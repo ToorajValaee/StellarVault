@@ -498,8 +498,8 @@ window.stellarVault = (() => {
 })();
 
 // PWA installation UI. Chromium exposes beforeinstallprompt only after
-// installability checks pass. Android also gets a manual fallback so the
-// installation tip is still visible when Chrome delays or suppresses the event.
+// installability checks pass. On Android, the custom INSTALL button is shown
+// only when the native prompt is available. iOS keeps manual Safari steps.
 (() => {
     let deferredInstallPrompt = null;
     let manualStepsVisible = false;
@@ -513,7 +513,6 @@ window.stellarVault = (() => {
         /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
         (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
 
-    const isAndroid = () => /android/i.test(window.navigator.userAgent);
 
     function createBanner() {
         let banner = document.getElementById('pwa-install-banner');
@@ -597,37 +596,21 @@ window.stellarVault = (() => {
         banner.hidden = false;
     }
 
-    function showManualInstallHelp() {
-        if (!canShowBanner()) {
+    function showIosInstallHelp() {
+        if (!canShowBanner() || !isIos()) {
             return;
         }
 
         const banner = createBanner();
-
-        if (isIos()) {
-            banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON IPHONE / IPAD';
-            banner.querySelector('#pwa-install-message').textContent = 'Use Safari to add this terminal to the Home Screen.';
-            setSteps(banner, [
-                'Open this page in Safari.',
-                'Tap the Share button.',
-                'Choose Add to Home Screen.',
-                'Tap Add.'
-            ]);
-        } else {
-            banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON ANDROID';
-            banner.querySelector('#pwa-install-message').textContent = deferredInstallPrompt
-                ? 'This terminal is ready to install.'
-                : 'If Chrome has not shown its native prompt, install it from the browser menu.';
-            setSteps(banner, [
-                'Open the Chrome menu (⋮).',
-                'Choose Install app or Add to Home screen.',
-                'Confirm Install.'
-            ]);
-        }
-
-        banner.querySelector('#pwa-install-action').textContent = deferredInstallPrompt
-            ? 'INSTALL'
-            : 'HOW TO INSTALL';
+        banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON IPHONE / IPAD';
+        banner.querySelector('#pwa-install-message').textContent = 'Use Safari to add this terminal to the Home Screen.';
+        setSteps(banner, [
+            'Open this page in Safari.',
+            'Tap the Share button.',
+            'Choose Add to Home Screen.',
+            'Tap Add.'
+        ]);
+        banner.querySelector('#pwa-install-action').textContent = 'HOW TO INSTALL';
         banner.querySelector('#pwa-install-action').hidden = false;
         banner.hidden = false;
     }
@@ -647,13 +630,10 @@ window.stellarVault = (() => {
     });
 
     window.addEventListener('load', () => {
-        // iOS never emits beforeinstallprompt. On Android, show a manual fallback
-        // if Chrome has not emitted it after the first render/installability check.
-        window.setTimeout(() => {
-            if (isIos() || isAndroid()) {
-                showManualInstallHelp();
-            }
-        }, 1800);
+        // iOS does not expose beforeinstallprompt, so it retains manual steps.
+        // Android shows no fallback tip: the INSTALL button appears only after
+        // Chrome supplies a native BeforeInstallPromptEvent.
+        window.setTimeout(showIosInstallHelp, 1200);
     });
 })();
 

@@ -1,48 +1,16 @@
-# Stellar Vault PWA v1.3.2
+# Stellar Vault PWA v1.3.3
 
-This update fixes Android scrolling on the access page and makes the Android
-installation guidance visible even when Chrome delays or suppresses the native
-`beforeinstallprompt` event.
+## Android install behavior
 
-## Android scrolling fix
+- Android no longer shows a manual installation-tip banner.
+- The custom **INSTALL** banner appears only after Chrome fires `beforeinstallprompt`.
+- Tapping **INSTALL** immediately opens Chrome's native PWA installation dialog.
+- The banner remains hidden when the app is already installed or Chrome has not yet made the native prompt available.
 
-The iOS visual viewport stabilizer previously ran on every browser. On Android,
-focus and visual viewport events could restore the page to an old scroll
-position. The workaround is now strictly scoped to iOS. Android uses normal
-document scrolling with `pan-y` and pinch zoom enabled.
+## iPhone and iPad
 
-## Android install guidance
+iOS does not provide `beforeinstallprompt`, so the app continues to display manual Safari instructions for **Share → Add to Home Screen**.
 
-When Chrome fires `beforeinstallprompt`, the banner opens the native install
-flow. If that event has not fired after startup, Android users still see a
-manual instruction banner:
+## Upgrade notes
 
-1. Open Chrome menu (⋮).
-2. Choose **Install app** or **Add to Home screen**.
-3. Confirm installation.
-
-The development service worker now has a real fetch handler, which makes local
-install testing more representative. Published builds still use
-`service-worker.published.js`.
-
-## Update steps
-
-```powershell
-dotnet clean
-Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
-dotnet restore
-dotnet build
-dotnet run
-```
-
-On Android Chrome, clear the previous PWA cache after deployment:
-
-1. Chrome → Site settings → Storage → Clear.
-2. Remove an older installed copy from the Home Screen, if present.
-3. Reopen the HTTPS site and wait about two seconds for the install guidance.
-
-For a production check, use the published output rather than only `dotnet run`:
-
-```powershell
-dotnet publish -c Release
-```
+After deploying, clear the old PWA/service-worker cache or uninstall and reinstall the existing app so the updated JavaScript is loaded.
