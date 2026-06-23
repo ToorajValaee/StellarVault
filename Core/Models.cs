@@ -48,9 +48,14 @@ public sealed record VaultReadResult(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<VaultNodeSnapshot> Nodes);
 
+public sealed record VaultMutationResult(
+    string TransactionHash,
+    string? Warning = null);
+
 internal sealed record RecordManifest(
     byte FormatVersion,
     ushort ChunkCount,
     int EncryptedLength,
     byte[] CiphertextHash,
-    long UpdatedUnixSeconds);
+    long UpdatedUnixSeconds,
+    string? Generation);

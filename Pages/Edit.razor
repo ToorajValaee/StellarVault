@@ -1,0 +1,223 @@
+@page "/edit/{RecordId}"
+@inject VaultSession Session
+@inject BrowserStorage Storage
+@inject NavigationManager Navigation
+
+<PageTitle>Edit Record // Stellar Vault</PageTitle>
+
+@if (!Session.IsUnlocked)
+{
+    <section class="terminal-panel centered-message">
+        <h1>DATABASE LOCKED</h1>
+        <a class="pixel-button primary" href="/">RETURN TO ACCESS TERMINAL</a>
+    </section>
+}
+else if (_location is null)
+{
+    <section class="terminal-panel centered-message">
+        <div class="panel-kicker">LOOKUP ERROR</div>
+        <h1>RECORD NOT FOUND</h1>
+        <p>The requested record is missing or the vault snapshot is stale.</p>
+        <a class="pixel-button primary" href="/vault">RETURN TO DATABASE</a>
+    </section>
+}
+else
+{
+    <section class="form-page">
+        <header class="page-command-header">
+            <div>
+                <div class="panel-kicker">WRITE OPERATION // EDIT @_location.Record.Id</div>
+                <h1>EDIT CREDENTIAL</h1>
+                <p class="page-subtitle">A new encrypted generation is committed before the previous chunks are removed.</p>
+            </div>
+            <a class="pixel-button compact" href="/vault">← CANCEL</a>
+        </header>
+
+        <EditForm Model="_form" OnValidSubmit="SaveAsync" class="terminal-panel credential-form">
+            <DataAnnotationsValidator />
+
+            <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
+
+            <label class="terminal-label">
+                <span>TITLE *</span>
+                <InputText class="terminal-input" @bind-Value="_form.Title" autocomplete="off" />
+                <ValidationMessage For="() => _form.Title" />
+            </label>
+
+            <label class="terminal-label">
+                <span>USERNAME / IDENTIFIER</span>
+                <InputText class="terminal-input" @bind-Value="_form.UserName" autocomplete="off" />
+            </label>
+
+            <label class="terminal-label">
+                <span>URL</span>
+                <InputText class="terminal-input" @bind-Value="_form.Url" inputmode="url" autocomplete="off" />
+            </label>
+
+            <div class="form-section-title"><span>02</span> SECRET PAYLOAD</div>
+
+            <label class="terminal-label">
+                <span>SECRET / PASSWORD *</span>
+                <div class="input-with-action multi-action">
+                    <InputText class="terminal-input" type="@(_showSecret ? "text" : "password")" @bind-Value="_form.Secret" autocomplete="new-password" />
+                    <button type="button" class="input-action" @onclick="ToggleSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
+                    <button type="button" class="input-action generate" @onclick="GeneratePasswordAsync">GEN</button>
+                </div>
+                <ValidationMessage For="() => _form.Secret" />
+            </label>
+
+            <label class="terminal-label">
+                <span>NOTES</span>
+                <InputTextArea class="terminal-input terminal-textarea" @bind-Value="_form.Notes" rows="5" />
+            </label>
+
+            <label class="terminal-label">
+                <span>TAGS // COMMA SEPARATED</span>
+                <InputText class="terminal-input" @bind-Value="_form.Tags" autocomplete="off" />
+            </label>
+
+            <div class="commit-preview">
+                <span>MODE</span><strong>STAGE NEW GENERATION → COMMIT → CLEAN OLD</strong>
+                <span>RECORD</span><strong>@_location.Record.Id</strong>
+                <span>NODE</span><strong>@Short(_location.NodeAccountId)</strong>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="terminal-alert error">
+                    <strong>UPDATE FAILED</strong>
+                    <span>@_error</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_transactionHash))
+            {
+                <div class="terminal-alert success">
+                    <strong>RECORD UPDATED</strong>
+                    <span>TX: @_transactionHash</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_warning))
+            {
+                <div class="terminal-alert warning">
+                    <strong>CLEANUP WARNING</strong>
+                    <span>@_warning</span>
+                </div>
+            }
+
+            <button class="pixel-button primary access-button" type="submit" disabled="@_saving">
+                <span>@(_saving ? "UPDATING LEDGER..." : "ENCRYPT AND UPDATE")</span>
+                <span>▶</span>
+            </button>
+        </EditForm>
+    </section>
+}
+
+@code {
+    [Parameter] public string RecordId { get; set; } = string.Empty;
+
+    private readonly EditCredentialForm _form = new();
+    private VaultRecordLocation? _location;
+    private string? _loadedRecordId;
+    private bool _showSecret;
+    private bool _saving;
+    private string? _error;
+    private string? _transactionHash;
+    private string? _warning;
+
+    protected override void OnParametersSet()
+    {
+        if (!Session.IsUnlocked)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        if (string.Equals(_loadedRecordId, RecordId, StringComparison.Ordinal))
+            return;
+
+        _loadedRecordId = RecordId;
+        _location = Session.Snapshot?.Records.FirstOrDefault(item =>
+            string.Equals(item.Record.Id, RecordId, StringComparison.OrdinalIgnoreCase));
+
+        if (_location is null)
+            return;
+
+        _form.Title = _location.Record.Title;
+        _form.UserName = _location.Record.UserName;
+        _form.Secret = _location.Record.Secret;
+        _form.Url = _location.Record.Url;
+        _form.Notes = _location.Record.Notes;
+        _form.Tags = string.Join(", ", _location.Record.Tags);
+    }
+
+    private void ToggleSecret() => _showSecret = !_showSecret;
+
+    private async Task GeneratePasswordAsync()
+    {
+        _form.Secret = await Storage.GeneratePasswordAsync(24);
+        _showSecret = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_location is null)
+            return;
+
+        _saving = true;
+        _error = null;
+        _transactionHash = null;
+        _warning = null;
+
+        try
+        {
+            var record = new VaultRecord
+            {
+                Id = _location.Record.Id,
+                Title = _form.Title.Trim(),
+                UserName = _form.UserName.Trim(),
+                Secret = _form.Secret,
+                Url = _form.Url.Trim(),
+                Notes = _form.Notes.Trim(),
+                Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                CreatedUtc = _location.Record.CreatedUtc,
+                UpdatedUtc = DateTimeOffset.UtcNow
+            };
+
+            var result = await Session.UpdateAsync(_location, record);
+            _transactionHash = result.TransactionHash;
+            _warning = result.Warning;
+            _location = Session.Snapshot?.Records.FirstOrDefault(item =>
+                string.Equals(item.Record.Id, record.Id, StringComparison.Ordinal)) ?? _location;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string Short(string value) =>
+        value.Length <= 18 ? value : $"{value[..9]}…{value[^6..]}";
+
+    private sealed class EditCredentialForm
+    {
+        [Required(ErrorMessage = "Title is required.")]
+        public string Title { get; set; } = string.Empty;
+
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Secret is required.")]
+        public string Secret { get; set; } = string.Empty;
+
+        public string Url { get; set; } = string.Empty;
+        public string Notes { get; set; } = string.Empty;
+        public string Tags { get; set; } = string.Empty;
+    }
+}

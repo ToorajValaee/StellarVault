@@ -270,7 +270,11 @@ window.stellarVault = (() => {
             });
 
             for (const write of writes) {
-                const value = sdkBufferFromBase64(session, write.valueBase64);
+                const isDelete = write.valueBase64 === null || write.valueBase64 === undefined;
+                const value = isDelete
+                    ? null
+                    : sdkBufferFromBase64(session, write.valueBase64);
+
                 builder = builder.addOperation(StellarSdk.Operation.manageData({
                     source: write.sourceAccountId,
                     name: write.name,
@@ -429,4 +433,106 @@ window.stellarVault = (() => {
             generatePassword
         }
     };
+})();
+
+
+// PWA installation UI. Modern browsers don't guarantee an automatic install banner,
+// so the app presents its own prompt when beforeinstallprompt becomes available.
+(() => {
+    let deferredInstallPrompt = null;
+
+    const isStandalone = () =>
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+
+    const isIos = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+
+    function createBanner() {
+        let banner = document.getElementById('pwa-install-banner');
+        if (banner) {
+            return banner;
+        }
+
+        banner = document.createElement('section');
+        banner.id = 'pwa-install-banner';
+        banner.className = 'pwa-install-banner';
+        banner.hidden = true;
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+        banner.innerHTML = `
+            <div class="pwa-install-copy">
+                <span class="pwa-install-kicker">:: SYSTEM MESSAGE</span>
+                <strong id="pwa-install-title">INSTALL STELLAR VAULT</strong>
+                <small id="pwa-install-message">Run this terminal as an installed application.</small>
+            </div>
+            <div class="pwa-install-actions">
+                <button id="pwa-install-action" class="pixel-button primary compact" type="button">INSTALL</button>
+                <button id="pwa-install-dismiss" class="mini-button" type="button">LATER</button>
+            </div>`;
+
+        document.body.appendChild(banner);
+
+        banner.querySelector('#pwa-install-action').addEventListener('click', async () => {
+            if (!deferredInstallPrompt) {
+                return;
+            }
+
+            const prompt = deferredInstallPrompt;
+            deferredInstallPrompt = null;
+            banner.hidden = true;
+
+            await prompt.prompt();
+            await prompt.userChoice;
+        });
+
+        banner.querySelector('#pwa-install-dismiss').addEventListener('click', () => {
+            banner.hidden = true;
+            sessionStorage.setItem('stellar-vault.install-dismissed', '1');
+        });
+
+        return banner;
+    }
+
+    function showInstallBanner() {
+        if (isStandalone() || sessionStorage.getItem('stellar-vault.install-dismissed') === '1') {
+            return;
+        }
+
+        const banner = createBanner();
+        banner.querySelector('#pwa-install-title').textContent = 'INSTALL STELLAR VAULT';
+        banner.querySelector('#pwa-install-message').textContent = 'Run this terminal as an installed application.';
+        banner.querySelector('#pwa-install-action').hidden = false;
+        banner.hidden = false;
+    }
+
+    function showIosInstructions() {
+        if (!isIos() || isStandalone() || sessionStorage.getItem('stellar-vault.install-dismissed') === '1') {
+            return;
+        }
+
+        const banner = createBanner();
+        banner.querySelector('#pwa-install-title').textContent = 'ADD TERMINAL TO HOME SCREEN';
+        banner.querySelector('#pwa-install-message').textContent = 'In Safari, tap Share, then Add to Home Screen.';
+        banner.querySelector('#pwa-install-action').hidden = true;
+        banner.hidden = false;
+    }
+
+    window.addEventListener('beforeinstallprompt', event => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        showInstallBanner();
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        const banner = document.getElementById('pwa-install-banner');
+        if (banner) {
+            banner.hidden = true;
+        }
+    });
+
+    window.addEventListener('load', () => {
+        // Safari on iOS doesn't expose beforeinstallprompt.
+        window.setTimeout(showIosInstructions, 1200);
+    });
 })();

@@ -40,10 +40,18 @@ else
             }
         </label>
 
+        @if (!string.IsNullOrWhiteSpace(_notice))
+        {
+            <div class="terminal-alert success">
+                <strong>DATABASE UPDATED</strong>
+                <span>@_notice</span>
+            </div>
+        }
+
         @if (!string.IsNullOrWhiteSpace(_error))
         {
             <div class="terminal-alert error">
-                <strong>SYNC ERROR</strong>
+                <strong>OPERATION ERROR</strong>
                 <span>@_error</span>
             </div>
         }
@@ -102,12 +110,16 @@ else
         </a>
     </section>
 
-    <RecordDetailModal Item="_selected" OnClose="CloseRecord" />
+    <RecordDetailModal Item="_selected"
+                       OnClose="CloseRecord"
+                       OnEdit="EditRecord"
+                       OnDelete="DeleteRecord" />
 }
 
 @code {
     private string _search = string.Empty;
     private string? _error;
+    private string? _notice;
     private VaultRecordLocation? _selected;
 
     private int RecordCount => Session.Snapshot?.Records.Count ?? 0;
@@ -143,6 +155,7 @@ else
     private async Task RefreshAsync()
     {
         _error = null;
+        _notice = null;
         try
         {
             await Session.RefreshAsync();
@@ -153,7 +166,31 @@ else
         }
     }
 
-    private void OpenRecord(VaultRecordLocation item) => _selected = item;
+    private void OpenRecord(VaultRecordLocation item)
+    {
+        _notice = null;
+        _selected = item;
+    }
+
+    private Task EditRecord(VaultRecordLocation item)
+    {
+        _selected = null;
+        Navigation.NavigateTo($"/edit/{item.Record.Id}");
+        return Task.CompletedTask;
+    }
+
+    private async Task DeleteRecord(VaultRecordLocation item)
+    {
+        _error = null;
+        _notice = null;
+
+        var result = await Session.DeleteAsync(item);
+        _selected = null;
+        _notice = string.IsNullOrWhiteSpace(result.Warning)
+            ? $"RECORD {item.Record.Id} DELETED. TX: {result.TransactionHash}"
+            : $"RECORD DELETED. {result.Warning}";
+    }
+
     private Task CloseRecord()
     {
         _selected = null;

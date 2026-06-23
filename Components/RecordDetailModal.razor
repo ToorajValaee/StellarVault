@@ -9,7 +9,7 @@
                     <div class="panel-kicker">RECORD // @Item.Record.Id</div>
                     <h2 id="record-title">@Item.Record.Title</h2>
                 </div>
-                <button class="icon-button close-button" type="button" aria-label="Close" @onclick="CloseAsync">×</button>
+                <button class="icon-button close-button" type="button" aria-label="Close" disabled="@_busy" @onclick="CloseAsync">×</button>
             </header>
 
             <div class="data-field">
@@ -70,6 +70,35 @@
             {
                 <div class="copy-notice">@_notice</div>
             }
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="terminal-alert error modal-alert">
+                    <strong>OPERATION FAILED</strong>
+                    <span>@_error</span>
+                </div>
+            }
+
+            @if (_confirmDelete)
+            {
+                <div class="delete-confirmation">
+                    <strong>PERMANENTLY DELETE THIS RECORD?</strong>
+                    <span>The manifest is removed first. Encrypted historical transaction data may still exist on the network.</span>
+                    <div class="modal-action-row">
+                        <button class="pixel-button danger" type="button" disabled="@_busy" @onclick="DeleteAsync">
+                            @(_busy ? "DELETING..." : "CONFIRM DELETE")
+                        </button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="CancelDelete">CANCEL</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="modal-action-row record-actions">
+                    <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="EditAsync">EDIT RECORD</button>
+                    <button class="pixel-button danger" type="button" disabled="@_busy" @onclick="BeginDelete">DELETE</button>
+                </div>
+            }
         </section>
     </div>
 }
@@ -77,18 +106,42 @@
 @code {
     [Parameter] public VaultRecordLocation? Item { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<VaultRecordLocation> OnEdit { get; set; }
+    [Parameter] public EventCallback<VaultRecordLocation> OnDelete { get; set; }
 
+    private string? _activeItemId;
     private bool _revealed;
+    private bool _confirmDelete;
+    private bool _busy;
     private string? _notice;
+    private string? _error;
 
     protected override void OnParametersSet()
     {
+        var nextId = Item?.Record.Id;
+        if (string.Equals(_activeItemId, nextId, StringComparison.Ordinal))
+            return;
+
+        _activeItemId = nextId;
         _revealed = false;
+        _confirmDelete = false;
+        _busy = false;
         _notice = null;
+        _error = null;
     }
 
     private void ToggleReveal() => _revealed = !_revealed;
+    private void BeginDelete()
+    {
+        _confirmDelete = true;
+        _error = null;
+    }
 
+    private void CancelDelete()
+    {
+        _confirmDelete = false;
+        _error = null;
+    }
 
     private Task CopyUsernameAsync() =>
         CopyAsync(Item?.Record.UserName ?? string.Empty, "USERNAME");
@@ -108,10 +161,51 @@
         _notice = $"> {label} COPIED TO CLIPBOARD";
     }
 
+    private async Task EditAsync()
+    {
+        if (Item is null)
+            return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            await OnEdit.InvokeAsync(Item);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (Item is null)
+            return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            await OnDelete.InvokeAsync(Item);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
     private Task CloseAsync()
     {
+        if (_busy)
+            return Task.CompletedTask;
+
         _revealed = false;
+        _confirmDelete = false;
         _notice = null;
+        _error = null;
         return OnClose.InvokeAsync();
     }
 

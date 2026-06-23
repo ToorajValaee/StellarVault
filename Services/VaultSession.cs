@@ -84,6 +84,49 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         }
     }
 
+
+    public async Task<VaultMutationResult> UpdateAsync(
+        VaultRecordLocation existing,
+        VaultRecord record)
+    {
+        var store = RequireStore();
+        SetBusy(true, "ENCRYPTING AND UPDATING...");
+        try
+        {
+            var result = await store.UpdateAsync(existing, record);
+            Snapshot = await store.ReadAsync();
+            StatusMessage = string.IsNullOrWhiteSpace(result.Warning)
+                ? "RECORD UPDATED"
+                : "RECORD UPDATED // CLEANUP WARNING";
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+            Changed?.Invoke();
+        }
+    }
+
+    public async Task<VaultMutationResult> DeleteAsync(VaultRecordLocation existing)
+    {
+        var store = RequireStore();
+        SetBusy(true, "DELETING RECORD...");
+        try
+        {
+            var result = await store.DeleteAsync(existing);
+            Snapshot = await store.ReadAsync();
+            StatusMessage = string.IsNullOrWhiteSpace(result.Warning)
+                ? "RECORD DELETED"
+                : "RECORD DELETED // CLEANUP WARNING";
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+            Changed?.Invoke();
+        }
+    }
+
     public async Task LockAsync()
     {
         if (_store is not null)
