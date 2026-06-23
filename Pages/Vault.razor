@@ -1,0 +1,184 @@
+@page "/vault"
+@implements IDisposable
+@inject VaultSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>Vault // Stellar Vault</PageTitle>
+
+@if (!Session.IsUnlocked)
+{
+    <section class="terminal-panel centered-message">
+        <h1>DATABASE LOCKED</h1>
+        <p>Return to the access terminal and enter the root secret.</p>
+        <a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a>
+    </section>
+}
+else
+{
+    <section class="vault-page">
+        <header class="page-command-header">
+            <div>
+                <div class="panel-kicker">DATABASE BROWSER // ONLINE</div>
+                <h1>VAULT RECORDS</h1>
+                <p class="page-subtitle">Encrypted credentials reconstructed from @NodeCount linked Stellar account(s).</p>
+            </div>
+            <button class="pixel-button compact" type="button" @onclick="RefreshAsync">↻ SYNC</button>
+        </header>
+
+        <div class="stats-strip">
+            <div><span>RECORDS</span><strong>@RecordCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+            <div><span>NODES</span><strong>@NodeCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+            <div><span>WARNINGS</span><strong>@WarningCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+        </div>
+
+        <label class="search-console">
+            <span class="search-prefix">FIND&gt;</span>
+            <input @bind="_search" @bind:event="oninput" placeholder="title, username, url, tag..." autocomplete="off" />
+            @if (!string.IsNullOrWhiteSpace(_search))
+            {
+                <button type="button" @onclick="() => _search = string.Empty" aria-label="Clear search">×</button>
+            }
+        </label>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">
+                <strong>SYNC ERROR</strong>
+                <span>@_error</span>
+            </div>
+        }
+
+        @if (Session.Snapshot?.Warnings.Count > 0)
+        {
+            <details class="warning-log">
+                <summary>@Session.Snapshot.Warnings.Count RECORD WARNING(S)</summary>
+                @foreach (var warning in Session.Snapshot.Warnings)
+                {
+                    <code>&gt; @warning</code>
+                }
+            </details>
+        }
+
+        <div class="record-list">
+            @if (FilteredRecords.Count == 0)
+            {
+                <div class="empty-state terminal-panel">
+                    <div class="empty-glyph">[ ]</div>
+                    <h2>@(RecordCount == 0 ? "DATABASE EMPTY" : "NO MATCH")</h2>
+                    <p>@(RecordCount == 0 ? "Commit the first credential to this Stellar database." : "No records match the active search filter.")</p>
+                    @if (RecordCount == 0)
+                    {
+                        <a class="pixel-button primary" href="/add">ADD FIRST RECORD</a>
+                    }
+                </div>
+            }
+            else
+            {
+                @foreach (var item in FilteredRecords)
+                {
+                    <button class="record-card" type="button" @onclick="() => OpenRecord(item)">
+                        <span class="record-index">@IndexOf(item)</span>
+                        <span class="record-card-body">
+                            <strong>@item.Record.Title</strong>
+                            <small>@SecondaryLine(item.Record)</small>
+                            @if (item.Record.Tags.Length > 0)
+                            {
+                                <span class="tag-row">
+                                    @foreach (var tag in item.Record.Tags.Take(3))
+                                    {
+                                        <span class="pixel-tag">#@tag</span>
+                                    }
+                                </span>
+                            }
+                        </span>
+                        <span class="record-chevron">›</span>
+                    </button>
+                }
+            }
+        </div>
+
+        <a class="floating-add" href="/add" aria-label="Add credential">
+            <span>＋</span>
+        </a>
+    </section>
+
+    <RecordDetailModal Item="_selected" OnClose="CloseRecord" />
+}
+
+@code {
+    private string _search = string.Empty;
+    private string? _error;
+    private VaultRecordLocation? _selected;
+
+    private int RecordCount => Session.Snapshot?.Records.Count ?? 0;
+    private int NodeCount => Session.Snapshot?.Nodes.Count ?? 0;
+    private int WarningCount => Session.Snapshot?.Warnings.Count ?? 0;
+
+    private IReadOnlyList<VaultRecordLocation> FilteredRecords
+    {
+        get
+        {
+            var records = Session.Snapshot?.Records ?? [];
+            if (string.IsNullOrWhiteSpace(_search))
+                return records;
+
+            var query = _search.Trim();
+            return records.Where(item =>
+                    item.Record.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.UserName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Notes.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Tags.Any(tag => tag.Contains(query, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Session.Changed += HandleChanged;
+        if (!Session.IsUnlocked)
+            Navigation.NavigateTo("/");
+    }
+
+    private async Task RefreshAsync()
+    {
+        _error = null;
+        try
+        {
+            await Session.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void OpenRecord(VaultRecordLocation item) => _selected = item;
+    private Task CloseRecord()
+    {
+        _selected = null;
+        return Task.CompletedTask;
+    }
+
+    private string IndexOf(VaultRecordLocation item)
+    {
+        var index = FilteredRecords.ToList().IndexOf(item) + 1;
+        return index.ToString("D2", CultureInfo.InvariantCulture);
+    }
+
+    private static string SecondaryLine(VaultRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.UserName))
+            return record.UserName;
+        if (!string.IsNullOrWhiteSpace(record.Url))
+            return record.Url;
+        return $"ID::{record.Id}";
+    }
+
+    private void HandleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= HandleChanged;
+    }
+}

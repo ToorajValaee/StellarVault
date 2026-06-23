@@ -1,0 +1,295 @@
+@page "/"
+@inject VaultSession Session
+@inject BrowserStorage Storage
+@inject NavigationManager Navigation
+
+<PageTitle>Access Terminal // Stellar Vault</PageTitle>
+
+<section class="access-grid">
+    <div class="hero-terminal terminal-panel">
+        <div class="panel-kicker">SECURE DATA LINK // READY</div>
+        <h1>OPEN STELLAR<br />CHAIN DATABASE<span class="blink-cursor">_</span></h1>
+        <p class="hero-copy">
+            One database seed unlocks the encrypted account chain. The seed stays in this browser session and is never saved by the app.
+        </p>
+        <div class="boot-log" aria-label="System capabilities">
+            <span><b>[OK]</b> AES-256-GCM RECORD ENCRYPTION</span>
+            <span><b>[OK]</b> 64-BYTE LEDGER CHUNK ENGINE</span>
+            <span><b>[OK]</b> AUTOMATIC CHILD ACCOUNT LINKING</span>
+            <span><b>[OK]</b> PWA OFFLINE APPLICATION SHELL</span>
+        </div>
+    </div>
+
+    <form class="access-form terminal-panel" @onsubmit="OpenAsync" @onsubmit:preventDefault="true">
+        <div class="panel-heading">
+            <div>
+                <div class="panel-kicker">STEP 01</div>
+                <h2>SELECT NETWORK</h2>
+            </div>
+            <span class="step-led">01</span>
+        </div>
+
+        <div class="network-selector">
+            <button type="button" class="network-option @TestnetClass" @onclick="SelectTestnet">
+                <span class="network-symbol">T</span>
+                <span><strong>TESTNET</strong><small>STELLAR TEST NETWORK</small></span>
+            </button>
+            <button type="button" class="network-option @PublicClass" @onclick="SelectPublic">
+                <span class="network-symbol">P</span>
+                <span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
+            </button>
+            <button type="button" class="network-option @CustomClass" @onclick="SelectCustom">
+                <span class="network-symbol">C</span>
+                <span><strong>CUSTOM</strong><small>PRIVATE / SELF-HOSTED</small></span>
+            </button>
+        </div>
+
+        @if (_preset == "custom")
+        {
+            <div class="custom-network-fields">
+                <label class="terminal-label">
+                    <span>NETWORK NAME</span>
+                    <input class="terminal-input" @bind="_networkName" autocomplete="off" placeholder="DAYACHAIN PRIVATE" />
+                </label>
+                <label class="terminal-label">
+                    <span>HORIZON URL</span>
+                    <input class="terminal-input" @bind="_horizonUrl" inputmode="url" autocomplete="url" placeholder="https://horizon.example.com" />
+                </label>
+                <label class="terminal-label">
+                    <span>NETWORK PASSPHRASE</span>
+                    <textarea class="terminal-input terminal-textarea compact" @bind="_passphrase" rows="2" spellcheck="false" placeholder="Your exact Stellar network passphrase"></textarea>
+                </label>
+            </div>
+        }
+
+        @if (HasMixedContentRisk)
+        {
+            <div class="terminal-alert warning">
+                <strong>MIXED CONTENT WARNING</strong>
+                <span>An HTTPS PWA cannot call an HTTP Horizon endpoint. Use HTTPS or run the app from an HTTP development address.</span>
+            </div>
+        }
+
+        <details class="advanced-block">
+            <summary>ADVANCED LEDGER PARAMETERS</summary>
+            <div class="advanced-grid">
+                <label class="terminal-label">
+                    <span>CHILD STARTING BALANCE</span>
+                    <input class="terminal-input" @bind="_childBalance" inputmode="decimal" />
+                </label>
+                <label class="terminal-label">
+                    <span>DATA ENTRY LIMIT / NODE</span>
+                    <input class="terminal-input" type="number" min="4" max="950" @bind="_entryLimit" />
+                </label>
+                <label class="terminal-label full-width">
+                    <span>BASE FEE / OPERATION (STROOPS)</span>
+                    <input class="terminal-input" type="number" min="1" @bind="_baseFee" />
+                </label>
+            </div>
+        </details>
+
+        <div class="panel-heading unlock-heading">
+            <div>
+                <div class="panel-kicker">STEP 02</div>
+                <h2>DATABASE SECRET</h2>
+            </div>
+            <span class="step-led">02</span>
+        </div>
+
+        <label class="terminal-label secret-input-wrap">
+            <span>ROOT STELLAR SECRET SEED</span>
+            <div class="input-with-action">
+                <input class="terminal-input secret-seed-input"
+                       type="@(_showSecret ? "text" : "password")"
+                       @bind="_secret"
+                       autocomplete="off"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       placeholder="SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+                <button type="button" class="input-action" @onclick="() => _showSecret = !_showSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
+            </div>
+        </label>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">
+                <strong>ACCESS ERROR</strong>
+                <span>@_error</span>
+            </div>
+        }
+
+        <button class="pixel-button primary access-button" type="submit" disabled="@_opening">
+            <span>@(_opening ? "CONNECTING..." : "OPEN DATABASE")</span>
+            <span aria-hidden="true">▶</span>
+        </button>
+
+        <p class="local-only-note">// SAVED LOCALLY: NETWORK SETTINGS ONLY. DATABASE SECRET: MEMORY ONLY.</p>
+    </form>
+</section>
+
+@code {
+    private string _preset = "testnet";
+    private string _networkName = "Testnet";
+    private string _horizonUrl = "https://horizon-testnet.stellar.org";
+    private string _passphrase = StellarDotnetSdk.Network.TestnetPassphrase;
+    private string _childBalance = "50";
+    private int _entryLimit = 80;
+    private uint _baseFee = 100u;
+    private string _secret = string.Empty;
+    private bool _showSecret;
+    private bool _opening;
+    private string? _error;
+
+    private bool HasMixedContentRisk =>
+        Navigation.BaseUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+        _horizonUrl.Trim().StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.IsUnlocked)
+        {
+            Navigation.NavigateTo("/vault");
+            return;
+        }
+
+        var saved = await Storage.LoadNetworkAsync();
+        if (saved is null)
+            return;
+
+        ApplySettings(saved);
+    }
+
+    private void SelectPreset(string preset)
+    {
+        _preset = preset;
+        _error = null;
+
+        switch (preset)
+        {
+            case "testnet":
+                _networkName = "Testnet";
+                _horizonUrl = "https://horizon-testnet.stellar.org";
+                _passphrase = StellarDotnetSdk.Network.TestnetPassphrase;
+                break;
+            case "public":
+                _networkName = "Public";
+                _horizonUrl = "https://horizon.stellar.org";
+                _passphrase = StellarDotnetSdk.Network.PublicPassphrase;
+                break;
+            case "custom":
+                if (_networkName is "Testnet" or "Public")
+                    _networkName = "Private";
+                if (_horizonUrl.Contains("stellar.org", StringComparison.OrdinalIgnoreCase))
+                    _horizonUrl = string.Empty;
+                if (_passphrase == StellarDotnetSdk.Network.TestnetPassphrase ||
+                    _passphrase == StellarDotnetSdk.Network.PublicPassphrase)
+                    _passphrase = string.Empty;
+                break;
+        }
+    }
+
+    private string TestnetClass => _preset == "testnet" ? "selected" : string.Empty;
+    private string PublicClass => _preset == "public" ? "selected" : string.Empty;
+    private string CustomClass => _preset == "custom" ? "selected" : string.Empty;
+
+    private void SelectTestnet() => SelectPreset("testnet");
+    private void SelectPublic() => SelectPreset("public");
+    private void SelectCustom() => SelectPreset("custom");
+
+    private async Task OpenAsync()
+    {
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_networkName) ||
+            string.IsNullOrWhiteSpace(_horizonUrl) ||
+            string.IsNullOrWhiteSpace(_passphrase))
+        {
+            _error = "Network name, Horizon URL, and network passphrase are required.";
+            return;
+        }
+
+        if (!Uri.TryCreate(_horizonUrl.Trim(), UriKind.Absolute, out var horizonUri) ||
+            (horizonUri.Scheme != Uri.UriSchemeHttp && horizonUri.Scheme != Uri.UriSchemeHttps))
+        {
+            _error = "Horizon URL must be an absolute HTTP or HTTPS address.";
+            return;
+        }
+
+        if (!decimal.TryParse(_childBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var childBalance) || childBalance <= 0)
+        {
+            _error = "Child starting balance must be a positive invariant number, for example 50.";
+            return;
+        }
+
+        if (_entryLimit is < 4 or > 950 || _baseFee == 0)
+        {
+            _error = "Entry limit must be 4–950 and the base fee must be positive.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_secret))
+        {
+            _error = "Enter the database/root Stellar secret seed.";
+            return;
+        }
+
+        var settings = new VaultNetworkSettings(
+            _networkName.Trim(),
+            horizonUri.ToString().TrimEnd('/'),
+            _passphrase,
+            childBalance.ToString("0.#######", CultureInfo.InvariantCulture),
+            _entryLimit,
+            _baseFee);
+
+        _opening = true;
+        var secretForUnlock = _secret;
+        _secret = string.Empty;
+        _showSecret = false;
+
+        try
+        {
+            await Session.UnlockAsync(settings, secretForUnlock);
+            await Storage.SaveNetworkAsync(settings);
+            Navigation.NavigateTo("/vault");
+        }
+        catch (Exception ex)
+        {
+            _error = FriendlyError(ex);
+        }
+        finally
+        {
+            secretForUnlock = string.Empty;
+            _opening = false;
+        }
+    }
+
+    private void ApplySettings(VaultNetworkSettings settings)
+    {
+        _networkName = settings.Name;
+        _horizonUrl = settings.HorizonUrl;
+        _passphrase = settings.Passphrase;
+        _childBalance = settings.ChildStartingBalance;
+        _entryLimit = settings.NodeDataEntryLimit;
+        _baseFee = settings.BaseFeeStroops;
+
+        _preset = settings.Passphrase == StellarDotnetSdk.Network.TestnetPassphrase
+            ? "testnet"
+            : settings.Passphrase == StellarDotnetSdk.Network.PublicPassphrase
+                ? "public"
+                : "custom";
+    }
+
+    private static string FriendlyError(Exception ex)
+    {
+        var text = ex.Message;
+        if (text.Contains("404", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            return "The root Stellar account does not exist on the selected network, or the Horizon URL is incorrect.";
+
+        if (text.Contains("CORS", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase))
+            return "The browser could not reach Horizon. Check CORS, HTTPS, the URL, and network connectivity.";
+
+        return text;
+    }
+}

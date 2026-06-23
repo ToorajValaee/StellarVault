@@ -1,0 +1,126 @@
+@inject BrowserStorage Storage
+
+@if (Item is not null)
+{
+    <div class="modal-backdrop" @onclick="CloseAsync">
+        <section class="record-modal terminal-panel" role="dialog" aria-modal="true" aria-labelledby="record-title" @onclick:stopPropagation="true">
+            <header class="modal-header">
+                <div>
+                    <div class="panel-kicker">RECORD // @Item.Record.Id</div>
+                    <h2 id="record-title">@Item.Record.Title</h2>
+                </div>
+                <button class="icon-button close-button" type="button" aria-label="Close" @onclick="CloseAsync">×</button>
+            </header>
+
+            <div class="data-field">
+                <span class="field-label">USERNAME / IDENTIFIER</span>
+                <div class="field-value-row">
+                    <code>@DisplayOrEmpty(Item.Record.UserName)</code>
+                    <button class="mini-button" type="button" @onclick="CopyUsernameAsync">COPY</button>
+                </div>
+            </div>
+
+            <div class="data-field secret-field">
+                <span class="field-label">SECRET</span>
+                <div class="field-value-row">
+                    <code class="secret-value">@(_revealed ? Item.Record.Secret : Mask(Item.Record.Secret))</code>
+                    <div class="inline-actions">
+                        <button class="mini-button" type="button" @onclick="ToggleReveal">@(_revealed ? "HIDE" : "REVEAL")</button>
+                        <button class="mini-button" type="button" @onclick="CopySecretAsync">COPY</button>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Item.Record.Url))
+            {
+                <div class="data-field">
+                    <span class="field-label">URL</span>
+                    <div class="field-value-row">
+                        <a class="terminal-link text-overflow" href="@Item.Record.Url" target="_blank" rel="noopener noreferrer">@Item.Record.Url</a>
+                        <button class="mini-button" type="button" @onclick="CopyUrlAsync">COPY</button>
+                    </div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Item.Record.Notes))
+            {
+                <div class="data-field">
+                    <span class="field-label">NOTES</span>
+                    <p class="record-notes">@Item.Record.Notes</p>
+                </div>
+            }
+
+            @if (Item.Record.Tags.Length > 0)
+            {
+                <div class="tag-row detail-tags">
+                    @foreach (var tag in Item.Record.Tags)
+                    {
+                        <span class="pixel-tag">#@tag</span>
+                    }
+                </div>
+            }
+
+            <div class="record-metadata">
+                <span>NODE @Short(Item.NodeAccountId)</span>
+                <span>@Item.ChunkCount CHUNKS</span>
+                <span>@Item.EncryptedByteLength BYTES</span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_notice))
+            {
+                <div class="copy-notice">@_notice</div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public VaultRecordLocation? Item { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private bool _revealed;
+    private string? _notice;
+
+    protected override void OnParametersSet()
+    {
+        _revealed = false;
+        _notice = null;
+    }
+
+    private void ToggleReveal() => _revealed = !_revealed;
+
+
+    private Task CopyUsernameAsync() =>
+        CopyAsync(Item?.Record.UserName ?? string.Empty, "USERNAME");
+
+    private Task CopySecretAsync() =>
+        CopyAsync(Item?.Record.Secret ?? string.Empty, "SECRET");
+
+    private Task CopyUrlAsync() =>
+        CopyAsync(Item?.Record.Url ?? string.Empty, "URL");
+
+    private async Task CopyAsync(string value, string label)
+    {
+        if (string.IsNullOrEmpty(value))
+            return;
+
+        await Storage.CopyAsync(value);
+        _notice = $"> {label} COPIED TO CLIPBOARD";
+    }
+
+    private Task CloseAsync()
+    {
+        _revealed = false;
+        _notice = null;
+        return OnClose.InvokeAsync();
+    }
+
+    private static string DisplayOrEmpty(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "<EMPTY>" : value;
+
+    private static string Mask(string value) =>
+        new('•', Math.Clamp(value.Length, 10, 24));
+
+    private static string Short(string value) =>
+        value.Length <= 14 ? value : $"{value[..7]}…{value[^5..]}";
+}

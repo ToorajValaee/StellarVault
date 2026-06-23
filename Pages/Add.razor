@@ -1,0 +1,190 @@
+@page "/add"
+@inject VaultSession Session
+@inject BrowserStorage Storage
+@inject NavigationManager Navigation
+
+<PageTitle>Add Record // Stellar Vault</PageTitle>
+
+@if (!Session.IsUnlocked)
+{
+    <section class="terminal-panel centered-message">
+        <h1>DATABASE LOCKED</h1>
+        <a class="pixel-button primary" href="/">RETURN TO ACCESS TERMINAL</a>
+    </section>
+}
+else
+{
+    <section class="form-page">
+        <header class="page-command-header">
+            <div>
+                <div class="panel-kicker">WRITE OPERATION // NEW RECORD</div>
+                <h1>ADD CREDENTIAL</h1>
+                <p class="page-subtitle">The record is encrypted locally before any data reaches Horizon.</p>
+            </div>
+            <a class="pixel-button compact" href="/vault">← CANCEL</a>
+        </header>
+
+        <EditForm Model="_form" OnValidSubmit="SaveAsync" class="terminal-panel credential-form">
+            <DataAnnotationsValidator />
+
+            <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
+
+            <label class="terminal-label">
+                <span>TITLE *</span>
+                <InputText class="terminal-input" @bind-Value="_form.Title" autocomplete="off" placeholder="GitHub, Nexus, Server root..." />
+                <ValidationMessage For="() => _form.Title" />
+            </label>
+
+            <label class="terminal-label">
+                <span>USERNAME / IDENTIFIER</span>
+                <InputText class="terminal-input" @bind-Value="_form.UserName" autocomplete="off" placeholder="user@example.com" />
+            </label>
+
+            <label class="terminal-label">
+                <span>URL</span>
+                <InputText class="terminal-input" @bind-Value="_form.Url" inputmode="url" autocomplete="off" placeholder="https://example.com" />
+            </label>
+
+            <div class="form-section-title"><span>02</span> SECRET PAYLOAD</div>
+
+            <label class="terminal-label">
+                <span>SECRET / PASSWORD *</span>
+                <div class="input-with-action multi-action">
+                    <InputText class="terminal-input" type="@(_showSecret ? "text" : "password")" @bind-Value="_form.Secret" autocomplete="new-password" />
+                    <button type="button" class="input-action" @onclick="ToggleSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
+                    <button type="button" class="input-action generate" @onclick="GeneratePasswordAsync">GEN</button>
+                </div>
+                <ValidationMessage For="() => _form.Secret" />
+            </label>
+
+            <label class="terminal-label">
+                <span>NOTES</span>
+                <InputTextArea class="terminal-input terminal-textarea" @bind-Value="_form.Notes" rows="5" placeholder="Recovery details, environment, account purpose..." />
+            </label>
+
+            <label class="terminal-label">
+                <span>TAGS // COMMA SEPARATED</span>
+                <InputText class="terminal-input" @bind-Value="_form.Tags" autocomplete="off" placeholder="work, infrastructure, production" />
+            </label>
+
+            <div class="commit-preview">
+                <span>MODE</span><strong>LOCAL ENCRYPT → CHUNK → SIGN → SUBMIT</strong>
+                <span>SOURCE</span><strong>@Short(Session.RootAccountId)</strong>
+                <span>NETWORK</span><strong>@Session.Network?.Name</strong>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="terminal-alert error">
+                    <strong>WRITE FAILED</strong>
+                    <span>@_error</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_transactionHash))
+            {
+                <div class="terminal-alert success">
+                    <strong>RECORD COMMITTED</strong>
+                    <span>TX: @_transactionHash</span>
+                </div>
+            }
+
+            <button class="pixel-button primary access-button" type="submit" disabled="@_saving">
+                <span>@(_saving ? "WRITING TO LEDGER..." : "ENCRYPT AND COMMIT")</span>
+                <span>▶</span>
+            </button>
+        </EditForm>
+    </section>
+}
+
+@code {
+    private readonly AddCredentialForm _form = new();
+    private bool _showSecret;
+    private bool _saving;
+    private string? _error;
+    private string? _transactionHash;
+
+    protected override void OnInitialized()
+    {
+        if (!Session.IsUnlocked)
+            Navigation.NavigateTo("/");
+    }
+
+    private void ToggleSecret() => _showSecret = !_showSecret;
+
+    private async Task GeneratePasswordAsync()
+    {
+        _form.Secret = await Storage.GeneratePasswordAsync(24);
+        _showSecret = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        _transactionHash = null;
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var record = new VaultRecord
+            {
+                Id = await Storage.RandomHexAsync(8),
+                Title = _form.Title.Trim(),
+                UserName = _form.UserName.Trim(),
+                Secret = _form.Secret,
+                Url = _form.Url.Trim(),
+                Notes = _form.Notes.Trim(),
+                Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+
+            _transactionHash = await Session.AddAsync(record);
+            _form.Reset();
+            _showSecret = false;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string Short(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "N/A";
+        return value.Length <= 18 ? value : $"{value[..9]}…{value[^6..]}";
+    }
+
+    private sealed class AddCredentialForm
+    {
+        [Required(ErrorMessage = "Title is required.")]
+        public string Title { get; set; } = string.Empty;
+
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Secret is required.")]
+        public string Secret { get; set; } = string.Empty;
+
+        public string Url { get; set; } = string.Empty;
+        public string Notes { get; set; } = string.Empty;
+        public string Tags { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            Title = string.Empty;
+            UserName = string.Empty;
+            Secret = string.Empty;
+            Url = string.Empty;
+            Notes = string.Empty;
+            Tags = string.Empty;
+        }
+    }
+}

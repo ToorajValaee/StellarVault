@@ -1,0 +1,97 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject VaultSession Session
+@inject BrowserStorage Storage
+
+<div class="crt-shell">
+    <div class="screen-noise" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="top-console-bar">
+        <a class="brand-lockup" href="/">
+            <span class="brand-glyph">SV</span>
+            <span>
+                <strong>STELLAR VAULT</strong>
+                <small>CHAIN DATABASE TERMINAL</small>
+            </span>
+        </a>
+
+        <div class="top-actions">
+            <span class="link-lamp @(Session.IsUnlocked ? "online" : "offline")"></span>
+            <span class="connection-label">@(Session.IsUnlocked ? "LINKED" : "LOCKED")</span>
+            <button class="icon-button" type="button" title="Change phosphor color" @onclick="ToggleThemeAsync">
+                <span aria-hidden="true">◐</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="app-main">
+        @Body
+    </main>
+
+    @if (Session.IsUnlocked)
+    {
+        <nav class="mobile-command-bar" aria-label="Vault navigation">
+            <NavLink href="vault" Match="NavLinkMatch.All">
+                <span class="nav-icon">▦</span>
+                <span>VAULT</span>
+            </NavLink>
+            <NavLink href="add">
+                <span class="nav-icon">＋</span>
+                <span>ADD</span>
+            </NavLink>
+            <NavLink href="system">
+                <span class="nav-icon">⌘</span>
+                <span>SYSTEM</span>
+            </NavLink>
+        </nav>
+    }
+
+    <footer class="terminal-footer">
+        <span>SV/1.0</span>
+        <span class="footer-status">@Session.StatusMessage</span>
+        <span>ENCRYPTED::AES-GCM</span>
+    </footer>
+
+    @if (Session.IsBusy)
+    {
+        <div class="busy-overlay" role="status" aria-live="polite">
+            <div class="busy-terminal">
+                <div class="pixel-spinner" aria-hidden="true"></div>
+                <strong>@Session.StatusMessage</strong>
+                <span class="blink-cursor">_</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string _theme = "green";
+
+    protected override void OnInitialized()
+    {
+        Session.Changed += HandleSessionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _theme = await Storage.GetThemeAsync() ?? "green";
+        await Storage.SetThemeAsync(_theme);
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        _theme = _theme == "green" ? "amber" : "green";
+        await Storage.SetThemeAsync(_theme);
+    }
+
+    private void HandleSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= HandleSessionChanged;
+    }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Stellar Vault Terminal",
+  "short_name": "StellarVault",
+  "description": "Encrypted credential storage using a linked chain of Stellar accounts.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#030806",
+  "theme_color": "#07110c",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
