@@ -40,6 +40,8 @@ html {
     min-height: 100%;
     background: var(--bg-0);
     font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 body {
@@ -1751,4 +1753,182 @@ body,
     .crt-shell {
         padding-bottom: calc(2.2rem + var(--safe-bottom));
     }
+}
+
+/* 1.3 native-like mobile input, approval modal, and iOS standalone fixes */
+:root {
+    --app-height: 100dvh;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+}
+
+html,
+body,
+#app,
+.crt-shell {
+    min-height: var(--app-height, 100dvh);
+}
+
+body {
+    overscroll-behavior-y: none;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+    touch-action: manipulation;
+}
+
+/* iOS zooms focused controls whose computed text size is smaller than 16px. */
+input,
+textarea,
+select,
+.terminal-input,
+.search-console input {
+    font-size: 16px;
+}
+
+.terminal-input,
+.search-console input,
+textarea,
+select {
+    scroll-margin-top: 5.75rem;
+}
+
+/* The non-translucent iOS status bar reserves its own space. Do not add the
+   top safe area again inside the sticky application header. */
+.top-console-bar {
+    min-height: 4.65rem;
+    padding-top: 0.75rem;
+}
+
+@media (display-mode: standalone) {
+    html,
+    body,
+    #app,
+    .crt-shell {
+        min-height: var(--app-height, 100vh);
+    }
+}
+
+@media (min-width: 58rem) {
+    .top-console-bar {
+        min-height: 4.65rem;
+        padding-top: 0.75rem;
+    }
+
+    .mobile-command-bar {
+        height: 4.65rem;
+        padding-top: 0;
+    }
+}
+
+html:has(.approval-modal-backdrop),
+body:has(.approval-modal-backdrop) {
+    overflow: hidden;
+}
+
+.approval-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    display: grid;
+    place-items: center;
+    padding:
+        max(0.75rem, env(safe-area-inset-top))
+        max(0.75rem, env(safe-area-inset-right))
+        max(0.75rem, env(safe-area-inset-bottom))
+        max(0.75rem, env(safe-area-inset-left));
+    background: rgba(0, 0, 0, 0.86);
+    backdrop-filter: blur(6px);
+    overscroll-behavior: contain;
+}
+
+.approval-modal {
+    width: min(100%, 40rem);
+    max-height: calc(var(--app-height, 100dvh) - max(1.5rem, env(safe-area-inset-top)) - max(1.5rem, env(safe-area-inset-bottom)));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding: 0;
+}
+
+.approval-modal-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 96%, black);
+}
+
+.approval-modal-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 1rem 1rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.approval-message {
+    margin: 1rem 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.6;
+}
+
+.approval-modal-scroll .ledger-cost-panel {
+    margin-top: 1rem;
+}
+
+.approval-warning {
+    margin-top: 1rem;
+}
+
+.approval-modal-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 97%, black);
+    box-shadow: 0 -10px 24px rgba(0, 0, 0, 0.32);
+}
+
+.approval-modal-actions .pixel-button {
+    margin: 0;
+}
+
+@media (max-width: 430px) {
+    .approval-modal-backdrop {
+        place-items: end center;
+        padding-top: max(0.5rem, env(safe-area-inset-top));
+        padding-right: 0;
+        padding-bottom: 0;
+        padding-left: 0;
+    }
+
+    .approval-modal {
+        width: 100%;
+        max-height: calc(var(--app-height, 100dvh) - max(0.5rem, env(safe-area-inset-top)));
+        border-right: 0;
+        border-bottom: 0;
+        border-left: 0;
+    }
+
+    .approval-modal-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .approval-modal-actions .pixel-button {
+        width: 100%;
+    }
+}
+
+
+input, textarea, select {
+    font-size: 16px;
 }

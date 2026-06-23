@@ -615,3 +615,46 @@ window.stellarVault = (() => {
         window.setTimeout(showIosInstructions, 1200);
     });
 })();
+
+// Keep the installed iOS layout stable during its first paint and after
+// orientation/keyboard changes. This avoids waiting for a manual scroll before
+// WebKit recalculates the visual viewport.
+(() => {
+    const root = document.documentElement;
+    const isIos =
+        /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+        (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+    const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+
+    root.classList.toggle('ios-device', isIos);
+    root.classList.toggle('standalone-app', isStandalone);
+
+    function syncAppHeight() {
+        const height = Math.round(window.visualViewport?.height || window.innerHeight || root.clientHeight);
+        if (height > 0) {
+            root.style.setProperty('--app-height', `${height}px`);
+        }
+    }
+
+    function settleViewport() {
+        syncAppHeight();
+        window.requestAnimationFrame(syncAppHeight);
+        window.setTimeout(syncAppHeight, 80);
+        window.setTimeout(syncAppHeight, 280);
+        window.setTimeout(syncAppHeight, 700);
+    }
+
+    window.addEventListener('pageshow', settleViewport, { passive: true });
+    window.addEventListener('resize', syncAppHeight, { passive: true });
+    window.addEventListener('orientationchange', settleViewport, { passive: true });
+    window.addEventListener('focusout', () => window.setTimeout(syncAppHeight, 120), { passive: true });
+    window.visualViewport?.addEventListener('resize', syncAppHeight, { passive: true });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', settleViewport, { once: true });
+    } else {
+        settleViewport();
+    }
+})();

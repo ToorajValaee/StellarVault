@@ -28,12 +28,12 @@ else
             <div>
                 <div class="panel-kicker">WRITE OPERATION // EDIT @_location.Record.Id</div>
                 <h1>EDIT CREDENTIAL</h1>
-                <p class="page-subtitle">A new encrypted generation is committed before the previous chunks are removed.</p>
+                <p class="page-subtitle">The ledger impact opens in a dedicated approval window before the update is signed.</p>
             </div>
             <a class="pixel-button compact" href="/vault">← CANCEL</a>
         </header>
 
-        <EditForm Model="_form" OnValidSubmit="ReviewOrSaveAsync" class="terminal-panel credential-form">
+        <EditForm Model="_form" OnValidSubmit="ReviewAsync" class="terminal-panel credential-form">
             <DataAnnotationsValidator />
 
             <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
@@ -82,16 +82,6 @@ else
                 <span>NODE</span><strong>@Short(_location.NodeAccountId)</strong>
             </div>
 
-            <CostEstimatePanel Estimate="@(IsEstimateCurrent ? _estimate : null)" />
-
-            @if (IsEstimateCurrent)
-            {
-                <div class="terminal-alert warning">
-                    <strong>CONFIRMATION REQUIRED</strong>
-                    <span>Review the estimate, then press the update button again. Editing any field will generate a new estimate.</span>
-                </div>
-            }
-
             @if (!string.IsNullOrWhiteSpace(_error))
             {
                 <div class="terminal-alert error">
@@ -116,12 +106,23 @@ else
                 </div>
             }
 
-            <button class="pixel-button primary access-button" type="submit" disabled="@_saving">
-                <span>@ButtonText</span>
+            <button class="pixel-button primary access-button" type="submit" disabled="@_busy">
+                <span>@(_busy ? "CALCULATING..." : "REVIEW AND APPROVE")</span>
                 <span>▶</span>
             </button>
         </EditForm>
     </section>
+
+    <CostApprovalModal Open="_showApproval"
+                       Estimate="_estimate"
+                       Title="APPROVE RECORD UPDATE"
+                       Message="The new encrypted generation is written and committed before old chunks are cleaned up."
+                       Warning="The database key will sign the listed operations. Check the peak reserve because the old and new encrypted generations may briefly coexist."
+                       ActionText="APPROVE AND UPDATE"
+                       BusyText="UPDATING..."
+                       Busy="_busy"
+                       OnConfirm="CommitAsync"
+                       OnCancel="CancelApproval" />
 }
 
 @code {
@@ -131,23 +132,14 @@ else
     private VaultRecordLocation? _location;
     private string? _loadedRecordId;
     private bool _showSecret;
-    private bool _saving;
+    private bool _busy;
+    private bool _showApproval;
     private string? _error;
     private string? _transactionHash;
     private string? _warning;
     private string? _reviewFingerprint;
     private VaultRecord? _pendingRecord;
     private VaultCostEstimate? _estimate;
-
-    private string ButtonText => _saving
-        ? "PROCESSING..."
-        : IsEstimateCurrent
-            ? "CONFIRM AND UPDATE"
-            : "REVIEW LEDGER COST";
-
-    private bool IsEstimateCurrent =>
-        _estimate is not null &&
-        string.Equals(_reviewFingerprint, CurrentFingerprint(), StringComparison.Ordinal);
 
     protected override void OnParametersSet()
     {
@@ -173,9 +165,7 @@ else
         _form.Url = _location.Record.Url;
         _form.Notes = _location.Record.Notes;
         _form.Tags = string.Join(", ", _location.Record.Tags);
-        _estimate = null;
-        _pendingRecord = null;
-        _reviewFingerprint = null;
+        ClearApproval();
     }
 
     private void ToggleSecret() => _showSecret = !_showSecret;
@@ -186,37 +176,59 @@ else
         _showSecret = true;
     }
 
-    private async Task ReviewOrSaveAsync()
+    private async Task ReviewAsync()
     {
         if (_location is null)
             return;
 
-        _saving = true;
+        _busy = true;
         _error = null;
         _transactionHash = null;
         _warning = null;
 
         try
         {
-            var fingerprint = CurrentFingerprint();
-            if (_estimate is null ||
-                _pendingRecord is null ||
-                !string.Equals(_reviewFingerprint, fingerprint, StringComparison.Ordinal))
-            {
-                _pendingRecord = BuildRecord(DateTimeOffset.UtcNow);
-                _estimate = await Session.EstimateUpdateAsync(_location, _pendingRecord);
-                _reviewFingerprint = fingerprint;
-                return;
-            }
+            _pendingRecord = BuildRecord(DateTimeOffset.UtcNow);
+            _reviewFingerprint = CurrentFingerprint();
+            _estimate = await Session.EstimateUpdateAsync(_location, _pendingRecord);
+            _showApproval = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            ClearApproval();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
+    private async Task CommitAsync()
+    {
+        if (_location is null || _pendingRecord is null || _estimate is null)
+            return;
+
+        if (!string.Equals(_reviewFingerprint, CurrentFingerprint(), StringComparison.Ordinal))
+        {
+            _error = "The form changed after the estimate was created. Review the ledger cost again.";
+            ClearApproval();
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        _transactionHash = null;
+        _warning = null;
+
+        try
+        {
             var result = await Session.UpdateAsync(_location, _pendingRecord);
             _transactionHash = result.TransactionHash;
             _warning = result.Warning;
             _location = Session.Snapshot?.Records.FirstOrDefault(item =>
                 string.Equals(item.Record.Id, _pendingRecord.Id, StringComparison.Ordinal)) ?? _location;
-            _estimate = null;
-            _pendingRecord = null;
-            _reviewFingerprint = null;
+            ClearApproval();
         }
         catch (Exception ex)
         {
@@ -224,8 +236,18 @@ else
         }
         finally
         {
-            _saving = false;
+            _busy = false;
         }
+    }
+
+    private void CancelApproval() => ClearApproval();
+
+    private void ClearApproval()
+    {
+        _showApproval = false;
+        _estimate = null;
+        _pendingRecord = null;
+        _reviewFingerprint = null;
     }
 
     private VaultRecord BuildRecord(DateTimeOffset updated) =>
