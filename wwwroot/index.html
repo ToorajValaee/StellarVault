@@ -18,6 +18,34 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <title>Stellar Vault Terminal — Encrypted Credential Vault</title>
+
+    <!-- Capture Chromium's one-shot install event before Blazor or the large
+         Stellar SDK bundle starts loading. This is especially important on
+         slower Android devices. -->
+    <script>
+        (() => {
+            window.__stellarVaultInstallPrompt = null;
+            window.__stellarVaultInstallEventSeen = false;
+
+            window.addEventListener('beforeinstallprompt', event => {
+                event.preventDefault();
+                window.__stellarVaultInstallPrompt = event;
+                window.__stellarVaultInstallEventSeen = true;
+                window.dispatchEvent(new CustomEvent('stellarvault:install-ready'));
+            }, { capture: true });
+
+            window.addEventListener('appinstalled', () => {
+                window.__stellarVaultInstallPrompt = null;
+                window.dispatchEvent(new CustomEvent('stellarvault:installed'));
+            });
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker
+                    .register('service-worker.js', { updateViaCache: 'none' })
+                    .catch(error => console.error('Service worker registration failed:', error));
+            }
+        })();
+    </script>
 </head>
 <body>
     <div id="app">
@@ -36,12 +64,5 @@
     <script src="js/vendor/stellar-sdk.min.js"></script>
     <script src="js/app.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker
-                .register('service-worker.js', { updateViaCache: 'none' })
-                .catch(error => console.error('Service worker registration failed:', error));
-        }
-    </script>
 </body>
 </html>
