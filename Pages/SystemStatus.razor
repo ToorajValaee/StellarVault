@@ -35,11 +35,17 @@ else
                     <dd class="break-value">@Session.Network?.Passphrase</dd>
                     <dt>BASE FEE</dt>
                     <dd>@Session.Network?.BaseFeeStroops STROOPS / OP</dd>
+                    <dt>BASE RESERVE</dt>
+                    <dd>@BaseReserveDisplay NATIVE / SUBENTRY</dd>
                     <dt>NODE LIMIT</dt>
                     <dd>@Session.Network?.NodeDataEntryLimit DATA ENTRIES</dd>
-                    <dt>CHILD BALANCE</dt>
-                    <dd>@Session.Network?.ChildStartingBalance NATIVE</dd>
+                    <dt>CHILD FUNDING</dt>
+                    <dd>@Session.Network?.ChildStartingBalance NATIVE // AUTO</dd>
                 </dl>
+                <p class="security-copy">
+                    Child funding is transferred to a root-controlled node so it can satisfy account and data-entry reserve requirements.
+                    It is not a network fee. The node limit determines how much capacity is pre-funded in each node.
+                </p>
             </section>
 
             <section class="terminal-panel system-card">
@@ -98,6 +104,10 @@ else
 }
 
 @code {
+    private string BaseReserveDisplay =>
+        ((Session.Network?.BaseReserveStroops ?? 0L) / 10_000_000m)
+            .ToString("0.#######", CultureInfo.InvariantCulture);
+
     private async Task CopyRootAsync()
     {
         if (!string.IsNullOrWhiteSpace(Session.RootAccountId))

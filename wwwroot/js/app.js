@@ -25,6 +25,61 @@ window.stellarVault = (() => {
         return url;
     }
 
+    async function inspectHorizon(horizonUrl) {
+        const normalizedHorizon = normalizeHorizonUrl(horizonUrl);
+
+        async function getJson(path) {
+            const response = await fetch(`${normalizedHorizon}${path}`, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+                cache: 'no-store'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Horizon discovery failed (${response.status}) for ${path || '/'}.`);
+            }
+
+            return await response.json();
+        }
+
+        try {
+            const [root, ledgers, feeStats] = await Promise.all([
+                getJson('/'),
+                getJson('/ledgers?order=desc&limit=1'),
+                getJson('/fee_stats').catch(() => null)
+            ]);
+
+            const latestLedger = ledgers?._embedded?.records?.[0] || null;
+            const networkPassphrase = String(root?.network_passphrase || '');
+            const baseReserveStroops = Number(latestLedger?.base_reserve_in_stroops || 0);
+            const minimumBaseFeeStroops = Number(
+                feeStats?.last_ledger_base_fee ||
+                latestLedger?.base_fee_in_stroops ||
+                100);
+            const recommendedBaseFeeStroops = Number(
+                feeStats?.max_fee?.p50 ||
+                feeStats?.fee_charged?.p50 ||
+                minimumBaseFeeStroops);
+
+            if (!networkPassphrase) {
+                throw new Error('Horizon did not return network_passphrase from its root endpoint.');
+            }
+            if (!Number.isFinite(baseReserveStroops) || baseReserveStroops <= 0) {
+                throw new Error('Horizon did not return a valid base reserve from its latest ledger.');
+            }
+
+            return {
+                networkPassphrase,
+                baseReserveStroops: Math.trunc(baseReserveStroops),
+                minimumBaseFeeStroops: Math.max(1, Math.trunc(minimumBaseFeeStroops)),
+                recommendedBaseFeeStroops: Math.max(1, Math.trunc(recommendedBaseFeeStroops)),
+                horizonVersion: String(root?.horizon_version || '')
+            };
+        } catch (error) {
+            throw new Error(formatStellarError(error));
+        }
+    }
+
     function sdkBufferFromBase64(session, value) {
         const BufferType = session.keypair.rawPublicKey().constructor;
         return BufferType.from(value, 'base64');
@@ -418,6 +473,9 @@ window.stellarVault = (() => {
             window.localStorage.setItem('stellar-vault.theme.v1', normalized);
         },
         getTheme: () => window.localStorage.getItem('stellar-vault.theme.v1'),
+        network: {
+            inspectHorizon
+        },
         stellar: {
             createSession,
             deleteSession,
@@ -435,17 +493,19 @@ window.stellarVault = (() => {
     };
 })();
 
-
-// PWA installation UI. Modern browsers don't guarantee an automatic install banner,
-// so the app presents its own prompt when beforeinstallprompt becomes available.
+// PWA installation UI. Chromium exposes beforeinstallprompt. iOS does not,
+// so iPhone/iPad users receive explicit Safari Add to Home Screen instructions.
 (() => {
     let deferredInstallPrompt = null;
+    let iosInstructionsVisible = false;
 
     const isStandalone = () =>
         window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
 
-    const isIos = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    const isIos = () =>
+        /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+        (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
 
     function createBanner() {
         let banner = document.getElementById('pwa-install-banner');
@@ -464,6 +524,12 @@ window.stellarVault = (() => {
                 <span class="pwa-install-kicker">:: SYSTEM MESSAGE</span>
                 <strong id="pwa-install-title">INSTALL STELLAR VAULT</strong>
                 <small id="pwa-install-message">Run this terminal as an installed application.</small>
+                <ol id="pwa-ios-steps" class="pwa-ios-steps" hidden>
+                    <li>Open this page in Safari.</li>
+                    <li>Tap the Share button in Safari.</li>
+                    <li>Choose Add to Home Screen.</li>
+                    <li>Tap Add.</li>
+                </ol>
             </div>
             <div class="pwa-install-actions">
                 <button id="pwa-install-action" class="pixel-button primary compact" type="button">INSTALL</button>
@@ -473,6 +539,16 @@ window.stellarVault = (() => {
         document.body.appendChild(banner);
 
         banner.querySelector('#pwa-install-action').addEventListener('click', async () => {
+            if (isIos()) {
+                iosInstructionsVisible = !iosInstructionsVisible;
+                const steps = banner.querySelector('#pwa-ios-steps');
+                steps.hidden = !iosInstructionsVisible;
+                banner.querySelector('#pwa-install-action').textContent = iosInstructionsVisible
+                    ? 'HIDE STEPS'
+                    : 'SHOW STEPS';
+                return;
+            }
+
             if (!deferredInstallPrompt) {
                 return;
             }
@@ -501,7 +577,9 @@ window.stellarVault = (() => {
         const banner = createBanner();
         banner.querySelector('#pwa-install-title').textContent = 'INSTALL STELLAR VAULT';
         banner.querySelector('#pwa-install-message').textContent = 'Run this terminal as an installed application.';
+        banner.querySelector('#pwa-install-action').textContent = 'INSTALL';
         banner.querySelector('#pwa-install-action').hidden = false;
+        banner.querySelector('#pwa-ios-steps').hidden = true;
         banner.hidden = false;
     }
 
@@ -511,9 +589,11 @@ window.stellarVault = (() => {
         }
 
         const banner = createBanner();
-        banner.querySelector('#pwa-install-title').textContent = 'ADD TERMINAL TO HOME SCREEN';
-        banner.querySelector('#pwa-install-message').textContent = 'In Safari, tap Share, then Add to Home Screen.';
-        banner.querySelector('#pwa-install-action').hidden = true;
+        banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON IPHONE / IPAD';
+        banner.querySelector('#pwa-install-message').textContent = 'iOS does not provide an automatic install dialog. Use Safari → Share → Add to Home Screen.';
+        banner.querySelector('#pwa-install-action').textContent = 'SHOW STEPS';
+        banner.querySelector('#pwa-install-action').hidden = false;
+        banner.querySelector('#pwa-ios-steps').hidden = true;
         banner.hidden = false;
     }
 
@@ -532,7 +612,6 @@ window.stellarVault = (() => {
     });
 
     window.addEventListener('load', () => {
-        // Safari on iOS doesn't expose beforeinstallprompt.
         window.setTimeout(showIosInstructions, 1200);
     });
 })();

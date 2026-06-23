@@ -1,84 +1,141 @@
 # Stellar Vault PWA
 
-A mobile-first Blazor WebAssembly PWA that stores individually encrypted credential records in classic Stellar `ManageData` entries. When a node reaches its configured capacity, the root database keypair creates a child account, makes the root public key its signer, disables the child master key, and links it through `sv:next`.
+A mobile-first Blazor WebAssembly PWA that stores individually encrypted credential records in classic Stellar `ManageData` entries. When the active account node reaches its configured capacity, the root database keypair creates a child account, makes the root public key its signer, disables the child master key, and links it through `sv:next`.
 
-The UI is intentionally styled like a CRT-era console with scanlines, pixel textures, sharp borders, green/amber phosphor themes, and touch-friendly mobile controls.
+The interface is styled like a CRT-era console with scanlines, pixel textures, sharp borders, green/amber phosphor themes, and touch-friendly mobile controls.
+
+Stellar Vault Terminal is powered by **BADJE.IR**. Project contact: **Tooraj Valaee** — **tooraj.valaee@live.com**.
 
 ## Features
 
-- Blazor WebAssembly PWA; installable on mobile and desktop
-- Testnet, Public, and custom/private Stellar network selection
-- Custom Horizon URL and exact network passphrase
-- Network settings saved locally; root secret is not persisted
-- Searchable credential list
-- Record detail view with reveal, clipboard, edit, and delete actions
-- Add and edit credential forms with local password generator
-- Two-step delete confirmation with manifest-first removal
-- AES-256-GCM encryption and HKDF-SHA256 key derivation through the browser Web Crypto API
+- Blazor WebAssembly PWA for mobile and desktop
+- iPhone/iPad installation instructions and Chromium native install prompt
+- iOS safe-area support for the status area, home indicator, and landscape notches
+- Testnet, Public, and custom/private Stellar networks
+- Automatic custom-network discovery from Horizon:
+  - network passphrase
+  - latest base reserve
+  - current/recommended fee per operation
+  - Horizon version
+- Manual fallback when Horizon discovery is blocked or unsupported
+- Network settings saved locally; root secret is never persisted by the app
+- Searchable credential list with reveal and clipboard actions
+- Add, edit, and delete flows
+- Cost review before add, edit, and delete operations
+- Separate display of:
+  - transaction fees that are spent
+  - reserve temporarily locked by ledger entries
+  - reserve released by deletion
+  - child-account funding transfers
+- AES-256-GCM encryption and HKDF-SHA256 derivation through Web Crypto
 - Automatic 64-byte `ManageData` chunking
-- Versioned chunk generations, manifest-last commits, and SHA-256 integrity verification
-- Safe edits that stage the new encrypted generation before cleaning old chunks
+- Versioned record generations and manifest-last commits
 - Automatic linked child-account creation
-- Root key controls all child nodes
-- Account-chain diagnostics page
-- Green and amber phosphor themes
+- Root key controls every child node
+- Contact and private-network account request page
 - Offline-cached application shell
 
-## Requirements
+## Run
+
+Requirements:
 
 - .NET 8 SDK
-- An existing, funded Stellar root account on the selected network
-- Enough native balance for transaction fees and child-account reserves
-- A Horizon endpoint reachable from the browser
-
-## Run
+- An existing funded Stellar root account
+- A Horizon endpoint reachable by the browser
 
 ```powershell
 dotnet restore
 dotnet run
 ```
 
-Open the HTTPS address shown by `dotnet run`. For a local private Horizon endpoint using plain HTTP, open the app through its HTTP development address instead; browsers block HTTPS pages from calling HTTP endpoints.
+Open the HTTPS address shown by `dotnet run`. When using a plain-HTTP private Horizon server during development, open the app from its HTTP development address; browsers block an HTTPS page from calling HTTP resources.
 
-## Publish
+## Custom-network discovery
 
-```powershell
-dotnet publish -c Release
-```
-
-Deploy the contents of:
+Enter the Horizon URL and press **DETECT PASSPHRASE + FEES**, or leave the field after typing the URL. The browser reads:
 
 ```text
-bin/Release/net8.0/publish/wwwroot
+GET /
+GET /ledgers?order=desc&limit=1
+GET /fee_stats
 ```
 
-The host must serve `index.html` for unknown client-side routes such as `/vault`, `/add`, `/edit/<record-id>`, and `/system`.
+The root Horizon response supplies the network passphrase. The latest ledger supplies the base reserve, and fee statistics supply a suggested per-operation fee bid.
 
-Example Nginx fallback:
+Horizon must allow the PWA origin through CORS. If discovery fails, the form remains editable so the values can be entered manually.
 
-```nginx
-location / {
-    try_files $uri $uri/ /index.html;
-}
+## Child funding and node limit
+
+The old prototype used a fixed child starting balance of `50` native units. This version calculates it from the actual network base reserve and the selected node capacity:
+
+```text
+recommended child funding = (node data-entry limit + 4) × base reserve
 ```
 
-## Horizon CORS
+The four reserve units represent:
 
-The browser calls Horizon directly. Horizon or its reverse proxy must allow the PWA origin.
-
-Example:
-
-```nginx
-add_header Access-Control-Allow-Origin "https://vault.example.com" always;
-add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-
-if ($request_method = OPTIONS) {
-    return 204;
-}
+```text
+2  account baseline
+1  root signer on the child
+1  safety reserve
 ```
 
-Do not use `*` when credentials or other protected browser features are introduced. Restrict the origin to the deployed PWA domain.
+The selected data-entry limit reserves capacity for the node's `ManageData` entries. The amount is a transfer from the root account to another account controlled by the same root signer. It is not burned as a fee.
+
+The node limit is kept under **Advanced Ledger Parameters** because it is a storage/capital tradeoff:
+
+- Lower limit: less balance locked in each node, but more child accounts are created.
+- Higher limit: fewer child accounts, but more native balance is transferred into each child as future capacity. Only the ledger-required portion is locked as entries are created.
+
+The default is `80` data entries per node. With a base reserve of `0.5`, the calculated child funding is `42` native units.
+
+## Cost estimates
+
+Before a mutation is signed, the app calculates and displays:
+
+- operation count
+- transaction count
+- encrypted chunk count
+- data entries added and removed
+- estimated network fee
+- peak additional reserve requirement
+- net reserve change after cleanup
+- child-account funding transfer, when a new node is required
+
+The estimate is regenerated whenever the form changes. The user must review it and press the confirmation button a second time before submission.
+
+Network fees are spent. Reserve is balance that must remain on an account while its account structure and data entries exist. Removing data entries can release reserve, but it does not refund transaction fees.
+
+## PWA installation
+
+### Android and desktop Chromium
+
+The app captures `beforeinstallprompt` and displays its own retro install banner. Pressing **INSTALL** opens the browser's native installation dialog when available.
+
+### iPhone and iPad
+
+iOS does not expose the Chromium installation prompt to the page. The app therefore shows manual instructions:
+
+1. Open the site in Safari.
+2. Tap **Share**.
+3. Choose **Add to Home Screen**.
+4. Tap **Add**.
+
+After installation, the layout uses `viewport-fit=cover` together with `env(safe-area-inset-*)` so important controls do not sit under the iOS status area, notch, or home indicator.
+
+Use HTTPS in production. `localhost` is accepted for local development, but a plain HTTP LAN address usually isn't an installable secure context.
+
+## Contact and private-network accounts
+
+The public home page and `/contact` include:
+
+```text
+Tooraj Valaee
+tooraj.valaee@live.com
+Powered by BADJE.IR
+```
+
+Users who do not have an account on the BADJE private Stellar network can use the prefilled email action to request account provisioning.
 
 ## Ledger format
 
@@ -90,33 +147,56 @@ svc:<record-id>:<generation>:0001        -> encrypted data chunk
 ...
 ```
 
-Manifest version 2 is 51 bytes and includes a four-byte generation identifier. Legacy version-1 manifests and non-generation chunk names remain readable. During an edit, new generation chunks are written first and the manifest is replaced last. Readers therefore continue using the old complete generation until the new one is committed. Obsolete chunks are removed afterward.
+Manifest version 2 is 51 bytes and contains a four-byte generation identifier. Legacy version-1 records remain readable. During an edit, the new encrypted chunks are staged first, the new manifest is committed last, and old entries are cleaned afterward.
 
-The Blazor client uses `window.crypto.subtle` so the web format remains byte-compatible with the console application. The encrypted envelope is:
-
-```text
-version (1 byte)
-nonce   (12 bytes)
-tag     (16 bytes)
-ciphertext
-```
-
-The manifest stores the chunk count, encrypted length, SHA-256 ciphertext hash, update timestamp, and generation. The header is submitted last, so incomplete staged chunks are ignored by readers. Delete removes all matching manifests first, then cleans their encrypted chunks.
+Delete removes matching manifests first so the record immediately disappears from normal reads, then removes the encrypted chunks. Historical transaction data may remain accessible on a Stellar history service even after current ledger entries are deleted.
 
 ## Security notes
 
 - This is an experimental prototype and has not been professionally audited.
-- All ciphertext is public on a public Stellar network and can remain in historical records after replacement.
+- All ciphertext is publicly retrievable when used on a public Stellar network.
 - Anyone who obtains the root secret can sign database operations and derive the vault encryption key.
-- The app never stores the root secret in `localStorage`, IndexedDB, cookies, or application settings.
-- The secret and decrypted records exist in WebAssembly memory while the vault is open.
-- Clipboard history, browser extensions, screenshots, terminal inspection, and a compromised device can expose revealed data.
+- The app does not save the root secret to local storage, IndexedDB, cookies, or application settings.
+- The secret and decrypted records exist in browser memory while the vault is open.
+- Clipboard history, browser extensions, screenshots, and a compromised device can expose revealed values.
 - Use HTTPS for production.
-- Configure an appropriate child balance for the network base reserve and chosen data-entry limit.
+- Back up the root secret securely. Losing it makes the database inaccessible.
 
-## Compatibility with the console prototype
+## Publish
 
-The PWA continues to read the console prototype's version-1 manifests and chunk names. New records and edited records use the safer version-2 generation format. The original console prototype must be upgraded before it can read records written in version 2. Encryption derivation and the child-account chain remain unchanged.
+```powershell
+dotnet publish -c Release
+```
+
+Deploy:
+
+```text
+bin/Release/net8.0/publish/wwwroot
+```
+
+The web server must fall back to `index.html` for client routes such as `/vault`, `/add`, `/edit/<record-id>`, `/system`, and `/contact`.
+
+Example Nginx configuration:
+
+```nginx
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+## Horizon CORS example
+
+```nginx
+add_header Access-Control-Allow-Origin "https://vault.example.com" always;
+add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+
+if ($request_method = OPTIONS) {
+    return 204;
+}
+```
+
+Restrict the allowed origin to the deployed app domain.
 
 ## Docker
 
@@ -125,16 +205,13 @@ docker build -t stellar-vault-pwa .
 docker run --rm -p 8080:80 stellar-vault-pwa
 ```
 
-Open `http://localhost:8080`. For production, put the container behind an HTTPS reverse proxy.
+Open `http://localhost:8080`.
 
+## Updating an installed copy
 
-## PWA installation prompt
+An existing service worker may keep an older UI briefly. After deployment:
 
-The app captures Chromium's `beforeinstallprompt` event and displays an in-app retro installation banner. On iPhone/iPad Safari it displays manual **Share → Add to Home Screen** instructions.
-
-For installability, use HTTPS in deployment. `http://localhost` is allowed for local development, but an HTTP LAN address such as `http://192.168.x.x` isn't a secure context. After the first service-worker registration, reload the page once.
-
-
-## Updating an already installed PWA
-
-The service worker can retain the previous application bundle. After deploying this version, close all installed-app windows and refresh the browser version. If the old UI remains, clear site data or unregister the existing service worker once, then reload.
+1. Close installed app windows.
+2. Reload the browser version.
+3. If the old bundle remains, clear site data or unregister the old service worker once.
+4. Reload again.

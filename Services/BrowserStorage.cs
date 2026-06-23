@@ -40,6 +40,10 @@ public sealed class BrowserStorage(IJSRuntime js)
     public ValueTask<string?> GetThemeAsync() =>
         js.InvokeAsync<string?>("stellarVault.getTheme");
 
+
+    public ValueTask<HorizonNetworkInfo> InspectHorizonAsync(string horizonUrl) =>
+        js.InvokeAsync<HorizonNetworkInfo>("stellarVault.network.inspectHorizon", horizonUrl);
+
     public ValueTask<string> RandomHexAsync(int byteCount) =>
         js.InvokeAsync<string>("stellarVault.crypto.randomHex", byteCount);
 

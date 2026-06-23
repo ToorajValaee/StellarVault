@@ -12,9 +12,19 @@ public sealed record VaultNetworkSettings(
     string Passphrase,
     string ChildStartingBalance,
     int NodeDataEntryLimit,
-    uint BaseFeeStroops)
+    uint BaseFeeStroops,
+    long BaseReserveStroops = 5_000_000)
 {
     public string NormalizedHorizonUrl => HorizonUrl.Trim().TrimEnd('/');
+}
+
+public sealed class HorizonNetworkInfo
+{
+    public string NetworkPassphrase { get; set; } = string.Empty;
+    public long BaseReserveStroops { get; set; }
+    public uint MinimumBaseFeeStroops { get; set; }
+    public uint RecommendedBaseFeeStroops { get; set; }
+    public string HorizonVersion { get; set; } = string.Empty;
 }
 
 public sealed class VaultRecord
@@ -51,6 +61,18 @@ public sealed record VaultReadResult(
 public sealed record VaultMutationResult(
     string TransactionHash,
     string? Warning = null);
+
+public sealed record VaultCostEstimate(
+    int OperationCount,
+    int TransactionCount,
+    int ChunkCount,
+    int DataEntriesAdded,
+    int DataEntriesRemoved,
+    decimal NetworkFeeNative,
+    decimal PeakReserveIncreaseNative,
+    decimal NetReserveChangeNative,
+    decimal ChildFundingTransferNative,
+    bool CreatesChildNode);
 
 internal sealed record RecordManifest(
     byte FormatVersion,

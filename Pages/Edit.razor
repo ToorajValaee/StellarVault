@@ -33,7 +33,7 @@ else
             <a class="pixel-button compact" href="/vault">← CANCEL</a>
         </header>
 
-        <EditForm Model="_form" OnValidSubmit="SaveAsync" class="terminal-panel credential-form">
+        <EditForm Model="_form" OnValidSubmit="ReviewOrSaveAsync" class="terminal-panel credential-form">
             <DataAnnotationsValidator />
 
             <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
@@ -82,6 +82,16 @@ else
                 <span>NODE</span><strong>@Short(_location.NodeAccountId)</strong>
             </div>
 
+            <CostEstimatePanel Estimate="@(IsEstimateCurrent ? _estimate : null)" />
+
+            @if (IsEstimateCurrent)
+            {
+                <div class="terminal-alert warning">
+                    <strong>CONFIRMATION REQUIRED</strong>
+                    <span>Review the estimate, then press the update button again. Editing any field will generate a new estimate.</span>
+                </div>
+            }
+
             @if (!string.IsNullOrWhiteSpace(_error))
             {
                 <div class="terminal-alert error">
@@ -107,7 +117,7 @@ else
             }
 
             <button class="pixel-button primary access-button" type="submit" disabled="@_saving">
-                <span>@(_saving ? "UPDATING LEDGER..." : "ENCRYPT AND UPDATE")</span>
+                <span>@ButtonText</span>
                 <span>▶</span>
             </button>
         </EditForm>
@@ -125,6 +135,19 @@ else
     private string? _error;
     private string? _transactionHash;
     private string? _warning;
+    private string? _reviewFingerprint;
+    private VaultRecord? _pendingRecord;
+    private VaultCostEstimate? _estimate;
+
+    private string ButtonText => _saving
+        ? "PROCESSING..."
+        : IsEstimateCurrent
+            ? "CONFIRM AND UPDATE"
+            : "REVIEW LEDGER COST";
+
+    private bool IsEstimateCurrent =>
+        _estimate is not null &&
+        string.Equals(_reviewFingerprint, CurrentFingerprint(), StringComparison.Ordinal);
 
     protected override void OnParametersSet()
     {
@@ -150,6 +173,9 @@ else
         _form.Url = _location.Record.Url;
         _form.Notes = _location.Record.Notes;
         _form.Tags = string.Join(", ", _location.Record.Tags);
+        _estimate = null;
+        _pendingRecord = null;
+        _reviewFingerprint = null;
     }
 
     private void ToggleSecret() => _showSecret = !_showSecret;
@@ -160,7 +186,7 @@ else
         _showSecret = true;
     }
 
-    private async Task SaveAsync()
+    private async Task ReviewOrSaveAsync()
     {
         if (_location is null)
             return;
@@ -172,26 +198,25 @@ else
 
         try
         {
-            var record = new VaultRecord
+            var fingerprint = CurrentFingerprint();
+            if (_estimate is null ||
+                _pendingRecord is null ||
+                !string.Equals(_reviewFingerprint, fingerprint, StringComparison.Ordinal))
             {
-                Id = _location.Record.Id,
-                Title = _form.Title.Trim(),
-                UserName = _form.UserName.Trim(),
-                Secret = _form.Secret,
-                Url = _form.Url.Trim(),
-                Notes = _form.Notes.Trim(),
-                Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                CreatedUtc = _location.Record.CreatedUtc,
-                UpdatedUtc = DateTimeOffset.UtcNow
-            };
+                _pendingRecord = BuildRecord(DateTimeOffset.UtcNow);
+                _estimate = await Session.EstimateUpdateAsync(_location, _pendingRecord);
+                _reviewFingerprint = fingerprint;
+                return;
+            }
 
-            var result = await Session.UpdateAsync(_location, record);
+            var result = await Session.UpdateAsync(_location, _pendingRecord);
             _transactionHash = result.TransactionHash;
             _warning = result.Warning;
             _location = Session.Snapshot?.Records.FirstOrDefault(item =>
-                string.Equals(item.Record.Id, record.Id, StringComparison.Ordinal)) ?? _location;
+                string.Equals(item.Record.Id, _pendingRecord.Id, StringComparison.Ordinal)) ?? _location;
+            _estimate = null;
+            _pendingRecord = null;
+            _reviewFingerprint = null;
         }
         catch (Exception ex)
         {
@@ -202,6 +227,25 @@ else
             _saving = false;
         }
     }
+
+    private VaultRecord BuildRecord(DateTimeOffset updated) =>
+        new()
+        {
+            Id = _location!.Record.Id,
+            Title = _form.Title.Trim(),
+            UserName = _form.UserName.Trim(),
+            Secret = _form.Secret,
+            Url = _form.Url.Trim(),
+            Notes = _form.Notes.Trim(),
+            Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            CreatedUtc = _location.Record.CreatedUtc,
+            UpdatedUtc = updated
+        };
+
+    private string CurrentFingerprint() =>
+        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags);
 
     private static string Short(string value) =>
         value.Length <= 18 ? value : $"{value[..9]}…{value[^6..]}";

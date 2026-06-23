@@ -49,16 +49,50 @@
             <div class="custom-network-fields">
                 <label class="terminal-label">
                     <span>NETWORK NAME</span>
-                    <input class="terminal-input" @bind="_networkName" autocomplete="off" placeholder="DAYACHAIN PRIVATE" />
+                    <input class="terminal-input" @bind="_networkName" autocomplete="off" placeholder="PRIVATE NETWORK" />
                 </label>
                 <label class="terminal-label">
                     <span>HORIZON URL</span>
-                    <input class="terminal-input" @bind="_horizonUrl" inputmode="url" autocomplete="url" placeholder="https://horizon.example.com" />
+                    <input class="terminal-input"
+                           @bind="_horizonUrl"
+                           @bind:event="oninput"
+                           @onblur="DiscoverNetworkAsync"
+                           inputmode="url"
+                           autocomplete="url"
+                           placeholder="https://horizon.example.com" />
                 </label>
+
+                <button class="pixel-button compact detect-network-button"
+                        type="button"
+                        disabled="@_discovering"
+                        @onclick="DiscoverNetworkAsync">
+                    @(_discovering ? "DETECTING..." : "DETECT PASSPHRASE + FEES")
+                </button>
+
                 <label class="terminal-label">
-                    <span>NETWORK PASSPHRASE</span>
-                    <textarea class="terminal-input terminal-textarea compact" @bind="_passphrase" rows="2" spellcheck="false" placeholder="Your exact Stellar network passphrase"></textarea>
+                    <span>NETWORK PASSPHRASE // AUTO-DETECTED</span>
+                    <textarea class="terminal-input terminal-textarea compact"
+                              @bind="_passphrase"
+                              rows="2"
+                              spellcheck="false"
+                              placeholder="Detected from the Horizon root endpoint"></textarea>
                 </label>
+
+                @if (!string.IsNullOrWhiteSpace(_networkProbeStatus))
+                {
+                    <div class="terminal-alert success compact-alert">
+                        <strong>HORIZON DETECTED</strong>
+                        <span>@_networkProbeStatus</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(_networkProbeError))
+                {
+                    <div class="terminal-alert warning compact-alert">
+                        <strong>AUTO-DETECTION FAILED</strong>
+                        <span>@_networkProbeError You can enter the values manually if only discovery endpoints are unavailable; the browser must still be able to reach Horizon.</span>
+                    </div>
+                }
             </div>
         }
 
@@ -72,16 +106,24 @@
 
         <details class="advanced-block">
             <summary>ADVANCED LEDGER PARAMETERS</summary>
+            <p class="advanced-help">
+                Most users should keep these automatic values. The node limit controls how many ManageData entries are placed on each child account.
+                A higher limit creates fewer accounts and pre-funds more native balance in each child; reserve becomes locked only as entries are created.
+            </p>
             <div class="advanced-grid">
                 <label class="terminal-label">
-                    <span>CHILD STARTING BALANCE</span>
-                    <input class="terminal-input" @bind="_childBalance" inputmode="decimal" />
+                    <span>DATA ENTRY LIMIT / NODE</span>
+                    <input class="terminal-input" type="number" min="4" max="950" @bind="NodeEntryLimit" />
                 </label>
                 <label class="terminal-label">
-                    <span>DATA ENTRY LIMIT / NODE</span>
-                    <input class="terminal-input" type="number" min="4" max="950" @bind="_entryLimit" />
+                    <span>AUTO CHILD FUNDING</span>
+                    <input class="terminal-input readonly-input" value="@ChildFundingDisplay" readonly />
                 </label>
-                <label class="terminal-label full-width">
+                <label class="terminal-label">
+                    <span>BASE RESERVE</span>
+                    <input class="terminal-input readonly-input" value="@BaseReserveEntryDisplay" readonly />
+                </label>
+                <label class="terminal-label">
                     <span>BASE FEE / OPERATION (STROOPS)</span>
                     <input class="terminal-input" type="number" min="1" @bind="_baseFee" />
                 </label>
@@ -125,20 +167,56 @@
 
         <p class="local-only-note">// SAVED LOCALLY: NETWORK SETTINGS ONLY. DATABASE SECRET: MEMORY ONLY.</p>
     </form>
+
+    <aside class="terminal-panel account-help-panel">
+        <div>
+            <div class="panel-kicker">PRIVATE NETWORK ACCESS</div>
+            <h2>NEED AN ACCOUNT?</h2>
+            <p>
+                If you do not have an account on the BADJE private Stellar network, contact Tooraj Valaee and an account can be provisioned for you.
+            </p>
+        </div>
+        <div class="account-help-actions">
+            <a class="pixel-button primary compact" href="mailto:tooraj.valaee@live.com?subject=Private%20Stellar%20Network%20Account">EMAIL TOORAJ</a>
+            <a class="mini-button" href="/contact">CONTACT DETAILS</a>
+        </div>
+    </aside>
 </section>
 
 @code {
+    private const long DefaultBaseReserveStroops = 5_000_000;
+
     private string _preset = "testnet";
     private string _networkName = "Testnet";
     private string _horizonUrl = "https://horizon-testnet.stellar.org";
     private string _passphrase = StellarNetworkPassphrases.Testnet;
-    private string _childBalance = "50";
+    private string _childBalance = "42";
     private int _entryLimit = 80;
     private uint _baseFee = 100u;
+    private long _baseReserveStroops = DefaultBaseReserveStroops;
     private string _secret = string.Empty;
     private bool _showSecret;
     private bool _opening;
+    private bool _discovering;
     private string? _error;
+    private string? _networkProbeStatus;
+    private string? _networkProbeError;
+
+    private int NodeEntryLimit
+    {
+        get => _entryLimit;
+        set
+        {
+            _entryLimit = Math.Clamp(value, 4, 950);
+            RecalculateChildBalance();
+        }
+    }
+
+    private string BaseReserveDisplay =>
+        (_baseReserveStroops / 10_000_000m).ToString("0.#######", CultureInfo.InvariantCulture);
+
+    private string ChildFundingDisplay => $"{_childBalance} NATIVE";
+    private string BaseReserveEntryDisplay => $"{BaseReserveDisplay} NATIVE / ENTRY";
 
     private bool HasMixedContentRisk =>
         Navigation.BaseUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
@@ -146,6 +224,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        RecalculateChildBalance();
+
         if (Session.IsUnlocked)
         {
             Navigation.NavigateTo("/vault");
@@ -163,6 +243,8 @@
     {
         _preset = preset;
         _error = null;
+        _networkProbeError = null;
+        _networkProbeStatus = null;
 
         switch (preset)
         {
@@ -170,11 +252,15 @@
                 _networkName = "Testnet";
                 _horizonUrl = "https://horizon-testnet.stellar.org";
                 _passphrase = StellarNetworkPassphrases.Testnet;
+                _baseReserveStroops = DefaultBaseReserveStroops;
+                _baseFee = 100u;
                 break;
             case "public":
                 _networkName = "Public";
                 _horizonUrl = "https://horizon.stellar.org";
                 _passphrase = StellarNetworkPassphrases.Public;
+                _baseReserveStroops = DefaultBaseReserveStroops;
+                _baseFee = 100u;
                 break;
             case "custom":
                 if (_networkName is "Testnet" or "Public")
@@ -186,6 +272,8 @@
                     _passphrase = string.Empty;
                 break;
         }
+
+        RecalculateChildBalance();
     }
 
     private string TestnetClass => _preset == "testnet" ? "selected" : string.Empty;
@@ -196,9 +284,64 @@
     private void SelectPublic() => SelectPreset("public");
     private void SelectCustom() => SelectPreset("custom");
 
+    private async Task DiscoverNetworkAsync()
+    {
+        await TryDiscoverNetworkAsync(requireSuccess: false);
+    }
+
+    private async Task<bool> TryDiscoverNetworkAsync(bool requireSuccess)
+    {
+        _networkProbeError = null;
+        _networkProbeStatus = null;
+
+        if (!Uri.TryCreate(_horizonUrl.Trim(), UriKind.Absolute, out var horizonUri) ||
+            (horizonUri.Scheme != Uri.UriSchemeHttp && horizonUri.Scheme != Uri.UriSchemeHttps))
+        {
+            if (requireSuccess)
+                _error = "Enter a valid Horizon URL before opening the database.";
+            return false;
+        }
+
+        _discovering = true;
+        try
+        {
+            var info = await Storage.InspectHorizonAsync(horizonUri.ToString().TrimEnd('/'));
+            _passphrase = info.NetworkPassphrase;
+            _baseReserveStroops = Math.Max(1L, info.BaseReserveStroops);
+            _baseFee = Math.Max(1u, info.RecommendedBaseFeeStroops);
+            RecalculateChildBalance();
+
+            var version = string.IsNullOrWhiteSpace(info.HorizonVersion)
+                ? string.Empty
+                : $" // HORIZON {info.HorizonVersion}";
+            _networkProbeStatus =
+                $"PASSPHRASE LOADED // RESERVE {BaseReserveDisplay} // FEE {_baseFee} STROOPS{version}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _networkProbeError = FriendlyError(ex);
+            if (requireSuccess && string.IsNullOrWhiteSpace(_passphrase))
+                _error = "The network passphrase could not be detected. Enter it manually or fix Horizon connectivity.";
+            return false;
+        }
+        finally
+        {
+            _discovering = false;
+        }
+    }
+
     private async Task OpenAsync()
     {
         _error = null;
+
+        if (_preset == "custom")
+            await TryDiscoverNetworkAsync(requireSuccess: true);
+        else
+            await TryDiscoverNetworkAsync(requireSuccess: false);
+
+        if (!string.IsNullOrWhiteSpace(_error))
+            return;
 
         if (string.IsNullOrWhiteSpace(_networkName) ||
             string.IsNullOrWhiteSpace(_horizonUrl) ||
@@ -217,13 +360,13 @@
 
         if (!decimal.TryParse(_childBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var childBalance) || childBalance <= 0)
         {
-            _error = "Child starting balance must be a positive invariant number, for example 50.";
+            _error = "The automatically calculated child funding amount is invalid.";
             return;
         }
 
-        if (_entryLimit is < 4 or > 950 || _baseFee == 0)
+        if (_entryLimit is < 4 or > 950 || _baseFee == 0 || _baseReserveStroops <= 0)
         {
-            _error = "Entry limit must be 4–950 and the base fee must be positive.";
+            _error = "Entry limit must be 4–950 and the detected reserve and fee must be positive.";
             return;
         }
 
@@ -239,7 +382,8 @@
             _passphrase,
             childBalance.ToString("0.#######", CultureInfo.InvariantCulture),
             _entryLimit,
-            _baseFee);
+            _baseFee,
+            _baseReserveStroops);
 
         _opening = true;
         var secretForUnlock = _secret;
@@ -263,14 +407,27 @@
         }
     }
 
+    private void RecalculateChildBalance()
+    {
+        // Two base reserves create the account, one reserve belongs to the root signer,
+        // NodeDataEntryLimit reserves cover the node's data entries, and one extra reserve
+        // provides a small safety margin if the network parameters move.
+        var reserveNative = Math.Max(1L, _baseReserveStroops) / 10_000_000m;
+        var recommended = (_entryLimit + 4) * reserveNative;
+        _childBalance = recommended.ToString("0.#######", CultureInfo.InvariantCulture);
+    }
+
     private void ApplySettings(VaultNetworkSettings settings)
     {
         _networkName = settings.Name;
         _horizonUrl = settings.HorizonUrl;
         _passphrase = settings.Passphrase;
-        _childBalance = settings.ChildStartingBalance;
         _entryLimit = settings.NodeDataEntryLimit;
-        _baseFee = settings.BaseFeeStroops;
+        _baseFee = settings.BaseFeeStroops == 0 ? 100u : settings.BaseFeeStroops;
+        _baseReserveStroops = settings.BaseReserveStroops <= 0
+            ? DefaultBaseReserveStroops
+            : settings.BaseReserveStroops;
+        RecalculateChildBalance();
 
         _preset = settings.Passphrase == StellarNetworkPassphrases.Testnet
             ? "testnet"
@@ -287,7 +444,8 @@
             return "The root Stellar account does not exist on the selected network, or the Horizon URL is incorrect.";
 
         if (text.Contains("CORS", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase))
+            text.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("fetch", StringComparison.OrdinalIgnoreCase))
             return "The browser could not reach Horizon. Check CORS, HTTPS, the URL, and network connectivity.";
 
         return text;

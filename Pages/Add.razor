@@ -19,12 +19,12 @@ else
             <div>
                 <div class="panel-kicker">WRITE OPERATION // NEW RECORD</div>
                 <h1>ADD CREDENTIAL</h1>
-                <p class="page-subtitle">The record is encrypted locally before any data reaches Horizon.</p>
+                <p class="page-subtitle">Review the network fee and reserve impact before the signed transaction is submitted.</p>
             </div>
             <a class="pixel-button compact" href="/vault">← CANCEL</a>
         </header>
 
-        <EditForm Model="_form" OnValidSubmit="SaveAsync" class="terminal-panel credential-form">
+        <EditForm Model="_form" OnValidSubmit="ReviewOrSaveAsync" class="terminal-panel credential-form">
             <DataAnnotationsValidator />
 
             <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
@@ -73,6 +73,16 @@ else
                 <span>NETWORK</span><strong>@Session.Network?.Name</strong>
             </div>
 
+            <CostEstimatePanel Estimate="@(IsEstimateCurrent ? _estimate : null)" />
+
+            @if (IsEstimateCurrent)
+            {
+                <div class="terminal-alert warning">
+                    <strong>CONFIRMATION REQUIRED</strong>
+                    <span>Review the estimate, then press the commit button again. Editing any field will generate a new estimate.</span>
+                </div>
+            }
+
             @if (!string.IsNullOrWhiteSpace(_error))
             {
                 <div class="terminal-alert error">
@@ -90,7 +100,7 @@ else
             }
 
             <button class="pixel-button primary access-button" type="submit" disabled="@_saving">
-                <span>@(_saving ? "WRITING TO LEDGER..." : "ENCRYPT AND COMMIT")</span>
+                <span>@ButtonText</span>
                 <span>▶</span>
             </button>
         </EditForm>
@@ -103,6 +113,20 @@ else
     private bool _saving;
     private string? _error;
     private string? _transactionHash;
+    private string? _draftRecordId;
+    private string? _reviewFingerprint;
+    private VaultRecord? _pendingRecord;
+    private VaultCostEstimate? _estimate;
+
+    private string ButtonText => _saving
+        ? "PROCESSING..."
+        : IsEstimateCurrent
+            ? "CONFIRM AND COMMIT"
+            : "REVIEW LEDGER COST";
+
+    private bool IsEstimateCurrent =>
+        _estimate is not null &&
+        string.Equals(_reviewFingerprint, CurrentFingerprint(), StringComparison.Ordinal);
 
     protected override void OnInitialized()
     {
@@ -118,7 +142,7 @@ else
         _showSecret = true;
     }
 
-    private async Task SaveAsync()
+    private async Task ReviewOrSaveAsync()
     {
         _saving = true;
         _error = null;
@@ -126,25 +150,26 @@ else
 
         try
         {
-            var now = DateTimeOffset.UtcNow;
-            var record = new VaultRecord
+            var fingerprint = CurrentFingerprint();
+            if (_estimate is null ||
+                _pendingRecord is null ||
+                !string.Equals(_reviewFingerprint, fingerprint, StringComparison.Ordinal))
             {
-                Id = await Storage.RandomHexAsync(8),
-                Title = _form.Title.Trim(),
-                UserName = _form.UserName.Trim(),
-                Secret = _form.Secret,
-                Url = _form.Url.Trim(),
-                Notes = _form.Notes.Trim(),
-                Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-                CreatedUtc = now,
-                UpdatedUtc = now
-            };
+                _draftRecordId ??= await Storage.RandomHexAsync(8);
+                var now = DateTimeOffset.UtcNow;
+                _pendingRecord = BuildRecord(_draftRecordId, now, now);
+                _estimate = await Session.EstimateAddAsync(_pendingRecord);
+                _reviewFingerprint = fingerprint;
+                return;
+            }
 
-            _transactionHash = await Session.AddAsync(record);
+            _transactionHash = await Session.AddAsync(_pendingRecord);
             _form.Reset();
             _showSecret = false;
+            _draftRecordId = null;
+            _pendingRecord = null;
+            _estimate = null;
+            _reviewFingerprint = null;
         }
         catch (Exception ex)
         {
@@ -155,6 +180,25 @@ else
             _saving = false;
         }
     }
+
+    private VaultRecord BuildRecord(string id, DateTimeOffset created, DateTimeOffset updated) =>
+        new()
+        {
+            Id = id,
+            Title = _form.Title.Trim(),
+            UserName = _form.UserName.Trim(),
+            Secret = _form.Secret,
+            Url = _form.Url.Trim(),
+            Notes = _form.Notes.Trim(),
+            Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            CreatedUtc = created,
+            UpdatedUtc = updated
+        };
+
+    private string CurrentFingerprint() =>
+        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags);
 
     private static string Short(string? value)
     {

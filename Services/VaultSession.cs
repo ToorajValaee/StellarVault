@@ -66,6 +66,17 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         }
     }
 
+    public Task<VaultCostEstimate> EstimateAddAsync(VaultRecord record) =>
+        RequireStore().EstimateAddAsync(record);
+
+    public Task<VaultCostEstimate> EstimateUpdateAsync(
+        VaultRecordLocation existing,
+        VaultRecord record) =>
+        RequireStore().EstimateUpdateAsync(existing, record);
+
+    public Task<VaultCostEstimate> EstimateDeleteAsync(VaultRecordLocation existing) =>
+        RequireStore().EstimateDeleteAsync(existing);
+
     public async Task<string> AddAsync(VaultRecord record)
     {
         var store = RequireStore();

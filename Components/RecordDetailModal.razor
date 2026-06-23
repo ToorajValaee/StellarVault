@@ -1,4 +1,5 @@
 @inject BrowserStorage Storage
+@inject VaultSession Session
 
 @if (Item is not null)
 {
@@ -84,6 +85,7 @@
                 <div class="delete-confirmation">
                     <strong>PERMANENTLY DELETE THIS RECORD?</strong>
                     <span>The manifest is removed first. Encrypted historical transaction data may still exist on the network.</span>
+                    <CostEstimatePanel Estimate="_deleteEstimate" />
                     <div class="modal-action-row">
                         <button class="pixel-button danger" type="button" disabled="@_busy" @onclick="DeleteAsync">
                             @(_busy ? "DELETING..." : "CONFIRM DELETE")
@@ -96,7 +98,7 @@
             {
                 <div class="modal-action-row record-actions">
                     <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="EditAsync">EDIT RECORD</button>
-                    <button class="pixel-button danger" type="button" disabled="@_busy" @onclick="BeginDelete">DELETE</button>
+                    <button class="pixel-button danger" type="button" disabled="@_busy" @onclick="BeginDeleteAsync">DELETE</button>
                 </div>
             }
         </section>
@@ -115,6 +117,7 @@
     private bool _busy;
     private string? _notice;
     private string? _error;
+    private VaultCostEstimate? _deleteEstimate;
 
     protected override void OnParametersSet()
     {
@@ -128,18 +131,38 @@
         _busy = false;
         _notice = null;
         _error = null;
+        _deleteEstimate = null;
     }
 
     private void ToggleReveal() => _revealed = !_revealed;
-    private void BeginDelete()
+
+    private async Task BeginDeleteAsync()
     {
+        if (Item is null)
+            return;
+
         _confirmDelete = true;
         _error = null;
+        _busy = true;
+        try
+        {
+            _deleteEstimate = await Session.EstimateDeleteAsync(Item);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _confirmDelete = false;
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private void CancelDelete()
     {
         _confirmDelete = false;
+        _deleteEstimate = null;
         _error = null;
     }
 
@@ -204,6 +227,7 @@
 
         _revealed = false;
         _confirmDelete = false;
+        _deleteEstimate = null;
         _notice = null;
         _error = null;
         return OnClose.InvokeAsync();

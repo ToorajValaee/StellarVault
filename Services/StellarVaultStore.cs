@@ -135,6 +135,158 @@ public sealed class StellarVaultStore : IAsyncDisposable
             nodes);
     }
 
+    public async Task<VaultCostEstimate> EstimateAddAsync(VaultRecord record)
+    {
+        ThrowIfDisposed();
+        ValidateRecord(record);
+
+        var nodes = await LoadChainAsync();
+        if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
+            throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
+
+        var encrypted = await _crypto.EncryptAsync(record);
+        try
+        {
+            var chunkCount = SplitIntoChunks(encrypted).Count;
+            EnsureRecordFitsNode(chunkCount);
+
+            var createsChild = !CanStageRecord(nodes[^1], chunkCount, headerAlreadyExists: false);
+            var recordWrites = chunkCount + 1;
+            var createOperations = createsChild ? 3 : 0;
+            var dataEntriesAdded = recordWrites + (createsChild ? 1 : 0); // sv:next on the old tail
+            var structuralReserves = createsChild ? 3 : 0; // child account: 2 base reserves + root signer
+            var reserve = BaseReserveNative;
+            var operationCount = createOperations + recordWrites;
+            var transactionCount = (createsChild ? 1 : 0) + TransactionCount(recordWrites);
+
+            return new VaultCostEstimate(
+                operationCount,
+                transactionCount,
+                chunkCount,
+                dataEntriesAdded,
+                0,
+                FeeNative(operationCount),
+                (dataEntriesAdded + structuralReserves) * reserve,
+                (dataEntriesAdded + structuralReserves) * reserve,
+                createsChild ? ParseChildStartingBalance() : 0m,
+                createsChild);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+        }
+    }
+
+    public async Task<VaultCostEstimate> EstimateUpdateAsync(
+        VaultRecordLocation expectedLocation,
+        VaultRecord record)
+    {
+        ThrowIfDisposed();
+        ValidateRecord(record);
+
+        if (!string.Equals(expectedLocation.Record.Id, record.Id, StringComparison.Ordinal))
+            throw new InvalidOperationException("The edited record ID does not match the original record.");
+
+        var nodes = await LoadChainAsync();
+        var oldCopies = FindRecordCopies(nodes, record.Id);
+        if (oldCopies.Count == 0)
+            throw new InvalidOperationException("The record no longer exists. Synchronize the vault and try again.");
+
+        var currentCopy = oldCopies
+            .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
+            .First();
+
+        var encrypted = await _crypto.EncryptAsync(record);
+        try
+        {
+            var chunkCount = SplitIntoChunks(encrypted).Count;
+            EnsureRecordFitsNode(chunkCount);
+
+            var source = currentCopy.Node;
+            var target = source;
+            var targetHasHeader = true;
+            var createsChild = false;
+
+            if (!CanStageRecord(source, chunkCount, headerAlreadyExists: true))
+            {
+                target = nodes[^1];
+                targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
+                if (!CanStageRecord(target, chunkCount, targetHasHeader))
+                {
+                    createsChild = true;
+                    targetHasHeader = false;
+                }
+            }
+
+            var targetId = createsChild ? "NEW-CHILD-NODE" : target.AccountId;
+            var generation = "__estimate_generation__";
+            var cleanupCount = BuildUpdateCleanupWrites(
+                    oldCopies,
+                    targetId,
+                    record.Id,
+                    generation)
+                .Count;
+
+            var commitOperations = chunkCount + 1;
+            var createOperations = createsChild ? 3 : 0;
+            var dataEntriesAdded = chunkCount + (targetHasHeader ? 0 : 1) + (createsChild ? 1 : 0);
+            var structuralReserves = createsChild ? 3 : 0;
+            var operationCount = createOperations + commitOperations + cleanupCount;
+            var transactionCount = (createsChild ? 1 : 0)
+                                   + TransactionCount(commitOperations)
+                                   + TransactionCount(cleanupCount);
+            var reserve = BaseReserveNative;
+            var peakReserve = (dataEntriesAdded + structuralReserves) * reserve;
+            var netReserve = peakReserve - cleanupCount * reserve;
+
+            return new VaultCostEstimate(
+                operationCount,
+                transactionCount,
+                chunkCount,
+                dataEntriesAdded,
+                cleanupCount,
+                FeeNative(operationCount),
+                peakReserve,
+                netReserve,
+                createsChild ? ParseChildStartingBalance() : 0m,
+                createsChild);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+        }
+    }
+
+    public async Task<VaultCostEstimate> EstimateDeleteAsync(VaultRecordLocation expectedLocation)
+    {
+        ThrowIfDisposed();
+        ValidateRecordId(expectedLocation.Record.Id);
+
+        var nodes = await LoadChainAsync();
+        var headerName = HeaderName(expectedLocation.Record.Id);
+        var headerCount = nodes.Count(node => node.Data.ContainsKey(headerName));
+        if (headerCount == 0)
+            throw new InvalidOperationException("The record no longer exists.");
+
+        var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
+        var chunkDeleteCount = readableCopies.Sum(copy => (int)copy.Manifest.ChunkCount);
+        var operationCount = headerCount + chunkDeleteCount;
+        var transactionCount = TransactionCount(headerCount) + TransactionCount(chunkDeleteCount);
+        var released = operationCount * BaseReserveNative;
+
+        return new VaultCostEstimate(
+            operationCount,
+            transactionCount,
+            expectedLocation.ChunkCount,
+            0,
+            operationCount,
+            FeeNative(operationCount),
+            0m,
+            -released,
+            0m,
+            false);
+    }
+
     public async Task<string> AddAsync(VaultRecord record)
     {
         ThrowIfDisposed();
@@ -503,7 +655,12 @@ public sealed class StellarVaultStore : IAsyncDisposable
     {
         var addedEntries = newChunkCount + (headerAlreadyExists ? 0 : 1);
         var reservedNextPointer = node.NextAccountId is null ? 1 : 0;
-        return node.Data.Count + addedEntries + reservedNextPointer <= _settings.NodeDataEntryLimit;
+        var respectsConfiguredDataLimit =
+            node.Data.Count + addedEntries + reservedNextPointer <= _settings.NodeDataEntryLimit;
+        var respectsProtocolSubentryLimit =
+            node.SubentryCount + addedEntries + reservedNextPointer <= 1_000;
+
+        return respectsConfiguredDataLimit && respectsProtocolSubentryLimit;
     }
 
     private void EnsureRecordFitsNode(int chunkCount)
@@ -659,6 +816,26 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     private static string ShortAccount(string value) =>
         value.Length <= 12 ? value : $"{value[..8]}…";
+
+    private decimal BaseReserveNative =>
+        Math.Max(1L, _settings.BaseReserveStroops) / 10_000_000m;
+
+    private decimal FeeNative(int operationCount) =>
+        operationCount * _settings.BaseFeeStroops / 10_000_000m;
+
+    private decimal ParseChildStartingBalance() =>
+        decimal.TryParse(
+            _settings.ChildStartingBalance,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var value)
+            ? value
+            : 0m;
+
+    private static int TransactionCount(int operationCount) =>
+        operationCount <= 0
+            ? 0
+            : (operationCount + MaxOperationsPerTransaction - 1) / MaxOperationsPerTransaction;
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 

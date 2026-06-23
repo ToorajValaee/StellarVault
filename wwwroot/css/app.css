@@ -1528,3 +1528,227 @@ h2 {
         width: 100%;
     }
 }
+
+/* 1.1 mobile safe areas, contact, network discovery, and cost previews */
+:root {
+    --safe-top: env(safe-area-inset-top, 0px);
+}
+
+html,
+body,
+.crt-shell {
+    min-height: 100dvh;
+}
+
+.top-console-bar {
+    min-height: calc(4.65rem + var(--safe-top));
+    padding-top: calc(0.75rem + var(--safe-top));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.readonly-input {
+    opacity: 0.88;
+    cursor: default;
+}
+
+.advanced-help {
+    margin: 0;
+    padding: 0 0.8rem 0.8rem;
+    color: var(--muted);
+    font-size: 0.61rem;
+    line-height: 1.55;
+}
+
+.detect-network-button {
+    width: 100%;
+}
+
+.compact-alert {
+    margin-top: 0;
+}
+
+.account-help-panel {
+    display: grid;
+    gap: 1rem;
+    padding: 1.15rem;
+}
+
+.account-help-panel p,
+.contact-card p,
+.cost-explainer {
+    color: var(--muted);
+    line-height: 1.65;
+}
+
+.account-help-actions {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.terminal-footer a {
+    color: var(--phosphor);
+    text-decoration: none;
+}
+
+.terminal-footer a:hover,
+.terminal-footer a:focus-visible {
+    color: var(--phosphor-strong);
+    text-decoration: underline;
+}
+
+.contact-page {
+    display: grid;
+    gap: 1rem;
+}
+
+.contact-card {
+    width: min(100%, 46rem);
+    display: grid;
+    gap: 1.1rem;
+    margin-inline: auto;
+    padding: 1.15rem;
+}
+
+.contact-avatar {
+    width: 4.5rem;
+    height: 4.5rem;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--phosphor-strong);
+    background: var(--phosphor-faint);
+    color: var(--phosphor-strong);
+    font-size: 1.45rem;
+    font-weight: 900;
+    box-shadow: 5px 5px 0 #000, inset 0 0 24px var(--shadow);
+}
+
+.contact-list {
+    margin: 0;
+}
+
+.ledger-cost-panel {
+    display: grid;
+    gap: 0.85rem;
+    margin-top: 1rem;
+    padding: 0.9rem;
+    border: 2px dashed var(--accent);
+    background: color-mix(in srgb, var(--accent) 5%, rgba(0, 0, 0, 0.42));
+}
+
+.cost-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.cost-grid > div {
+    min-width: 0;
+    display: grid;
+    gap: 0.24rem;
+    padding: 0.62rem;
+    border: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.cost-grid span {
+    color: var(--muted);
+    font-size: 0.53rem;
+    letter-spacing: 0.08em;
+}
+
+.cost-grid strong {
+    overflow-wrap: anywhere;
+    color: var(--phosphor-strong);
+    font-size: 0.72rem;
+}
+
+.cost-grid .reserve-release {
+    color: var(--accent);
+}
+
+.cost-node-warning {
+    margin: 0;
+}
+
+.cost-explainer {
+    margin: 0;
+    font-size: 0.6rem;
+}
+
+.pwa-ios-steps {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.65rem 0 0;
+    padding-left: 1.3rem;
+    color: var(--phosphor-strong);
+    font-size: 0.65rem;
+    line-height: 1.45;
+}
+
+.pwa-ios-steps[hidden] {
+    display: none;
+}
+
+@media (min-width: 42rem) {
+    .advanced-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .account-help-actions {
+        grid-template-columns: auto auto;
+        justify-content: start;
+    }
+
+    .cost-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 58rem) {
+    .top-console-bar {
+        min-height: calc(4.65rem + var(--safe-top));
+    }
+
+    .account-help-panel {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding: 1.45rem;
+    }
+}
+
+/* Refined iOS standalone safe-area placement */
+.app-main {
+    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+.mobile-command-bar {
+    bottom: calc(2.2rem + var(--safe-bottom));
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: 0;
+    padding-left: env(safe-area-inset-left, 0px);
+}
+
+.terminal-footer {
+    padding-right: max(0.65rem, env(safe-area-inset-right));
+    padding-left: max(0.65rem, env(safe-area-inset-left));
+}
+
+@media (min-width: 58rem) {
+    .mobile-command-bar {
+        top: 0;
+        bottom: auto;
+        height: calc(4.65rem + var(--safe-top));
+        padding-top: var(--safe-top);
+        padding-right: 0;
+        padding-left: 0;
+    }
+}
+
+@media (min-width: 58rem) {
+    .crt-shell {
+        padding-bottom: calc(2.2rem + var(--safe-bottom));
+    }
+}

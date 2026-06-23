@@ -2,44 +2,16 @@
 @implements IDisposable
 @inject VaultSession Session
 @inject BrowserStorage Storage
-@inject NavigationManager Navigation
 
 <HeadContent>
-    <title>@PageTitle</title>
-
-    <meta name="description" content="@PageDescription" />
-    <meta name="author" content="BADJE.IR" />
+    <meta name="author" content="Tooraj Valaee" />
     <meta name="application-name" content="Stellar Vault Terminal" />
-    <meta name="robots" content="@RobotsContent" />
-
     <meta name="theme-color" content="@ThemeColor" />
     <meta name="color-scheme" content="dark" />
-
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style"
-          content="black-translucent" />
-    <meta name="apple-mobile-web-app-title"
-          content="Stellar Vault" />
-
-    @if (IsPublicPage)
-    {
-        <link rel="canonical" href="@CanonicalUrl" />
-
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Stellar Vault Terminal" />
-        <meta property="og:title" content="@PageTitle" />
-        <meta property="og:description" content="@PageDescription" />
-        <meta property="og:url" content="@CanonicalUrl" />
-        <meta property="og:image" content="@SocialImageUrl" />
-        <meta property="og:image:alt"
-              content="Stellar Vault Terminal retro console interface" />
-
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="@PageTitle" />
-        <meta name="twitter:description" content="@PageDescription" />
-        <meta name="twitter:image" content="@SocialImageUrl" />
-    }
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Stellar Vault" />
 </HeadContent>
 
 <div class="crt-shell">
@@ -57,10 +29,7 @@
 
         <div class="top-actions">
             <span class="link-lamp @(Session.IsUnlocked ? "online" : "offline")"></span>
-            <span class="connection-label">
-                @(Session.IsUnlocked ? "LINKED" : "LOCKED")
-            </span>
-
+            <span class="connection-label">@(Session.IsUnlocked ? "LINKED" : "LOCKED")</span>
             <button class="icon-button"
                     type="button"
                     title="Change phosphor color"
@@ -77,19 +46,15 @@
 
     @if (Session.IsUnlocked)
     {
-        <nav class="mobile-command-bar"
-             aria-label="Vault navigation">
-
+        <nav class="mobile-command-bar" aria-label="Vault navigation">
             <NavLink href="vault" Match="NavLinkMatch.All">
                 <span class="nav-icon">▦</span>
                 <span>VAULT</span>
             </NavLink>
-
             <NavLink href="add">
                 <span class="nav-icon">＋</span>
                 <span>ADD</span>
             </NavLink>
-
             <NavLink href="system">
                 <span class="nav-icon">⌘</span>
                 <span>SYSTEM</span>
@@ -98,17 +63,14 @@
     }
 
     <footer class="terminal-footer">
-        <span>SV/1.0 Powered by BADJE.IR</span>
+        <span>SV/1.2 · POWERED BY <a href="https://badje.ir" target="_blank" rel="noopener noreferrer">BADJE.IR</a></span>
         <span class="footer-status">@Session.StatusMessage</span>
-        <span>ENCRYPTED::AES-GCM</span>
+        <a href="/contact">CONTACT</a>
     </footer>
 
     @if (Session.IsBusy)
     {
-        <div class="busy-overlay"
-             role="status"
-             aria-live="polite">
-
+        <div class="busy-overlay" role="status" aria-live="polite">
             <div class="busy-terminal">
                 <div class="pixel-spinner" aria-hidden="true"></div>
                 <strong>@Session.StatusMessage</strong>
@@ -120,72 +82,11 @@
 
 @code {
     private string _theme = "green";
-
-    private string CurrentPath
-    {
-        get
-        {
-            var path = Navigation
-                .ToBaseRelativePath(Navigation.Uri)
-                .Split('?', '#')[0];
-
-            return path.Trim('/');
-        }
-    }
-
-    // Only the landing page should normally be indexed.
-    private bool IsPublicPage =>
-        string.IsNullOrWhiteSpace(CurrentPath);
-
-    private string RobotsContent =>
-        IsPublicPage
-            ? "index, follow"
-            : "noindex, nofollow, noarchive";
-
-    private string PageTitle =>
-        CurrentPath.ToLowerInvariant() switch
-        {
-            "" =>
-                "Stellar Vault Terminal — Encrypted Credential Vault",
-
-            "vault" =>
-                "Credential Vault — Stellar Vault Terminal",
-
-            "add" =>
-                "Add Credential — Stellar Vault Terminal",
-
-            "system" =>
-                "System Status — Stellar Vault Terminal",
-
-            _ when CurrentPath.StartsWith(
-                "edit/",
-                StringComparison.OrdinalIgnoreCase) =>
-                "Edit Credential — Stellar Vault Terminal",
-
-            _ =>
-                "Stellar Vault Terminal"
-        };
-
-    private string PageDescription =>
-        IsPublicPage
-            ? "A mobile-first encrypted credential vault powered by Stellar account data, featuring a retro terminal interface and Progressive Web App support."
-            : "Secure Stellar Vault application page.";
-
-    private string CanonicalUrl =>
-        Navigation.BaseUri.TrimEnd('/') + "/";
-
-    private string SocialImageUrl =>
-        $"{Navigation.BaseUri}images/social-preview.png";
-
-    private string ThemeColor =>
-        _theme == "amber"
-            ? "#1a1000"
-            : "#07140d";
+    private string ThemeColor => _theme == "amber" ? "#1a1000" : "#07140d";
 
     protected override void OnInitialized()
     {
         Session.Changed += HandleSessionChanged;
-        Navigation.LocationChanged += HandleLocationChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -195,34 +96,19 @@
 
         _theme = await Storage.GetThemeAsync() ?? "green";
         await Storage.SetThemeAsync(_theme);
-
         StateHasChanged();
     }
 
     private async Task ToggleThemeAsync()
     {
-        _theme = _theme == "green"
-            ? "amber"
-            : "green";
-
+        _theme = _theme == "green" ? "amber" : "green";
         await Storage.SetThemeAsync(_theme);
     }
 
-    private void HandleSessionChanged()
-    {
-        _ = InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleLocationChanged(
-        object? sender,
-        LocationChangedEventArgs args)
-    {
-        _ = InvokeAsync(StateHasChanged);
-    }
+    private void HandleSessionChanged() => _ = InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
         Session.Changed -= HandleSessionChanged;
-        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }
