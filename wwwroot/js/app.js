@@ -497,14 +497,14 @@ window.stellarVault = (() => {
     };
 })();
 
-// PWA installation UI. The one-shot beforeinstallprompt event is captured
-// in index.html before the Blazor and Stellar SDK bundles load. This avoids
-// missing the event on slower Android devices. Android displays only the
-// native INSTALL action; iOS retains its manual Home Screen instructions.
+// PWA installation UI. Chromium's native dialog is available only after
+// beforeinstallprompt fires. On Android we still show the install panel early,
+// then upgrade its INSTALL button to the native prompt as soon as Chrome makes
+// it available. iOS keeps the manual Home Screen instructions.
 (() => {
     let deferredInstallPrompt = window.__stellarVaultInstallPrompt ?? null;
     let manualStepsVisible = false;
-    let nativeDismissedForPage = false;
+    let dismissedForPage = false;
     const iosDismissKey = 'stellar-vault.ios-install-dismissed.v1';
 
     const isStandalone = () =>
@@ -514,6 +514,8 @@ window.stellarVault = (() => {
     const isIos = () =>
         /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
         (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+
+    const isAndroid = () => /android/i.test(window.navigator.userAgent);
 
     function createBanner() {
         let banner = document.getElementById('pwa-install-banner');
@@ -542,6 +544,8 @@ window.stellarVault = (() => {
         document.body.appendChild(banner);
 
         banner.querySelector('#pwa-install-action').addEventListener('click', async () => {
+            deferredInstallPrompt = window.__stellarVaultInstallPrompt ?? deferredInstallPrompt;
+
             if (deferredInstallPrompt) {
                 const promptEvent = deferredInstallPrompt;
                 deferredInstallPrompt = null;
@@ -553,30 +557,27 @@ window.stellarVault = (() => {
                     await promptEvent.userChoice;
                 } catch (error) {
                     console.error('Native PWA install prompt failed:', error);
+                    banner.hidden = false;
                 }
                 return;
             }
 
-            // Only iOS reaches this branch because it has no native
-            // beforeinstallprompt implementation.
+            // Chrome hasn't supplied its install event yet. A website cannot
+            // manufacture the native dialog, so reveal the browser-menu path.
             manualStepsVisible = !manualStepsVisible;
             const steps = banner.querySelector('#pwa-install-steps');
             steps.hidden = !manualStepsVisible;
             banner.querySelector('#pwa-install-action').textContent = manualStepsVisible
                 ? 'HIDE STEPS'
-                : 'HOW TO INSTALL';
+                : 'INSTALL';
         });
 
         banner.querySelector('#pwa-install-dismiss').addEventListener('click', () => {
             banner.hidden = true;
+            dismissedForPage = true;
 
             if (isIos()) {
                 sessionStorage.setItem(iosDismissKey, '1');
-            } else {
-                // Do not reuse dismissal state from older Android builds.
-                // A native install event on a future page load may be offered
-                // again by Chrome.
-                nativeDismissedForPage = true;
             }
         });
 
@@ -594,19 +595,25 @@ window.stellarVault = (() => {
         manualStepsVisible = false;
     }
 
-    function showNativeInstallBanner() {
-        deferredInstallPrompt = window.__stellarVaultInstallPrompt ?? deferredInstallPrompt;
-
-        if (isStandalone() || isIos() || nativeDismissedForPage || !deferredInstallPrompt) {
+    function showAndroidInstallBanner() {
+        if (isStandalone() || !isAndroid() || dismissedForPage) {
             return;
         }
 
+        deferredInstallPrompt = window.__stellarVaultInstallPrompt ?? deferredInstallPrompt;
         const banner = createBanner();
-        banner.querySelector('#pwa-install-title').textContent = 'INSTALL STELLAR VAULT';
-        banner.querySelector('#pwa-install-message').textContent = 'Install and run this terminal as an Android app.';
+        banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON ANDROID';
+        banner.querySelector('#pwa-install-message').textContent = deferredInstallPrompt
+            ? 'Stellar Vault is ready to install as an Android app.'
+            : 'Install Stellar Vault from Chrome. The native dialog will open when Chrome makes it available.';
         banner.querySelector('#pwa-install-action').textContent = 'INSTALL';
         banner.querySelector('#pwa-install-action').hidden = false;
-        setSteps(banner, []);
+        setSteps(banner, [
+            'Tap INSTALL again after Chrome marks the app as ready.',
+            'Or open the Chrome menu (⋮).',
+            'Choose Install app or Add to Home screen.',
+            'Confirm Install.'
+        ]);
         banner.hidden = false;
     }
 
@@ -635,14 +642,14 @@ window.stellarVault = (() => {
 
         if (deferredInstallPrompt) {
             window.__stellarVaultInstallPrompt = deferredInstallPrompt;
-            showNativeInstallBanner();
+            showAndroidInstallBanner();
         }
     }
 
     // Fallback listener for pages that do not include the early bootstrap.
     window.addEventListener('beforeinstallprompt', captureInstallPrompt);
 
-    // Primary path: index.html has already captured the event and announces it.
+    // Primary path: index.html captures the one-shot event before app.js loads.
     window.addEventListener('stellarvault:install-ready', () => {
         captureInstallPrompt(window.__stellarVaultInstallPrompt);
     });
@@ -658,6 +665,7 @@ window.stellarVault = (() => {
 
     window.addEventListener('stellarvault:installed', () => {
         deferredInstallPrompt = null;
+        window.__stellarVaultInstallPrompt = null;
         const banner = document.getElementById('pwa-install-banner');
         if (banner) {
             banner.hidden = true;
@@ -666,13 +674,16 @@ window.stellarVault = (() => {
 
     function initializeInstallUi() {
         if (isIos()) {
-            window.setTimeout(showIosInstallHelp, 1200);
+            window.setTimeout(showIosInstallHelp, 1000);
             return;
         }
 
-        // Handles the case where Chrome emitted beforeinstallprompt before
-        // app.js finished loading.
-        showNativeInstallBanner();
+        if (isAndroid()) {
+            // Restore the visible Android install panel from the earlier build.
+            // It appears even if Chrome delays beforeinstallprompt, and upgrades
+            // automatically when the native event arrives.
+            window.setTimeout(showAndroidInstallBanner, 1000);
+        }
     }
 
     if (document.readyState === 'loading') {
@@ -681,11 +692,10 @@ window.stellarVault = (() => {
         initializeInstallUi();
     }
 
-    // Small diagnostic API for remote Android troubleshooting. In Chrome's
-    // console run: stellarPwaInstallState()
     window.stellarPwaInstallState = () => ({
         standalone: isStandalone(),
         ios: isIos(),
+        android: isAndroid(),
         eventSeen: window.__stellarVaultInstallEventSeen === true,
         promptAvailable: Boolean(window.__stellarVaultInstallPrompt || deferredInstallPrompt),
         serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),

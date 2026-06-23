@@ -1,28 +1,24 @@
-# Stellar Vault PWA v1.3.3
+# Stellar Vault PWA v1.3.5
 
-## Android install behavior
+This build restores the Android installation panel from the earlier PWA version while keeping the later Android scrolling and iOS viewport fixes.
 
-- Android no longer shows a manual installation-tip banner.
-- The custom **INSTALL** banner appears only after Chrome fires `beforeinstallprompt`.
-- Tapping **INSTALL** immediately opens Chrome's native PWA installation dialog.
-- The banner remains hidden when the app is already installed or Chrome has not yet made the native prompt available.
+## Android installation behavior
 
-## iPhone and iPad
+- On Android Chrome, an **INSTALL ON ANDROID** panel appears shortly after page load, unless the app is already running in standalone mode.
+- When Chrome has emitted `beforeinstallprompt`, the **INSTALL** button opens Chrome's native installation dialog directly.
+- If Chrome has not emitted the event yet, the panel remains visible. Tapping **INSTALL** reveals the Chrome menu installation path instead of silently doing nothing.
+- When the event arrives later, the same button automatically becomes a native install action.
+- iPhone and iPad retain the Safari **Share → Add to Home Screen** instructions.
 
-iOS does not provide `beforeinstallprompt`, so the app continues to display manual Safari instructions for **Share → Add to Home Screen**.
+## Important browser limitation
 
-## Upgrade notes
+A web page cannot create Chrome's native PWA install event. The app can retain the event and invoke it from the button only after Chrome decides the site is installable.
 
-After deploying, clear the old PWA/service-worker cache or uninstall and reinstall the existing app so the updated JavaScript is loaded.
+## Deployment refresh
 
+After deploying:
 
-## v1.3.4 Android install reliability
-
-- Captures `beforeinstallprompt` in `index.html` before Blazor and the Stellar SDK load.
-- Registers the service worker before the WebAssembly application starts.
-- Removes the old Android dismissal key that could hide a later native prompt.
-- Keeps Android native-install-only behavior; no Android instruction banner is shown.
-- Adds `stellarPwaInstallState()` for Android Chrome remote debugging.
-- Adds explicit `prefer_related_applications: false` to the manifest.
-
-Chrome may withhold `beforeinstallprompt` until its engagement criteria are met. On a new Android profile, interact with the page and keep it open for at least 30 seconds, then reload once.
+1. Remove any older installed copy from Android.
+2. In Chrome, clear the site's stored data.
+3. Reopen the HTTPS URL directly in Chrome.
+4. Reload once after the new service worker takes control.
