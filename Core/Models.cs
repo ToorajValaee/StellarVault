@@ -1,5 +1,11 @@
 namespace StellarVaultPwa.Core;
 
+public static class StellarNetworkPassphrases
+{
+    public const string Testnet = "Test SDF Network ; September 2015";
+    public const string Public = "Public Global Stellar Network ; September 2015";
+}
+
 public sealed record VaultNetworkSettings(
     string Name,
     string HorizonUrl,

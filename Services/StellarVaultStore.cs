@@ -2,20 +2,12 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.JSInterop;
-using StellarDotnetSdk;
-using StellarDotnetSdk.Accounts;
-using StellarDotnetSdk.Operations;
-using StellarDotnetSdk.Responses;
-using StellarDotnetSdk.Transactions;
 using StellarVaultPwa.Core;
-using StellarNetwork = StellarDotnetSdk.Network;
-using StellarOperation = StellarDotnetSdk.Operations.Operation;
 
 namespace StellarVaultPwa.Services;
 
 public sealed class StellarVaultStore : IAsyncDisposable
 {
-    private const string NextPointerName = "sv:next";
     private const string HeaderPrefix = "svh:";
     private const string ChunkPrefix = "svc:";
     private const int ChunkValueSize = 64;
@@ -24,30 +16,45 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private const byte ManifestVersion = 1;
     private const int ManifestLength = 47;
 
+    private static long _sessionCounter;
+
     private readonly VaultNetworkSettings _settings;
-    private readonly KeyPair _root;
-    private readonly StellarNetwork _network;
-    private readonly Server _server;
+    private readonly IJSRuntime _js;
+    private readonly string _sessionId;
     private readonly VaultCrypto _crypto;
+    private string? _rootAccountId;
     private bool _disposed;
 
-    public StellarVaultStore(VaultNetworkSettings settings, KeyPair root, IJSRuntime js)
+    public StellarVaultStore(VaultNetworkSettings settings, IJSRuntime js)
     {
         _settings = settings with { HorizonUrl = settings.NormalizedHorizonUrl };
-        _root = root;
-        _network = new StellarNetwork(settings.Passphrase);
-        _server = new Server(_settings.HorizonUrl);
-        _crypto = new VaultCrypto(js, root, _settings);
+        _js = js;
+        _sessionId = $"sv-{Interlocked.Increment(ref _sessionCounter):x}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds():x}";
+        _crypto = new VaultCrypto(js, _sessionId);
     }
 
-    public string RootAccountId => _root.AccountId;
+    public string RootAccountId =>
+        _rootAccountId ?? throw new InvalidOperationException("The Stellar session is not open.");
+
     public VaultNetworkSettings Settings => _settings;
 
-    public async Task OpenAsync()
+    public async Task OpenAsync(string secret)
     {
         ThrowIfDisposed();
-        await _crypto.InitializeAsync();
-        _ = await GetAccountAsync(_root.AccountId);
+        if (_rootAccountId is not null)
+            throw new InvalidOperationException("The Stellar session is already open.");
+
+        var result = await _js.InvokeAsync<JsSessionInfo>(
+            "stellarVault.stellar.createSession",
+            _sessionId,
+            secret,
+            _settings.HorizonUrl,
+            _settings.Passphrase);
+
+        if (string.IsNullOrWhiteSpace(result.RootAccountId))
+            throw new InvalidOperationException("The browser Stellar SDK did not return a root account ID.");
+
+        _rootAccountId = result.RootAccountId;
     }
 
     public async Task<VaultReadResult> ReadAsync()
@@ -136,18 +143,34 @@ public sealed class StellarVaultStore : IAsyncDisposable
             if (target.Data.Count + requiredDataEntries + 1 > _settings.NodeDataEntryLimit)
                 target = await CreateAndAppendChildAsync(target);
 
-            var operations = new List<StellarOperation>(requiredDataEntries);
-            var source = KeyPair.FromAccountId(target.AccountId);
-
+            var writes = new List<JsManageDataWrite>(requiredDataEntries);
             for (var i = 0; i < chunks.Count; i++)
-                operations.Add(new ManageDataOperation(ChunkName(record.Id, i), chunks[i], source));
+            {
+                writes.Add(new JsManageDataWrite
+                {
+                    Name = ChunkName(record.Id, i),
+                    ValueBase64 = Convert.ToBase64String(chunks[i]),
+                    SourceAccountId = target.AccountId
+                });
+            }
 
             var manifest = await CreateManifestAsync(encrypted, chunks.Count, record.UpdatedUtc);
-            operations.Add(new ManageDataOperation(HeaderName(record.Id), manifest, source));
+            writes.Add(new JsManageDataWrite
+            {
+                Name = HeaderName(record.Id),
+                ValueBase64 = Convert.ToBase64String(manifest),
+                SourceAccountId = target.AccountId
+            });
 
             string lastTransactionHash = string.Empty;
-            foreach (var batch in operations.Chunk(MaxOperationsPerTransaction))
-                lastTransactionHash = await SubmitOperationsAsync(batch);
+            foreach (var batch in writes.Chunk(MaxOperationsPerTransaction))
+            {
+                lastTransactionHash = await _js.InvokeAsync<string>(
+                    "stellarVault.stellar.submitManageData",
+                    _sessionId,
+                    batch,
+                    _settings.BaseFeeStroops);
+            }
 
             return lastTransactionHash;
         }
@@ -162,136 +185,70 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (_disposed)
             return;
 
-        await _crypto.DisposeAsync();
-        _server.Dispose();
-        if (_root.SeedBytes is { } seed)
-            CryptographicOperations.ZeroMemory(seed);
+        try
+        {
+            await _js.InvokeVoidAsync("stellarVault.stellar.deleteSession", _sessionId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The browser page is unloading and its JavaScript memory is already gone.
+        }
+
+        _rootAccountId = null;
         _disposed = true;
     }
 
     private async Task<List<VaultNodeSnapshot>> LoadChainAsync()
     {
-        var nodes = new List<VaultNodeSnapshot>();
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var current = _root.AccountId;
+        var jsNodes = await _js.InvokeAsync<JsVaultNode[]>(
+            "stellarVault.stellar.loadChain",
+            _sessionId,
+            MaxChainLength);
 
-        while (true)
+        var nodes = new List<VaultNodeSnapshot>(jsNodes.Length);
+        foreach (var node in jsNodes)
         {
-            if (!visited.Add(current))
-                throw new InvalidDataException("The vault account chain contains a cycle.");
-            if (nodes.Count >= MaxChainLength)
-                throw new InvalidDataException($"The vault chain exceeds the safety limit of {MaxChainLength} accounts.");
-
-            var account = await GetAccountAsync(current);
-            var data = DecodeData(account.Data);
-            string? next = null;
-
-            if (data.TryGetValue(NextPointerName, out var pointerBytes))
-            {
-                if (pointerBytes.Length != 32)
-                    throw new InvalidDataException($"Account {current} has an invalid {NextPointerName} pointer.");
-
-                next = KeyPair.FromPublicKey(pointerBytes).AccountId;
-            }
+            var decoded = new Dictionary<string, byte[]>(node.Data.Count, StringComparer.Ordinal);
+            foreach (var pair in node.Data)
+                decoded[pair.Key] = Convert.FromBase64String(pair.Value);
 
             nodes.Add(new VaultNodeSnapshot(
-                account.AccountId,
-                nodes.Count,
-                account.SubentryCount,
-                data,
-                next));
-
-            if (next is null)
-                return nodes;
-
-            current = next;
+                node.AccountId,
+                node.Position,
+                node.SubentryCount,
+                decoded,
+                node.NextAccountId));
         }
+
+        if (nodes.Count == 0)
+            throw new InvalidDataException("The account chain is empty.");
+
+        return nodes;
     }
 
     private async Task<VaultNodeSnapshot> CreateAndAppendChildAsync(VaultNodeSnapshot previous)
     {
-        if (previous.Data.ContainsKey(NextPointerName))
+        if (previous.NextAccountId is not null)
             throw new InvalidOperationException("Only the tail account can be extended.");
 
-        var child = KeyPair.Random();
-        try
-        {
-            var rootAccount = await GetAccountAsync(_root.AccountId);
-            var previousSource = KeyPair.FromAccountId(previous.AccountId);
+        var node = await _js.InvokeAsync<JsVaultNode>(
+            "stellarVault.stellar.createAndAppendChild",
+            _sessionId,
+            previous.AccountId,
+            previous.Position + 1,
+            _settings.ChildStartingBalance,
+            _settings.BaseFeeStroops);
 
-            var configureChild = new SetOptionsOperation(child)
-                .SetSigner(_root.AccountId, 1)
-                .SetMasterKeyWeight(0)
-                .SetLowThreshold(1)
-                .SetMediumThreshold(1)
-                .SetHighThreshold(1);
+        var decoded = new Dictionary<string, byte[]>(node.Data.Count, StringComparer.Ordinal);
+        foreach (var pair in node.Data)
+            decoded[pair.Key] = Convert.FromBase64String(pair.Value);
 
-            var transaction = new TransactionBuilder(rootAccount)
-                .SetFee(_settings.BaseFeeStroops)
-                .AddOperation(new CreateAccountOperation(child, _settings.ChildStartingBalance))
-                .AddOperation(configureChild)
-                .AddOperation(new ManageDataOperation(NextPointerName, child.PublicKey, previousSource))
-                .Build();
-
-            transaction.Sign(_root, _network);
-            transaction.Sign(child, _network);
-            await SubmitAsync(transaction);
-
-            var childAccount = await GetAccountAsync(child.AccountId);
-            return new VaultNodeSnapshot(
-                childAccount.AccountId,
-                previous.Position + 1,
-                childAccount.SubentryCount,
-                DecodeData(childAccount.Data),
-                null);
-        }
-        finally
-        {
-            if (child.SeedBytes is { } childSeed)
-                CryptographicOperations.ZeroMemory(childSeed);
-        }
-    }
-
-    private async Task<string> SubmitOperationsAsync(IEnumerable<StellarOperation> operations)
-    {
-        var rootAccount = await GetAccountAsync(_root.AccountId);
-        var builder = new TransactionBuilder(rootAccount).SetFee(_settings.BaseFeeStroops);
-
-        foreach (var operation in operations)
-            builder.AddOperation(operation);
-
-        var transaction = builder.Build();
-        transaction.Sign(_root, _network);
-        return await SubmitAsync(transaction);
-    }
-
-    private async Task<string> SubmitAsync(Transaction transaction)
-    {
-        var response = await _server.SubmitTransaction(transaction);
-        if (response?.IsSuccess == true)
-            return response.Hash ?? string.Empty;
-
-        var transactionCode = response?.SubmitTransactionResponseExtras?
-            .ExtrasResultCodes?.TransactionResultCode ?? "unknown";
-        var operationCodes = response?.SubmitTransactionResponseExtras?
-            .ExtrasResultCodes?.OperationsResultCodes;
-
-        var details = operationCodes is { Count: > 0 }
-            ? $" Operations: {string.Join(", ", operationCodes)}"
-            : string.Empty;
-
-        throw new InvalidOperationException($"Stellar transaction failed: {transactionCode}.{details}");
-    }
-
-    private Task<AccountResponse> GetAccountAsync(string accountId) =>
-        _server.Accounts.Account(accountId);
-
-    private static Dictionary<string, byte[]> DecodeData(Dictionary<string, string> encodedData)
-    {
-        var result = new Dictionary<string, byte[]>(encodedData.Count, StringComparer.Ordinal);
-        foreach (var pair in encodedData)
-            result[pair.Key] = Convert.FromBase64String(pair.Value);
-        return result;
+        return new VaultNodeSnapshot(
+            node.AccountId,
+            node.Position,
+            node.SubentryCount,
+            decoded,
+            node.NextAccountId);
     }
 
     private static List<byte[]> SplitIntoChunks(byte[] value)
@@ -402,4 +359,25 @@ public sealed class StellarVaultStore : IAsyncDisposable
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private sealed class JsSessionInfo
+    {
+        public string RootAccountId { get; set; } = string.Empty;
+    }
+
+    private sealed class JsVaultNode
+    {
+        public string AccountId { get; set; } = string.Empty;
+        public int Position { get; set; }
+        public int SubentryCount { get; set; }
+        public Dictionary<string, string> Data { get; set; } = new(StringComparer.Ordinal);
+        public string? NextAccountId { get; set; }
+    }
+
+    private sealed class JsManageDataWrite
+    {
+        public string Name { get; set; } = string.Empty;
+        public string ValueBase64 { get; set; } = string.Empty;
+        public string SourceAccountId { get; set; } = string.Empty;
+    }
 }

@@ -1,5 +1,4 @@
 using Microsoft.JSInterop;
-using StellarDotnetSdk.Accounts;
 using StellarVaultPwa.Core;
 
 namespace StellarVaultPwa.Services;
@@ -28,9 +27,8 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         StellarVaultStore? candidate = null;
         try
         {
-            var keyPair = KeyPair.FromSecretSeed(secret.Trim());
-            candidate = new StellarVaultStore(settings, keyPair, js);
-            await candidate.OpenAsync();
+            candidate = new StellarVaultStore(settings, js);
+            await candidate.OpenAsync(secret.Trim());
             var snapshot = await candidate.ReadAsync();
 
             _store = candidate;
@@ -98,7 +96,7 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    public ValueTask DisposeAsync() => new ValueTask(LockAsync());
+    public ValueTask DisposeAsync() => new(LockAsync());
 
     private StellarVaultStore RequireStore() =>
         _store ?? throw new InvalidOperationException("The vault is locked.");

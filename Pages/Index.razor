@@ -131,7 +131,7 @@
     private string _preset = "testnet";
     private string _networkName = "Testnet";
     private string _horizonUrl = "https://horizon-testnet.stellar.org";
-    private string _passphrase = StellarDotnetSdk.Network.TestnetPassphrase;
+    private string _passphrase = StellarNetworkPassphrases.Testnet;
     private string _childBalance = "50";
     private int _entryLimit = 80;
     private uint _baseFee = 100u;
@@ -169,20 +169,20 @@
             case "testnet":
                 _networkName = "Testnet";
                 _horizonUrl = "https://horizon-testnet.stellar.org";
-                _passphrase = StellarDotnetSdk.Network.TestnetPassphrase;
+                _passphrase = StellarNetworkPassphrases.Testnet;
                 break;
             case "public":
                 _networkName = "Public";
                 _horizonUrl = "https://horizon.stellar.org";
-                _passphrase = StellarDotnetSdk.Network.PublicPassphrase;
+                _passphrase = StellarNetworkPassphrases.Public;
                 break;
             case "custom":
                 if (_networkName is "Testnet" or "Public")
                     _networkName = "Private";
                 if (_horizonUrl.Contains("stellar.org", StringComparison.OrdinalIgnoreCase))
                     _horizonUrl = string.Empty;
-                if (_passphrase == StellarDotnetSdk.Network.TestnetPassphrase ||
-                    _passphrase == StellarDotnetSdk.Network.PublicPassphrase)
+                if (_passphrase == StellarNetworkPassphrases.Testnet ||
+                    _passphrase == StellarNetworkPassphrases.Public)
                     _passphrase = string.Empty;
                 break;
         }
@@ -272,9 +272,9 @@
         _entryLimit = settings.NodeDataEntryLimit;
         _baseFee = settings.BaseFeeStroops;
 
-        _preset = settings.Passphrase == StellarDotnetSdk.Network.TestnetPassphrase
+        _preset = settings.Passphrase == StellarNetworkPassphrases.Testnet
             ? "testnet"
-            : settings.Passphrase == StellarDotnetSdk.Network.PublicPassphrase
+            : settings.Passphrase == StellarNetworkPassphrases.Public
                 ? "public"
                 : "custom";
     }
