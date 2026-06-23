@@ -22,3 +22,10 @@ After deploying:
 2. In Chrome, clear the site's stored data.
 3. Reopen the HTTPS URL directly in Chrome.
 4. Reload once after the new service worker takes control.
+
+
+## v1.3.6 — iOS safe-area regression fix
+
+This release is based on v1.3.5 and preserves all earlier features and fixes, including Android scrolling, Android install UI, edit/delete, cost approval modals, custom network discovery, contact information, PWA support, and viewport stabilization.
+
+The iOS platform and standalone classes are now applied in `index.html` before the CSS file loads. A final iOS-only CSS override restores the top safe-area inset for the sticky header, preventing the installed app from rendering beneath the iPhone status/navigation area on first paint. Android layout rules are unchanged.
