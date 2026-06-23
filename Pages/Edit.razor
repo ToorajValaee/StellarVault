@@ -94,7 +94,7 @@ else
             {
                 <div class="terminal-alert success">
                     <strong>RECORD UPDATED</strong>
-                    <span>TX: @_transactionHash</span>
+                    <span class="transaction-hash">TX: @_transactionHash</span>
                 </div>
             }
 
@@ -229,6 +229,8 @@ else
             _location = Session.Snapshot?.Records.FirstOrDefault(item =>
                 string.Equals(item.Record.Id, _pendingRecord.Id, StringComparison.Ordinal)) ?? _location;
             ClearApproval();
+            await InvokeAsync(StateHasChanged);
+            await Storage.StabilizeViewportAsync();
         }
         catch (Exception ex)
         {

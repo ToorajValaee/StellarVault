@@ -489,6 +489,10 @@ window.stellarVault = (() => {
         crypto: {
             randomHex,
             generatePassword
+        },
+        viewport: {
+            prepareModal: () => window.stellarVaultViewport?.prepareModal(),
+            stabilize: () => window.stellarVaultViewport?.stabilize()
         }
     };
 })();
@@ -616,9 +620,8 @@ window.stellarVault = (() => {
     });
 })();
 
-// Keep the installed iOS layout stable during its first paint and after
-// orientation/keyboard changes. This avoids waiting for a manual scroll before
-// WebKit recalculates the visual viewport.
+// Keep the installed iOS layout stable during first paint, keyboard changes,
+// modal transitions, and ledger-operation completion.
 (() => {
     const root = document.documentElement;
     const isIos =
@@ -628,14 +631,63 @@ window.stellarVault = (() => {
         window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
 
+    let stableScrollX = 0;
+    let stableScrollY = 0;
+    let viewportRestoreTimer = 0;
+
     root.classList.toggle('ios-device', isIos);
     root.classList.toggle('standalone-app', isStandalone);
 
     function syncAppHeight() {
-        const height = Math.round(window.visualViewport?.height || window.innerHeight || root.clientHeight);
+        const visualViewport = window.visualViewport;
+        const scale = Number(visualViewport?.scale || 1);
+        const visualHeight = Number(visualViewport?.height || 0);
+        const layoutHeight = Number(window.innerHeight || root.clientHeight || 0);
+
+        // While iOS is animating a focused control, visualViewport can report a
+        // keyboard-scaled height. Prefer the layout height unless scale is 1.
+        const height = scale === 1 && visualHeight > 0
+            ? Math.max(visualHeight, layoutHeight)
+            : layoutHeight;
+
         if (height > 0) {
-            root.style.setProperty('--app-height', `${height}px`);
+            root.style.setProperty('--app-height', `${Math.round(height)}px`);
         }
+    }
+
+    function blurActiveControl() {
+        const active = document.activeElement;
+        if (active && active !== document.body && typeof active.blur === 'function') {
+            active.blur();
+        }
+    }
+
+    function temporarilyResetIosScale() {
+        if (!isIos || !isStandalone) {
+            return;
+        }
+
+        const viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+            return;
+        }
+
+        const original = viewport.getAttribute('content') ||
+            'width=device-width, initial-scale=1.0, viewport-fit=cover';
+
+        window.clearTimeout(viewportRestoreTimer);
+        viewport.setAttribute(
+            'content',
+            'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+
+        viewportRestoreTimer = window.setTimeout(() => {
+            viewport.setAttribute('content', original);
+        }, 450);
+    }
+
+    function restoreScrollAndSize() {
+        window.scrollTo(stableScrollX, stableScrollY);
+        syncAppHeight();
     }
 
     function settleViewport() {
@@ -646,10 +698,36 @@ window.stellarVault = (() => {
         window.setTimeout(syncAppHeight, 700);
     }
 
+    function prepareModal() {
+        stableScrollX = window.scrollX || 0;
+        stableScrollY = window.scrollY || 0;
+        blurActiveControl();
+        settleViewport();
+    }
+
+    function stabilize() {
+        // Closing a modal while the software keyboard is finishing its animation
+        // can leave an installed iOS PWA at the wrong visual scale. Blur first,
+        // briefly force scale 1, then restore the previous document position.
+        blurActiveControl();
+        temporarilyResetIosScale();
+
+        window.requestAnimationFrame(restoreScrollAndSize);
+        window.setTimeout(restoreScrollAndSize, 60);
+        window.setTimeout(restoreScrollAndSize, 180);
+        window.setTimeout(restoreScrollAndSize, 420);
+        window.setTimeout(restoreScrollAndSize, 800);
+    }
+
+    window.stellarVaultViewport = {
+        prepareModal,
+        stabilize
+    };
+
     window.addEventListener('pageshow', settleViewport, { passive: true });
     window.addEventListener('resize', syncAppHeight, { passive: true });
     window.addEventListener('orientationchange', settleViewport, { passive: true });
-    window.addEventListener('focusout', () => window.setTimeout(syncAppHeight, 120), { passive: true });
+    window.addEventListener('focusout', () => window.setTimeout(stabilize, 120), { passive: true });
     window.visualViewport?.addEventListener('resize', syncAppHeight, { passive: true });
 
     if (document.readyState === 'loading') {

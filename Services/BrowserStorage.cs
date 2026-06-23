@@ -49,4 +49,10 @@ public sealed class BrowserStorage(IJSRuntime js)
 
     public ValueTask<string> GeneratePasswordAsync(int length = 24) =>
         js.InvokeAsync<string>("stellarVault.crypto.generatePassword", length);
+
+    public ValueTask PrepareModalAsync() =>
+        js.InvokeVoidAsync("stellarVault.viewport.prepareModal");
+
+    public ValueTask StabilizeViewportAsync() =>
+        js.InvokeVoidAsync("stellarVault.viewport.stabilize");
 }

@@ -10,8 +10,7 @@ Stellar Vault Terminal is powered by **BADJE.IR**. Project contact: **Tooraj Val
 
 - Blazor WebAssembly PWA for mobile and desktop
 - iPhone/iPad installation instructions and Chromium native install prompt
-- iOS standalone viewport stabilization, non-translucent status bar, and safe-area support
-- 16px mobile form controls to prevent Safari focus zoom
+- iOS safe-area support for the status area, home indicator, and landscape notches
 - Testnet, Public, and custom/private Stellar networks
 - Automatic custom-network discovery from Horizon:
   - network passphrase
@@ -22,7 +21,7 @@ Stellar Vault Terminal is powered by **BADJE.IR**. Project contact: **Tooraj Val
 - Network settings saved locally; root secret is never persisted by the app
 - Searchable credential list with reveal and clipboard actions
 - Add, edit, and delete flows
-- Dedicated popup approval for add, edit, and delete cost estimates
+- Cost review before add, edit, and delete operations
 - Separate display of:
   - transaction fees that are spent
   - reserve temporarily locked by ledger entries
@@ -103,7 +102,7 @@ Before a mutation is signed, the app calculates and displays:
 - net reserve change after cleanup
 - child-account funding transfer, when a new node is required
 
-Submitting an add or edit form opens a dedicated approval popup. The popup keeps the estimated fee, reserve impact, operation count, and approval controls visible without requiring the user to scroll back through the form. Delete uses the same approval flow. No transaction is signed until the popup approval button is pressed.
+The estimate is regenerated whenever the form changes. The user must review it and press the confirmation button a second time before submission.
 
 Network fees are spent. Reserve is balance that must remain on an account while its account structure and data entries exist. Removing data entries can release reserve, but it does not refund transaction fees.
 
@@ -122,9 +121,7 @@ iOS does not expose the Chromium installation prompt to the page. The app theref
 3. Choose **Add to Home Screen**.
 4. Tap **Add**.
 
-After installation, the app uses a non-translucent iOS status bar so the operating system reserves the top status area instead of requiring the header to add that inset again. Left, right, and bottom safe areas still use `env(safe-area-inset-*)`. A small viewport synchronizer refreshes the first standalone layout without waiting for the user to scroll.
-
-Mobile inputs use a computed font size of at least 16px. This prevents Safari from automatically zooming the page when a form field receives focus while preserving normal pinch zoom for accessibility.
+After installation, the layout uses `viewport-fit=cover` together with `env(safe-area-inset-*)` so important controls do not sit under the iOS status area, notch, or home indicator.
 
 Use HTTPS in production. `localhost` is accepted for local development, but a plain HTTP LAN address usually isn't an installable secure context.
 
@@ -218,3 +215,12 @@ An existing service worker may keep an older UI briefly. After deployment:
 2. Reload the browser version.
 3. If the old bundle remains, clear site data or unregister the old service worker once.
 4. Reload again.
+
+
+## v1.3.1 iPhone post-commit viewport fix
+
+- Transaction hashes and other long ledger values now wrap instead of widening the page.
+- Approval dialogs blur the active form control before opening.
+- Closing an approval dialog restores the pre-dialog scroll position and recalculates the visual viewport.
+- Add, edit, and delete completion explicitly request viewport stabilization.
+- Installed iOS mode briefly resets the viewport to scale 1 during the transition, then restores the normal accessible viewport configuration.

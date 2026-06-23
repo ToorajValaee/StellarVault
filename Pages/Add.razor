@@ -85,7 +85,7 @@ else
             {
                 <div class="terminal-alert success">
                     <strong>RECORD COMMITTED</strong>
-                    <span>TX: @_transactionHash</span>
+                    <span class="transaction-hash">TX: @_transactionHash</span>
                 </div>
             }
 
@@ -183,6 +183,8 @@ else
             _showSecret = false;
             _draftRecordId = null;
             ClearApproval();
+            await InvokeAsync(StateHasChanged);
+            await Storage.StabilizeViewportAsync();
         }
         catch (Exception ex)
         {

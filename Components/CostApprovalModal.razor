@@ -1,3 +1,5 @@
+@inject BrowserStorage Storage
+
 @if (Open && Estimate is not null)
 {
     <div class="approval-modal-backdrop" @onclick="CancelAsync">
@@ -61,6 +63,30 @@
     [Parameter] public bool Busy { get; set; }
     [Parameter] public EventCallback OnConfirm { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool _rendered;
+    private bool _previousOpen;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_rendered)
+        {
+            _rendered = true;
+            _previousOpen = Open;
+            if (Open)
+                await Storage.PrepareModalAsync();
+            return;
+        }
+
+        if (_previousOpen == Open)
+            return;
+
+        _previousOpen = Open;
+        if (Open)
+            await Storage.PrepareModalAsync();
+        else
+            await Storage.StabilizeViewportAsync();
+    }
 
     private Task ConfirmAsync() => OnConfirm.InvokeAsync();
 

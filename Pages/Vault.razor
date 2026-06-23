@@ -1,6 +1,7 @@
 @page "/vault"
 @implements IDisposable
 @inject VaultSession Session
+@inject BrowserStorage Storage
 @inject NavigationManager Navigation
 
 <PageTitle>Vault // Stellar Vault</PageTitle>
@@ -44,7 +45,7 @@ else
         {
             <div class="terminal-alert success">
                 <strong>DATABASE UPDATED</strong>
-                <span>@_notice</span>
+                <span class="transaction-message">@_notice</span>
             </div>
         }
 
@@ -186,6 +187,8 @@ else
         _notice = string.IsNullOrWhiteSpace(result.Warning)
             ? $"RECORD {item.Record.Id} DELETED. TX: {result.TransactionHash}"
             : $"RECORD DELETED. {result.Warning}";
+        await InvokeAsync(StateHasChanged);
+        await Storage.StabilizeViewportAsync();
     }
 
     private Task CloseRecord()
