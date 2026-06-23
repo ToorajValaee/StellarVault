@@ -497,11 +497,13 @@ window.stellarVault = (() => {
     };
 })();
 
-// PWA installation UI. Chromium exposes beforeinstallprompt. iOS does not,
-// so iPhone/iPad users receive explicit Safari Add to Home Screen instructions.
+// PWA installation UI. Chromium exposes beforeinstallprompt only after
+// installability checks pass. Android also gets a manual fallback so the
+// installation tip is still visible when Chrome delays or suppresses the event.
 (() => {
     let deferredInstallPrompt = null;
-    let iosInstructionsVisible = false;
+    let manualStepsVisible = false;
+    const dismissKey = 'stellar-vault.install-dismissed.v2';
 
     const isStandalone = () =>
         window.matchMedia('(display-mode: standalone)').matches ||
@@ -510,6 +512,8 @@ window.stellarVault = (() => {
     const isIos = () =>
         /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
         (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+
+    const isAndroid = () => /android/i.test(window.navigator.userAgent);
 
     function createBanner() {
         let banner = document.getElementById('pwa-install-banner');
@@ -528,12 +532,7 @@ window.stellarVault = (() => {
                 <span class="pwa-install-kicker">:: SYSTEM MESSAGE</span>
                 <strong id="pwa-install-title">INSTALL STELLAR VAULT</strong>
                 <small id="pwa-install-message">Run this terminal as an installed application.</small>
-                <ol id="pwa-ios-steps" class="pwa-ios-steps" hidden>
-                    <li>Open this page in Safari.</li>
-                    <li>Tap the Share button in Safari.</li>
-                    <li>Choose Add to Home Screen.</li>
-                    <li>Tap Add.</li>
-                </ol>
+                <ol id="pwa-install-steps" class="pwa-install-steps" hidden></ol>
             </div>
             <div class="pwa-install-actions">
                 <button id="pwa-install-action" class="pixel-button primary compact" type="button">INSTALL</button>
@@ -543,38 +542,49 @@ window.stellarVault = (() => {
         document.body.appendChild(banner);
 
         banner.querySelector('#pwa-install-action').addEventListener('click', async () => {
-            if (isIos()) {
-                iosInstructionsVisible = !iosInstructionsVisible;
-                const steps = banner.querySelector('#pwa-ios-steps');
-                steps.hidden = !iosInstructionsVisible;
-                banner.querySelector('#pwa-install-action').textContent = iosInstructionsVisible
-                    ? 'HIDE STEPS'
-                    : 'SHOW STEPS';
+            if (deferredInstallPrompt) {
+                const prompt = deferredInstallPrompt;
+                deferredInstallPrompt = null;
+                banner.hidden = true;
+
+                await prompt.prompt();
+                await prompt.userChoice;
                 return;
             }
 
-            if (!deferredInstallPrompt) {
-                return;
-            }
-
-            const prompt = deferredInstallPrompt;
-            deferredInstallPrompt = null;
-            banner.hidden = true;
-
-            await prompt.prompt();
-            await prompt.userChoice;
+            manualStepsVisible = !manualStepsVisible;
+            const steps = banner.querySelector('#pwa-install-steps');
+            steps.hidden = !manualStepsVisible;
+            banner.querySelector('#pwa-install-action').textContent = manualStepsVisible
+                ? 'HIDE STEPS'
+                : 'HOW TO INSTALL';
         });
 
         banner.querySelector('#pwa-install-dismiss').addEventListener('click', () => {
             banner.hidden = true;
-            sessionStorage.setItem('stellar-vault.install-dismissed', '1');
+            sessionStorage.setItem(dismissKey, '1');
         });
 
         return banner;
     }
 
-    function showInstallBanner() {
-        if (isStandalone() || sessionStorage.getItem('stellar-vault.install-dismissed') === '1') {
+    function canShowBanner() {
+        return !isStandalone() && sessionStorage.getItem(dismissKey) !== '1';
+    }
+
+    function setSteps(banner, items) {
+        const steps = banner.querySelector('#pwa-install-steps');
+        steps.replaceChildren(...items.map(text => {
+            const item = document.createElement('li');
+            item.textContent = text;
+            return item;
+        }));
+        steps.hidden = true;
+        manualStepsVisible = false;
+    }
+
+    function showNativeInstallBanner() {
+        if (!canShowBanner() || !deferredInstallPrompt) {
             return;
         }
 
@@ -583,28 +593,49 @@ window.stellarVault = (() => {
         banner.querySelector('#pwa-install-message').textContent = 'Run this terminal as an installed application.';
         banner.querySelector('#pwa-install-action').textContent = 'INSTALL';
         banner.querySelector('#pwa-install-action').hidden = false;
-        banner.querySelector('#pwa-ios-steps').hidden = true;
+        setSteps(banner, []);
         banner.hidden = false;
     }
 
-    function showIosInstructions() {
-        if (!isIos() || isStandalone() || sessionStorage.getItem('stellar-vault.install-dismissed') === '1') {
+    function showManualInstallHelp() {
+        if (!canShowBanner()) {
             return;
         }
 
         const banner = createBanner();
-        banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON IPHONE / IPAD';
-        banner.querySelector('#pwa-install-message').textContent = 'iOS does not provide an automatic install dialog. Use Safari → Share → Add to Home Screen.';
-        banner.querySelector('#pwa-install-action').textContent = 'SHOW STEPS';
+
+        if (isIos()) {
+            banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON IPHONE / IPAD';
+            banner.querySelector('#pwa-install-message').textContent = 'Use Safari to add this terminal to the Home Screen.';
+            setSteps(banner, [
+                'Open this page in Safari.',
+                'Tap the Share button.',
+                'Choose Add to Home Screen.',
+                'Tap Add.'
+            ]);
+        } else {
+            banner.querySelector('#pwa-install-title').textContent = 'INSTALL ON ANDROID';
+            banner.querySelector('#pwa-install-message').textContent = deferredInstallPrompt
+                ? 'This terminal is ready to install.'
+                : 'If Chrome has not shown its native prompt, install it from the browser menu.';
+            setSteps(banner, [
+                'Open the Chrome menu (⋮).',
+                'Choose Install app or Add to Home screen.',
+                'Confirm Install.'
+            ]);
+        }
+
+        banner.querySelector('#pwa-install-action').textContent = deferredInstallPrompt
+            ? 'INSTALL'
+            : 'HOW TO INSTALL';
         banner.querySelector('#pwa-install-action').hidden = false;
-        banner.querySelector('#pwa-ios-steps').hidden = true;
         banner.hidden = false;
     }
 
     window.addEventListener('beforeinstallprompt', event => {
         event.preventDefault();
         deferredInstallPrompt = event;
-        showInstallBanner();
+        showNativeInstallBanner();
     });
 
     window.addEventListener('appinstalled', () => {
@@ -616,27 +647,54 @@ window.stellarVault = (() => {
     });
 
     window.addEventListener('load', () => {
-        window.setTimeout(showIosInstructions, 1200);
+        // iOS never emits beforeinstallprompt. On Android, show a manual fallback
+        // if Chrome has not emitted it after the first render/installability check.
+        window.setTimeout(() => {
+            if (isIos() || isAndroid()) {
+                showManualInstallHelp();
+            }
+        }, 1800);
     });
 })();
 
-// Keep the installed iOS layout stable during first paint, keyboard changes,
-// modal transitions, and ledger-operation completion.
+// Keep iOS standalone layout stable during keyboard and modal transitions.
+// Android deliberately uses the browser's normal document scrolling; applying
+// iOS visualViewport restoration there can repeatedly snap the page to the top.
 (() => {
     const root = document.documentElement;
     const isIos =
         /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
         (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+    const isAndroid = /android/i.test(window.navigator.userAgent);
     const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
 
+    root.classList.toggle('ios-device', isIos);
+    root.classList.toggle('android-device', isAndroid);
+    root.classList.toggle('standalone-app', isStandalone);
+
+    function blurActiveControl() {
+        const active = document.activeElement;
+        if (active && active !== document.body && typeof active.blur === 'function') {
+            active.blur();
+        }
+    }
+
+    // Non-iOS browsers must not receive scroll restoration or visualViewport
+    // height overrides. They only need the active input to be released.
+    if (!isIos) {
+        root.style.removeProperty('--app-height');
+        window.stellarVaultViewport = {
+            prepareModal: blurActiveControl,
+            stabilize: blurActiveControl
+        };
+        return;
+    }
+
     let stableScrollX = 0;
     let stableScrollY = 0;
     let viewportRestoreTimer = 0;
-
-    root.classList.toggle('ios-device', isIos);
-    root.classList.toggle('standalone-app', isStandalone);
 
     function syncAppHeight() {
         const visualViewport = window.visualViewport;
@@ -644,8 +702,6 @@ window.stellarVault = (() => {
         const visualHeight = Number(visualViewport?.height || 0);
         const layoutHeight = Number(window.innerHeight || root.clientHeight || 0);
 
-        // While iOS is animating a focused control, visualViewport can report a
-        // keyboard-scaled height. Prefer the layout height unless scale is 1.
         const height = scale === 1 && visualHeight > 0
             ? Math.max(visualHeight, layoutHeight)
             : layoutHeight;
@@ -655,15 +711,8 @@ window.stellarVault = (() => {
         }
     }
 
-    function blurActiveControl() {
-        const active = document.activeElement;
-        if (active && active !== document.body && typeof active.blur === 'function') {
-            active.blur();
-        }
-    }
-
     function temporarilyResetIosScale() {
-        if (!isIos || !isStandalone) {
+        if (!isStandalone) {
             return;
         }
 
@@ -706,9 +755,6 @@ window.stellarVault = (() => {
     }
 
     function stabilize() {
-        // Closing a modal while the software keyboard is finishing its animation
-        // can leave an installed iOS PWA at the wrong visual scale. Blur first,
-        // briefly force scale 1, then restore the previous document position.
         blurActiveControl();
         temporarilyResetIosScale();
 
@@ -727,8 +773,11 @@ window.stellarVault = (() => {
     window.addEventListener('pageshow', settleViewport, { passive: true });
     window.addEventListener('resize', syncAppHeight, { passive: true });
     window.addEventListener('orientationchange', settleViewport, { passive: true });
-    window.addEventListener('focusout', () => window.setTimeout(stabilize, 120), { passive: true });
     window.visualViewport?.addEventListener('resize', syncAppHeight, { passive: true });
+
+    if (isStandalone) {
+        window.addEventListener('focusout', () => window.setTimeout(stabilize, 120), { passive: true });
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', settleViewport, { once: true });

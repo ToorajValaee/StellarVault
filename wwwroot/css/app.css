@@ -1968,3 +1968,66 @@ pre,
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+
+/* 1.3.2 Android document scrolling and install-help refinements */
+html,
+body {
+    height: auto;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
+}
+
+body,
+.crt-shell,
+.app-main {
+    touch-action: pan-y pinch-zoom;
+}
+
+.crt-shell {
+    height: auto;
+    min-height: 100svh;
+}
+
+.app-main {
+    overflow: visible;
+}
+
+/* The viewport workaround is only needed by the installed iOS app. Keeping it
+   off Android prevents visualViewport/focus events from cancelling normal pan. */
+html.ios-device.standalone-app,
+html.ios-device.standalone-app body {
+    overscroll-behavior-y: none;
+}
+
+html.android-device,
+html.android-device body {
+    min-height: 100%;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+html.android-device .crt-shell {
+    min-height: 100svh;
+}
+
+.pwa-install-banner {
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.pwa-install-steps {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.65rem 0 0;
+    padding-left: 1.3rem;
+    color: var(--phosphor-strong);
+    font-size: 0.65rem;
+    line-height: 1.45;
+}
+
+.pwa-install-steps[hidden] {
+    display: none;
+}
