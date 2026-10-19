@@ -446,12 +446,11 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
         try
         {
-            var chunkDeletes = readableCopies
-                .SelectMany(copy => BuildChunkDeletes(
-                    copy.Node.AccountId,
-                    expectedLocation.Record.Id,
-                    copy.Manifest))
-                .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
+            var prefix = ChunkPrefix + expectedLocation.Record.Id + ":";
+            var chunkDeletes = nodes.SelectMany(node =>
+                    node.Data.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                        .Select(key => DeleteWrite(node.AccountId, key)))
+                .DistinctBy(write => write.SourceAccountId + "|" + write.Name, StringComparer.Ordinal)
                 .ToArray();
 
             if (chunkDeletes.Length > 0)
