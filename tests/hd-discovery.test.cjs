@@ -7,9 +7,10 @@ const path = require('node:path');
 function setup(existing, highest = 3) {
   const window = {
     stellarVaultHd: { accountSeed: async (_, i) => Uint8Array.of(i) },
-    StellarSdk: { Keypair: { fromRawEd25519Seed: raw => ({
-      publicKey: () => 'child-' + raw[0]
-    }) } }
+    StellarSdk: { Keypair: { fromRawEd25519Seed: raw => {
+      const index = raw[0];
+      return { publicKey: () => 'child-' + index };
+    } } }
   };
   vm.runInNewContext(fs.readFileSync(
     path.join(__dirname, '../wwwroot/js/hd-discovery.js'), 'utf8'),
