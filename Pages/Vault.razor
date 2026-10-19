@@ -32,6 +32,28 @@ else
             <div><span>WARNINGS</span><strong>@WarningCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
         </div>
 
+        <details class="terminal-panel" style="margin-bottom:1rem;padding:1rem">
+            <summary>INDEX 0 // ROOT TREASURY</summary>
+            <p>Live Horizon balance, including sponsored reserve obligations. Refresh before planning writes.</p>
+            <button class="pixel-button compact" type="button"
+                    disabled="@_treasuryLoading" @onclick="RefreshTreasuryAsync">
+                @(_treasuryLoading ? "CHECKING..." : "CHECK LIVE BALANCE")
+            </button>
+            @if (_treasury is not null)
+            {
+                <div class="stats-strip">
+                    <div><span>TOTAL XLM</span><strong>@_treasury.BalanceXlm</strong></div>
+                    <div><span>SPENDABLE XLM</span><strong>@_treasury.SpendableXlm</strong></div>
+                    <div><span>SPONSORED RESERVE XLM</span><strong>@_treasury.SponsoredReserveXlm</strong></div>
+                </div>
+                <p>Minimum balance: @FormatStroops(_treasury.MinimumBalanceStroops) XLM. Sponsored reserve units: @_treasury.SponsoredReserveUnits.</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_treasuryError))
+            {
+                <div class="terminal-alert warning">@_treasuryError</div>
+            }
+        </details>
+
         <label class="search-console">
             <span class="search-prefix">FIND&gt;</span>
             <input @bind="_search" @bind:event="oninput" placeholder="title, username, url, tag..." autocomplete="off" />
@@ -119,6 +141,9 @@ else
     private string? _error;
     private string? _notice;
     private VaultRecordLocation? _selected;
+    private RootTreasurySnapshot? _treasury;
+    private string? _treasuryError;
+    private bool _treasuryLoading;
 
     private int RecordCount => Session.Snapshot?.Records.Count ?? 0;
     private int NodeCount => Session.Snapshot?.Nodes.Count ?? 0;
@@ -162,6 +187,31 @@ else
         {
             _error = ex.Message;
         }
+    }
+
+    private async Task RefreshTreasuryAsync()
+    {
+        _treasuryLoading = true;
+        _treasuryError = null;
+        try
+        {
+            _treasury = await Session.InspectRootTreasuryAsync();
+        }
+        catch (Exception ex)
+        {
+            _treasury = null;
+            _treasuryError = ex.Message;
+        }
+        finally
+        {
+            _treasuryLoading = false;
+        }
+    }
+
+    private static string FormatStroops(string value)
+    {
+        var stroops = long.Parse(value, CultureInfo.InvariantCulture);
+        return (stroops / 10_000_000m).ToString("0.0000000", CultureInfo.InvariantCulture);
     }
 
     private void OpenRecord(VaultRecordLocation item)
