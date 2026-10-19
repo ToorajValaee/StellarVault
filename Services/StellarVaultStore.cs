@@ -216,11 +216,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
             .First();
 
-        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
-        try
-        {
-            var chunkCount = SplitIntoChunks(encrypted).Count;
-            EnsureRecordFitsNode(chunkCount);
+        var chunkCount = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(chunkCount);
 
             var source = currentCopy.Node;
             var target = source;
@@ -247,34 +244,22 @@ public sealed class StellarVaultStore : IAsyncDisposable
                     generation)
                 .Count;
 
-            var commitOperations = chunkCount + 1;
-            var createOperations = createsChild ? 3 : 0;
-            var dataEntriesAdded = chunkCount + (targetHasHeader ? 0 : 1) + (createsChild ? 1 : 0);
-            var structuralReserves = createsChild ? 3 : 0;
-            var operationCount = createOperations + commitOperations + cleanupCount;
-            var transactionCount = (createsChild ? 1 : 0)
-                                   + TransactionCount(commitOperations)
-                                   + TransactionCount(cleanupCount);
+            var commitWrites = chunkCount + 1;
+            var newEntries = chunkCount + (targetHasHeader ? 0 : 1);
+            var allocationOperations = createsChild ? 4 : 0;
+            // Each newly sponsored entry requires begin/write/end operations.
+            // Existing entries need only a ManageData operation.
+            var commitOperations = newEntries * 3 + (commitWrites - newEntries);
+            var operationCount = allocationOperations + commitOperations + cleanupCount;
+            var transactionCount = (createsChild ? 1 : 0) + commitWrites + cleanupCount;
             var reserve = BaseReserveNative;
-            var peakReserve = (dataEntriesAdded + structuralReserves) * reserve;
+            var peakReserve = (newEntries + (createsChild ? 2 : 0)) * reserve;
             var netReserve = peakReserve - cleanupCount * reserve;
 
             return new VaultCostEstimate(
-                operationCount,
-                transactionCount,
-                chunkCount,
-                dataEntriesAdded,
-                cleanupCount,
-                FeeNative(operationCount),
-                peakReserve,
-                netReserve,
-                createsChild ? ParseChildStartingBalance() : 0m,
-                createsChild);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+                operationCount, transactionCount, chunkCount, newEntries,
+                cleanupCount, FeeNative(operationCount), peakReserve,
+                netReserve, 0m, createsChild);
     }
 
     public async Task<VaultCostEstimate> EstimateDeleteAsync(VaultRecordLocation expectedLocation)
