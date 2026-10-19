@@ -42,3 +42,20 @@ test('rejects inconsistent derived account discovery', async () => {
     setup({ scannedThrough: 19, requiresReconciliation: true }, registry)
       .check(new Uint8Array(64), opened()), /registry mismatch/);
 });
+
+test('rejects allocation after maximum supported child index', async () => {
+  const full = { highestAllocatedIndex: 4096, activeWriteIndex: 4096, revision: 8 };
+  await assert.rejects(
+    setup({ scannedThrough: 4096, requiresReconciliation: false }, full)
+      .check(new Uint8Array(64), { ...opened(), registry: full }),
+    /allocation limit reached/);
+});
+
+test('rejects fractional and negative highest allocation indices', async () => {
+  const preflight = setup({ scannedThrough: 19, requiresReconciliation: false }, registry);
+  for (const highestAllocatedIndex of [-1, 1.5]) {
+    await assert.rejects(preflight.check(new Uint8Array(64), {
+      ...opened(), registry: { ...registry, highestAllocatedIndex }
+    }), /registry index invalid/);
+  }
+});
