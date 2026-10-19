@@ -184,37 +184,17 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
             throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
 
-        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
-        try
-        {
-            var chunkCount = SplitIntoChunks(encrypted).Count;
-            EnsureRecordFitsNode(chunkCount);
+        var chunkCount = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(chunkCount);
+        var createsChild = !CanStageRecord(nodes[^1], chunkCount, headerAlreadyExists: false);
+        var entries = chunkCount + 1;
+        var operations = entries * 3 + (createsChild ? 4 : 0);
+        var transactions = entries + (createsChild ? 1 : 0);
+        var reserve = (entries + (createsChild ? 2 : 0)) * BaseReserveNative;
 
-            var createsChild = !CanStageRecord(nodes[^1], chunkCount, headerAlreadyExists: false);
-            var recordWrites = chunkCount + 1;
-            var createOperations = createsChild ? 3 : 0;
-            var dataEntriesAdded = recordWrites + (createsChild ? 1 : 0); // sv:next on the old tail
-            var structuralReserves = createsChild ? 3 : 0; // child account: 2 base reserves + root signer
-            var reserve = BaseReserveNative;
-            var operationCount = createOperations + recordWrites;
-            var transactionCount = (createsChild ? 1 : 0) + TransactionCount(recordWrites);
-
-            return new VaultCostEstimate(
-                operationCount,
-                transactionCount,
-                chunkCount,
-                dataEntriesAdded,
-                0,
-                FeeNative(operationCount),
-                (dataEntriesAdded + structuralReserves) * reserve,
-                (dataEntriesAdded + structuralReserves) * reserve,
-                createsChild ? ParseChildStartingBalance() : 0m,
-                createsChild);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+        return new VaultCostEstimate(
+            operations, transactions, chunkCount, entries, 0,
+            FeeNative(operations), reserve, reserve, 0m, createsChild);
     }
 
     public async Task<VaultCostEstimate> EstimateUpdateAsync(
