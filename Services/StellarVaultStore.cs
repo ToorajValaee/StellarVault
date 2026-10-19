@@ -236,7 +236,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
             .First();
 
-        var encrypted = await _crypto.EncryptAsync(record);
+        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
         try
         {
             var chunkCount = SplitIntoChunks(encrypted).Count;
