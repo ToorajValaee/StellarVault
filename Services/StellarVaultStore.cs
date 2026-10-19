@@ -276,7 +276,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
         var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
         var chunkDeleteCount = readableCopies.Sum(copy => (int)copy.Manifest.ChunkCount);
         var operationCount = headerCount + chunkDeleteCount;
-        var transactionCount = TransactionCount(headerCount) + TransactionCount(chunkDeleteCount);
+        var transactionCount = operationCount;
         var released = operationCount * BaseReserveNative;
 
         return new VaultCostEstimate(
