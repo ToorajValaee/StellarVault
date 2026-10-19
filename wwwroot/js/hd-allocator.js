@@ -45,6 +45,9 @@ window.stellarVaultHdAllocator = (() => {
         latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex ||
         latest.activeWriteIndex !== opened.registry.activeWriteIndex)
       throw new Error('Registry changed before child allocation; refresh and retry');
+    if (!Number.isSafeInteger(latest.revision) ||
+        latest.revision >= Number.MAX_SAFE_INTEGER)
+      throw new Error('Registry revision exhausted; cannot allocate another child');
     // Use the same fresh account snapshot for both treasury validation and
     // transaction sequence; never authorize against an earlier balance.
     const treasury = window.stellarVaultTreasury.calculate(latestRoot,
