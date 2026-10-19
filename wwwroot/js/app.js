@@ -236,50 +236,31 @@ window.stellarVault = (() => {
     }
 
     async function loadChain(sessionId, maxChainLength) {
-        const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
-        if (session.mode === 'hd-v2')
-            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
-        const limit = Math.max(1, Math.min(Number(maxChainLength) || 64, 256));
-        const visited = new Set();
-        const nodes = [];
-        let current = session.rootAccountId;
-
-        while (true) {
-            if (visited.has(current)) {
-                throw new Error('The vault account chain contains a cycle.');
-            }
-            if (nodes.length >= limit) {
-                throw new Error(`The vault chain exceeds the safety limit of ${limit} accounts.`);
-            }
-
-            visited.add(current);
-            const account = await session.server.loadAccount(current);
-            const data = { ...(account.data_attr || {}) };
-            let nextAccountId = null;
-
-            if (Object.prototype.hasOwnProperty.call(data, 'sv:next')) {
-                const rawPointer = sdkBufferFromBase64(session, data['sv:next']);
-                if (rawPointer.length !== 32) {
-                    throw new Error(`Account ${current} has an invalid sv:next pointer.`);
-                }
-                nextAccountId = StellarSdk.StrKey.encodeEd25519PublicKey(rawPointer);
-            }
-
-            nodes.push({
-                accountId: account.account_id,
-                position: nodes.length,
-                subentryCount: Number(account.subentry_count || 0),
-                data,
-                nextAccountId
-            });
-
-            if (!nextAccountId) {
-                return nodes;
-            }
-
-            current = nextAccountId;
-        }
+        if (session.mode !== 'hd-v2')
+            throw new Error('Only v2 indexed sessions are supported.');
+        if (!session.registry)
+            throw new Error('Authenticated v2 registry is missing; initialize the existing root first.');
+        const max = Number(maxChainLength);
+        if (!Number.isSafeInteger(max) || max < 1)
+            throw new Error('Invalid indexed account limit.');
+        const highest = session.registry.highestAllocatedIndex;
+        if (highest > max)
+            throw new Error('Indexed registry exceeds configured account limit.');
+        // Scan the registered range plus a recovery lookahead. Never follow sv:next.
+        const discovered = await window.stellarVaultHdDiscovery.discover(
+            session.hdSeed, session, { recoveryLookahead: 16 });
+        if (discovered.requiresReconciliation)
+            throw new Error('HD account gaps or unregistered children detected; reconcile before reading.');
+        const root = await session.server.loadAccount(session.rootAccountId);
+        return [{
+            accountId: session.rootAccountId, position: 0,
+            subentryCount: Number(root.subentry_count || 0),
+            data: { ...(root.data_attr || {}) }, nextAccountId: null
+        }, ...discovered.nodes.map(node => ({
+            accountId: node.accountId, position: node.index,
+            subentryCount: node.subentryCount, data: node.data, nextAccountId: null
+        }))];
     }
 
     async function createAndAppendChild(
