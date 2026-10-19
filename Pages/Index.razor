@@ -456,18 +456,5 @@
                 : "custom";
     }
 
-    private static string FriendlyError(Exception ex)
-    {
-        var text = ex.Message;
-        if (text.Contains("404", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("not found", StringComparison.OrdinalIgnoreCase))
-            return "The root Stellar account does not exist on the selected network, or the Horizon URL is incorrect.";
-
-        if (text.Contains("CORS", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("fetch", StringComparison.OrdinalIgnoreCase))
-            return "The browser could not reach Horizon. Check CORS, HTTPS, the URL, and network connectivity.";
-
-        return text;
-    }
+    private static string FriendlyError(Exception ex) => VaultErrorMessages.Friendly(ex);
 }
