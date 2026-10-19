@@ -11,6 +11,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private const string HeaderPrefix = "svh:";
     private const string ChunkPrefix = "svc:";
     private const int ChunkValueSize = 64;
+    private const int MaxOperationsPerTransaction = 90;
     private const int MaxChainLength = 64;
     private const byte LegacyManifestVersion = 1;
     private const byte CurrentManifestVersion = 2;
@@ -127,7 +128,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
                             CryptographicOperations.ZeroMemory(computedHash);
                         }
 
-                        if (manifest.Version != CurrentManifestVersion || manifest.Generation is null)
+                        if (manifest.Generation is null)
                             throw new InvalidDataException("Legacy record manifests are not supported in HD v2.");
 
                         var record = await _crypto.DecryptHdAsync(
