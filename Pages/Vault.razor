@@ -112,6 +112,24 @@ else
             </details>
         }
 
+        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
+            <strong>FOLDERS</strong>
+            <p>@CurrentFolderName</p>
+            <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">ALL RECORDS</button>
+            @if (_folderId is not null)
+            {
+                <button class="pixel-button compact" type="button" @onclick="GoUp">UP ONE LEVEL</button>
+            }
+            @foreach (var folder in ChildFolders)
+            {
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = folder.Record.Id">📁 @folder.Record.Title</button>
+            }
+            <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+                <input class="terminal-input" placeholder="New folder name" @bind="_newFolderName" />
+                <button class="pixel-button compact" type="button" disabled="@Session.IsBusy" @onclick="CreateFolderAsync">CREATE FOLDER</button>
+                <a class="pixel-button compact" href="@AddRecordUrl">ADD RECORD HERE</a>
+            </div>
+        </section>
         <div class="record-list">
             @if (FilteredRecords.Count == 0)
             {
@@ -160,6 +178,43 @@ else
 
 @code {
     private string _search = string.Empty;
+    private string? _folderId;
+    private string _newFolderName = string.Empty;
+    private IReadOnlyList<VaultRecordLocation> Folders =>
+        Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
+    private IReadOnlyList<VaultRecordLocation> ChildFolders =>
+        Folders.Where(x => x.Record.FolderId == _folderId).ToArray();
+    private string CurrentFolderName =>
+        _folderId is null ? "All records" :
+        Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.Title ?? "Unknown folder";
+    private string AddRecordUrl => _folderId is null ? "/add" : $"/add?folder={_folderId}";
+    private void GoUp()
+    {
+        _folderId = Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.FolderId;
+    }
+    private async Task CreateFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newFolderName) || Session.IsBusy) return;
+        _error = null;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var folder = new VaultRecord
+            {
+                Id = Guid.NewGuid().ToString("N")[..16],
+                Title = _newFolderName.Trim(),
+                Secret = "folder-metadata",
+                Kind = "folder",
+                FolderId = _folderId,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            await Session.AddAsync(folder);
+            _newFolderName = string.Empty;
+            _folderId = folder.Id;
+        }
+        catch (Exception ex) { _error = VaultErrorMessages.Friendly(ex); }
+    }
     private bool _confirmInitialization;
     private string? _error;
     private string? _notice;
@@ -176,7 +231,7 @@ else
     {
         get
         {
-            var records = Session.Snapshot?.Records ?? [];
+            var records = Session.Snapshot?.Records.Where(x => !x.Record.IsFolder && (_folderId is null || x.Record.FolderId == _folderId)).ToArray() ?? [];
             if (string.IsNullOrWhiteSpace(_search))
                 return records;
 
