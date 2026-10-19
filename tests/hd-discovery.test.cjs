@@ -50,3 +50,16 @@ test('rejects a scan that cannot inspect the next index', async () => {
   await assert.rejects(setup([1, 2, 3]).discover({ recoveryLookahead: 0 }),
     /lookahead/);
 });
+
+test('allows scanning the last supported registered index', async () => {
+  const result = await setup([], 4096).discover({
+    recoveryLookahead: 1, maxScan: 4096
+  });
+  assert.equal(result.scannedThrough, 4096);
+  assert.equal(result.registeredGaps.length, 4096);
+});
+
+test('rejects a malformed registry index before deriving accounts', async () => {
+  await assert.rejects(setup([], -1).discover(), /invalid highest allocated index/);
+  await assert.rejects(setup([], 1.5).discover(), /invalid highest allocated index/);
+});
