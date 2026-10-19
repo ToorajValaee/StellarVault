@@ -318,17 +318,22 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
             throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
 
-        var encrypted = await _crypto.EncryptAsync(record);
+        // Ciphertext length is plaintext JSON length + v2 nonce/version/tag (29 bytes).
+        // Size before choosing the child because the child index is authenticated AAD.
+        var estimatedChunks = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(estimatedChunks);
+
+        var target = nodes[^1];
+        if (!CanStageRecord(target, estimatedChunks, headerAlreadyExists: false))
+            target = await CreateAndAppendChildAsync(target);
+
+        var generation = CreateGeneration();
+        var encrypted = await _crypto.EncryptHdAsync(record, target.Position, generation);
         try
         {
             var chunks = SplitIntoChunks(encrypted);
-            EnsureRecordFitsNode(chunks.Count);
-
-            var target = nodes[^1];
-            if (!CanStageRecord(target, chunks.Count, headerAlreadyExists: false))
-                target = await CreateAndAppendChildAsync(target);
-
-            var generation = CreateGeneration();
+            if (chunks.Count != estimatedChunks)
+                throw new InvalidDataException("Encrypted record size changed during staging.");
             var manifest = await CreateManifestAsync(
                 encrypted,
                 chunks.Count,
@@ -363,13 +368,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
             .First();
 
-        var encrypted = await _crypto.EncryptAsync(record);
-        try
-        {
-            var chunks = SplitIntoChunks(encrypted);
-            EnsureRecordFitsNode(chunks.Count);
-
-            var generation = CreateGeneration(currentCopy.Manifest.Generation);
+        var estimatedChunks = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(estimatedChunks);
+        var generation = CreateGeneration(currentCopy.Manifest.Generation);
             var updatedSeconds = Math.Max(
                 record.UpdatedUtc.ToUnixTimeSeconds(),
                 currentCopy.Manifest.UpdatedUnixSeconds + 1);
@@ -377,7 +378,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             var source = currentCopy.Node;
             VaultNodeSnapshot target;
 
-            if (CanStageRecord(source, chunks.Count, headerAlreadyExists: true))
+            if (CanStageRecord(source, estimatedChunks, headerAlreadyExists: true))
             {
                 target = source;
             }
@@ -386,9 +387,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 target = nodes[^1];
                 var targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
 
-                if (!CanStageRecord(target, chunks.Count, targetHasHeader))
+                if (!CanStageRecord(target, estimatedChunks, targetHasHeader))
                     target = await CreateAndAppendChildAsync(target);
             }
+
+            var encrypted = await _crypto.EncryptHdAsync(record, target.Position, generation);
+            try
+            {
+                var chunks = SplitIntoChunks(encrypted);
+                if (chunks.Count != estimatedChunks)
+                    throw new InvalidDataException("Encrypted record size changed during staging.");
 
             var manifest = await CreateManifestAsync(
                 encrypted,
@@ -417,10 +425,10 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
             return new VaultMutationResult(lastHash, cleanupWarning);
         }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(encrypted);
+            }
     }
 
     public async Task<VaultMutationResult> DeleteAsync(VaultRecordLocation expectedLocation)
