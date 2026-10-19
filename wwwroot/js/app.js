@@ -402,7 +402,7 @@ window.stellarVault = (() => {
             const unique = index + ':' + name;
             if (seen.has(unique)) throw new Error('Duplicate data key in batch.');
             seen.add(unique);
-            const raw = await window.stellarVaultHd.accountSeed(session.hdSeed, index);
+            const raw = await window.stellarVaultHd.accountSeed(session.hdSeed, index, session.derivationScheme);
             let child;
             try { child = sdk.Keypair.fromRawEd25519Seed(raw); }
             finally { raw.fill(0); }
