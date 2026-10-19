@@ -87,12 +87,12 @@ window.stellarVaultSponsorship = (() => {
     safetyBufferStroops = '0'
   }) {
     const sdk = requireSdk();
+    if (rootKeypair.publicKey() === childKeypair.publicKey())
+      throw new Error('Root and storage child must be different accounts');
     const [root, child] = await Promise.all([
       server.loadAccount(rootKeypair.publicKey()),
       server.loadAccount(childKeypair.publicKey())
     ]);
-    if (rootKeypair.publicKey() === childKeypair.publicKey())
-      throw new Error('Root and storage child must be different accounts');
     const exists = Object.prototype.hasOwnProperty.call(child.data_attr || {}, name);
     if (value === null && !exists)
       throw new Error('Data entry was already removed; refresh before deleting');
