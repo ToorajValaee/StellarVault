@@ -26,7 +26,7 @@ window.stellarVaultHdAllocator = (() => {
     if (reserve <= 0n || fee <= 0n || buffer < 0n)
       throw new Error('Invalid reserve, fee or safety buffer');
     const preflight = await window.stellarVaultAllocationPreflight.check(seed, opened);
-    const childRaw = await window.stellarVaultHd.accountSeed(seed, preflight.nextIndex);
+    const childRaw = await window.stellarVaultHd.accountSeed(seed, preflight.nextIndex, opened.derivationScheme);
     let child;
     try { child = window.StellarSdk.Keypair.fromRawEd25519Seed(childRaw); }
     finally { childRaw.fill(0); }
