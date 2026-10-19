@@ -15,19 +15,29 @@ window.stellarVaultHdDiscovery = (() => {
     const url = String(horizonUrl || '').trim().replace(/\/+$/, '');
     if (!url || !networkPassphrase) throw new Error('Network settings required');
     const server = new sdk.Horizon.Server(url, { allowHttp: url.startsWith('http://') });
-    const rootRaw = await window.stellarVaultHd.accountSeed(seed, 0);
-    let rootKeypair;
-    try { rootKeypair = sdk.Keypair.fromRawEd25519Seed(rootRaw); }
-    finally { rootRaw.fill(0); }
-    const rootId = rootKeypair.publicKey();
-    // Do not create or fund index 0. The user must provide an existing funded root.
-    let root;
-    try { root = await server.loadAccount(rootId); }
-    catch (error) {
-      if (Number(error?.response?.status) === 404)
-        throw new Error('Mnemonic index-0 account ' + rootId + ' does not exist on this network. Fund this public address on the selected network, or verify your mnemonic, optional BIP-39 passphrase, and network selection. No funds were transferred.');
-      throw error;
+    // Prefer standard SEP-0005; try legacy BIP32 only when the standard
+    // account is definitively absent. Never mask network or auth failures.
+    let root, rootKeypair, rootId, derivationScheme;
+    const absent = [];
+    for (const scheme of ['sep5', 'bip32-compat']) {
+      const rootRaw = await window.stellarVaultHd.accountSeed(seed, 0, scheme);
+      let candidate;
+      try { candidate = sdk.Keypair.fromRawEd25519Seed(rootRaw); }
+      finally { rootRaw.fill(0); }
+      const accountId = candidate.publicKey();
+      try {
+        root = await server.loadAccount(accountId);
+        rootKeypair = candidate;
+        rootId = accountId;
+        derivationScheme = scheme;
+        break;
+      } catch (error) {
+        if (Number(error?.response?.status) !== 404) throw error;
+        absent.push(accountId);
+      }
     }
+    if (!root)
+      throw new Error('No index-0 account found for this mnemonic on the selected network. Checked standard Stellar derivation (' + absent[0] + ') and compatible derivation (' + absent[1] + '). Verify your mnemonic, optional BIP39 passphrase and network. Do not fund an unverified address.');
     const native = (root.balances || []).find(b => b.asset_type === 'native');
     if (!native) throw new Error('Root account has no native XLM balance');
     const macKey = await window.stellarVaultRegistry.registryMacKey(
@@ -38,7 +48,7 @@ window.stellarVaultHdDiscovery = (() => {
       const bytes = Uint8Array.from(atob(registryEncoded), c => c.charCodeAt(0));
       registry = await window.stellarVaultRegistry.decode(macKey, bytes);
     }
-    return { server, rootKeypair, rootAccountId: rootId, registry, networkPassphrase };
+    return { server, rootKeypair, rootAccountId: rootId, registry, networkPassphrase, derivationScheme };
   }
 
   async function discover(seed, opened, { recoveryLookahead = 16, maxScan = MAX_SCAN } = {}) {
@@ -62,7 +72,7 @@ window.stellarVaultHdDiscovery = (() => {
     // Bootstrap scans 4096 paths; sequential network calls are prohibitively slow.
     const batchSize = 12;
     async function inspectIndex(index) {
-      const raw = await window.stellarVaultHd.accountSeed(seed, index);
+      const raw = await window.stellarVaultHd.accountSeed(seed, index, opened.derivationScheme || 'sep5');
       let pair;
       try { pair = window.StellarSdk.Keypair.fromRawEd25519Seed(raw); }
       finally { raw.fill(0); }
