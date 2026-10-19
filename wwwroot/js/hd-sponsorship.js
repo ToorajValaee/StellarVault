@@ -51,8 +51,9 @@ window.stellarVaultSponsorship = (() => {
     const fee = BigInt(String(baseFeeStroops));
     const required = 2n * BigInt(String(baseReserveStroops)) +
       3n * fee + BigInt(String(safetyBufferStroops));
-    if (fee <= 0n || required < 0n)
-      throw new Error('Invalid sponsorship fee or reserve');
+    if (fee <= 0n || BigInt(String(baseReserveStroops)) <= 0n ||
+        BigInt(String(safetyBufferStroops)) < 0n)
+      throw new Error('Invalid sponsorship fee, reserve or safety buffer');
     const funds = parseAccountReserves(root, baseReserveStroops);
     if (funds.spendable < required)
       throw new Error('Root account has insufficient spendable XLM for sponsorship and fees');
@@ -100,8 +101,9 @@ window.stellarVaultSponsorship = (() => {
     const operationCount = createsEntry ? 3n : 1n;
     const required = (createsEntry ? BigInt(String(baseReserveStroops)) : 0n) +
       operationCount * fee + BigInt(String(safetyBufferStroops));
-    if (fee <= 0n || required < 0n)
-      throw new Error('Invalid sponsorship fee or reserve');
+    if (fee <= 0n || BigInt(String(baseReserveStroops)) <= 0n ||
+        BigInt(String(safetyBufferStroops)) < 0n)
+      throw new Error('Invalid sponsorship fee, reserve or safety buffer');
     if (parseAccountReserves(root, baseReserveStroops).spendable < required)
       throw new Error('Root account has insufficient spendable XLM for data operation');
 
