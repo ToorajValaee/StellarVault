@@ -42,15 +42,18 @@ window.stellarVaultHdBootstrap = (() => {
     tx.sign(opened.rootKeypair);
     const result = await opened.server.submitTransaction(tx);
     // Reopen from ledger; never trust local state until HMAC verification succeeds.
-    const verified = await window.stellarVaultHdDiscovery.open(seed,
-      opened.server.serverURL?.toString?.() || opened.horizonUrl,
-      opened.networkPassphrase);
-    if (!verified.registry || verified.registry.highestAllocatedIndex !== 0 ||
-        verified.registry.activeWriteIndex !== 0 || verified.registry.revision !== 0)
+    const verifiedRoot = await opened.server.loadAccount(opened.rootAccountId);
+    const encoded = verifiedRoot.data_attr?.['sv:registry:v2'];
+    if (!encoded)
+      throw new Error('Registry transaction submitted but ledger entry is missing; refresh');
+    const verifiedRegistry = await window.stellarVaultRegistry.decode(key,
+      Uint8Array.from(atob(encoded), c => c.charCodeAt(0)));
+    if (verifiedRegistry.highestAllocatedIndex !== 0 ||
+        verifiedRegistry.activeWriteIndex !== 0 || verifiedRegistry.revision !== 0)
       throw new Error('Registry transaction submitted but verification failed; refresh');
-    opened.registry = verified.registry;
+    opened.registry = verifiedRegistry;
     return { rootAccountId: opened.rootAccountId, transactionHash: result.hash,
-      registry: verified.registry };
+      registry: verifiedRegistry };
   }
   return Object.freeze({ initialize });
 })();
