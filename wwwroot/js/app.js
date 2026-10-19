@@ -293,7 +293,7 @@ window.stellarVault = (() => {
             throw new Error('Stale child allocation index; refresh before retrying.');
         const expectedPreviousIndex = session.registry.highestAllocatedIndex;
         const previousRaw = await window.stellarVaultHd.accountSeed(
-            session.hdSeed, expectedPreviousIndex);
+            session.hdSeed, expectedPreviousIndex, session.derivationScheme);
         let expectedPreviousAccount;
         try {
             expectedPreviousAccount = requireStellarSdk()
