@@ -115,7 +115,18 @@ else
         <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
             <strong>FOLDERS</strong>
             <span> (@Folders.Count)</span>
-            <p>@CurrentFolderName</p>
+            <nav aria-label="Folder path" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.75rem 0">
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">MY VAULT</button>
+                @foreach (var crumb in Breadcrumbs)
+                {
+                    <span aria-hidden="true">/</span>
+                    <button class="pixel-button compact" type="button" @onclick="() => _folderId = crumb.Record.Id">@crumb.Record.Title</button>
+                }
+            </nav>
+            <label style="display:flex;align-items:center;gap:.5rem;margin:.75rem 0">
+                <input type="checkbox" @bind="_includeSubfolders" />
+                Include records from subfolders
+            </label>
             <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">ROOT / UNFILED</button>
             @if (_folderId is not null)
             {
@@ -182,6 +193,23 @@ else
     private string? _folderId;
     private string _newFolderName = string.Empty;
     private bool _includeSubfolders;
+    private IReadOnlyList<VaultRecordLocation> Breadcrumbs
+    {
+        get
+        {
+            var path = new List<VaultRecordLocation>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var current = _folderId;
+            while (current is not null && visited.Add(current))
+            {
+                var folder = Folders.FirstOrDefault(x => x.Record.Id == current);
+                if (folder is null) break;
+                path.Insert(0, folder);
+                current = folder.Record.FolderId;
+            }
+            return path;
+        }
+    }
     private IReadOnlyList<VaultRecordLocation> Folders =>
         Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
     private IReadOnlyList<VaultRecordLocation> ChildFolders =>
