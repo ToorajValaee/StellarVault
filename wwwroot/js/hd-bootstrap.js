@@ -37,7 +37,7 @@ window.stellarVaultHdBootstrap = (() => {
     const tx = new sdk.TransactionBuilder(root, {
       fee: fee.toString(), networkPassphrase: opened.networkPassphrase
     }).addOperation(sdk.Operation.manageData({
-      source: opened.rootAccountId, name: 'sv:registry:v2', value: Buffer.from(value)
+      source: opened.rootAccountId, name: 'sv:registry:v2', value: opened.rootKeypair.rawPublicKey().constructor.from(value)
     })).setTimeout(60).build();
     tx.sign(opened.rootKeypair);
     const result = await opened.server.submitTransaction(tx);
