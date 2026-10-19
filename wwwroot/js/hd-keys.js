@@ -45,8 +45,22 @@ window.stellarVaultHd = (() => {
       return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-512', salt, iterations: 2048 }, key, 512));
     } finally { password.fill(0); salt.fill(0); }
   }
-  async function accountSeed(bip39Seed, index) {
+  async function accountSeed(bip39Seed, index, scheme = 'sep5') {
     if (!(bip39Seed instanceof Uint8Array) || bip39Seed.length !== 64) throw new TypeError('Expected 64-byte BIP-39 seed');
+    if (scheme === 'sep5') {
+      let state = await hmac(text.encode('ed25519 seed'), bip39Seed);
+      try {
+        for (const segment of [44, 148, index]) {
+          const data = new Uint8Array(37);
+          data.set(state.subarray(0, 32), 1);
+          new DataView(data.buffer).setUint32(33, harden(segment), false);
+          const next = await hmac(state.subarray(32, 64), data);
+          data.fill(0); state.fill(0); state = next;
+        }
+        return state.slice(0, 32);
+      } finally { state.fill(0); }
+    }
+    if (scheme !== 'bip32-compat') throw new Error('Unsupported HD derivation scheme');
     // Match @scure/bip32 HDKey.fromMasterSeed(seed).derive("m/44'/148'/i'").
     // BIP32 uses Bitcoin seed and secp256k1 scalar addition, NOT SLIP-0010.
     const order = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
@@ -74,11 +88,11 @@ window.stellarVaultHd = (() => {
       return toBytes(scalar);
     } finally { state.fill(0); }
   }
-  async function deriveKeypair(validatedMnemonic, index, passphrase = '') {
+  async function deriveKeypair(validatedMnemonic, index, passphrase = '', scheme = 'sep5') {
     if (!window.StellarSdk?.Keypair?.fromRawEd25519Seed) throw new Error('Stellar SDK unavailable');
     const seed = await mnemonicSeed(validatedMnemonic, passphrase);
     try {
-      const raw = await accountSeed(seed, index);
+      const raw = await accountSeed(seed, index, scheme);
       try { return window.StellarSdk.Keypair.fromRawEd25519Seed(raw); }
       finally { raw.fill(0); }
     } finally { seed.fill(0); }
