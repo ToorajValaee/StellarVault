@@ -25,7 +25,7 @@ window.stellarVaultHdDiscovery = (() => {
     try { root = await server.loadAccount(rootId); }
     catch (error) {
       if (Number(error?.response?.status) === 404)
-        throw new Error('Mnemonic index-0 account does not exist on this network');
+        throw new Error('Mnemonic index-0 account ' + rootId + ' does not exist on this network. Fund this public address on the selected network, or verify your mnemonic, optional BIP-39 passphrase, and network selection. No funds were transferred.');
       throw error;
     }
     const native = (root.balances || []).find(b => b.asset_type === 'native');
