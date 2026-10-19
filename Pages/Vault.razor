@@ -114,8 +114,9 @@ else
 
         <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
             <strong>FOLDERS</strong>
+            <span> (@Folders.Count)</span>
             <p>@CurrentFolderName</p>
-            <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">ALL RECORDS</button>
+            <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">ROOT / UNFILED</button>
             @if (_folderId is not null)
             {
                 <button class="pixel-button compact" type="button" @onclick="GoUp">UP ONE LEVEL</button>
@@ -185,7 +186,7 @@ else
     private IReadOnlyList<VaultRecordLocation> ChildFolders =>
         Folders.Where(x => x.Record.FolderId == _folderId).ToArray();
     private string CurrentFolderName =>
-        _folderId is null ? "All records" :
+        _folderId is null ? "Root / Unfiled" :
         Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.Title ?? "Unknown folder";
     private string AddRecordUrl => _folderId is null ? "/add" : $"/add?folder={_folderId}";
     private void GoUp()
