@@ -2,7 +2,20 @@
 // Child creation and registry persistence are separate ledger transactions; a failed
 // registry update leaves an orphan that discovery must reconcile before retrying.
 window.stellarVaultHdAllocator = (() => {
+  const pendingRoots = new Set();
   async function allocate(seed, opened, options) {
+    const rootId = opened?.rootAccountId;
+    if (!rootId) throw new Error('Missing root account identity');
+    if (pendingRoots.has(rootId))
+      throw new Error('Child allocation already in progress for this root');
+    pendingRoots.add(rootId);
+    try {
+      return await allocateOnce(seed, opened, options);
+    } finally {
+      pendingRoots.delete(rootId);
+    }
+  }
+  async function allocateOnce(seed, opened, options) {
     if (!opened?.registry || !opened?.rootKeypair || !opened?.server)
       throw new Error('Open an authenticated root registry before allocating');
     if (!options?.baseReserveStroops || !options?.baseFeeStroops)
@@ -14,11 +27,13 @@ window.stellarVaultHdAllocator = (() => {
     finally { childRaw.fill(0); }
     if (child.publicKey() !== preflight.accountId)
       throw new Error('Derived child changed after allocation preflight');
-    // Reserve for the child account (2 units) AND root registry entry if absent.
+    // Reserve two child-account units; the authenticated root registry must exist.
     const root = await opened.server.loadAccount(opened.rootAccountId);
     const registryExists = Object.prototype.hasOwnProperty.call(
       root.data_attr || {}, 'sv:registry:v2');
-    const reserveUnits = registryExists ? 2 : 3;
+    if (!registryExists)
+      throw new Error('Authenticated registry is absent on root; initialize it first');
+    const reserveUnits = 2;
     const treasury = window.stellarVaultTreasury.calculate(root,
       options.baseReserveStroops, {
         additionalSponsoredUnits: reserveUnits,
