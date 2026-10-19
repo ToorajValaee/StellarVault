@@ -191,12 +191,10 @@ window.stellarVault = (() => {
 
     // Explicit v2 entrypoint: never interpret a mnemonic as a Stellar secret.
     // This read-only path deliberately does not enable legacy account writes.
-    async function openHdSession(sessionId, bip39SeedBytes, horizonUrl, networkPassphrase) {
+    async function openHdSession(sessionId, mnemonic, horizonUrl, networkPassphrase, bip39Passphrase = '') {
         if (stellarSessions.has(sessionId))
             throw new Error('Session identifier is already in use.');
-        const seed = new Uint8Array(bip39SeedBytes);
-        if (seed.length !== 64)
-            throw new Error('A 64-byte checksum-validated BIP39 seed is required.');
+        const seed = await window.stellarVaultHd.mnemonicSeed(mnemonic, bip39Passphrase);
         if (!window.stellarVaultHdDiscovery || !window.stellarVaultEncryption)
             throw new Error('V2 modules are unavailable.');
         try {

@@ -10,12 +10,12 @@
         <div class="panel-kicker">SECURE DATA LINK // READY</div>
         <h1>OPEN STELLAR<br />CHAIN DATABASE<span class="blink-cursor">_</span></h1>
         <p class="hero-copy">
-            One database seed unlocks the encrypted account chain. The seed stays in this browser session and is never saved by the app.
+            Your BIP-39 recovery phrase derives the existing index-0 root and deterministic child accounts. The seed stays in this browser session and is never saved by the app.
         </p>
         <div class="boot-log" aria-label="System capabilities">
             <span><b>[OK]</b> AES-256-GCM RECORD ENCRYPTION</span>
             <span><b>[OK]</b> 64-BYTE LEDGER CHUNK ENGINE</span>
-            <span><b>[OK]</b> AUTOMATIC CHILD ACCOUNT LINKING</span>
+            <span><b>[OK]</b> DETERMINISTIC HD ACCOUNT DISCOVERY</span>
             <span><b>[OK]</b> PWA OFFLINE APPLICATION SHELL</span>
         </div>
     </div>
@@ -133,13 +133,13 @@
         <div class="panel-heading unlock-heading">
             <div>
                 <div class="panel-kicker">STEP 02</div>
-                <h2>DATABASE SECRET</h2>
+                <h2>RECOVERY PHRASE</h2>
             </div>
             <span class="step-led">02</span>
         </div>
 
         <label class="terminal-label secret-input-wrap">
-            <span>ROOT STELLAR SECRET SEED</span>
+            <span>BIP-39 RECOVERY PHRASE</span>
             <div class="input-with-action">
                 <input class="terminal-input secret-seed-input"
                        type="@(_showSecret ? "text" : "password")"
@@ -147,7 +147,7 @@
                        autocomplete="off"
                        autocapitalize="off"
                        spellcheck="false"
-                       placeholder="SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
+                       placeholder="12 / 15 / 18 / 21 / 24 BIP-39 words" />
                 <button type="button" class="input-action" @onclick="() => _showSecret = !_showSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
             </div>
         </label>
@@ -165,7 +165,7 @@
             <span aria-hidden="true">▶</span>
         </button>
 
-        <p class="local-only-note">// SAVED LOCALLY: NETWORK SETTINGS ONLY. DATABASE SECRET: MEMORY ONLY.</p>
+        <p class="local-only-note">// SAVED LOCALLY: NETWORK SETTINGS ONLY. RECOVERY PHRASE: MEMORY ONLY.</p>
     </form>
 
     <aside class="terminal-panel account-help-panel">
@@ -372,7 +372,7 @@
 
         if (string.IsNullOrWhiteSpace(_secret))
         {
-            _error = "Enter the database/root Stellar secret seed.";
+            _error = "Enter your BIP-39 recovery phrase.";
             return;
         }
 

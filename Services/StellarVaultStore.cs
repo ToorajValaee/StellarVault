@@ -64,7 +64,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             throw new InvalidOperationException("The Stellar session is already open.");
 
         var result = await _js.InvokeAsync<JsSessionInfo>(
-            "stellarVault.stellar.createSession",
+            "stellarVault.stellar.openHdSession",
             _sessionId,
             secret,
             _settings.HorizonUrl,
