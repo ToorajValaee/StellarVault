@@ -152,6 +152,13 @@
             </div>
         </label>
 
+        <label class="terminal-label">
+            <span>OPTIONAL BIP-39 PASSPHRASE</span>
+            <input class="terminal-input" type="password" @bind="_bip39Passphrase"
+                   autocomplete="off" autocapitalize="off" spellcheck="false"
+                   placeholder="Leave blank if unused" />
+        </label>
+
         @if (!string.IsNullOrWhiteSpace(_error))
         {
             <div class="terminal-alert error">
@@ -195,6 +202,7 @@
     private uint _baseFee = 100u;
     private long _baseReserveStroops = DefaultBaseReserveStroops;
     private string _secret = string.Empty;
+    private string _bip39Passphrase = string.Empty;
     private bool _showSecret;
     private bool _opening;
     private bool _discovering;
@@ -387,12 +395,14 @@
 
         _opening = true;
         var secretForUnlock = _secret;
+        var bip39PassphraseForUnlock = _bip39Passphrase;
         _secret = string.Empty;
+        _bip39Passphrase = string.Empty;
         _showSecret = false;
 
         try
         {
-            await Session.UnlockAsync(settings, secretForUnlock);
+            await Session.UnlockAsync(settings, secretForUnlock, bip39PassphraseForUnlock);
             await Storage.SaveNetworkAsync(settings);
             Navigation.NavigateTo("/vault");
         }
@@ -403,6 +413,7 @@
         finally
         {
             secretForUnlock = string.Empty;
+            bip39PassphraseForUnlock = string.Empty;
             _opening = false;
         }
     }
