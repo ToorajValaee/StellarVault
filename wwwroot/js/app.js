@@ -240,6 +240,8 @@ window.stellarVault = (() => {
     async function loadChain(sessionId, maxChainLength) {
         const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const limit = Math.max(1, Math.min(Number(maxChainLength) || 64, 256));
         const visited = new Set();
         const nodes = [];
@@ -290,6 +292,8 @@ window.stellarVault = (() => {
         baseFeeStroops) {
         const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const child = StellarSdk.Keypair.random();
 
         try {
@@ -348,6 +352,8 @@ window.stellarVault = (() => {
     async function submitManageData(sessionId, writes, baseFeeStroops) {
         const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
 
         if (!Array.isArray(writes) || writes.length === 0) {
             throw new Error('No ManageData writes were supplied.');
@@ -397,6 +403,8 @@ window.stellarVault = (() => {
 
     async function encrypt(sessionId, recordId, plaintextBytes) {
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const nonce = crypto.getRandomValues(new Uint8Array(12));
         const plaintext = new Uint8Array(plaintextBytes);
         const aad = encoder.encode(session.aadPrefix + recordId);
@@ -425,6 +433,8 @@ window.stellarVault = (() => {
 
     async function decrypt(sessionId, recordId, envelopeBytes) {
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const envelope = new Uint8Array(envelopeBytes);
 
         if (envelope.length < 29) {
