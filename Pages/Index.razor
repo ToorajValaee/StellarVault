@@ -66,14 +66,15 @@
                         type="button"
                         disabled="@_discovering"
                         @onclick="DiscoverNetworkAsync">
-                    @(_discovering ? "DETECTING..." : "DETECT PASSPHRASE + FEES")
+                    @(_discovering ? "DETECTING..." : "DETECT NETWORK PARAMETERS")
                 </button>
 
                 <label class="terminal-label">
                     <span>NETWORK PASSPHRASE // AUTO-DETECTED</span>
-                    <textarea class="terminal-input terminal-textarea compact"
-                              @bind="_passphrase"
+                    <textarea class="terminal-input terminal-textarea compact readonly-input"
+                              value="@_passphrase"
                               rows="2"
+                              readonly
                               spellcheck="false"
                               placeholder="Detected from the Horizon root endpoint"></textarea>
                 </label>
@@ -90,7 +91,7 @@
                 {
                     <div class="terminal-alert warning compact-alert">
                         <strong>AUTO-DETECTION FAILED</strong>
-                        <span>@_networkProbeError You can enter the values manually if only discovery endpoints are unavailable; the browser must still be able to reach Horizon.</span>
+                        <span>@_networkProbeError Check the Horizon URL and browser connectivity, then retry.</span>
                     </div>
                 }
             </div>
@@ -105,9 +106,9 @@
         }
 
         <details class="advanced-block">
-            <summary>ADVANCED LEDGER PARAMETERS</summary>
+            <summary>ADVANCED STORAGE SETTINGS</summary>
             <p class="advanced-help">
-                Most users should keep these automatic values. The node limit controls how many ManageData entries are placed on each child account.
+                Network reserves and fees are detected automatically from Horizon. The node limit controls how many ManageData entries are placed on each child account.
                 A higher limit creates fewer accounts. HD children receive zero XLM; the root sponsors their reserves and pays transaction fees.
             </p>
             <div class="advanced-grid">
@@ -124,8 +125,8 @@
                     <input class="terminal-input readonly-input" value="@BaseReserveEntryDisplay" readonly />
                 </label>
                 <label class="terminal-label">
-                    <span>BASE FEE / OPERATION (STROOPS)</span>
-                    <input class="terminal-input" type="number" min="1" @bind="_baseFee" />
+                    <span>DETECTED FEE / OPERATION (STROOPS)</span>
+                    <input class="terminal-input readonly-input" value="@_baseFee" readonly />
                 </label>
             </div>
         </details>
@@ -345,8 +346,8 @@
         catch (Exception ex)
         {
             _networkProbeError = FriendlyError(ex);
-            if (requireSuccess && string.IsNullOrWhiteSpace(_passphrase))
-                _error = "The network passphrase could not be detected. Enter it manually or fix Horizon connectivity.";
+            if (requireSuccess)
+                _error = "Horizon network parameters could not be detected. Check connectivity and retry.";
             return false;
         }
         finally
@@ -359,10 +360,7 @@
     {
         _error = null;
 
-        if (_preset == "custom")
-            await TryDiscoverNetworkAsync(requireSuccess: true);
-        else
-            await TryDiscoverNetworkAsync(requireSuccess: false);
+        await TryDiscoverNetworkAsync(requireSuccess: true);
 
         if (!string.IsNullOrWhiteSpace(_error))
             return;
