@@ -271,11 +271,13 @@ window.stellarVault = (() => {
             throw new Error('Legacy child creation is no longer supported.');
         if (!session.registry)
             throw new Error('Initialize the authenticated root registry first.');
-        if (previousAccountId !== session.rootAccountId &&
-            position !== session.registry.highestAllocatedIndex + 1)
-            throw new Error('Child allocation must follow the authenticated registry.');
+        if (typeof previousAccountId !== 'string' || !previousAccountId)
+            throw new Error('Previous account identity is required.');
         if (Number(position) !== session.registry.highestAllocatedIndex + 1)
             throw new Error('Stale child allocation index; refresh before retrying.');
+        // The old record writer is not v2-safe. Do not allocate a child that
+        // would be left empty when the subsequent legacy ManageData write fails.
+        throw new Error('HD allocation is blocked until sponsored v2 record writes are integrated.');
         if (!baseReserveStroops || BigInt(String(baseReserveStroops)) <= 0n)
             throw new Error('Detected base reserve is required for sponsorship.');
         const result = await window.stellarVaultHdAllocator.allocate(
