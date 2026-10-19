@@ -90,7 +90,11 @@ window.stellarVaultSponsorship = (() => {
       server.loadAccount(rootKeypair.publicKey()),
       server.loadAccount(childKeypair.publicKey())
     ]);
+    if (rootKeypair.publicKey() === childKeypair.publicKey())
+      throw new Error('Root and storage child must be different accounts');
     const exists = Object.prototype.hasOwnProperty.call(child.data_attr || {}, name);
+    if (value === null && !exists)
+      throw new Error('Data entry was already removed; refresh before deleting');
     const createsEntry = value !== null && !exists;
     const fee = BigInt(String(baseFeeStroops));
     const operationCount = createsEntry ? 3n : 1n;
