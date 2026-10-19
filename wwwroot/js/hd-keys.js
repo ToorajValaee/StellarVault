@@ -9,12 +9,36 @@ window.stellarVaultHd = (() => {
     const imported = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-512' }, false, ['sign']);
     return new Uint8Array(await crypto.subtle.sign('HMAC', imported, data));
   }
+  async function validateMnemonic(mnemonic) {
+    const words = String(mnemonic || '').normalize('NFKD').trim().split(/\\s+/u);
+    if (![12, 15, 18, 21, 24].includes(words.length))
+      throw new Error('BIP-39 mnemonic must contain 12, 15, 18, 21, or 24 words');
+    const wordlist = window.stellarVaultBip39English;
+    if (!Array.isArray(wordlist) || wordlist.length !== 2048)
+      throw new Error('Canonical BIP-39 English wordlist is unavailable');
+    const positions = new Map(wordlist.map((word, index) => [word, index]));
+    const indices = words.map(word => {
+      const index = positions.get(word);
+      if (index === undefined) throw new Error('Unknown BIP-39 English word: ' + word);
+      return index;
+    });
+    const bitLength = indices.length * 11;
+    const entropyBits = bitLength * 32 / 33;
+    const checksumBits = bitLength - entropyBits;
+    const bits = indices.map(index => index.toString(2).padStart(11, '0')).join('');
+    const entropy = new Uint8Array(entropyBits / 8);
+    for (let i = 0; i < entropy.length; i++)
+      entropy[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', entropy));
+    const expected = digest[0].toString(2).padStart(8, '0').slice(0, checksumBits);
+    entropy.fill(0);
+    if (bits.slice(entropyBits) !== expected)
+      throw new Error('BIP-39 mnemonic checksum mismatch');
+    return words.join(' ');
+  }
   async function mnemonicSeed(validatedMnemonic, passphrase = '') {
-    const phrase = String(validatedMnemonic).normalize('NFKD');
-    const words = phrase.trim().split(/\s+/u);
-    if (![12, 15, 18, 21, 24].includes(words.length)) throw new Error('Invalid mnemonic length');
-    // Callers MUST verify BIP-39 wordlist and checksum before this function.
-    const password = text.encode(words.join(' '));
+    const phrase = await validateMnemonic(validatedMnemonic);
+    const password = text.encode(phrase);
     const salt = text.encode('mnemonic' + String(passphrase).normalize('NFKD'));
     try {
       const key = await crypto.subtle.importKey('raw', password, 'PBKDF2', false, ['deriveBits']);
@@ -44,5 +68,5 @@ window.stellarVaultHd = (() => {
       finally { raw.fill(0); }
     } finally { seed.fill(0); }
   }
-  return Object.freeze({ mnemonicSeed, accountSeed, deriveKeypair, path: (index) => { harden(index); return `m/44'/148'/${index}'`; } });
+  return Object.freeze({ validateMnemonic, mnemonicSeed, accountSeed, deriveKeypair, path: (index) => { harden(index); return `m/44'/148'/${index}'`; } });
 })();
