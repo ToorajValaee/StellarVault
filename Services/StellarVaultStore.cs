@@ -688,12 +688,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
         int newChunkCount,
         bool headerAlreadyExists)
     {
+        // Index zero is exclusively the authenticated registry and treasury.
+        // V2 does not reserve an sv:next entry: children are indexed by HD path.
+        if (node.Position < 1)
+            return false;
+
         var addedEntries = newChunkCount + (headerAlreadyExists ? 0 : 1);
-        var reservedNextPointer = node.NextAccountId is null ? 1 : 0;
         var respectsConfiguredDataLimit =
-            node.Data.Count + addedEntries + reservedNextPointer <= _settings.NodeDataEntryLimit;
+            node.Data.Count + addedEntries <= _settings.NodeDataEntryLimit;
         var respectsProtocolSubentryLimit =
-            node.SubentryCount + addedEntries + reservedNextPointer <= 1_000;
+            node.SubentryCount + addedEntries <= 1_000;
 
         return respectsConfiguredDataLimit && respectsProtocolSubentryLimit;
     }
