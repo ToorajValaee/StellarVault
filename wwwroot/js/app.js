@@ -345,6 +345,20 @@ window.stellarVault = (() => {
         const reserve = BigInt(String(baseReserveStroops));
         if (fee <= 0n || reserve <= 0n)
             throw new Error('Valid base fee and reserve are required.');
+        // A second tab/device may have advanced the registry since unlock.
+        // Reject stale writes rather than signing against an old allocation map.
+        const latestRoot = await session.server.loadAccount(session.rootAccountId);
+        const encodedRegistry = latestRoot.data_attr?.['sv:registry:v2'];
+        if (!encodedRegistry)
+            throw new Error('V2 registry missing from root.');
+        const macKey = await window.stellarVaultRegistry.registryMacKey(
+            session.hdSeed, session.passphrase, session.rootAccountId);
+        const latestRegistry = await window.stellarVaultRegistry.decode(
+            macKey, Uint8Array.from(atob(encodedRegistry), c => c.charCodeAt(0)));
+        if (latestRegistry.revision !== session.registry.revision ||
+            latestRegistry.highestAllocatedIndex !== session.registry.highestAllocatedIndex ||
+            latestRegistry.activeWriteIndex !== session.registry.activeWriteIndex)
+            throw new Error('HD registry changed since unlock; refresh before writing.');
         const seen = new Set();
         const staged = [];
         for (const write of writes) {
