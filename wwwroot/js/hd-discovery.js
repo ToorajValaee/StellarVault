@@ -58,20 +58,30 @@ window.stellarVaultHdDiscovery = (() => {
     if (highest > maxScan)
       throw new Error('Registry exceeds safe scan limit; raise bound explicitly');
     const nodes = [];
-    for (let index = 1; index <= limit; index++) {
+    // Bound Horizon concurrency while preserving deterministic index order.
+    // Bootstrap scans 4096 paths; sequential network calls are prohibitively slow.
+    const batchSize = 12;
+    async function inspectIndex(index) {
       const raw = await window.stellarVaultHd.accountSeed(seed, index);
       let pair;
       try { pair = window.StellarSdk.Keypair.fromRawEd25519Seed(raw); }
       finally { raw.fill(0); }
       try {
         const account = await opened.server.loadAccount(pair.publicKey());
-        nodes.push({ index, accountId: pair.publicKey(),
+        return { index, accountId: pair.publicKey(),
           subentryCount: Number(account.subentry_count || 0),
-          data: { ...(account.data_attr || {}) } });
+          data: { ...(account.data_attr || {}) } };
       } catch (error) {
-        // Missing indices are gaps, not a reason to stop scanning.
-        if (Number(error?.response?.status) !== 404) throw error;
+        if (Number(error?.response?.status) === 404) return null;
+        throw error;
       }
+    }
+    for (let start = 1; start <= limit; start += batchSize) {
+      const end = Math.min(limit, start + batchSize - 1);
+      const indices = Array.from({ length: end - start + 1 },
+        (_, offset) => start + offset);
+      const batch = await Promise.all(indices.map(inspectIndex));
+      for (const node of batch) if (node !== null) nodes.push(node);
     }
     const registeredGaps = [];
     for (let index = 1; index <= highest; index++) {
