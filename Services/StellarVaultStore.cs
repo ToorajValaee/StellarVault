@@ -184,7 +184,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
             throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
 
-        var encrypted = await _crypto.EncryptAsync(record);
+        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
         try
         {
             var chunkCount = SplitIntoChunks(encrypted).Count;
