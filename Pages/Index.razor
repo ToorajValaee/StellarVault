@@ -105,32 +105,6 @@
             </div>
         }
 
-        <details class="advanced-block">
-            <summary>ADVANCED STORAGE SETTINGS</summary>
-            <p class="advanced-help">
-                Network reserves and fees are detected automatically from Horizon. The node limit controls how many ManageData entries are placed on each child account.
-                A higher limit creates fewer accounts. HD children receive zero XLM; the root sponsors their reserves and pays transaction fees.
-            </p>
-            <div class="advanced-grid">
-                <label class="terminal-label">
-                    <span>DATA ENTRY LIMIT / NODE</span>
-                    <input class="terminal-input" type="number" min="4" max="950" @bind="NodeEntryLimit" />
-                </label>
-                <label class="terminal-label">
-                    <span>CHILD STARTING BALANCE (ROOT-SPONSORED)</span>
-                    <input class="terminal-input readonly-input" value="@ChildFundingDisplay" readonly />
-                </label>
-                <label class="terminal-label">
-                    <span>BASE RESERVE</span>
-                    <input class="terminal-input readonly-input" value="@BaseReserveEntryDisplay" readonly />
-                </label>
-                <label class="terminal-label">
-                    <span>DETECTED FEE / OPERATION (STROOPS)</span>
-                    <input class="terminal-input readonly-input" value="@_baseFee" readonly />
-                </label>
-            </div>
-        </details>
-
         <div class="panel-heading unlock-heading">
             <div>
                 <div class="panel-kicker">STEP 02</div>
@@ -227,21 +201,9 @@
     private string? _networkProbeStatus;
     private string? _networkProbeError;
 
-    private int NodeEntryLimit
-    {
-        get => _entryLimit;
-        set
-        {
-            _entryLimit = Math.Clamp(value, 4, 950);
-            RecalculateChildBalance();
-        }
-    }
-
     private string BaseReserveDisplay =>
         (_baseReserveStroops / 10_000_000m).ToString("0.#######", CultureInfo.InvariantCulture);
 
-    private string ChildFundingDisplay => $"{_childBalance} NATIVE";
-    private string BaseReserveEntryDisplay => $"{BaseReserveDisplay} NATIVE / ENTRY";
 
     private bool HasMixedContentRisk =>
         Navigation.BaseUri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
