@@ -75,7 +75,7 @@ test('does not submit when root treasury is insufficient', async () => {
 });
 test('does not submit when registry changed', async () => {
   const h = harness({ revision: 3 });
-  await assert.rejects(h.allocate(), /registry changed/);
+  await assert.rejects(h.allocate(), /Registry changed/i);
   assert.equal(h.submissions(), 0);
 });
 test('failed atomic submission does not advance local registry', async () => {
