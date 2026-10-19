@@ -18,7 +18,7 @@ window.stellarVaultSponsorship = (() => {
       throw new Error('Invalid Horizon root balance or reserve information');
     function toStroops(value) {
       const str = String(value || '0');
-      if (!/^\\d+(\\.\\d{1,7})?$/.test(str))
+      if (!/^\d+(\.\d{1,7})?$/.test(str))
         throw new Error('Invalid native XLM amount');
       const [whole, fractional = ''] = str.split('.');
       return BigInt(whole) * 10000000n + BigInt(fractional.padEnd(7, '0'));
@@ -37,13 +37,15 @@ window.stellarVaultSponsorship = (() => {
     if (rootKeypair.publicKey() === childKeypair.publicKey())
       throw new Error('Root and child accounts must differ');
     const root = await server.loadAccount(rootKeypair.publicKey());
+    let childExists = false;
     try {
       await server.loadAccount(childKeypair.publicKey());
-      throw new Error('Derived child account already exists; reconcile registry before proceeding');
+      childExists = true;
     } catch (error) {
-      if (!/404|not found/i.test(String(error?.response?.status || error?.message || '')))
-        throw error;
+      if (Number(error?.response?.status) !== 404) throw error;
     }
+    if (childExists)
+      throw new Error('Derived child account already exists; reconcile registry before proceeding');
 
     // Account creation consumes two reserve units sponsored by root.
     const fee = BigInt(String(baseFeeStroops));
