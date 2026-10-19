@@ -181,6 +181,7 @@ else
     private string _search = string.Empty;
     private string? _folderId;
     private string _newFolderName = string.Empty;
+    private bool _includeSubfolders;
     private IReadOnlyList<VaultRecordLocation> Folders =>
         Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
     private IReadOnlyList<VaultRecordLocation> ChildFolders =>
