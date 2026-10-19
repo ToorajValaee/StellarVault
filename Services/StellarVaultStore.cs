@@ -872,15 +872,6 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private decimal FeeNative(int operationCount) =>
         operationCount * _settings.BaseFeeStroops / 10_000_000m;
 
-    private decimal ParseChildStartingBalance() =>
-        decimal.TryParse(
-            _settings.ChildStartingBalance,
-            NumberStyles.Number,
-            CultureInfo.InvariantCulture,
-            out var value)
-            ? value
-            : 0m;
-
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private sealed record RecordCopy(VaultNodeSnapshot Node, RecordManifest Manifest);
