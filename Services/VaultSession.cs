@@ -16,7 +16,7 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
     public VaultNetworkSettings? Network => _store?.Settings;
     public string? RootAccountId => _store?.RootAccountId;
 
-    public async Task UnlockAsync(VaultNetworkSettings settings, string secret)
+    public async Task UnlockAsync(VaultNetworkSettings settings, string secret, string bip39Passphrase = "")
     {
         if (string.IsNullOrWhiteSpace(secret))
             throw new ArgumentException("Database secret is required.", nameof(secret));
@@ -28,7 +28,7 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         try
         {
             candidate = new StellarVaultStore(settings, js);
-            await candidate.OpenAsync(secret.Trim());
+            await candidate.OpenAsync(secret.Trim(), bip39Passphrase);
             var snapshot = await candidate.ReadAsync();
 
             _store = candidate;
