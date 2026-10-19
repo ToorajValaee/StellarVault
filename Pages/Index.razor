@@ -108,7 +108,7 @@
             <summary>ADVANCED LEDGER PARAMETERS</summary>
             <p class="advanced-help">
                 Most users should keep these automatic values. The node limit controls how many ManageData entries are placed on each child account.
-                A higher limit creates fewer accounts and pre-funds more native balance in each child; reserve becomes locked only as entries are created.
+                A higher limit creates fewer accounts. HD children receive zero XLM; the root sponsors their reserves and pays transaction fees.
             </p>
             <div class="advanced-grid">
                 <label class="terminal-label">
@@ -116,7 +116,7 @@
                     <input class="terminal-input" type="number" min="4" max="950" @bind="NodeEntryLimit" />
                 </label>
                 <label class="terminal-label">
-                    <span>AUTO CHILD FUNDING</span>
+                    <span>CHILD STARTING BALANCE (ROOT-SPONSORED)</span>
                     <input class="terminal-input readonly-input" value="@ChildFundingDisplay" readonly />
                 </label>
                 <label class="terminal-label">
@@ -197,7 +197,7 @@
     private string _networkName = "Testnet";
     private string _horizonUrl = "https://horizon-testnet.stellar.org";
     private string _passphrase = StellarNetworkPassphrases.Testnet;
-    private string _childBalance = "42";
+    private string _childBalance = "0";
     private int _entryLimit = 80;
     private uint _baseFee = 100u;
     private long _baseReserveStroops = DefaultBaseReserveStroops;
@@ -366,9 +366,9 @@
             return;
         }
 
-        if (!decimal.TryParse(_childBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var childBalance) || childBalance <= 0)
+        if (!decimal.TryParse(_childBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var childBalance) || childBalance != 0)
         {
-            _error = "The automatically calculated child funding amount is invalid.";
+            _error = "V2 HD children must have a zero-XLM starting balance.";
             return;
         }
 
@@ -420,12 +420,8 @@
 
     private void RecalculateChildBalance()
     {
-        // Two base reserves create the account, one reserve belongs to the root signer,
-        // NodeDataEntryLimit reserves cover the node's data entries, and one extra reserve
-        // provides a small safety margin if the network parameters move.
-        var reserveNative = Math.Max(1L, _baseReserveStroops) / 10_000_000m;
-        var recommended = (_entryLimit + 4) * reserveNative;
-        _childBalance = recommended.ToString("0.#######", CultureInfo.InvariantCulture);
+        // V2 child accounts start with zero XLM. The existing root sponsors reserves.
+        _childBalance = "0";
     }
 
     private void ApplySettings(VaultNetworkSettings settings)
