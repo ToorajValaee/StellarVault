@@ -346,6 +346,19 @@ window.stellarVault = (() => {
         }
     }
 
+    async function inspectRootTreasury(sessionId, baseReserveStroops, additionalSponsoredUnits = 0, expectedFeeStroops = '0', safetyBufferStroops = '0') {
+        const session = requireSession(sessionId);
+        if (!window.stellarVaultTreasury) {
+            throw new Error('Treasury accounting module unavailable.');
+        }
+        return window.stellarVaultTreasury.inspect(
+            session.server, session.rootAccountId, String(baseReserveStroops), {
+                additionalSponsoredUnits,
+                expectedFeeStroops: String(expectedFeeStroops),
+                safetyBufferStroops: String(safetyBufferStroops)
+            });
+    }
+
     async function encrypt(sessionId, recordId, plaintextBytes) {
         const session = requireSession(sessionId);
         const nonce = crypto.getRandomValues(new Uint8Array(12));
@@ -482,6 +495,7 @@ window.stellarVault = (() => {
             loadChain,
             createAndAppendChild,
             submitManageData,
+            inspectRootTreasury,
             encrypt,
             decrypt,
             sha256

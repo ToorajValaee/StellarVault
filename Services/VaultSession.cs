@@ -66,6 +66,13 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         }
     }
 
+    public Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
+        int additionalSponsoredUnits = 0,
+        long expectedFeeStroops = 0,
+        long safetyBufferStroops = 0) =>
+        RequireStore().InspectRootTreasuryAsync(
+            additionalSponsoredUnits, expectedFeeStroops, safetyBufferStroops);
+
     public Task<VaultCostEstimate> EstimateAddAsync(VaultRecord record) =>
         RequireStore().EstimateAddAsync(record);
 

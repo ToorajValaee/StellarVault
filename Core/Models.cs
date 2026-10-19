@@ -82,3 +82,16 @@ internal sealed record RecordManifest(
     byte[] CiphertextHash,
     long UpdatedUnixSeconds,
     string? Generation);
+
+public sealed class RootTreasurySnapshot
+{
+    public string BalanceStroops { get; set; } = "0";
+    public string MinimumBalanceStroops { get; set; } = "0";
+    public string SpendableStroops { get; set; } = "0";
+    public string AvailableAfterPlanStroops { get; set; } = "0";
+    public bool CanAffordPlan { get; set; }
+    public string SponsoredReserveUnits { get; set; } = "0";
+    public string SponsoredReserveXlm { get; set; } = "0";
+    public string BalanceXlm { get; set; } = "0";
+    public string SpendableXlm { get; set; } = "0";
+}

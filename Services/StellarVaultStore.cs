@@ -40,6 +40,23 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     public VaultNetworkSettings Settings => _settings;
 
+    public async Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
+        int additionalSponsoredUnits = 0,
+        long expectedFeeStroops = 0,
+        long safetyBufferStroops = 0)
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null)
+            throw new InvalidOperationException("The Stellar session is not open.");
+        if (additionalSponsoredUnits < 0 || expectedFeeStroops < 0 || safetyBufferStroops < 0)
+            throw new ArgumentOutOfRangeException(nameof(additionalSponsoredUnits));
+        return await _js.InvokeAsync<RootTreasurySnapshot>(
+            "stellarVault.stellar.inspectRootTreasury", _sessionId,
+            _settings.BaseReserveStroops, additionalSponsoredUnits,
+            expectedFeeStroops.ToString(CultureInfo.InvariantCulture),
+            safetyBufferStroops.ToString(CultureInfo.InvariantCulture));
+    }
+
     public async Task OpenAsync(string secret)
     {
         ThrowIfDisposed();
