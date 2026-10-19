@@ -449,6 +449,44 @@ window.stellarVault = (() => {
         }
     }
 
+    // V2 records bind ciphertext to its exact deterministic storage location.
+    async function encryptHdRecord(sessionId, nodeIndex, recordId, generation, plaintextBytes) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2') throw new Error('V2 session required.');
+        const nonce = crypto.getRandomValues(new Uint8Array(12));
+        const plaintext = new Uint8Array(plaintextBytes);
+        const aad = window.stellarVaultEncryption.recordAad(
+            session.passphrase, session.rootAccountId, nodeIndex, recordId, generation);
+        try {
+            const ciphertext = new Uint8Array(await crypto.subtle.encrypt({
+                name: 'AES-GCM', iv: nonce, additionalData: aad, tagLength: 128
+            }, session.cryptoKey, plaintext));
+            const envelope = new Uint8Array(13 + ciphertext.length);
+            envelope[0] = 2;
+            envelope.set(nonce, 1);
+            envelope.set(ciphertext, 13);
+            ciphertext.fill(0);
+            return envelope;
+        } finally {
+            plaintext.fill(0);
+            nonce.fill(0);
+        }
+    }
+
+    async function decryptHdRecord(sessionId, nodeIndex, recordId, generation, envelopeBytes) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2') throw new Error('V2 session required.');
+        const envelope = new Uint8Array(envelopeBytes);
+        if (envelope.length < 29 || envelope[0] !== 2)
+            throw new Error('Invalid v2 AES-GCM envelope.');
+        const aad = window.stellarVaultEncryption.recordAad(
+            session.passphrase, session.rootAccountId, nodeIndex, recordId, generation);
+        return new Uint8Array(await crypto.subtle.decrypt({
+            name: 'AES-GCM', iv: envelope.subarray(1, 13),
+            additionalData: aad, tagLength: 128
+        }, session.cryptoKey, envelope.subarray(13)));
+    }
+
     async function sha256(valueBytes) {
         const value = new Uint8Array(valueBytes);
         return new Uint8Array(await crypto.subtle.digest('SHA-256', value));
@@ -525,6 +563,8 @@ window.stellarVault = (() => {
             inspectRootTreasury,
             encrypt,
             decrypt,
+            encryptHdRecord,
+            decryptHdRecord,
             sha256
         },
         crypto: {
