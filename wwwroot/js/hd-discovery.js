@@ -69,7 +69,9 @@ window.stellarVaultHdDiscovery = (() => {
         if (Number(error?.response?.status) !== 404) throw error;
       }
     }
-    return { nodes, scannedThrough: limit, registry: opened.registry };
+    const unregisteredNodes = nodes.filter(node => node.index > highest);
+    return { nodes, scannedThrough: limit, registry: opened.registry,
+      unregisteredNodes, requiresReconciliation: unregisteredNodes.length > 0 };
   }
 
   async function rootTreasury(opened, baseReserveStroops, options = {}) {
