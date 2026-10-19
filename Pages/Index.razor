@@ -141,7 +141,7 @@
         <div class="terminal-label">
             <span>BIP-39 RECOVERY WORDS</span>
             <div class="input-with-action">
-                <select class="terminal-input" aria-label="Recovery phrase length" @bind="_wordCount">
+                <select class="terminal-input" aria-label="Recovery phrase length" value="@_wordCount" @onchange="ChangeWordCount">
                     @foreach (var count in new[] { 12, 15, 18, 21, 24 })
                     {
                         <option value="@count">@count WORDS</option>
@@ -434,21 +434,41 @@
         }
     }
 
+    private void ChangeWordCount(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var count) ||
+            !new[] { 12, 15, 18, 21, 24 }.Contains(count))
+            return;
+
+        // Never retain hidden words when the user switches to a shorter phrase.
+        if (count < _wordCount)
+            Array.Fill(_words, string.Empty, count, _words.Length - count);
+        _wordCount = count;
+    }
+
     private void UpdateMnemonicWord(int index, string value)
     {
         var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length > 1)
         {
-            // A full phrase pasted into any slot populates successive numbered slots.
             if (index == 0 && new[] { 12, 15, 18, 21, 24 }.Contains(words.Length))
+            {
+                Array.Fill(_words, string.Empty);
                 _wordCount = words.Length;
-            for (var i = 0; i < words.Length && index + i < _wordCount; i++)
-                _words[index + i] = words[i].ToLowerInvariant();
+            }
+            else if (index + words.Length > _wordCount)
+            {
+                _error = "Pasted phrase exceeds the selected word count. Choose the correct length.";
+                return;
+            }
+            for (var i = 0; i < words.Length; i++)
+                _words[index + i] = words[i].Normalize(System.Text.NormalizationForm.FormKD).ToLowerInvariant();
         }
         else
         {
-            _words[index] = value.Trim().ToLowerInvariant();
+            _words[index] = value.Trim().Normalize(System.Text.NormalizationForm.FormKD).ToLowerInvariant();
         }
+        _error = null;
     }
 
     private void RecalculateChildBalance()
