@@ -26,6 +26,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private readonly VaultCrypto _crypto;
     private string? _rootAccountId;
     private bool _disposed;
+    public bool RegistryInitialized { get; private set; }
 
     public StellarVaultStore(VaultNetworkSettings settings, IJSRuntime js)
     {
@@ -75,6 +76,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             throw new InvalidOperationException("The browser Stellar SDK did not return a root account ID.");
 
         _rootAccountId = result.RootAccountId;
+        RegistryInitialized = result.RegistryInitialized;
     }
 
     public async Task InitializeHdRegistryAsync()
@@ -90,6 +92,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             _sessionId,
             _settings.BaseReserveStroops,
             _settings.BaseFeeStroops);
+        RegistryInitialized = true;
     }
 
     public async Task<VaultReadResult> ReadAsync()
