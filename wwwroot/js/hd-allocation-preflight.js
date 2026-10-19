@@ -13,6 +13,17 @@ window.stellarVaultAllocationPreflight = (() => {
     const nextIndex = opened.registry.highestAllocatedIndex + 1;
     if (nextIndex > discovery.scannedThrough)
       throw new Error('Next index was not scanned; increase recovery lookahead');
+    const latestRoot = await opened.server.loadAccount(opened.rootAccountId);
+    const encoded = latestRoot.data_attr?.['sv:registry:v2'];
+    if (!encoded) throw new Error('Root registry missing during allocation');
+    const macKey = await window.stellarVaultRegistry.registryMacKey(
+      seed, opened.networkPassphrase, opened.rootAccountId);
+    const latest = await window.stellarVaultRegistry.decode(macKey,
+      Uint8Array.from(atob(encoded), c => c.charCodeAt(0)));
+    if (latest.revision !== opened.registry.revision ||
+        latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex ||
+        latest.activeWriteIndex !== opened.registry.activeWriteIndex)
+      throw new Error('Registry changed during allocation; refresh required');
     const raw = await window.stellarVaultHd.accountSeed(seed, nextIndex);
     try {
       const keypair = window.StellarSdk.Keypair.fromRawEd25519Seed(raw);
