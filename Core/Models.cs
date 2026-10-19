@@ -37,6 +37,8 @@ public sealed class VaultRecord
     public string Notes { get; init; } = string.Empty;
     public string[] Tags { get; init; } = [];
     public string? FolderId { get; init; }
+    public string Kind { get; init; } = "record";
+    public bool IsFolder => Kind == "folder";
     public required DateTimeOffset CreatedUtc { get; init; }
     public required DateTimeOffset UpdatedUtc { get; init; }
 }
