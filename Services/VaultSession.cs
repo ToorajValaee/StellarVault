@@ -50,6 +50,8 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         }
     }
 
+    public Task InitializeHdRegistryAsync() => RequireStore().InitializeHdRegistryAsync();
+
     public async Task RefreshAsync()
     {
         var store = RequireStore();
