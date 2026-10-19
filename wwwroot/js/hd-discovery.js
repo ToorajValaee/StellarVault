@@ -50,6 +50,8 @@ window.stellarVaultHdDiscovery = (() => {
         !Number.isInteger(maxScan) || maxScan < 1 || maxScan > MAX_SCAN)
       throw new RangeError('Invalid recovery scan bounds');
     const highest = opened.registry?.highestAllocatedIndex ?? 0;
+    if (!Number.isSafeInteger(highest) || highest < 0)
+      throw new Error('Registry contains an invalid highest allocated index');
     const limit = Math.min(maxScan, highest + recoveryLookahead);
     if (highest > 0 && recoveryLookahead === 0)
       throw new Error('Recovery lookahead must inspect at least the next index');
