@@ -332,6 +332,63 @@ window.stellarVault = (() => {
         }
     }
 
+    // Each v2 data entry is owned and signed by its deterministic child.
+    // The root pays every transaction fee and sponsors reserves for new entries.
+    async function submitHdManageData(sessionId, writes, baseFeeStroops, baseReserveStroops) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2' || !session.registry)
+            throw new Error('Authenticated v2 session required.');
+        if (!Array.isArray(writes) || writes.length === 0)
+            throw new Error('At least one v2 ManageData write is required.');
+        const sdk = requireStellarSdk();
+        const fee = BigInt(String(baseFeeStroops));
+        const reserve = BigInt(String(baseReserveStroops));
+        if (fee <= 0n || reserve <= 0n)
+            throw new Error('Valid base fee and reserve are required.');
+        const seen = new Set();
+        const staged = [];
+        for (const write of writes) {
+            const index = Number(write.nodeIndex);
+            if (!Number.isSafeInteger(index) || index < 1 ||
+                index > session.registry.highestAllocatedIndex)
+                throw new Error('Write targets an unregistered HD child.');
+            const name = String(write.name || '');
+            if (!name || new TextEncoder().encode(name).length > 64 ||
+                name === 'sv:registry:v2' || name === 'sv:next')
+                throw new Error('Invalid or reserved v2 ManageData name.');
+            const unique = index + ':' + name;
+            if (seen.has(unique)) throw new Error('Duplicate data key in batch.');
+            seen.add(unique);
+            const raw = await window.stellarVaultHd.accountSeed(session.hdSeed, index);
+            let child;
+            try { child = sdk.Keypair.fromRawEd25519Seed(raw); }
+            finally { raw.fill(0); }
+            if (write.sourceAccountId && write.sourceAccountId !== child.publicKey())
+                throw new Error('Data source does not match deterministic child.');
+            const value = write.valueBase64 == null
+                ? null : sdkBufferFromBase64(session, write.valueBase64);
+            if (value && value.length > 64)
+                throw new Error('Stellar ManageData values cannot exceed 64 bytes.');
+            staged.push({ child, name, value });
+        }
+        // Submit one child write per transaction. The sponsorship operations
+        // are atomic with the data write; a failed transaction creates no entry.
+        let lastHash = '';
+        for (const entry of staged) {
+            lastHash = await window.stellarVaultSponsorship.writeSponsoredData({
+                server: session.server,
+                rootKeypair: session.rootKeypair,
+                childKeypair: entry.child,
+                networkPassphrase: session.passphrase,
+                baseReserveStroops: reserve.toString(),
+                baseFeeStroops: fee.toString(),
+                name: entry.name,
+                value: entry.value
+            });
+        }
+        return lastHash;
+    }
+
     async function inspectRootTreasury(sessionId, baseReserveStroops, additionalSponsoredUnits = 0, expectedFeeStroops = '0', safetyBufferStroops = '0') {
         const session = requireSession(sessionId);
         if (!window.stellarVaultTreasury) {
@@ -525,6 +582,7 @@ window.stellarVault = (() => {
             loadChain,
             createAndAppendChild,
             submitManageData,
+            submitHdManageData,
             inspectRootTreasury,
             encrypt,
             decrypt,
