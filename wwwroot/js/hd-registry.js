@@ -25,7 +25,7 @@ window.stellarVaultRegistry = (() => {
   function validate(highest, active, revision) {
     if (!Number.isSafeInteger(highest) || highest < 0 || highest > 0x7ffffffe ||
         !Number.isSafeInteger(active) || active < 0 || active > highest ||
-        !Number.isSafeInteger(revision) || revision < 0)
+        !Number.isSafeInteger(revision) || revision < 0 || revision > Number.MAX_SAFE_INTEGER)
       throw new Error('Invalid registry values');
   }
   async function encode(key, highest, active, revision) {
