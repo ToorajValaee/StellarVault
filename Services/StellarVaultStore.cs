@@ -273,13 +273,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (headerCount == 0)
             throw new InvalidOperationException("The record no longer exists.");
 
-        var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
-        var chunkDeleteCount = readableCopies
-            .SelectMany(copy => BuildChunkDeletes(
-                copy.Node.AccountId, expectedLocation.Record.Id, copy.Manifest))
-            .Select(write => $"{write.SourceAccountId}|{write.Name}")
-            .Distinct(StringComparer.Ordinal)
-            .Count();
+        var chunkPrefix = ChunkPrefix + expectedLocation.Record.Id + ":";
+        var chunkDeleteCount = nodes.Sum(node =>
+            node.Data.Keys.Count(name => name.StartsWith(chunkPrefix, StringComparison.Ordinal)));
         var operationCount = headerCount + chunkDeleteCount;
         var transactionCount = operationCount;
         var released = operationCount * BaseReserveNative;
