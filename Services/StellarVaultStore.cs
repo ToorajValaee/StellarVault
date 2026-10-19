@@ -928,6 +928,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private sealed class JsSessionInfo
     {
         public string RootAccountId { get; set; } = string.Empty;
+        public bool RegistryInitialized { get; set; }
     }
 
     private sealed class JsVaultNode
