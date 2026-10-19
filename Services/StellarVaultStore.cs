@@ -881,11 +881,6 @@ public sealed class StellarVaultStore : IAsyncDisposable
             ? value
             : 0m;
 
-    private static int TransactionCount(int operationCount) =>
-        operationCount <= 0
-            ? 0
-            : (operationCount + MaxOperationsPerTransaction - 1) / MaxOperationsPerTransaction;
-
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private sealed record RecordCopy(VaultNodeSnapshot Node, RecordManifest Manifest);
