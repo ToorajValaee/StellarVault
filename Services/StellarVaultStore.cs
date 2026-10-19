@@ -548,14 +548,30 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (materialized.Length == 0)
             return string.Empty;
 
+        // Resolve every write to its registered deterministic HD index.
+        // Index zero is the treasury/registry and must never hold record data.
+        var nodes = await LoadChainAsync();
+        var indices = nodes.Where(node => node.Position > 0)
+            .ToDictionary(node => node.AccountId, node => node.Position, StringComparer.Ordinal);
+        foreach (var write in materialized)
+        {
+            if (!indices.TryGetValue(write.SourceAccountId, out var index))
+                throw new InvalidOperationException(
+                    "Record write targets an unregistered HD child account.");
+            write.NodeIndex = index;
+        }
+
         string lastTransactionHash = string.Empty;
+        // V2 sponsorship submits each ManageData operation in its own atomic
+        // transaction; never route writes through the legacy transaction signer.
         foreach (var batch in materialized.Chunk(MaxOperationsPerTransaction))
         {
             lastTransactionHash = await _js.InvokeAsync<string>(
-                "stellarVault.stellar.submitManageData",
+                "stellarVault.stellar.submitHdManageData",
                 _sessionId,
                 batch,
-                _settings.BaseFeeStroops);
+                _settings.BaseFeeStroops,
+                _settings.BaseReserveStroops);
         }
 
         return lastTransactionHash;
@@ -876,6 +892,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     private sealed class JsManageDataWrite
     {
+        public int NodeIndex { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? ValueBase64 { get; set; }
         public string SourceAccountId { get; set; } = string.Empty;
