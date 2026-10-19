@@ -193,6 +193,21 @@ else
     private string? _folderId;
     private string _newFolderName = string.Empty;
     private bool _includeSubfolders;
+    private HashSet<string> IncludedFolderIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (_folderId is not null) ids.Add(_folderId);
+        if (!_includeSubfolders) return ids;
+        var queue = new Queue<string?>();
+        queue.Enqueue(_folderId);
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            foreach (var folder in Folders.Where(x => x.Record.FolderId == parent))
+                if (ids.Add(folder.Record.Id)) queue.Enqueue(folder.Record.Id);
+        }
+        return ids;
+    }
     private IReadOnlyList<VaultRecordLocation> Breadcrumbs
     {
         get
@@ -261,7 +276,10 @@ else
     {
         get
         {
-            var records = Session.Snapshot?.Records.Where(x => !x.Record.IsFolder && (_folderId is null || x.Record.FolderId == _folderId)).ToArray() ?? [];
+            var includedIds = IncludedFolderIds();
+            var records = Session.Snapshot?.Records.Where(x => !x.Record.IsFolder &&
+                (x.Record.FolderId == _folderId ||
+                 (_includeSubfolders && x.Record.FolderId is not null && includedIds.Contains(x.Record.FolderId)))).ToArray() ?? [];
             if (string.IsNullOrWhiteSpace(_search))
                 return records;
 
