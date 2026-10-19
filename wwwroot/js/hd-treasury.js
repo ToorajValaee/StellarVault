@@ -5,7 +5,7 @@ window.stellarVaultTreasury = (() => {
 
   function xlmToStroops(value) {
     const input = String(value);
-    if (!/^(0|[1-9][0-9]*)(\\.[0-9]{1,7})?$/.test(input))
+    if (!/^(0|[1-9][0-9]*)(\.[0-9]{1,7})?$/.test(input))
       throw new Error('Invalid Horizon XLM amount');
     const [whole, fraction = ''] = input.split('.');
     return BigInt(whole) * STROOPS + BigInt(fraction.padEnd(7, '0'));
