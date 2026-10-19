@@ -714,15 +714,30 @@ public sealed class StellarVaultStore : IAsyncDisposable
         return respectsConfiguredDataLimit && respectsProtocolSubentryLimit;
     }
 
+    private async Task<int> EstimateHdChunkCountAsync(VaultRecord record)
+    {
+        // AES-GCM output length is invariant across the selected HD child index.
+        // Use a temporary v2 envelope to get the exact serialized record size.
+        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
+        try
+        {
+            return (encrypted.Length + ChunkValueSize - 1) / ChunkValueSize;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+        }
+    }
+
     private void EnsureRecordFitsNode(int chunkCount)
     {
         var permanentEntries = chunkCount + 1;
-        if (permanentEntries + 1 > _settings.NodeDataEntryLimit)
+        if (permanentEntries > _settings.NodeDataEntryLimit)
         {
             throw new InvalidOperationException(
                 $"This record needs {permanentEntries} data entries. " +
-                $"The configured node limit is {_settings.NodeDataEntryLimit}, and one entry is reserved for the next-node pointer. " +
-                "Increase the node limit and fund child accounts with enough native balance.");
+                $"The configured node limit is {_settings.NodeDataEntryLimit}. " +
+                "Increase the limit or reduce the record size; the root sponsors child reserves.");
         }
     }
 
