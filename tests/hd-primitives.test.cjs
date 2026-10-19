@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const { webcrypto } = require('node:crypto');
 const context = vm.createContext({ window: {}, crypto: webcrypto, TextEncoder, Uint8Array, DataView, BigInt, Number, String, Error, TypeError, RangeError, Object });
-for (const file of ['hd-keys.js', 'hd-encryption.js', 'hd-registry.js'])
+for (const file of ['bip39-english.js', 'hd-keys.js', 'hd-encryption.js', 'hd-registry.js'])
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'wwwroot', 'js', file), 'utf8'), context);
 
 (async () => {
