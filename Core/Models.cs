@@ -36,6 +36,7 @@ public sealed class VaultRecord
     public string Url { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
     public string[] Tags { get; init; } = [];
+    public string? FolderId { get; init; }
     public required DateTimeOffset CreatedUtc { get; init; }
     public required DateTimeOffset UpdatedUtc { get; init; }
 }
