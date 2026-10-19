@@ -11,7 +11,6 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private const string HeaderPrefix = "svh:";
     private const string ChunkPrefix = "svc:";
     private const int ChunkValueSize = 64;
-    private const int MaxOperationsPerTransaction = 90;
     private const int MaxChainLength = 64;
     private const byte LegacyManifestVersion = 1;
     private const byte CurrentManifestVersion = 2;
