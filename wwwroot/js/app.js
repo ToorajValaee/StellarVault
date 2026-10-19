@@ -291,9 +291,10 @@ window.stellarVault = (() => {
             throw new Error('Previous account identity is required.');
         if (Number(position) !== session.registry.highestAllocatedIndex + 1)
             throw new Error('Stale child allocation index; refresh before retrying.');
-        // The old record writer is not v2-safe. Do not allocate a child that
-        // would be left empty when the subsequent legacy ManageData write fails.
-        throw new Error('HD allocation is blocked until sponsored v2 record writes are integrated.');
+        if (String(childStartingBalance) !== '0')
+            throw new Error('V2 children must be created with zero starting balance.');
+        if (typeof window.stellarVaultSponsorship?.writeSponsoredData !== 'function')
+            throw new Error('Sponsored record writer is unavailable; refusing allocation.');
         if (!baseReserveStroops || BigInt(String(baseReserveStroops)) <= 0n)
             throw new Error('Detected base reserve is required for sponsorship.');
         const result = await window.stellarVaultHdAllocator.allocate(
