@@ -14,6 +14,28 @@
         <a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a>
     </section>
 }
+else if (Session.NeedsRegistryInitialization)
+{
+    <section class="terminal-panel centered-message">
+        <div class="panel-kicker">FIRST-TIME HD SETUP</div>
+        <h1>INITIALIZE ROOT REGISTRY</h1>
+        <p>The funded root account has no authenticated v2 registry. Initialization writes a registry entry to the root ledger account and pays a network fee. Existing derived child accounts must be reconciled first; initialization will refuse them.</p>
+        <p>Root account: @Session.RootAccountId</p>
+        <label class="terminal-label">
+            <input type="checkbox" @bind="_confirmInitialization" />
+            I understand this writes to the selected Stellar network.
+        </label>
+        <button class="pixel-button primary" type="button"
+                disabled="@(!_confirmInitialization || Session.IsBusy)"
+                @onclick="InitializeRegistryAsync">
+            @(Session.IsBusy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")
+        </button>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">@_error</div>
+        }
+    </section>
+}
 else
 {
     <section class="vault-page">
@@ -138,6 +160,7 @@ else
 
 @code {
     private string _search = string.Empty;
+    private bool _confirmInitialization;
     private string? _error;
     private string? _notice;
     private VaultRecordLocation? _selected;
@@ -173,6 +196,22 @@ else
         Session.Changed += HandleChanged;
         if (!Session.IsUnlocked)
             Navigation.NavigateTo("/");
+    }
+
+    private async Task InitializeRegistryAsync()
+    {
+        if (!_confirmInitialization || Session.IsBusy)
+            return;
+        _error = null;
+        try
+        {
+            await Session.InitializeHdRegistryAsync();
+            _confirmInitialization = false;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
     }
 
     private async Task RefreshAsync()
