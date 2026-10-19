@@ -3,6 +3,9 @@
 window.stellarVaultAllocationPreflight = (() => {
   async function check(seed, opened, options = {}) {
     if (!opened?.registry) throw new Error('Authenticated registry required');
+    const highest = opened.registry.highestAllocatedIndex;
+    if (!Number.isSafeInteger(highest) || highest < 0 || highest >= 4096)
+      throw new Error('HD child allocation limit reached or registry index invalid');
     const discovery = await window.stellarVaultHdDiscovery.discover(
       seed, opened, { recoveryLookahead: options.recoveryLookahead ?? 16,
         maxScan: options.maxScan ?? 4096 });
