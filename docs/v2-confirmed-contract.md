@@ -8,8 +8,9 @@
 - Index 0 pays **all** transaction fees. Prefer root-sourced transactions; support fee-bump envelopes when an independently authorized child-sourced inner transaction is appropriate.
 - A fee-bump outer signature does not authorize inner operations. The child or configured delegated signer MUST sign the inner transaction. Fee bump cannot replace child minimum balance or reserves.
 - Fee-bump fee must cover the inner operation count and protocol fee requirements; validate current network fee and SDK fee semantics before submission.
-- For every new index >= 1, the root funds account creation and required reserves. Reserves belong to each child account; transaction fees are charged to the transaction source.
-- Before any submission, load current balances, base reserve, ledger sequence and fee requirements from Horizon. Include minimum balance and sponsorship/subentry implications; do not rely on stale estimates.
+- For every new index >= 1, root sponsors the account base reserve and ManageData entry reserves using BeginSponsoringFutureReserves and EndSponsoringFutureReserves. Child native balance can remain zero. Sponsorship is a reserve obligation of root, not an XLM transfer to the child.
+- Use root-funded fee-bump envelopes for child-sourced transactions when appropriate. Root must have spendable balance after sponsorship obligations and transaction fees.
+- Before any submission, load current balances, base reserve, ledger sequence and fee requirements from Horizon. Root minimum balance in stroops is (2 + subentry_count + num_sponsoring - num_sponsored) * base_reserve + native selling liabilities. Treat sponsorship counts as reserve units, not XLM; subtract expected new sponsored reserve units, fees and safety buffer from spendable balance. Do not rely on stale estimates.
 - For child operations, require the child's signature or a deliberately configured delegated signer. Do not assume that the fee payer's signature authorizes child operations.
 - Root registry updates and child account creation must be reconciled after timeouts or ambiguous transaction outcomes. Never advance indexes solely from local memory.
 
