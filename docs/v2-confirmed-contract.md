@@ -5,7 +5,9 @@
 - Import an **existing** BIP-39 mnemonic, with optional BIP-39 passphrase.
 - Derive Stellar Ed25519 accounts using SLIP-0010 paths `m/44'/148'/i'`.
 - Index 0 MUST already exist on the selected Stellar network and have sufficient XLM. Never silently create or fund it.
-- Index 0 is the transaction source and pays **all** transaction fees.
+- Index 0 pays **all** transaction fees. Prefer root-sourced transactions; support fee-bump envelopes when an independently authorized child-sourced inner transaction is appropriate.
+- A fee-bump outer signature does not authorize inner operations. The child or configured delegated signer MUST sign the inner transaction. Fee bump cannot replace child minimum balance or reserves.
+- Fee-bump fee must cover the inner operation count and protocol fee requirements; validate current network fee and SDK fee semantics before submission.
 - For every new index >= 1, the root funds account creation and required reserves. Reserves belong to each child account; transaction fees are charged to the transaction source.
 - Before any submission, load current balances, base reserve, ledger sequence and fee requirements from Horizon. Include minimum balance and sponsorship/subentry implications; do not rely on stale estimates.
 - For child operations, require the child's signature or a deliberately configured delegated signer. Do not assume that the fee payer's signature authorizes child operations.
