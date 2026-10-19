@@ -138,19 +138,34 @@
             <span class="step-led">02</span>
         </div>
 
-        <label class="terminal-label secret-input-wrap">
-            <span>BIP-39 RECOVERY PHRASE</span>
+        <div class="terminal-label">
+            <span>BIP-39 RECOVERY WORDS</span>
             <div class="input-with-action">
-                <input class="terminal-input secret-seed-input"
-                       type="@(_showSecret ? "text" : "password")"
-                       @bind="_secret"
-                       autocomplete="off"
-                       autocapitalize="off"
-                       spellcheck="false"
-                       placeholder="12 / 15 / 18 / 21 / 24 BIP-39 words" />
-                <button type="button" class="input-action" @onclick="() => _showSecret = !_showSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
+                <select class="terminal-input" aria-label="Recovery phrase length" @bind="_wordCount">
+                    @foreach (var count in new[] { 12, 15, 18, 21, 24 })
+                    {
+                        <option value="@count">@count WORDS</option>
+                    }
+                </select>
+                <button type="button" class="input-action"
+                        @onclick="() => _showSecret = !_showSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
             </div>
-        </label>
+            <p class="advanced-help">Enter one word per slot, or paste the entire phrase into the first slot.</p>
+            <div class="mnemonic-word-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:10px">
+                @for (var i = 0; i < _wordCount; i++)
+                {
+                    var index = i;
+                    <label class="terminal-label">
+                        <span>WORD @(index + 1)</span>
+                        <input class="terminal-input" type="@(_showSecret ? "text" : "password")"
+                               value="@_words[index]"
+                               @oninput="e => UpdateMnemonicWord(index, e.Value?.ToString() ?? string.Empty)"
+                               autocomplete="off" autocapitalize="off" spellcheck="false"
+                               aria-label="@($"Recovery word {index + 1}")" />
+                    </label>
+                }
+            </div>
+        </div>
 
         <label class="terminal-label">
             <span>OPTIONAL BIP-39 PASSPHRASE</span>
@@ -201,7 +216,8 @@
     private int _entryLimit = 80;
     private uint _baseFee = 100u;
     private long _baseReserveStroops = DefaultBaseReserveStroops;
-    private string _secret = string.Empty;
+    private readonly string[] _words = new string[24];
+    private int _wordCount = 12;
     private string _bip39Passphrase = string.Empty;
     private bool _showSecret;
     private bool _opening;
@@ -378,7 +394,7 @@
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_secret))
+        if (_words.Take(_wordCount).Any(string.IsNullOrWhiteSpace))
         {
             _error = "Enter your BIP-39 recovery phrase.";
             return;
@@ -394,9 +410,9 @@
             _baseReserveStroops);
 
         _opening = true;
-        var secretForUnlock = _secret;
+        var secretForUnlock = string.Join(' ', _words.Take(_wordCount));
         var bip39PassphraseForUnlock = _bip39Passphrase;
-        _secret = string.Empty;
+        Array.Fill(_words, string.Empty);
         _bip39Passphrase = string.Empty;
         _showSecret = false;
 
@@ -415,6 +431,23 @@
             secretForUnlock = string.Empty;
             bip39PassphraseForUnlock = string.Empty;
             _opening = false;
+        }
+    }
+
+    private void UpdateMnemonicWord(int index, string value)
+    {
+        var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 1)
+        {
+            // A full phrase pasted into any slot populates successive numbered slots.
+            if (index == 0 && new[] { 12, 15, 18, 21, 24 }.Contains(words.Length))
+                _wordCount = words.Length;
+            for (var i = 0; i < words.Length && index + i < _wordCount; i++)
+                _words[index + i] = words[i].ToLowerInvariant();
+        }
+        else
+        {
+            _words[index] = value.Trim().ToLowerInvariant();
         }
     }
 
