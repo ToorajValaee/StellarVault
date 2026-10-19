@@ -189,6 +189,41 @@ window.stellarVault = (() => {
         }
     }
 
+    // Explicit v2 entrypoint: never interpret a mnemonic as a Stellar secret.
+    // This read-only path deliberately does not enable legacy account writes.
+    async function openHdSession(sessionId, bip39SeedBytes, horizonUrl, networkPassphrase) {
+        if (stellarSessions.has(sessionId))
+            throw new Error('Session identifier is already in use.');
+        const seed = new Uint8Array(bip39SeedBytes);
+        if (seed.length !== 64)
+            throw new Error('A 64-byte checksum-validated BIP39 seed is required.');
+        if (!window.stellarVaultHdDiscovery || !window.stellarVaultEncryption)
+            throw new Error('V2 modules are unavailable.');
+        try {
+            const opened = await window.stellarVaultHdDiscovery.open(
+                seed, normalizeHorizonUrl(horizonUrl), String(networkPassphrase));
+            const cryptoKey = await window.stellarVaultEncryption.deriveKey(
+                seed, opened.networkPassphrase, opened.rootAccountId);
+            stellarSessions.set(sessionId, {
+                ...opened, keypair: opened.rootKeypair,
+                passphrase: opened.networkPassphrase, cryptoKey,
+                hdSeed: seed.slice(), mode: 'hd-v2'
+            });
+            return { rootAccountId: opened.rootAccountId,
+                registryInitialized: opened.registry !== null };
+        } finally {
+            seed.fill(0);
+        }
+    }
+
+    async function discoverHdNodes(sessionId, recoveryLookahead = 16) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2')
+            throw new Error('Indexed discovery requires a v2 session.');
+        return window.stellarVaultHdDiscovery.discover(session.hdSeed, session,
+            { recoveryLookahead });
+    }
+
     function deleteSession(sessionId) {
         const session = stellarSessions.get(sessionId);
         if (session) {
@@ -198,6 +233,7 @@ window.stellarVault = (() => {
                 // The keypair may already have been cleared.
             }
         }
+        if (session?.hdSeed) session.hdSeed.fill(0);
         stellarSessions.delete(sessionId);
     }
 
@@ -491,6 +527,8 @@ window.stellarVault = (() => {
         },
         stellar: {
             createSession,
+            openHdSession,
+            discoverHdNodes,
             deleteSession,
             loadChain,
             createAndAppendChild,
