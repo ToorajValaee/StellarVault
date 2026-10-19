@@ -44,7 +44,7 @@ window.stellarVaultHdAllocator = (() => {
     if (latest.revision !== preflight.registryRevision ||
         latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex ||
         latest.activeWriteIndex !== opened.registry.activeWriteIndex)
-      throw new Error('Child created but registry changed; reconcile before retrying');
+      throw new Error('Registry changed before child allocation; refresh and retry');
     // Use the same fresh account snapshot for both treasury validation and
     // transaction sequence; never authorize against an earlier balance.
     const treasury = window.stellarVaultTreasury.calculate(latestRoot,
