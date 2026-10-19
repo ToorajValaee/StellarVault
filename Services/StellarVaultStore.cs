@@ -77,6 +77,21 @@ public sealed class StellarVaultStore : IAsyncDisposable
         _rootAccountId = result.RootAccountId;
     }
 
+    public async Task InitializeHdRegistryAsync()
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null)
+            throw new InvalidOperationException("Unlock the funded HD root before initialization.");
+
+        // The JavaScript bootstrap refuses existing registries and scans derived
+        // children before writing the first authenticated registry entry.
+        await _js.InvokeVoidAsync(
+            "stellarVault.stellar.initializeHdRegistry",
+            _sessionId,
+            _settings.BaseReserveStroops,
+            _settings.BaseFeeStroops);
+    }
+
     public async Task<VaultReadResult> ReadAsync()
     {
         ThrowIfDisposed();
