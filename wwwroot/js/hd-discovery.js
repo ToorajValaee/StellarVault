@@ -51,6 +51,8 @@ window.stellarVaultHdDiscovery = (() => {
       throw new RangeError('Invalid recovery scan bounds');
     const highest = opened.registry?.highestAllocatedIndex ?? 0;
     const limit = Math.min(maxScan, highest + recoveryLookahead);
+    if (highest > 0 && recoveryLookahead === 0)
+      throw new Error('Recovery lookahead must inspect at least the next index');
     if (highest === maxScan && recoveryLookahead > 0)
       throw new Error('Recovery scan cannot inspect beyond the registry index');
     if (highest > maxScan)
