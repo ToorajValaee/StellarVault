@@ -51,6 +51,8 @@ window.stellarVaultHdDiscovery = (() => {
       throw new RangeError('Invalid recovery scan bounds');
     const highest = opened.registry?.highestAllocatedIndex ?? 0;
     const limit = Math.min(maxScan, highest + recoveryLookahead);
+    if (highest === maxScan && recoveryLookahead > 0)
+      throw new Error('Recovery scan cannot inspect beyond the registry index');
     if (highest > maxScan)
       throw new Error('Registry exceeds safe scan limit; raise bound explicitly');
     const nodes = [];
@@ -69,9 +71,14 @@ window.stellarVaultHdDiscovery = (() => {
         if (Number(error?.response?.status) !== 404) throw error;
       }
     }
+    const registeredGaps = [];
+    for (let index = 1; index <= highest; index++) {
+      if (!nodes.some(node => node.index === index)) registeredGaps.push(index);
+    }
     const unregisteredNodes = nodes.filter(node => node.index > highest);
     return { nodes, scannedThrough: limit, registry: opened.registry,
-      unregisteredNodes, requiresReconciliation: unregisteredNodes.length > 0 };
+      registeredGaps, unregisteredNodes,
+      requiresReconciliation: unregisteredNodes.length > 0 || registeredGaps.length > 0 };
   }
 
   async function rootTreasury(opened, baseReserveStroops, options = {}) {

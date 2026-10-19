@@ -9,7 +9,7 @@ window.stellarVaultAllocationPreflight = (() => {
     if (discovery.scannedThrough < opened.registry.highestAllocatedIndex + 1)
       throw new Error('Next allocation index was not scanned');
     if (discovery.requiresReconciliation)
-      throw new Error('Unregistered derived accounts detected; reconcile before allocation');
+      throw new Error('Derived account registry mismatch detected; reconcile before allocation');
     const nextIndex = opened.registry.highestAllocatedIndex + 1;
     if (nextIndex > discovery.scannedThrough)
       throw new Error('Next index was not scanned; increase recovery lookahead');
