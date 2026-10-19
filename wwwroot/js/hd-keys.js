@@ -10,7 +10,7 @@ window.stellarVaultHd = (() => {
     return new Uint8Array(await crypto.subtle.sign('HMAC', imported, data));
   }
   async function validateMnemonic(mnemonic) {
-    const words = String(mnemonic || '').normalize('NFKD').trim().split(/\\s+/u);
+    const words = String(mnemonic || '').normalize('NFKD').trim().split(/\s+/u);
     if (![12, 15, 18, 21, 24].includes(words.length))
       throw new Error('BIP-39 mnemonic must contain 12, 15, 18, 21, or 24 words');
     const wordlist = window.stellarVaultBip39English;
