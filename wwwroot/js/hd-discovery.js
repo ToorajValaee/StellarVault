@@ -83,9 +83,10 @@ window.stellarVaultHdDiscovery = (() => {
       const batch = await Promise.all(indices.map(inspectIndex));
       for (const node of batch) if (node !== null) nodes.push(node);
     }
+    const discovered = new Set(nodes.map(node => node.index));
     const registeredGaps = [];
     for (let index = 1; index <= highest; index++) {
-      if (!nodes.some(node => node.index === index)) registeredGaps.push(index);
+      if (!discovered.has(index)) registeredGaps.push(index);
     }
     const unregisteredNodes = nodes.filter(node => node.index > highest);
     return { nodes, scannedThrough: limit, registry: opened.registry,
