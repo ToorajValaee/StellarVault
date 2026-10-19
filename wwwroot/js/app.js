@@ -291,6 +291,18 @@ window.stellarVault = (() => {
             throw new Error('Previous account identity is required.');
         if (Number(position) !== session.registry.highestAllocatedIndex + 1)
             throw new Error('Stale child allocation index; refresh before retrying.');
+        const expectedPreviousIndex = session.registry.highestAllocatedIndex;
+        const previousRaw = await window.stellarVaultHd.accountSeed(
+            session.hdSeed, expectedPreviousIndex);
+        let expectedPreviousAccount;
+        try {
+            expectedPreviousAccount = requireStellarSdk()
+                .Keypair.fromRawEd25519Seed(previousRaw).publicKey();
+        } finally {
+            previousRaw.fill(0);
+        }
+        if (previousAccountId !== expectedPreviousAccount)
+            throw new Error('Previous account does not match the registered HD tail.');
         if (String(childStartingBalance) !== '0')
             throw new Error('V2 children must be created with zero starting balance.');
         if (typeof window.stellarVaultSponsorship?.writeSponsoredData !== 'function')
