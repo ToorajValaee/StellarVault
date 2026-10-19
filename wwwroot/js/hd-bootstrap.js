@@ -18,7 +18,7 @@ window.stellarVaultHdBootstrap = (() => {
     if (reserve <= 0n || fee <= 0n || buffer < 0n)
       throw new Error('Invalid registry initialization reserve or fee');
     const discovery = await window.stellarVaultHdDiscovery.discover(seed, opened,
-      { recoveryLookahead: 16 });
+      { recoveryLookahead: 4096, maxScan: 4096 });
     if (discovery.nodes.length !== 0)
       throw new Error('Derived children already exist; recover registry instead of initializing');
     const root = await opened.server.loadAccount(opened.rootAccountId);
