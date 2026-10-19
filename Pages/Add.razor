@@ -218,6 +218,7 @@ else
             Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            FolderId = null,
             CreatedUtc = created,
             UpdatedUtc = updated
         };
