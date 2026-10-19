@@ -521,6 +521,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (previous.NextAccountId is not null)
             throw new InvalidOperationException("Only the tail account can be extended.");
 
+        if (!string.Equals(_settings.ChildStartingBalance, "0", StringComparison.Ordinal))
+            throw new InvalidOperationException("HD child accounts must start with zero XLM.");
+
         var node = await _js.InvokeAsync<JsVaultNode>(
             "stellarVault.stellar.createAndAppendChild",
             _sessionId,
