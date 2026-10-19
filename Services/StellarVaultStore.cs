@@ -110,7 +110,11 @@ public sealed class StellarVaultStore : IAsyncDisposable
                             CryptographicOperations.ZeroMemory(computedHash);
                         }
 
-                        var record = await _crypto.DecryptAsync(recordId, encrypted);
+                        if (manifest.Version != CurrentManifestVersion || manifest.Generation is null)
+                            throw new InvalidDataException("Legacy record manifests are not supported in HD v2.");
+
+                        var record = await _crypto.DecryptHdAsync(
+                            recordId, node.Position, manifest.Generation, encrypted);
                         if (!string.Equals(record.Id, recordId, StringComparison.Ordinal))
                             throw new InvalidDataException("The decrypted record ID does not match its ledger key.");
 
