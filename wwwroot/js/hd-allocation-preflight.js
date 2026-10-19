@@ -27,7 +27,7 @@ window.stellarVaultAllocationPreflight = (() => {
         latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex ||
         latest.activeWriteIndex !== opened.registry.activeWriteIndex)
       throw new Error('Registry changed during allocation; refresh required');
-    const raw = await window.stellarVaultHd.accountSeed(seed, nextIndex);
+    const raw = await window.stellarVaultHd.accountSeed(seed, nextIndex, opened.derivationScheme);
     try {
       const keypair = window.StellarSdk.Keypair.fromRawEd25519Seed(raw);
       return { nextIndex, accountId: keypair.publicKey(),
