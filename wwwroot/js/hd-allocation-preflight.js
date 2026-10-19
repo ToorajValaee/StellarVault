@@ -6,6 +6,8 @@ window.stellarVaultAllocationPreflight = (() => {
     const discovery = await window.stellarVaultHdDiscovery.discover(
       seed, opened, { recoveryLookahead: options.recoveryLookahead ?? 16,
         maxScan: options.maxScan ?? 4096 });
+    if (discovery.scannedThrough < opened.registry.highestAllocatedIndex + 1)
+      throw new Error('Next allocation index was not scanned');
     if (discovery.requiresReconciliation)
       throw new Error('Unregistered derived accounts detected; reconcile before allocation');
     const nextIndex = opened.registry.highestAllocatedIndex + 1;
