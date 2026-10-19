@@ -19,7 +19,7 @@ else if (Session.NeedsRegistryInitialization)
     <section class="terminal-panel centered-message">
         <div class="panel-kicker">FIRST-TIME HD SETUP</div>
         <h1>INITIALIZE ROOT REGISTRY</h1>
-        <p>The funded root account has no authenticated v2 registry. Initialization writes a registry entry to the root ledger account and pays a network fee. Existing derived child accounts must be reconciled first; initialization will refuse them.</p>
+        <p>This vault needs a one-time setup on the Stellar network. Your account must have enough available XLM to cover a small network fee and storage reserve.</p>
         <p>Root account: @Session.RootAccountId</p>
         <label class="terminal-label">
             <input type="checkbox" @bind="_confirmInitialization" />
@@ -210,7 +210,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = VaultErrorMessages.Friendly(ex);
         }
     }
 
@@ -224,7 +224,7 @@ else
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = VaultErrorMessages.Friendly(ex);
         }
     }
 
@@ -239,7 +239,7 @@ else
         catch (Exception ex)
         {
             _treasury = null;
-            _treasuryError = ex.Message;
+            _treasuryError = VaultErrorMessages.Friendly(ex);
         }
         finally
         {
