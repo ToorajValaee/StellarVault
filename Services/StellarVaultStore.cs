@@ -219,47 +219,47 @@ public sealed class StellarVaultStore : IAsyncDisposable
         var chunkCount = await EstimateHdChunkCountAsync(record);
         EnsureRecordFitsNode(chunkCount);
 
-            var source = currentCopy.Node;
-            var target = source;
-            var targetHasHeader = true;
-            var createsChild = false;
+        var source = currentCopy.Node;
+        var target = source;
+        var targetHasHeader = true;
+        var createsChild = false;
 
-            if (!CanStageRecord(source, chunkCount, headerAlreadyExists: true))
+        if (!CanStageRecord(source, chunkCount, headerAlreadyExists: true))
+        {
+            target = nodes[^1];
+            targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
+            if (!CanStageRecord(target, chunkCount, targetHasHeader))
             {
-                target = nodes[^1];
-                targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
-                if (!CanStageRecord(target, chunkCount, targetHasHeader))
-                {
-                    createsChild = true;
-                    targetHasHeader = false;
-                }
+                createsChild = true;
+                targetHasHeader = false;
             }
+        }
 
-            var targetId = createsChild ? "NEW-CHILD-NODE" : target.AccountId;
-            var generation = "__estimate_generation__";
-            var cleanupCount = BuildUpdateCleanupWrites(
-                    oldCopies,
-                    targetId,
-                    record.Id,
-                    generation)
-                .Count;
+        var targetId = createsChild ? "NEW-CHILD-NODE" : target.AccountId;
+        var generation = "__estimate_generation__";
+        var cleanupCount = BuildUpdateCleanupWrites(
+                oldCopies,
+                targetId,
+                record.Id,
+                generation)
+            .Count;
 
-            var commitWrites = chunkCount + 1;
-            var newEntries = chunkCount + (targetHasHeader ? 0 : 1);
-            var allocationOperations = createsChild ? 4 : 0;
-            // Each newly sponsored entry requires begin/write/end operations.
-            // Existing entries need only a ManageData operation.
-            var commitOperations = newEntries * 3 + (commitWrites - newEntries);
-            var operationCount = allocationOperations + commitOperations + cleanupCount;
-            var transactionCount = (createsChild ? 1 : 0) + commitWrites + cleanupCount;
-            var reserve = BaseReserveNative;
-            var peakReserve = (newEntries + (createsChild ? 2 : 0)) * reserve;
-            var netReserve = peakReserve - cleanupCount * reserve;
+        var commitWrites = chunkCount + 1;
+        var newEntries = chunkCount + (targetHasHeader ? 0 : 1);
+        var allocationOperations = createsChild ? 4 : 0;
+        // Each newly sponsored entry requires begin/write/end operations.
+        // Existing entries need only a ManageData operation.
+        var commitOperations = newEntries * 3 + (commitWrites - newEntries);
+        var operationCount = allocationOperations + commitOperations + cleanupCount;
+        var transactionCount = (createsChild ? 1 : 0) + commitWrites + cleanupCount;
+        var reserve = BaseReserveNative;
+        var peakReserve = (newEntries + (createsChild ? 2 : 0)) * reserve;
+        var netReserve = peakReserve - cleanupCount * reserve;
 
-            return new VaultCostEstimate(
-                operationCount, transactionCount, chunkCount, newEntries,
-                cleanupCount, FeeNative(operationCount), peakReserve,
-                netReserve, 0m, createsChild);
+        return new VaultCostEstimate(
+            operationCount, transactionCount, chunkCount, newEntries,
+            cleanupCount, FeeNative(operationCount), peakReserve,
+            netReserve, 0m, createsChild);
     }
 
     public async Task<VaultCostEstimate> EstimateDeleteAsync(VaultRecordLocation expectedLocation)
