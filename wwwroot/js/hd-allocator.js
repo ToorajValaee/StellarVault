@@ -1,6 +1,6 @@
 // Deterministic v2 child allocation. Requires a previously authenticated registry.
-// Child creation and registry persistence are separate ledger transactions; a failed
-// registry update leaves an orphan that discovery must reconcile before retrying.
+// Child creation and registry persistence share one atomic Stellar transaction.
+// Concurrent devices must refresh after any conflicting ledger submission.
 window.stellarVaultHdAllocator = (() => {
   const pendingRoots = new Set();
   async function allocate(seed, opened, options) {
@@ -42,14 +42,7 @@ window.stellarVaultHdAllocator = (() => {
       });
     if (!treasury.canAffordPlan)
       throw new Error('Root treasury cannot cover sponsored child and registry update');
-    const created = await window.stellarVaultSponsorship.createSponsoredChild({
-      server: opened.server, rootKeypair: opened.rootKeypair, childKeypair: child,
-      networkPassphrase: opened.networkPassphrase,
-      baseReserveStroops: options.baseReserveStroops,
-      baseFeeStroops: options.baseFeeStroops,
-      safetyBufferStroops: options.safetyBufferStroops ?? '0'
-    });
-    // Re-check the registry after creation to avoid overwriting a newer revision.
+    // Re-check the registry before the single atomic ledger transaction.
     const latestRoot = await opened.server.loadAccount(opened.rootAccountId);
     const encoded = latestRoot.data_attr?.['sv:registry:v2'];
     if (!encoded)
@@ -67,15 +60,22 @@ window.stellarVaultHdAllocator = (() => {
     const tx = new sdk.TransactionBuilder(latestRoot, {
       fee: String(options.baseFeeStroops),
       networkPassphrase: opened.networkPassphrase
-    }).addOperation(sdk.Operation.manageData({
+    }).addOperation(sdk.Operation.beginSponsoringFutureReserves({
+      source: opened.rootAccountId, sponsoredId: child.publicKey()
+    })).addOperation(sdk.Operation.createAccount({
+      source: opened.rootAccountId, destination: child.publicKey(), startingBalance: '0'
+    })).addOperation(sdk.Operation.endSponsoringFutureReserves({
+      source: child.publicKey()
+    })).addOperation(sdk.Operation.manageData({
       name: 'sv:registry:v2', value: nextRegistry,
       source: opened.rootAccountId
     })).setTimeout(60).build();
     tx.sign(opened.rootKeypair);
+    tx.sign(child);
     let committed;
     try { committed = await opened.server.submitTransaction(tx); }
     catch (error) {
-      throw new Error('Child created but registry commit failed; reconcile before retrying: ' +
+      throw new Error('Atomic child allocation transaction failed; refresh before retrying: ' +
         (error?.message || String(error)));
     }
     opened.registry = {
@@ -84,7 +84,7 @@ window.stellarVaultHdAllocator = (() => {
     };
     return {
       index: preflight.nextIndex, accountId: child.publicKey(),
-      creationHash: created.transactionHash, registryHash: committed.hash,
+      creationHash: committed.hash, registryHash: committed.hash,
       registry: opened.registry
     };
   }
