@@ -264,68 +264,31 @@ window.stellarVault = (() => {
     }
 
     async function createAndAppendChild(
-        sessionId,
-        previousAccountId,
-        position,
-        childStartingBalance,
-        baseFeeStroops) {
-        const StellarSdk = requireStellarSdk();
+        sessionId, previousAccountId, position, childStartingBalance, baseFeeStroops,
+        baseReserveStroops) {
         const session = requireSession(sessionId);
-        if (session.mode === 'hd-v2')
-            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
-        const child = StellarSdk.Keypair.random();
-
-        try {
-            const rootAccount = await session.server.loadAccount(session.rootAccountId);
-            const transaction = new StellarSdk.TransactionBuilder(rootAccount, {
-                fee: String(baseFeeStroops),
-                networkPassphrase: session.passphrase
-            })
-                .addOperation(StellarSdk.Operation.createAccount({
-                    destination: child.publicKey(),
-                    startingBalance: String(childStartingBalance)
-                }))
-                .addOperation(StellarSdk.Operation.setOptions({
-                    source: child.publicKey(),
-                    signer: {
-                        ed25519PublicKey: session.rootAccountId,
-                        weight: 1
-                    },
-                    masterWeight: 0,
-                    lowThreshold: 1,
-                    medThreshold: 1,
-                    highThreshold: 1
-                }))
-                .addOperation(StellarSdk.Operation.manageData({
-                    source: previousAccountId,
-                    name: 'sv:next',
-                    value: child.rawPublicKey()
-                }))
-                .setTimeout(60)
-                .build();
-
-            transaction.sign(session.keypair);
-            transaction.sign(child);
-
-            await session.server.submitTransaction(transaction);
-            const childAccount = await session.server.loadAccount(child.publicKey());
-
-            return {
-                accountId: childAccount.account_id,
-                position: Number(position),
-                subentryCount: Number(childAccount.subentry_count || 0),
-                data: { ...(childAccount.data_attr || {}) },
-                nextAccountId: null
-            };
-        } catch (error) {
-            throw new Error(formatStellarError(error));
-        } finally {
-            try {
-                child.rawSecretKey().fill(0);
-            } catch {
-                // Best-effort cleanup.
-            }
-        }
+        if (session.mode !== 'hd-v2')
+            throw new Error('Legacy child creation is no longer supported.');
+        if (!session.registry)
+            throw new Error('Initialize the authenticated root registry first.');
+        if (previousAccountId !== session.rootAccountId &&
+            position !== session.registry.highestAllocatedIndex + 1)
+            throw new Error('Child allocation must follow the authenticated registry.');
+        if (Number(position) !== session.registry.highestAllocatedIndex + 1)
+            throw new Error('Stale child allocation index; refresh before retrying.');
+        if (!baseReserveStroops || BigInt(String(baseReserveStroops)) <= 0n)
+            throw new Error('Detected base reserve is required for sponsorship.');
+        const result = await window.stellarVaultHdAllocator.allocate(
+            session.hdSeed, session, {
+                baseReserveStroops: String(baseReserveStroops),
+                baseFeeStroops: String(baseFeeStroops)
+            });
+        const child = await session.server.loadAccount(result.accountId);
+        return {
+            accountId: result.accountId, position: result.index,
+            subentryCount: Number(child.subentry_count || 0),
+            data: { ...(child.data_attr || {}) }, nextAccountId: null
+        };
     }
 
     async function submitManageData(sessionId, writes, baseFeeStroops) {
