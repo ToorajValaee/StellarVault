@@ -42,3 +42,19 @@ test('sponsorship helper rejects already-existing child without swallowing error
     subentry_count: 0, num_sponsoring: 2, num_sponsored: 0
   }, '5000000').spendable, 15000000n);
 });
+
+test('treasury rejects plans that exceed spendable reserves', () => {
+  const t = load('hd-treasury.js', 'stellarVaultTreasury');
+  const account = {
+    balances: [{ asset_type: 'native', balance: '2.0000000', selling_liabilities: '0' }],
+    subentry_count: 0, num_sponsoring: 0, num_sponsored: 0
+  };
+  const result = t.calculate(account, '5000000', {
+    additionalSponsoredUnits: 2, expectedFeeStroops: '300'
+  });
+  assert.equal(result.canAffordPlan, false);
+  assert.equal(result.availableAfterPlanStroops, '0');
+  assert.throws(() => t.calculate(account, '5000000', {
+    safetyBufferStroops: '-1'
+  }));
+});
