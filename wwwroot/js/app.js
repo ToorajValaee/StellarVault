@@ -214,6 +214,22 @@ window.stellarVault = (() => {
         }
     }
 
+    async function initializeHdRegistry(sessionId, baseReserveStroops, baseFeeStroops,
+        safetyBufferStroops = '0') {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2')
+            throw new Error('An unlocked v2 session is required.');
+        if (session.registry !== null)
+            throw new Error('Registry already initialized; refusing to overwrite it.');
+        if (!window.stellarVaultHdBootstrap)
+            throw new Error('V2 registry bootstrap module is unavailable.');
+        return window.stellarVaultHdBootstrap.initialize(session.hdSeed, session, {
+            baseReserveStroops: String(baseReserveStroops),
+            baseFeeStroops: String(baseFeeStroops),
+            safetyBufferStroops: String(safetyBufferStroops)
+        });
+    }
+
     async function discoverHdNodes(sessionId, recoveryLookahead = 16) {
         const session = requireSession(sessionId);
         if (session.mode !== 'hd-v2')
@@ -592,6 +608,7 @@ window.stellarVault = (() => {
             createSession,
             openHdSession,
             discoverHdNodes,
+            initializeHdRegistry,
             deleteSession,
             loadChain,
             createAndAppendChild,
