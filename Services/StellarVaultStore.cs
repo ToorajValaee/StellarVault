@@ -57,7 +57,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             safetyBufferStroops.ToString(CultureInfo.InvariantCulture));
     }
 
-    public async Task OpenAsync(string secret)
+    public async Task OpenAsync(string secret, string bip39Passphrase = "")
     {
         ThrowIfDisposed();
         if (_rootAccountId is not null)
@@ -68,7 +68,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
             _sessionId,
             secret,
             _settings.HorizonUrl,
-            _settings.Passphrase);
+            _settings.Passphrase,
+            bip39Passphrase);
 
         if (string.IsNullOrWhiteSpace(result.RootAccountId))
             throw new InvalidOperationException("The browser Stellar SDK did not return a root account ID.");
