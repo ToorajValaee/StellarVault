@@ -527,7 +527,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
             previous.AccountId,
             previous.Position + 1,
             _settings.ChildStartingBalance,
-            _settings.BaseFeeStroops);
+            _settings.BaseFeeStroops,
+            _settings.BaseReserveStroops);
 
         var decoded = new Dictionary<string, byte[]>(node.Data.Count, StringComparer.Ordinal);
         foreach (var pair in node.Data)
