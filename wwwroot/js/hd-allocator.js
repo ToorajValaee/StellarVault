@@ -71,7 +71,7 @@ window.stellarVaultHdAllocator = (() => {
     })).addOperation(sdk.Operation.endSponsoringFutureReserves({
       source: child.publicKey()
     })).addOperation(sdk.Operation.manageData({
-      name: 'sv:registry:v2', value: Buffer.from(nextRegistry),
+      name: 'sv:registry:v2', value: opened.rootKeypair.rawPublicKey().constructor.from(nextRegistry),
       source: opened.rootAccountId
     })).setTimeout(60).build();
     tx.sign(opened.rootKeypair);
