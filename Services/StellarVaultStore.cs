@@ -429,16 +429,13 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (headerNodes.Length == 0)
             throw new InvalidOperationException("The record no longer exists.");
 
-        var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
         var headerDeletes = headerNodes
             .Select(node => DeleteWrite(node.AccountId, headerName))
             .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
             .ToArray();
 
         var lastHash = await SubmitWritesAsync(headerDeletes);
-        string? cleanupWarning = readableCopies.Count < headerNodes.Length
-            ? "The record manifest was deleted, but at least one malformed copy could not be mapped to its encrypted chunks."
-            : null;
+        string? cleanupWarning = null;
 
         try
         {
