@@ -20,6 +20,11 @@ window.stellarVaultHdAllocator = (() => {
       throw new Error('Open an authenticated root registry before allocating');
     if (!options?.baseReserveStroops || !options?.baseFeeStroops)
       throw new Error('Reserve and fee settings are required');
+    const reserve = BigInt(String(options.baseReserveStroops));
+    const fee = BigInt(String(options.baseFeeStroops));
+    const buffer = BigInt(String(options.safetyBufferStroops ?? '0'));
+    if (reserve <= 0n || fee <= 0n || buffer < 0n)
+      throw new Error('Invalid reserve, fee or safety buffer');
     const preflight = await window.stellarVaultAllocationPreflight.check(seed, opened);
     const childRaw = await window.stellarVaultHd.accountSeed(seed, preflight.nextIndex);
     let child;
@@ -27,33 +32,29 @@ window.stellarVaultHdAllocator = (() => {
     finally { childRaw.fill(0); }
     if (child.publicKey() !== preflight.accountId)
       throw new Error('Derived child changed after allocation preflight');
-    // Reserve two child-account units; the authenticated root registry must exist.
-    const root = await opened.server.loadAccount(opened.rootAccountId);
-    const registryExists = Object.prototype.hasOwnProperty.call(
-      root.data_attr || {}, 'sv:registry:v2');
-    if (!registryExists)
-      throw new Error('Authenticated registry is absent on root; initialize it first');
-    const reserveUnits = 2;
-    const treasury = window.stellarVaultTreasury.calculate(root,
-      options.baseReserveStroops, {
-        additionalSponsoredUnits: reserveUnits,
-        expectedFeeStroops: String(BigInt(String(options.baseFeeStroops)) * 4n),
-        safetyBufferStroops: options.safetyBufferStroops ?? '0'
-      });
-    if (!treasury.canAffordPlan)
-      throw new Error('Root treasury cannot cover sponsored child and registry update');
     // Re-check the registry before the single atomic ledger transaction.
     const latestRoot = await opened.server.loadAccount(opened.rootAccountId);
     const encoded = latestRoot.data_attr?.['sv:registry:v2'];
     if (!encoded)
-      throw new Error('Child created but root registry missing; reconcile before retrying');
+      throw new Error('Authenticated root registry missing; initialize it first');
     const key = await window.stellarVaultRegistry.registryMacKey(
       seed, opened.networkPassphrase, opened.rootAccountId);
     const latest = await window.stellarVaultRegistry.decode(key,
       Uint8Array.from(atob(encoded), c => c.charCodeAt(0)));
     if (latest.revision !== preflight.registryRevision ||
-        latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex)
+        latest.highestAllocatedIndex !== opened.registry.highestAllocatedIndex ||
+        latest.activeWriteIndex !== opened.registry.activeWriteIndex)
       throw new Error('Child created but registry changed; reconcile before retrying');
+    // Use the same fresh account snapshot for both treasury validation and
+    // transaction sequence; never authorize against an earlier balance.
+    const treasury = window.stellarVaultTreasury.calculate(latestRoot,
+      options.baseReserveStroops, {
+        additionalSponsoredUnits: 2,
+        expectedFeeStroops: String(fee * 4n),
+        safetyBufferStroops: buffer.toString()
+      });
+    if (!treasury.canAffordPlan)
+      throw new Error('Root treasury cannot cover sponsored child and registry update');
     const nextRegistry = await window.stellarVaultRegistry.encode(key,
       preflight.nextIndex, preflight.nextIndex, latest.revision + 1);
     const sdk = window.StellarSdk;
