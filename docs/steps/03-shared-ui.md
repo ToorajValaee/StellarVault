@@ -3,6 +3,8 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Access, Vault, Add Record and MainLayout now reside in the shared library; compilation and device verification pending.
 
 ## Implemented
+- PR #2 commit `1df28c5` passed both Migration build and HD v2 validation workflows, including the full browser build and JavaScript regressions.
+- Added an independent `android-preview` CI job to install the Android MAUI workload and compile the disabled native shell; native build outcome pending.
 - CI confirmed the scoped CSS exclusion eliminated `BLAZOR102`. Browser compilation then exposed `CS0122` for `RecordManifest` crossing the Core/host boundary. Promoted the record to public without modifying its fields; regression contract added. Browser build rerun pending.
 - PR #2 CI confirms the shared Razor UI compiles with 0 warnings and 0 errors, and the JavaScript regression suite passes after the HD allocator fix. Browser build then failed with `BLAZOR102` due to root-project inclusion of nested `.razor.css` files; explicit exclusion committed, pending rerun.
 - CI on draft PR #2 confirmed shared UI builds standalone; full browser build failed with `NETSDK1082` because of the ASP.NET Core framework reference. Switched the RCL to `Microsoft.AspNetCore.Components.Web` package; awaiting CI recheck.
