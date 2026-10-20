@@ -24,3 +24,15 @@ jobs:
         run: dotnet build StellarVaultPwa.csproj --configuration Release --no-restore
       - name: Run Node regression tests
         run: node --test tests/*.test.cjs
+
+  android-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Android MAUI workload
+        run: dotnet workload install maui-android
+      - name: Compile native Android preview
+        run: dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net8.0-android -c Release -p:AndroidPackageFormat=apk
