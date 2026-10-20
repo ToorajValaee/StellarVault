@@ -13,5 +13,6 @@ builder.Services.AddScoped<VaultSession>();
 builder.Services.AddScoped<IVaultPreferences>(sp => sp.GetRequiredService<BrowserStorage>());
 builder.Services.AddScoped<IVaultPlatformActions>(sp => sp.GetRequiredService<BrowserStorage>());
 builder.Services.AddScoped<IVaultSessionStatus>(sp => sp.GetRequiredService<VaultSession>());
+builder.Services.AddScoped<IVaultOperations>(sp => sp.GetRequiredService<VaultSession>());
 
 await builder.Build().RunAsync();
