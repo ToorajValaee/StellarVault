@@ -216,6 +216,24 @@ catch (CryptographicException) { }
 try { await committer.CommitVerifiedAsync(verifiedRecordId, verifiedPointer, verifiedEnvelope, key, "verified-manifest"u8.ToArray()); throw new Exception("Old generation accepted"); }
 catch (CryptographicException) { }
 Console.WriteLine("PASS: authenticated manifest identity and generation at commit boundary");
+// A valid authenticated manifest must not publish dangling or corrupted ciphertext references.
+var danglingRecordId = Guid.NewGuid();
+var danglingDescriptor = new VaultChunkDescriptor(0, new string('a', 64), 1, new string('b', 64));
+var danglingIndex = new VaultRecordIndex(danglingRecordId, 0, 1, new[] { danglingDescriptor });
+var danglingEnvelope = VaultChunkIndex.Seal(danglingIndex, key, "verified-manifest"u8);
+try { await committer.CommitVerifiedAsync(danglingRecordId, null, danglingEnvelope, key, "verified-manifest"u8.ToArray()); throw new Exception("Missing chunk was published"); }
+catch (FileNotFoundException) { }
+Check(await committedIndex.ReadAsync(danglingRecordId) is null, "Dangling record pointer published");
+var mismatchRecordId = Guid.NewGuid();
+var mismatchCiphertext = VaultV2Envelope.Seal(key, "x"u8, "chunk"u8);
+using var mismatchStream = new MemoryStream(mismatchCiphertext);
+var mismatchId = await committedObjects.PutAsync(mismatchStream);
+var mismatchDescriptor = new VaultChunkDescriptor(0, mismatchId, 1, new string('b', 64));
+var mismatchEnvelope = VaultChunkIndex.Seal(new VaultRecordIndex(mismatchRecordId, 0, 1, new[] { mismatchDescriptor }), key, "verified-manifest"u8);
+try { await committer.CommitVerifiedAsync(mismatchRecordId, null, mismatchEnvelope, key, "verified-manifest"u8.ToArray()); throw new Exception("Mismatched chunk digest published"); }
+catch (CryptographicException) { }
+Check(await committedIndex.ReadAsync(mismatchRecordId) is null, "Corrupted chunk pointer published");
+Console.WriteLine("PASS: reject missing and mismatched ciphertext before record publication");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
