@@ -20,6 +20,8 @@ Decrypt writes to **private, seekable staging storage** and truncates it on fail
 
 `VaultRecordCommitter` uploads an already encrypted/authenticated manifest into `IVaultChunkStore`, then atomically advances the pointer via `IVaultRecordIndex.CompareExchangeAsync`. Stale writers receive `VaultWriteConflictException`. Failed CAS may leave an orphaned encrypted manifest: garbage collection must use a reachability scan and a grace period, **never immediately delete an object that could be shared**. The preferred `CommitVerifiedAsync` and `ReadVerifiedAsync` paths authenticate the index and check record identity and generation against the pointer. The unauthenticated `CommitAsync` entry point is now private, so external callers must use verified commits. Account authorization, durable rollback resistance, and complete chunk-reference validation remain outside this coordinator. A production implementation must combine verification and authorization within the trusted transaction boundary, and must have a durable atomic index.
 
+Verified reads now use a single record-pointer snapshot for both object retrieval and generation checking, avoiding a race where an intervening update could cause a false identity mismatch. This is snapshot consistency for one manifest read, **not** a cross-record transaction or trusted rollback anchor.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
