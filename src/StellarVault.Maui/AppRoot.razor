@@ -1,7 +1,10 @@
 @using StellarVault.UI.Components
 
-<main style="min-height:100vh;background:#07110c;color:#e3f5e7;padding:2rem;font-family:system-ui">
-    <PlatformBanner PlatformName="MAUI PREVIEW" />
-    <h1>StellarVault</h1>
-    <p>Native application host initialized. Vault unlock and ledger actions are intentionally disabled until the shared services and security compatibility tests are complete.</p>
-</main>
+<AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
+    <section class="native-preview" aria-labelledby="native-preview-title">
+        <p class="eyebrow">DEVELOPMENT BUILD</p>
+        <h1 id="native-preview-title">One vault. Every screen.</h1>
+        <p>StellarVault's native application shell is being prepared for phones, tablets and desktop devices.</p>
+        <p class="notice" role="status">Vault unlocking, secret entry and Stellar transactions are unavailable in this preview until compatibility and security tests are complete.</p>
+    </section>
+</AdaptiveShell>
