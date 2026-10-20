@@ -11,6 +11,10 @@
         <ManagedVaultSessionStatus />
         @if (Sessions.IsUnlocked)
         {
+            <VaultRecordWorkspaceView />
+        }
+        @if (Sessions.IsUnlocked)
+        {
             <p>Active account: @Sessions.ActiveAccountId</p>
             <button type="button" class="session-lock" @onclick="LockVault">Lock vault</button>
         }
