@@ -3,6 +3,7 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Access, Vault, Add Record and MainLayout now reside in the shared library; compilation and device verification pending.
 
 ## Implemented
+- PR #2 CI confirms the shared Razor UI compiles with 0 warnings and 0 errors, and the JavaScript regression suite passes after the HD allocator fix. Browser build then failed with `BLAZOR102` due to root-project inclusion of nested `.razor.css` files; explicit exclusion committed, pending rerun.
 - CI on draft PR #2 confirmed shared UI builds standalone; full browser build failed with `NETSDK1082` because of the ASP.NET Core framework reference. Switched the RCL to `Microsoft.AspNetCore.Components.Web` package; awaiting CI recheck.
 - HD allocator CI revealed an invalid `rootKeypair.rawPublicKey()` call; corrected registry payload handling and added regression assertions. Awaiting CI recheck.
 - Added source-layout regression assertions for shared pages, record details and ledger approval components; CI now separately compiles the shared Razor UI before the browser host.
