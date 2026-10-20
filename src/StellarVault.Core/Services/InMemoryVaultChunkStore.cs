@@ -53,7 +53,7 @@ public sealed class InMemoryVaultChunkStore : IVaultChunkStore
             if (!_objects.TryGetValue(contentId, out var content)) throw new FileNotFoundException("Encrypted object not found.");
             if (!string.Equals(Convert.ToHexString(SHA256.HashData(content)), contentId, StringComparison.OrdinalIgnoreCase))
                 throw new CryptographicException("Encrypted object hash mismatch.");
-            return Task.FromResult<Stream>(new MemoryStream(content, writable: false));
+            return Task.FromResult<Stream>(new MemoryStream((byte[])content.Clone(), writable: false));
         }
     }
 
@@ -61,7 +61,10 @@ public sealed class InMemoryVaultChunkStore : IVaultChunkStore
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateId(contentId);
-        lock (_gate) _objects.Remove(contentId);
+        lock (_gate)
+        {
+            if (_objects.Remove(contentId, out var removed)) CryptographicOperations.ZeroMemory(removed);
+        }
         return Task.CompletedTask;
     }
 
