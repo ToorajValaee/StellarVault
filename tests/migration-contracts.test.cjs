@@ -11,7 +11,7 @@ test('vault pages and approval modal use portable interfaces', () => {
     assert.match(source, /@inject IVaultClientServices Storage/);
     assert.doesNotMatch(source, /@inject (?:VaultSession|BrowserStorage)/);
   }
-  assert.match(read('Components/CostApprovalModal.razor'), /@inject IVaultClientServices Storage/);
+  assert.match(read('src/StellarVault.UI/Components/CostApprovalModal.razor'), /@inject IVaultClientServices Storage/);
   assert.match(read('Layout/MainLayout.razor'), /@inject IVaultPreferences Storage/);
 });
 
