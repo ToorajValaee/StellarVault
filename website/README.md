@@ -27,3 +27,12 @@ The Privacy Policy and Terms are complete product-facing drafts based on the cur
 
 ## Dana font
 Dana remains configured in `assets/styles.css`, but Persian is currently disabled. Licensed font files are not included.
+
+
+## Cross-platform roadmap
+
+The currently available application is the browser/PWA vault at https://app.svault.ir. Native Android, iOS, Windows and macOS apps using shared MAUI Blazor Hybrid UI are **in development** and should not be described as released. See [migration steps](../docs/README.md).
+
+## Source integrity check
+
+Run `python3 scripts/verify-landing.py` from the repository root to compare imported assets with `website/source-manifest.json`. The existence of this manifest does not by itself prove deployment correctness.
