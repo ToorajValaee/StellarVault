@@ -83,3 +83,12 @@ test('all application hosts and shared projects target .NET 10', () => {
   }
   assert.match(read('.github/workflows/migration-build.yml'), /dotnet-version: '10\.0\.x'/);
 });
+
+test('portable vault cryptography authenticates ciphertext and associated data', () => {
+  const source = read('src/StellarVault.Core/Services/VaultCryptoPrimitives.cs');
+  assert.match(source, /new AesGcm\(key, TagLength\)/);
+  assert.match(source, /aes\.Encrypt\(nonce, plaintext/);
+  assert.match(source, /aes\.Decrypt\(nonce, ciphertextAndTag/);
+  assert.match(source, /CryptographicOperations\.ZeroMemory\(plaintext\)/);
+  assert.match(source, /RandomNumberGenerator\.GetBytes\(count\)/);
+});
