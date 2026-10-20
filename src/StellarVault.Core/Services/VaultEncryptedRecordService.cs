@@ -91,7 +91,8 @@ public sealed class VaultEncryptedRecordService(IVaultChunkStore objects, IVault
                 byte[] ciphertext = encrypted.ToArray();
                 try
                 {
-                    if (!VaultChunkIndex.VerifyCiphertext(descriptor, ciphertext))
+                    if (!string.Equals(descriptor.ObjectKey, descriptor.Sha256Hex, StringComparison.OrdinalIgnoreCase) ||
+                        !VaultChunkIndex.VerifyCiphertext(descriptor, ciphertext))
                         throw new CryptographicException("Encrypted chunk digest mismatch.");
                     byte[] aad = BuildChunkContext(recordId, manifest.Generation, descriptor.Index);
                     try
