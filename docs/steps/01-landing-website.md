@@ -1,6 +1,6 @@
 # Step 01 — Public landing website
 
-**Status:** in progress — original ZIP inspected and repeatable import script committed; landing assets are **not yet committed**.
+**Status:** in progress — original landing source has been pushed and key source files verified in GitHub. Runtime/Docker and asset-integrity checks are still pending.
 
 ## Source and verified contents
 The supplied archive contains the standalone site: `index.html`, `privacy.html`, `terms.html`, Persian redirect pages, CSS, JavaScript, screenshots, icons, social preview, Dockerfile, nginx.conf, sitemap, robots.txt, `llms.txt` and `llms-full.txt`.
@@ -29,4 +29,4 @@ The importer copies all original files without re-encoding, rejects traversal/sy
 5. Keep landing deployment separate from browser and MAUI hosts.
 
 ## Acceptance criteria
-All original files committed intact; images and legal pages load; Docker/Nginx serve the static site; links and SEO metadata are correct; landing build verified. **Not yet verified.**
+Original HTML, stylesheet, Dockerfile, source manifest and LLM description confirmed present on the branch. Browser rendering, all asset checksums, Docker/Nginx behavior, and legal review **not yet verified**.
