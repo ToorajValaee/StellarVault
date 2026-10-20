@@ -339,6 +339,17 @@ try
     Console.WriteLine("PASS: abandoned temporary pointer recovery and corrupted committed pointer rejection");
 }
 finally { if (Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, recursive: true); }
+var aliasRecordId = Guid.NewGuid();
+byte[] aliasCipher = VaultV2Envelope.Seal(key, "a"u8, "alias"u8);
+using var aliasStream = new MemoryStream(aliasCipher);
+string aliasObjectId = await committedObjects.PutAsync(aliasStream);
+var aliasDescriptor = new VaultChunkDescriptor(0, new string('f', 64), 1, aliasObjectId);
+var aliasManifest = VaultChunkIndex.Seal(new VaultRecordIndex(aliasRecordId, 0, 1, new[] { aliasDescriptor }), key, "verified-manifest"u8);
+try { await committer.CommitVerifiedAsync(aliasRecordId, null, aliasManifest, key, "verified-manifest"u8.ToArray()); throw new Exception("Aliased chunk identifier was published"); }
+catch (CryptographicException) { }
+Check(await committedIndex.ReadAsync(aliasRecordId) is null, "Aliased ciphertext manifest was committed");
+CryptographicOperations.ZeroMemory(aliasCipher);
+Console.WriteLine("PASS: reject mismatched content-addressed object keys");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
