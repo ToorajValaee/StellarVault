@@ -1,0 +1,412 @@
+@page "/vault"
+@implements IDisposable
+@inject IVaultOperations Session
+@inject IVaultClientServices Storage
+@inject NavigationManager Navigation
+
+<PageTitle>Vault // Stellar Vault</PageTitle>
+
+@if (!Session.IsUnlocked)
+{
+    <section class="terminal-panel centered-message">
+        <h1>DATABASE LOCKED</h1>
+        <p>Return to the access terminal and enter the root secret.</p>
+        <a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a>
+    </section>
+}
+else if (Session.NeedsRegistryInitialization)
+{
+    <section class="terminal-panel centered-message">
+        <div class="panel-kicker">FIRST-TIME HD SETUP</div>
+        <h1>INITIALIZE ROOT REGISTRY</h1>
+        <p>This vault needs a one-time setup on the Stellar network. Your account must have enough available XLM to cover a small network fee and storage reserve.</p>
+        <p>Root account: @Session.RootAccountId</p>
+        <label class="terminal-label">
+            <input type="checkbox" @bind="_confirmInitialization" />
+            I understand this writes to the selected Stellar network.
+        </label>
+        <button class="pixel-button primary" type="button"
+                disabled="@(!_confirmInitialization || Session.IsBusy)"
+                @onclick="InitializeRegistryAsync">
+            @(Session.IsBusy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")
+        </button>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">@_error</div>
+        }
+    </section>
+}
+else
+{
+    <section class="vault-page">
+        <header class="page-command-header">
+            <div>
+                <div class="panel-kicker">DATABASE BROWSER // ONLINE</div>
+                <h1>VAULT RECORDS</h1>
+                <p class="page-subtitle">Encrypted credentials reconstructed from @NodeCount linked Stellar account(s).</p>
+            </div>
+            <button class="pixel-button compact" type="button" @onclick="RefreshAsync">↻ SYNC</button>
+        </header>
+
+        <div class="stats-strip">
+            <div><span>RECORDS</span><strong>@RecordCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+            <div><span>NODES</span><strong>@NodeCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+            <div><span>WARNINGS</span><strong>@WarningCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
+        </div>
+
+        <details class="terminal-panel" style="margin-bottom:1rem;padding:1rem">
+            <summary>INDEX 0 // ROOT TREASURY</summary>
+            <p>Live Horizon balance, including sponsored reserve obligations. Refresh before planning writes.</p>
+            <button class="pixel-button compact" type="button"
+                    disabled="@_treasuryLoading" @onclick="RefreshTreasuryAsync">
+                @(_treasuryLoading ? "CHECKING..." : "CHECK LIVE BALANCE")
+            </button>
+            @if (_treasury is not null)
+            {
+                <div class="stats-strip">
+                    <div><span>TOTAL XLM</span><strong>@_treasury.BalanceXlm</strong></div>
+                    <div><span>SPENDABLE XLM</span><strong>@_treasury.SpendableXlm</strong></div>
+                    <div><span>SPONSORED RESERVE XLM</span><strong>@_treasury.SponsoredReserveXlm</strong></div>
+                </div>
+                <p>Minimum balance: @FormatStroops(_treasury.MinimumBalanceStroops) XLM. Sponsored reserve units: @_treasury.SponsoredReserveUnits.</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_treasuryError))
+            {
+                <div class="terminal-alert warning">@_treasuryError</div>
+            }
+        </details>
+
+        <label class="search-console">
+            <span class="search-prefix">FIND&gt;</span>
+            <input @bind="_search" @bind:event="oninput" placeholder="title, username, url, tag..." autocomplete="off" />
+            @if (!string.IsNullOrWhiteSpace(_search))
+            {
+                <button type="button" @onclick="() => _search = string.Empty" aria-label="Clear search">×</button>
+            }
+        </label>
+
+        @if (!string.IsNullOrWhiteSpace(_notice))
+        {
+            <div class="terminal-alert success">
+                <strong>DATABASE UPDATED</strong>
+                <span class="transaction-message">@_notice</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">
+                <strong>OPERATION ERROR</strong>
+                <span>@_error</span>
+            </div>
+        }
+
+        @if (Session.Snapshot?.Warnings.Count > 0)
+        {
+            <details class="warning-log">
+                <summary>@Session.Snapshot.Warnings.Count RECORD WARNING(S)</summary>
+                @foreach (var warning in Session.Snapshot.Warnings)
+                {
+                    <code>&gt; @warning</code>
+                }
+            </details>
+        }
+
+        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
+            <strong>FOLDERS</strong>
+            <span> (@Folders.Count)</span>
+            <nav aria-label="Folder path" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.75rem 0">
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">MY VAULT</button>
+                @foreach (var crumb in Breadcrumbs)
+                {
+                    <span aria-hidden="true">/</span>
+                    <button class="pixel-button compact" type="button" @onclick="() => _folderId = crumb.Record.Id">@crumb.Record.Title</button>
+                }
+            </nav>
+            <label style="display:flex;align-items:center;gap:.5rem;margin:.75rem 0">
+                <input type="checkbox" @bind="_includeSubfolders" />
+                Include records from subfolders
+            </label>
+            @if (_folderId is not null)
+            {
+                <button class="pixel-button compact" type="button" @onclick="GoUp">UP ONE LEVEL</button>
+            }
+            @foreach (var folder in ChildFolders)
+            {
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = folder.Record.Id">📁 @folder.Record.Title</button>
+            }
+            <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+                <input class="terminal-input" placeholder="New folder name" @bind="_newFolderName" />
+                <button class="pixel-button compact" type="button" disabled="@Session.IsBusy" @onclick="CreateFolderAsync">CREATE FOLDER</button>
+                <a class="pixel-button compact" href="@AddRecordUrl">ADD RECORD HERE</a>
+            </div>
+        </section>
+        <div class="record-list">
+            @if (FilteredRecords.Count == 0)
+            {
+                <div class="empty-state terminal-panel">
+                    <div class="empty-glyph">[ ]</div>
+                    <h2>@(RecordCount == 0 ? "DATABASE EMPTY" : "NO MATCH")</h2>
+                    <p>@(RecordCount == 0 ? "Commit the first credential to this Stellar database." : "No records match the active search filter.")</p>
+                    @if (RecordCount == 0)
+                    {
+                        <a class="pixel-button primary" href="/add">ADD FIRST RECORD</a>
+                    }
+                </div>
+            }
+            else
+            {
+                @foreach (var item in FilteredRecords)
+                {
+                    <button class="record-card" type="button" @onclick="() => OpenRecord(item)">
+                        <span class="record-index">@IndexOf(item)</span>
+                        <span class="record-card-body">
+                            <strong>@item.Record.Title</strong>
+                            <small>@SecondaryLine(item.Record)</small>
+                            @if (item.Record.Tags.Length > 0)
+                            {
+                                <span class="tag-row">
+                                    @foreach (var tag in item.Record.Tags.Take(3))
+                                    {
+                                        <span class="pixel-tag">#@tag</span>
+                                    }
+                                </span>
+                            }
+                        </span>
+                        <span class="record-chevron">›</span>
+                    </button>
+                }
+            }
+        </div>
+
+    </section>
+
+    <RecordDetailModal Item="_selected"
+                       OnClose="CloseRecord"
+                       OnEdit="EditRecord"
+                       OnDelete="DeleteRecord" />
+}
+
+@code {
+    private string _search = string.Empty;
+    private string? _folderId;
+    private string _newFolderName = string.Empty;
+    private bool _includeSubfolders;
+    private HashSet<string> IncludedFolderIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (_folderId is not null) ids.Add(_folderId);
+        if (!_includeSubfolders) return ids;
+        var queue = new Queue<string?>();
+        queue.Enqueue(_folderId);
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            foreach (var folder in Folders.Where(x => x.Record.FolderId == parent))
+                if (ids.Add(folder.Record.Id)) queue.Enqueue(folder.Record.Id);
+        }
+        return ids;
+    }
+    private IReadOnlyList<VaultRecordLocation> Breadcrumbs
+    {
+        get
+        {
+            var path = new List<VaultRecordLocation>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var current = _folderId;
+            while (current is not null && visited.Add(current))
+            {
+                var folder = Folders.FirstOrDefault(x => x.Record.Id == current);
+                if (folder is null) break;
+                path.Insert(0, folder);
+                current = folder.Record.FolderId;
+            }
+            return path;
+        }
+    }
+    private IReadOnlyList<VaultRecordLocation> Folders =>
+        Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
+    private IReadOnlyList<VaultRecordLocation> ChildFolders =>
+        Folders.Where(x => x.Record.FolderId == _folderId).ToArray();
+    private string CurrentFolderName =>
+        _folderId is null ? "Root / Unfiled" :
+        Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.Title ?? "Unknown folder";
+    private string AddRecordUrl => _folderId is null ? "/add" : $"/add?folder={_folderId}";
+    private void GoUp()
+    {
+        _folderId = Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.FolderId;
+    }
+    private async Task CreateFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newFolderName) || Session.IsBusy) return;
+        _error = null;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var folder = new VaultRecord
+            {
+                Id = Guid.NewGuid().ToString("N")[..16],
+                Title = _newFolderName.Trim(),
+                Secret = "folder-metadata",
+                Kind = "folder",
+                FolderId = _folderId,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            await Session.AddAsync(folder);
+            _newFolderName = string.Empty;
+            _folderId = folder.Id;
+        }
+        catch (Exception ex) { _error = VaultErrorMessages.Friendly(ex); }
+    }
+    private bool _confirmInitialization;
+    private string? _error;
+    private string? _notice;
+    private VaultRecordLocation? _selected;
+    private RootTreasurySnapshot? _treasury;
+    private string? _treasuryError;
+    private bool _treasuryLoading;
+
+    private int RecordCount => Session.Snapshot?.Records.Count ?? 0;
+    private int NodeCount => Session.Snapshot?.Nodes.Count ?? 0;
+    private int WarningCount => Session.Snapshot?.Warnings.Count ?? 0;
+
+    private IReadOnlyList<VaultRecordLocation> FilteredRecords
+    {
+        get
+        {
+            var includedIds = IncludedFolderIds();
+            var records = Session.Snapshot?.Records.Where(x => !x.Record.IsFolder &&
+                (x.Record.FolderId == _folderId ||
+                 (_includeSubfolders && x.Record.FolderId is not null && includedIds.Contains(x.Record.FolderId)))).ToArray() ?? [];
+            if (string.IsNullOrWhiteSpace(_search))
+                return records;
+
+            var query = _search.Trim();
+            return records.Where(item =>
+                    item.Record.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.UserName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Notes.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    item.Record.Tags.Any(tag => tag.Contains(query, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Session.Changed += HandleChanged;
+        if (!Session.IsUnlocked)
+            Navigation.NavigateTo("/");
+    }
+
+    private async Task InitializeRegistryAsync()
+    {
+        if (!_confirmInitialization || Session.IsBusy)
+            return;
+        _error = null;
+        try
+        {
+            await Session.InitializeHdRegistryAsync();
+            _confirmInitialization = false;
+        }
+        catch (Exception ex)
+        {
+            _error = VaultErrorMessages.Friendly(ex);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _error = null;
+        _notice = null;
+        try
+        {
+            await Session.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = VaultErrorMessages.Friendly(ex);
+        }
+    }
+
+    private async Task RefreshTreasuryAsync()
+    {
+        _treasuryLoading = true;
+        _treasuryError = null;
+        try
+        {
+            _treasury = await Session.InspectRootTreasuryAsync();
+        }
+        catch (Exception ex)
+        {
+            _treasury = null;
+            _treasuryError = VaultErrorMessages.Friendly(ex);
+        }
+        finally
+        {
+            _treasuryLoading = false;
+        }
+    }
+
+    private static string FormatStroops(string value)
+    {
+        var stroops = long.Parse(value, CultureInfo.InvariantCulture);
+        return (stroops / 10_000_000m).ToString("0.0000000", CultureInfo.InvariantCulture);
+    }
+
+    private void OpenRecord(VaultRecordLocation item)
+    {
+        _notice = null;
+        _selected = item;
+    }
+
+    private Task EditRecord(VaultRecordLocation item)
+    {
+        _selected = null;
+        Navigation.NavigateTo($"/edit/{item.Record.Id}");
+        return Task.CompletedTask;
+    }
+
+    private async Task DeleteRecord(VaultRecordLocation item)
+    {
+        _error = null;
+        _notice = null;
+
+        var result = await Session.DeleteAsync(item);
+        _selected = null;
+        _notice = string.IsNullOrWhiteSpace(result.Warning)
+            ? $"RECORD {item.Record.Id} DELETED. TX: {result.TransactionHash}"
+            : $"RECORD DELETED. {result.Warning}";
+        await InvokeAsync(StateHasChanged);
+        await Storage.StabilizeViewportAsync();
+    }
+
+    private Task CloseRecord()
+    {
+        _selected = null;
+        return Task.CompletedTask;
+    }
+
+    private string IndexOf(VaultRecordLocation item)
+    {
+        var index = FilteredRecords.ToList().IndexOf(item) + 1;
+        return index.ToString("D2", CultureInfo.InvariantCulture);
+    }
+
+    private static string SecondaryLine(VaultRecord record)
+    {
+        if (!string.IsNullOrWhiteSpace(record.UserName))
+            return record.UserName;
+        if (!string.IsNullOrWhiteSpace(record.Url))
+            return record.Url;
+        return $"ID::{record.Id}";
+    }
+
+    private void HandleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= HandleChanged;
+    }
+}
