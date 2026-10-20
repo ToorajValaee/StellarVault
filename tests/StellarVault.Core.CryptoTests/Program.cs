@@ -11,6 +11,15 @@ var key = VaultCryptoPrimitives.NewRandomBytes(32);
 var nonce = VaultCryptoPrimitives.NewRandomBytes(12);
 var plaintext = Encoding.UTF8.GetBytes("StellarVault test secret");
 var aad = Encoding.UTF8.GetBytes("svault:v2:metadata");
+var sealedEnvelope = VaultCryptoPrimitives.Seal(key, plaintext, aad);
+Check(sealedEnvelope.Length == plaintext.Length + 28, "Invalid sealed envelope size");
+Check(VaultCryptoPrimitives.Open(key, sealedEnvelope, aad).AsSpan().SequenceEqual(plaintext), "Envelope round-trip failed");
+var sealedEnvelope2 = VaultCryptoPrimitives.Seal(key, plaintext, aad);
+Check(!sealedEnvelope.AsSpan().SequenceEqual(sealedEnvelope2), "Nonce was reused");
+var modifiedEnvelope = (byte[])sealedEnvelope.Clone();
+modifiedEnvelope[0] ^= 1;
+try { VaultCryptoPrimitives.Open(key, modifiedEnvelope, aad); throw new Exception("Modified envelope nonce accepted"); }
+catch (CryptographicException) { }
 var encrypted = VaultCryptoPrimitives.Encrypt(key, plaintext, aad, nonce);
 Check(encrypted.Length == plaintext.Length + 16, "Unexpected ciphertext size");
 Check(!encrypted.AsSpan(0, plaintext.Length).SequenceEqual(plaintext), "Plaintext leaked");
