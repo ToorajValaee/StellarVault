@@ -2064,3 +2064,62 @@ html.ios-device.standalone-app .terminal-footer {
     padding-right: max(0.65rem, env(safe-area-inset-right, 0px));
     padding-left: max(0.65rem, env(safe-area-inset-left, 0px));
 }
+
+/* Cross-platform responsive refinement — phone, tablet, desktop.
+   Additive overrides: preserve existing iOS standalone safe-area rules. */
+:root { --sv-touch-target: 44px; }
+.app-main, .terminal-panel, .form-page, .credential-form, .access-grid,
+.vault-grid, .record-grid, .advanced-grid, .cost-grid {
+    min-width: 0;
+}
+.app-main { width: 100%; }
+.app-main img, .app-main svg, .app-main video { max-width: 100%; height: auto; }
+.app-main :is(h1,h2,h3,p,span,strong,a,code) { overflow-wrap: anywhere; }
+.app-main :is(input,select,textarea) { max-width: 100%; }
+.app-main :is(button,.pixel-button,.icon-button) {
+    min-height: var(--sv-touch-target);
+}
+.app-main :is(button,.pixel-button,.icon-button,a):focus-visible,
+.mobile-command-bar a:focus-visible {
+    outline: 3px solid var(--phosphor-strong);
+    outline-offset: 3px;
+}
+@media (pointer: coarse) {
+    .mobile-command-bar a, .top-actions button, .approval-modal-actions button {
+        min-height: 48px;
+    }
+}
+@media (min-width: 431px) and (max-width: 57.999rem) {
+    /* Tablet portrait and small landscape devices should retain readable,
+       centered content rather than stretching desktop-sized forms. */
+    .app-main { width: min(100%, 54rem); margin-inline: auto; }
+    .approval-modal { width: min(100%, 38rem); }
+    .cost-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 57.999rem) {
+    /* Reserve enough space for the persistent mobile navigation bar. */
+    .crt-shell { padding-bottom: calc(5rem + env(safe-area-inset-bottom,0px)); }
+    .app-main { padding-bottom: 1.5rem; }
+    .mobile-command-bar {
+        bottom: env(safe-area-inset-bottom,0px);
+        padding-bottom: 0;
+    }
+    .mobile-command-bar a { min-width: 0; }
+    .terminal-footer { padding-bottom: 1rem; }
+}
+@media (max-width: 430px) {
+    .top-console-bar { gap: .5rem; }
+    .brand-lockup { min-width: 0; }
+    .brand-lockup strong, .brand-lockup small { overflow-wrap: normal; }
+    .cost-grid { grid-template-columns: 1fr; }
+    .approval-modal-actions { gap: .5rem; }
+    .approval-modal-scroll { -webkit-overflow-scrolling: touch; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .crt-shell *, .crt-shell *::before, .crt-shell *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
