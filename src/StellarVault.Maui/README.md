@@ -29,3 +29,14 @@ See [Step 05](../../docs/steps/05-maui-host.md).
 ## Native vault session lifecycle
 
 The MAUI host registers `VaultSessionManager` as a singleton and locks its active session on the window `Stopped` and `Destroying` events. This is defense in depth for future unlock integration; the native preview still disables secrets and transactions. Platform-specific lifecycle handling, timeout locking, secure passphrase derivation, and end-to-end validation remain required before enabling the vault. The session manager is not the existing browser `IVaultOperations` service; no claim of complete UI migration is made.
+
+## Stellar ownership authorization integration (pending)
+
+The shared core provides `StellarChallengeAccountAuthorizer` and two required external contracts:
+
+- `IStellarChallengeSigner`: have an external wallet sign the exact domain-separated challenge bytes without exporting secrets.
+- `IStellarOwnershipProofVerifier`: independently fetch fresh signer/threshold data for the selected Stellar account and verify the exact Ed25519 signature and applicable signer policy. Do not trust signer lists from the client.
+
+Challenges include a random 32-byte nonce, the account G-address, selected network passphrase and a two-minute expiry. The challenge coordinator is not currently registered by MAUI: `DenyVaultAccountAuthorizer` remains the default. Consequently the create/unlock form intentionally refuses authorization. Before enabling it, implement and validate both contracts, signer-weight/threshold policy, correct network identity, wallet compatibility, and replay handling on the trusted verification boundary. A single signed challenge is a proof of signer control, not proof of ownership of an arbitrary account or authorization for a Stellar transaction.
+
+The development UI must not be treated as production-ready or enabled by substituting an always-true verifier.
