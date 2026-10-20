@@ -255,6 +255,29 @@ catch (CryptographicException) { }
 Check(wrongContextStage.Length == 0, "Wrong context leaked staged plaintext");
 CryptographicOperations.ZeroMemory(fullPlain);
 Console.WriteLine("PASS: end-to-end encrypted chunked record service and CAS conflicts");
+var fsRoot = Path.Combine(Path.GetTempPath(), "svault-ciphertext-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var diskStore = new FileSystemVaultChunkStore(fsRoot);
+    byte[] diskCiphertext = VaultV2Envelope.Seal(key, "persistent"u8, "fs-test"u8);
+    using var diskInput = new MemoryStream(diskCiphertext);
+    string diskId = await diskStore.PutAsync(diskInput);
+    var reopenedStore = new FileSystemVaultChunkStore(fsRoot);
+    await using (var diskRead = await reopenedStore.OpenReadAsync(diskId))
+    {
+        using var bytes = new MemoryStream();
+        await diskRead.CopyToAsync(bytes);
+        Check(bytes.ToArray().AsSpan().SequenceEqual(diskCiphertext), "Filesystem ciphertext persistence failed");
+    }
+    using var diskDuplicate = new MemoryStream(diskCiphertext);
+    Check(await reopenedStore.PutAsync(diskDuplicate) == diskId, "Filesystem deduplication failed");
+    await File.WriteAllBytesAsync(Path.Combine(fsRoot, diskId), new byte[] { 1, 2, 3 });
+    try { await reopenedStore.OpenReadAsync(diskId); throw new Exception("Corrupted filesystem object accepted"); }
+    catch (CryptographicException) { }
+    CryptographicOperations.ZeroMemory(diskCiphertext);
+    Console.WriteLine("PASS: filesystem ciphertext persistence, deduplication and tamper rejection");
+}
+finally { if (Directory.Exists(fsRoot)) Directory.Delete(fsRoot, recursive: true); }
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
