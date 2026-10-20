@@ -29,11 +29,7 @@ public sealed class StellarAccountVaultDatabase
         ArgumentNullException.ThrowIfNull(objects);
         ArgumentNullException.ThrowIfNull(pointers);
         ArgumentException.ThrowIfNullOrWhiteSpace(stellarAccountId);
-        // Account IDs are canonical public Stellar G-addresses (56 uppercase base32 chars).
-        // Full StrKey checksum validation belongs to the Stellar account boundary.
-        if (stellarAccountId.Length != 56 || stellarAccountId[0] != 'G' ||
-            stellarAccountId.Any(c => !((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7'))))
-            throw new ArgumentException("Expected a canonical Stellar G-account address.", nameof(stellarAccountId));
+        StellarAccountAddress.Validate(stellarAccountId);
         _accountId = stellarAccountId;
         _pointers = pointers;
         _records = new VaultEncryptedRecordService(objects, pointers);
