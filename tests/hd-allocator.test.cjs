@@ -63,6 +63,8 @@ test('sponsors child and persists registry in one signed transaction', async () 
   const result = await h.allocate();
   assert.deepEqual(h.operations.map(o => o.kind), ['begin', 'create', 'end', 'registry']);
   assert.equal(h.operations[1].startingBalance, '0');
+  assert.equal(h.operations[3].value.length, 50);
+  assert.equal(h.operations[3].source, 'root');
   assert.deepEqual(h.signed, ['root', 'child-2']);
   assert.equal(h.submissions(), 1);
   assert.equal(result.creationHash, result.registryHash);
