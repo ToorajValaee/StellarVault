@@ -72,12 +72,16 @@ public static class VaultChunkedRecord
         finally { CryptographicOperations.ZeroMemory(buffer); }
     }
 
-    /// <summary>Validates all chunks and the final manifest before returning plaintext.
-    /// Uses a temporary buffer; callers should persist/commit only after successful return.</summary>
-    public static async Task<byte[]> DecryptAsync(Stream input, ReadOnlyMemory<byte> key,
+    /// <summary>Writes to caller-owned PRIVATE staging storage; do not publish it before success.
+    /// On failure staging is truncated back to its original position.</summary>
+    public static async Task DecryptAsync(Stream input, Stream staging, ReadOnlyMemory<byte> key,
         Guid expectedRecordId, long expectedGeneration, CancellationToken cancellationToken = default)
     {
         if (key.Length != 32) throw new ArgumentException("Expected AES-256 key.", nameof(key));
+        if (!staging.CanWrite || !staging.CanSeek) throw new ArgumentException("Seekable staging stream required.", nameof(staging));
+        long initialPosition = staging.Position;
+        try
+        {
         byte[] header = new byte[HeaderSize];
         await input.ReadExactlyAsync(header, cancellationToken);
         if (!header.AsSpan(0, 4).SequenceEqual(Magic) || header[4] != 1 ||
@@ -88,7 +92,6 @@ public static class VaultChunkedRecord
         long total = BinaryPrimitives.ReadInt64BigEndian(header.AsSpan(33, 8));
         if (count < 0 || count > MaxChunks || total < 0 || total > (long)count * ChunkSize ||
             (count == 0 && total != 0)) throw new CryptographicException("Invalid record bounds.");
-        using var output = new MemoryStream();
         using var hashes = new MemoryStream(count * 32);
         for (int i = 0; i < count; i++)
         {
@@ -104,7 +107,7 @@ public static class VaultChunkedRecord
             try
             {
                 byte[] plain = VaultV2Envelope.Open(key.Span, encrypted, context);
-                try { await output.WriteAsync(plain, cancellationToken); }
+                try { await staging.WriteAsync(plain, cancellationToken); }
                 finally { CryptographicOperations.ZeroMemory(plain); }
             }
             finally { CryptographicOperations.ZeroMemory(context); }
@@ -117,11 +120,18 @@ public static class VaultChunkedRecord
         byte[] verified = VaultV2Envelope.Open(key.Span, manifest, header);
         try
         {
-            if (!CryptographicOperations.FixedTimeEquals(verified, hashes.ToArray()) || output.Length != total)
+            if (!CryptographicOperations.FixedTimeEquals(verified, hashes.ToArray()) || staging.Position - initialPosition != total)
                 throw new CryptographicException("Record manifest authentication failed.");
-            return output.ToArray();
+            return;
         }
         finally { CryptographicOperations.ZeroMemory(verified); }
+        }
+        catch
+        {
+            staging.SetLength(initialPosition);
+            staging.Position = initialPosition;
+            throw;
+        }
     }
 
     private static byte[] Context(ReadOnlySpan<byte> recordIdentity, int index)
