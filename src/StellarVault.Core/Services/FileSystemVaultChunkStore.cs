@@ -65,6 +65,9 @@ public sealed class FileSystemVaultChunkStore : IVaultChunkStore
         ValidateId(contentId);
         string path = Path.Combine(_directory, contentId);
         // Verify the complete ciphertext before handing a private in-memory snapshot to callers.
+        var fileInfo = new FileInfo(path);
+        if (fileInfo.Length < VaultV2Envelope.MinimumLength || fileInfo.Length > VaultV2Envelope.MaximumLength)
+            throw new CryptographicException("Stored ciphertext object exceeds allowed bounds.");
         byte[] ciphertext = await File.ReadAllBytesAsync(path, cancellationToken);
         if (ciphertext.Length < VaultV2Envelope.MinimumLength || ciphertext.Length > VaultV2Envelope.MaximumLength ||
             !string.Equals(Convert.ToHexString(SHA256.HashData(ciphertext)), contentId, StringComparison.OrdinalIgnoreCase))
