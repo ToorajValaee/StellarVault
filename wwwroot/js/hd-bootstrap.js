@@ -40,20 +40,41 @@ window.stellarVaultHdBootstrap = (() => {
       source: opened.rootAccountId, name: 'sv:registry:v2', value: opened.rootKeypair.rawPublicKey().constructor.from(value)
     })).setTimeout(60).build();
     tx.sign(opened.rootKeypair);
-    const result = await opened.server.submitTransaction(tx);
-    // Reopen from ledger; never trust local state until HMAC verification succeeds.
-    const verifiedRoot = await opened.server.loadAccount(opened.rootAccountId);
+    // A Horizon timeout can occur after the transaction reaches consensus.
+    // Never retry initialization blindly: first check the authenticated ledger
+    // state, and fail closed if it cannot be inspected.
+    let result;
+    let submissionError;
+    try {
+      result = await opened.server.submitTransaction(tx);
+    } catch (error) {
+      submissionError = error;
+    }
+    let verifiedRoot;
+    try {
+      verifiedRoot = await opened.server.loadAccount(opened.rootAccountId);
+    } catch (error) {
+      if (submissionError)
+        throw new Error('Registry submission outcome is unknown and ledger verification failed; reopen the vault before retrying', { cause: submissionError });
+      throw error;
+    }
     const encoded = verifiedRoot.data_attr?.['sv:registry:v2'];
-    if (!encoded)
+    if (!encoded) {
+      if (submissionError)
+        throw new Error('Registry submission did not produce a visible registry; refresh ledger state before retrying', { cause: submissionError });
       throw new Error('Registry transaction submitted but ledger entry is missing; refresh');
+    }
+    // Verify both authentication and exact intended payload; an unrelated
+    // registry write must not be mistaken for successful initialization.
     const verifiedRegistry = await window.stellarVaultRegistry.decode(key,
       Uint8Array.from(atob(encoded), c => c.charCodeAt(0)));
     if (verifiedRegistry.highestAllocatedIndex !== 0 ||
         verifiedRegistry.activeWriteIndex !== 0 || verifiedRegistry.revision !== 0)
-      throw new Error('Registry transaction submitted but verification failed; refresh');
+      throw new Error('Ledger registry differs from initialization payload; reopen and reconcile');
     opened.registry = verifiedRegistry;
-    return { rootAccountId: opened.rootAccountId, transactionHash: result.hash,
-      registry: verifiedRegistry };
+    return { rootAccountId: opened.rootAccountId,
+      transactionHash: result?.hash ?? null, registry: verifiedRegistry,
+      recoveredAfterSubmissionError: Boolean(submissionError) };
   }
   return Object.freeze({ initialize });
 })();
