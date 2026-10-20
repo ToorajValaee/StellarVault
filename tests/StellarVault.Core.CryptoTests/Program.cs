@@ -150,3 +150,20 @@ MustReject(() => VaultChunkIndex.Open(sealedIndex, key, "wrong-index"u8), "Wrong
 MustReject(() => VaultChunkIndex.Validate(new VaultRecordIndex(index.RecordId, 1, 13, new[] { descriptor with { Index = 1 } })), "Out-of-order descriptor accepted");
 MustReject(() => VaultChunkIndex.Validate(new VaultRecordIndex(index.RecordId, 1, 13, new[] { descriptor with { Sha256Hex = "BAD" } })), "Malformed digest accepted");
 Console.WriteLine("PASS: authenticated record index, descriptor bounds and ciphertext hash validation");
+
+// Empty records are valid and authenticate the empty manifest.
+using var emptyInput = new MemoryStream();
+using var emptyEncoded = new MemoryStream();
+await VaultChunkedRecord.EncryptAsync(emptyInput, emptyEncoded, key, recordId, 9);
+emptyEncoded.Position = 0;
+using var emptyStage = new MemoryStream();
+await VaultChunkedRecord.DecryptAsync(emptyEncoded, emptyStage, key, recordId, 9);
+Check(emptyStage.Length == 0, "Empty record did not round-trip");
+// Truncated encrypted records must never leave published plaintext in staging.
+var truncatedRecord = encodedRecord.ToArray()[..^5];
+using var truncatedInput = new MemoryStream(truncatedRecord);
+using var truncatedStage = new MemoryStream();
+try { await VaultChunkedRecord.DecryptAsync(truncatedInput, truncatedStage, key, recordId, 7); throw new Exception("Truncated record accepted"); }
+catch (EndOfStreamException) { }
+Check(truncatedStage.Length == 0, "Truncation did not roll back staging");
+Console.WriteLine("PASS: empty records and truncated record staging rollback");
