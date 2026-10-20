@@ -8,6 +8,10 @@
         <p>Encrypted documents, records, and application data belong to an account-scoped vault.
            Storage is off-chain; Stellar identity and authorization are separate from encryption.</p>
         <ManagedVaultSessionStatus />
+        @if (Sessions.IsUnlocked)
+        {
+            <VaultRecordWorkspaceView />
+        }
         <fieldset disabled aria-describedby="sv-authorization-note">
             <legend>Vault access</legend>
             <p><label for="sv-account">Stellar public account</label></p>
