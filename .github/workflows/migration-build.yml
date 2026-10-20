@@ -22,6 +22,8 @@ jobs:
         run: dotnet restore StellarVaultPwa.csproj
       - name: Build .NET 10 browser host and shared core
         run: dotnet build StellarVaultPwa.csproj --configuration Release --no-restore
+      - name: Run .NET 10 authenticated encryption tests
+        run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
       - name: Run Node regression tests
         run: node --test tests/*.test.cjs
 
