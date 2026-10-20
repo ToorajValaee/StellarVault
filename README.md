@@ -9,7 +9,7 @@ Encrypted Stellar-backed vault with a browser/PWA application today and a shared
 | Location | Purpose | Status |
 | --- | --- | --- |
 | `StellarVaultPwa.csproj`, `Pages/`, `Components/`, `Services/`, `wwwroot/` | Existing browser/PWA vault | Existing implementation |
-| `website/` | Public static marketing site, independently deployed | Import pending |
+| `website/` | Public static marketing site, independently deployed | Source imported; validation pending |
 | `src/StellarVault.Core/` | Reusable vault data contracts and portable logic | Initial library committed |
 | `src/StellarVault.UI/` | Shared Razor screens and components | Planned |
 | `src/StellarVault.Web/` | Thin browser host | Planned |
@@ -36,7 +36,7 @@ Do not change SEP-0005/legacy derivation, Stellar account allocation, registry e
 
 ## Landing website
 
-The landing site is intended for `svault.ir`; the vault application for `app.svault.ir`. The supplied landing package's full HTML, styles, scripts, images and Docker configuration must be imported into `website/` intact. Documentation currently exists, but the actual website files have **not** yet been committed to this branch.
+The landing site is intended for `svault.ir`; the vault application for `app.svault.ir`. The supplied landing website has been pushed to `website/`, including HTML, stylesheet, Dockerfile and source checksum manifest. Run `python3 scripts/verify-landing.py` and test the Docker/Nginx deployment before marking Step 01 verified.
 
 ## Previous PWA release notes
 
