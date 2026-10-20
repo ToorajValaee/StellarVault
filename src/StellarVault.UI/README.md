@@ -25,3 +25,7 @@ The PWA root now listens for `visibilitychange` (hidden), `pagehide`, and `freez
 ## Horizon network binding
 
 The ownership verifier now reads the configured Horizon root resource and requires its `network_passphrase` to match the signed challenge/network configuration before fetching the account signer list. Both requests reject redirected responses and enforce a 128 KiB response bound. This protects against accidental wrong-network configuration, but does **not** establish independent ledger authenticity: the application's trust in the chosen HTTPS Horizon provider and its signer freshness remains security-critical. MAUI and PWA still register the deny authorizer by default; real message signing and end-to-end proof verification are not yet enabled.
+
+## Fresh v2 Razor compilation scope
+
+The shared Razor project excludes the old `Pages/`, `Layout/`, and legacy modal components from Razor compilation. Its `_Imports.razor` now depends only on .NET/Blazor, shared Core, and fresh UI namespaces; the PWA's old HD routes are neither launched nor required by the new UI. Old files remain in the repository for later deletion, but **legacy record compatibility is not a goal**. Release builds for PWA and every target MAUI platform must confirm the source graph is clean before distributing packages.
