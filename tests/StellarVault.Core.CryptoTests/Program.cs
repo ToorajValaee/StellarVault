@@ -74,8 +74,6 @@ MustReject(() => VaultCryptoPrimitives.Decrypt(key, new byte[15], aad, nonce), "
 var randomA = VaultCryptoPrimitives.NewRandomBytes(32);
 var randomB = VaultCryptoPrimitives.NewRandomBytes(32);
 Check(!randomA.AsSpan().SequenceEqual(randomB), "Random generator returned identical samples");
-CryptographicOperations.ZeroMemory(key);
-CryptographicOperations.ZeroMemory(wrongKey);
 CryptographicOperations.ZeroMemory(plaintext);
 CryptographicOperations.ZeroMemory(decrypted);
 Console.WriteLine("PASS: AES-256-GCM round-trip, tampering, authentication, truncation and randomness checks");
@@ -123,6 +121,8 @@ try { await VaultChunkObjectStore.ReadAsync(encryptedIndex, objectStore, failedS
 catch (CryptographicException) { }
 Check(failedStage.Length == 0, "Failed object verification left staged data");
 CryptographicOperations.ZeroMemory(objectPlain);
+CryptographicOperations.ZeroMemory(key);
+CryptographicOperations.ZeroMemory(wrongKey);
 Console.WriteLine("PASS: content-addressed chunk objects and authenticated manifest");
 
 sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
