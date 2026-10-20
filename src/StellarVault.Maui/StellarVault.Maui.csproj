@@ -24,6 +24,7 @@
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#07110c" BaseSize="256,256" />
     <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
