@@ -68,7 +68,28 @@ public sealed class FileSystemVaultChunkStore : IVaultChunkStore
         var fileInfo = new FileInfo(path);
         if (fileInfo.Length < VaultV2Envelope.MinimumLength || fileInfo.Length > VaultV2Envelope.MaximumLength)
             throw new CryptographicException("Stored ciphertext object exceeds allowed bounds.");
-        byte[] ciphertext = await File.ReadAllBytesAsync(path, cancellationToken);
+        byte[] ciphertext;
+        await using (var source = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 64 * 1024, FileOptions.Asynchronous))
+        {
+            if (source.Length < VaultV2Envelope.MinimumLength || source.Length > VaultV2Envelope.MaximumLength)
+                throw new CryptographicException("Stored ciphertext object exceeds allowed bounds.");
+            using var bounded = new MemoryStream();
+            byte[] buffer = new byte[64 * 1024];
+            try
+            {
+                while (true)
+                {
+                    int read = await source.ReadAsync(buffer, cancellationToken);
+                    if (read == 0) break;
+                    if (bounded.Length + read > VaultV2Envelope.MaximumLength)
+                        throw new CryptographicException("Stored ciphertext object exceeds allowed bounds.");
+                    await bounded.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                }
+                ciphertext = bounded.ToArray();
+            }
+            finally { CryptographicOperations.ZeroMemory(buffer); }
+        }
         if (ciphertext.Length < VaultV2Envelope.MinimumLength || ciphertext.Length > VaultV2Envelope.MaximumLength ||
             !string.Equals(Convert.ToHexString(SHA256.HashData(ciphertext)), contentId, StringComparison.OrdinalIgnoreCase))
         {
