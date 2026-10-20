@@ -16,6 +16,10 @@ Decrypt writes to **private, seekable staging storage** and truncates it on fail
 
 `InMemoryVaultChunkStore` now provides immutable SHA-256-addressed encrypted objects, bounded writes, duplicate-object reuse, digest verification on reads, and deletion. This is an **ephemeral testing backend**, not durable or remotely accessible storage. Deduplication only applies to byte-identical ciphertext; independently encrypted plaintext uses random nonces and therefore normally produces different identifiers. A persistent backend must provide durable writes, atomic pointer updates, tenant isolation, integrity verification, garbage collection and crash recovery.
 
+## Publish-after-upload transaction prototype
+
+`VaultRecordCommitter` uploads an already encrypted/authenticated manifest into `IVaultChunkStore`, then atomically advances the pointer via `IVaultRecordIndex.CompareExchangeAsync`. Stale writers receive `VaultWriteConflictException`. Failed CAS may leave an orphaned encrypted manifest: garbage collection must use a reachability scan and a grace period, **never immediately delete an object that could be shared**. This coordinator **does not validate manifest cryptographic contents**, record identity, or account authorization: the trusted caller must authenticate and bind these before commit. A production implementation must combine verification and authorization within the trusted transaction boundary, and must have a durable atomic index.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
