@@ -3,8 +3,8 @@ using StellarVault.Core.Abstractions;
 
 namespace StellarVault.Core.Services;
 
-/// <summary>Single-process durable compare-and-swap pointer index. Requires a trusted
-/// private directory and one writer process; it is not a distributed lock or rollback anchor.</summary>
+/// <summary>Local-filesystem compare-and-swap index using an exclusive lock file for cooperating writers.
+/// Requires trusted storage and working OS file-sharing semantics; it is not a rollback anchor.</summary>
 public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
 {
     private readonly string _directory;
@@ -96,9 +96,19 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
     {
         string path = PathFor(recordId);
         if (!File.Exists(path)) return null;
-        var info = new FileInfo(path);
-        if (info.Length > 4096) throw new InvalidDataException("Record pointer exceeds size limit.");
-        byte[] bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        await using var source = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
+        if (source.Length > 4096) throw new InvalidDataException("Record pointer exceeds size limit.");
+        byte[] buffer = new byte[4097];
+        int total = 0;
+        while (true)
+        {
+            int read = await source.ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken);
+            if (read == 0) break;
+            total += read;
+            if (total > 4096) throw new InvalidDataException("Record pointer exceeds size limit.");
+        }
+        byte[] bytes = buffer.AsSpan(0, total).ToArray();
         var pointer = JsonSerializer.Deserialize<VaultRecordPointer>(bytes)
             ?? throw new InvalidDataException("Record pointer is invalid.");
         if (pointer.Generation < 0 || pointer.ManifestContentId is null ||
