@@ -23,7 +23,7 @@ public sealed class StellarLedgerOwnershipVerifier(
     public async Task<bool> VerifyAsync(StellarOwnershipChallenge challenge, string signerAccountId,
         ReadOnlyMemory<byte> signature, CancellationToken cancellationToken = default)
     {
-        if (challenge is null || challenge.Payload is null ||
+        if (!StellarOwnershipChallengeCodec.IsWellFormed(challenge) ||
             !StellarAccountAddress.IsValid(challenge.AccountId) ||
             !StellarAccountAddress.IsValid(signerAccountId) ||
             challenge.NetworkPassphrase != networkPassphrase ||
