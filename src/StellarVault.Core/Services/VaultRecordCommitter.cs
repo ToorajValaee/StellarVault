@@ -37,8 +37,7 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
         finally { CryptographicOperations.ZeroMemory(encrypted); }
     }
 
-    [Obsolete("Use CommitVerifiedAsync with an authenticated manifest key and context.")]
-    public async Task<VaultRecordPointer> CommitAsync(Guid recordId, VaultRecordPointer? expected,
+    private async Task<VaultRecordPointer> CommitAsync(Guid recordId, VaultRecordPointer? expected,
         ReadOnlyMemory<byte> authenticatedManifest, CancellationToken cancellationToken = default)
     {
         if (recordId == Guid.Empty) throw new ArgumentException("Record ID required.", nameof(recordId));
