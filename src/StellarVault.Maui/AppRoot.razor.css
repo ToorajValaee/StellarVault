@@ -3,3 +3,6 @@
 .native-preview p{margin:0;line-height:1.65}
 .eyebrow{font-size:.75rem;letter-spacing:.15em;color:#a3dcb0}
 .notice{border-left:3px solid #d7b96e;padding:.85rem 1rem;background:#252517;color:#f4e9c6}
+
+.session-lock{justify-self:start;padding:.75rem 1.1rem;border:1px solid #8ebf9b;border-radius:.35rem;background:#183424;color:#ecfff0;font:inherit;font-weight:600;cursor:pointer}
+.session-lock:focus-visible{outline:3px solid #d7b96e;outline-offset:3px}
