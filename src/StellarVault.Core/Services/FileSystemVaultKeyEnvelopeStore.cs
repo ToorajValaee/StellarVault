@@ -105,9 +105,7 @@ public sealed class FileSystemVaultKeyEnvelopeStore : IVaultKeyEnvelopeStore
     private string PathFor(string accountId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        if (accountId.Length != 56 || accountId[0] != 'G' ||
-            accountId.Any(c => !((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7'))))
-            throw new ArgumentException("Expected canonical Stellar G-account address.", nameof(accountId));
+        StellarAccountAddress.Validate(accountId);
         byte[] hash = SHA256.HashData(Encoding.ASCII.GetBytes(accountId));
         return Path.Combine(_directory, Convert.ToHexStringLower(hash) + ".key");
     }
