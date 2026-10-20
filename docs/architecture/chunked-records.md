@@ -36,6 +36,8 @@ Verified commits now preflight each referenced encrypted chunk by reading its by
 
 `FileSystemVaultRecordIndex` stores each record pointer in an atomically replaced JSON file and enforces sequential generations and compare-and-swap under a process-local semaphore. Combined with `FileSystemVaultChunkStore`, the unified encrypted-record service can reopen an existing record after a process restart. Compare-and-swap writes now hold an exclusive filesystem lock file across read/compare/replace, in addition to the process-local semaphore. This coordinates cooperating writers on local filesystems that honor exclusive file-sharing semantics. Network filesystems, hostile writers, filesystem rollback, and power-loss durability remain outside this guarantee. The pointer file is not independently authenticated or rollback-resistant; a trusted monotonic anchor and crash/power-loss durability testing are still required.
 
+Crash-interruption regression coverage now simulates an abandoned pointer temporary file and checks that the last committed pointer survives a reopen and can advance. It also rejects malformed committed pointer JSON. This is **not** a power-loss/fsync guarantee or a substitute for fault-injection tests on target filesystems. Filesystem ciphertext reads now check file size before loading bytes to avoid allocating arbitrarily large attacker-controlled files.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
