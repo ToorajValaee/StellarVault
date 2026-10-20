@@ -1,20 +1,29 @@
-# StellarVault public landing site
+# SVAULT public landing site
 
-**Status: source import pending.** The actual user-supplied landing package has not yet been committed. See [Step 01](../docs/steps/01-landing-website.md) for the checklist and acceptance criteria.
+**Status:** awaiting original asset import. See [Step 01](../docs/steps/01-landing-website.md).
 
-## Hosting
-- Public site: `svault.ir`
-- Vault app: `app.svault.ir`
-- Independent Docker/Nginx deployment; do not mix landing files into the vault WebAssembly host.
+This directory is the standalone static site for `https://svault.ir`, deployed separately from the vault at `https://app.svault.ir`.
 
-## Content policy during migration
-- Describe the browser/PWA vault as currently available, subject to production readiness.
-- Label Android, iOS and desktop MAUI applications as **planned/in development** until tested and released.
-- Do not claim that the migration changes wallet keys, encrypted records, or user recovery phrases.
-- Keep English/Persian pages, privacy, terms, sitemap, robots, `llms.txt` and `llms-full.txt` consistent.
-- Keep links to the app and legal pages functional.
+## Import source intact
 
-## Import
-Copy the full contents of the prepared landing package's `website/` folder into this directory, including binary images and screenshots. Preserve the original `Dockerfile`, `nginx.conf`, assets and legal pages. Do not replace missing files with placeholders.
+```bash
+python3 scripts/import-landing.py "/path/to/svault-website-docker (1).zip"
+```
 
-The full landing source remains in the user-provided archive until imported.
+Alternatively pass `svault-landing-repo-package.zip`. The script copies the original HTML/CSS/JS, images, screenshots, legal pages, SEO files and Docker/Nginx config, then creates `source-manifest.json` with SHA-256 hashes.
+
+## Content rules
+- The existing browser/PWA vault is the current product.
+- Native MAUI Android/iOS/Windows/macOS applications are **planned**, not released.
+- Do not promise zero fees or put readable secrets on Stellar.
+- Preserve the original multilingual routes and legal content.
+- Verify all site-to-app links and metadata before deployment.
+
+## Local test after import
+
+```bash
+docker build -t svault-website ./website
+docker run --rm -p 8080:80 svault-website
+```
+
+Then open `http://localhost:8080` and verify pages and images. No production deployment is implied by this step.
