@@ -78,6 +78,10 @@ public sealed class StellarVaultRecordCatalog(StellarAccountVaultDatabase databa
         if (version is null) return (null, new Document(1, new List<Entry>()));
         using var staging = new MemoryStream();
         await database.GetAsync(CatalogName, staging, key, ct);
+        // Prevent using a newer catalog body with an older CAS pointer.
+        var afterRead = await database.GetVersionAsync(CatalogName, key, ct);
+        if (afterRead != version)
+            throw new VaultWriteConflictException(database.GetRecordId(CatalogName, key.Span));
         if (staging.Length > MaxCatalogBytes) throw new InvalidDataException("Catalog exceeds size limit.");
         var document = JsonSerializer.Deserialize<Document>(staging.ToArray())
             ?? throw new InvalidDataException("Catalog is missing.");
