@@ -24,6 +24,10 @@ Verified reads now use a single record-pointer snapshot for both object retrieva
 
 Verified commits now preflight each referenced encrypted chunk by reading its bytes, checking its bounded envelope length and SHA-256 digest, and refusing publication when a reference is missing or corrupted. This does **not** decrypt each chunk or prove its AES-GCM key/context matches the manifest; a production writer must encrypt and bind chunks consistently. Non-transactional stores may change between preflight and later reads; durable immutable objects and authorization remain required.
 
+## Unified encrypted record service
+
+`VaultEncryptedRecordService` provides a development-stage end-to-end path: streaming plaintext into individually encrypted 256 KiB objects, storing those objects by ciphertext SHA-256, sealing an authenticated index, verifying all referenced objects, and atomically publishing the manifest pointer. Reads authenticate the manifest and every chunk before returning successfully; partial plaintext is rolled back from private staging on failure. The staging stream **must remain private until success**, and should not be an unencrypted disk file for secrets. The implementation currently rewrites all chunks for updates and has no persistent backend, account authorization, garbage collection, or trusted rollback anchor.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
