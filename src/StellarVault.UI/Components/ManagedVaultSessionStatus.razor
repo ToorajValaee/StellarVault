@@ -2,15 +2,15 @@
 @inject VaultSessionManager Sessions
 @implements IDisposable
 
-<section aria-label="New vault session status">
-    <SecurityStatus Heading="@(Sessions.IsUnlocked ? "NEW VAULT SESSION ACTIVE" : "NEW VAULT SESSION LOCKED")"
+<section aria-label="Vault session status">
+    <SecurityStatus Heading="@(Sessions.IsUnlocked ? "VAULT SESSION ACTIVE" : "VAULT LOCKED")"
                     Message="@(Sessions.IsUnlocked
-                        ? "A new-architecture vault session is active. This status does not unlock the legacy vault."
-                        : "The new credential-backed vault is locked. Account ownership proof and persistent browser storage are required before browser creation or unlock can be enabled.")" />
+                        ? "The active account session is unlocked. Record operations remain gated until verified account authorization and storage integration are complete."
+                        : "No account session is unlocked. Secure wallet authorization and persistent storage are required before vault creation and unlock can be enabled.")" />
     @if (Sessions.IsUnlocked)
     {
         <p>Account: @Sessions.ActiveAccountId</p>
-        <button type="button" @onclick="Lock">Lock new vault session</button>
+        <button type="button" @onclick="Lock">Lock vault</button>
     }
 </section>
 
