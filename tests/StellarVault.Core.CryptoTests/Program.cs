@@ -79,3 +79,28 @@ CryptographicOperations.ZeroMemory(wrongKey);
 CryptographicOperations.ZeroMemory(plaintext);
 CryptographicOperations.ZeroMemory(decrypted);
 Console.WriteLine("PASS: AES-256-GCM round-trip, tampering, authentication, truncation and randomness checks");
+
+// Chunked records span multiple authenticated 256 KiB encryption operations.
+var recordId = Guid.NewGuid();
+var bigPlain = VaultCryptoPrimitives.NewRandomBytes(VaultChunkedRecord.ChunkSize * 2 + 37);
+using var source = new MemoryStream(bigPlain);
+using var encodedRecord = new MemoryStream();
+await VaultChunkedRecord.EncryptAsync(source, encodedRecord, key, recordId, 7);
+encodedRecord.Position = 0;
+using var staged = new MemoryStream();
+await VaultChunkedRecord.DecryptAsync(encodedRecord, staged, key, recordId, 7);
+Check(staged.ToArray().AsSpan().SequenceEqual(bigPlain), "Chunked record round-trip failed");
+encodedRecord.Position = 0;
+using var wrongGenerationStage = new MemoryStream();
+try { await VaultChunkedRecord.DecryptAsync(encodedRecord, wrongGenerationStage, key, recordId, 8); throw new Exception("Wrong generation accepted"); }
+catch (CryptographicException) { }
+Check(wrongGenerationStage.Length == 0, "Failed decryption left staged data");
+var corruptedRecord = encodedRecord.ToArray();
+corruptedRecord[^1] ^= 1;
+using var corruptedInput = new MemoryStream(corruptedRecord);
+using var corruptedStage = new MemoryStream();
+try { await VaultChunkedRecord.DecryptAsync(corruptedInput, corruptedStage, key, recordId, 7); throw new Exception("Corrupt manifest accepted"); }
+catch (CryptographicException) { }
+Check(corruptedStage.Length == 0, "Manifest failure did not roll back staging");
+CryptographicOperations.ZeroMemory(bigPlain);
+Console.WriteLine("PASS: chunked authenticated records and rollback-on-failure staging");
