@@ -1,0 +1,62 @@
+using System.Text;
+using System.Security.Cryptography;
+using StellarVault.Core.Abstractions;
+
+namespace StellarVault.Core.Services;
+
+/// <summary>Shared PWA/MAUI application service for encrypted UTF-8 records.
+/// All operations are guarded by the active session and use the encrypted catalog.
+/// It never caches data keys or persists plaintext.</summary>
+public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
+{
+    public sealed record RecordSummary(string Name, string? ContentType, long UpdatedUnixSeconds);
+    public sealed record TextRecord(string Name, string Text, VaultRecordPointer Version);
+
+    public Task<IReadOnlyList<RecordSummary>> ListAsync(CancellationToken ct = default) =>
+        sessions.ExecuteAsync<IReadOnlyList<RecordSummary>>(async (db, key, token) =>
+        {
+            var entries = await db.Catalog.ListAsync(key, token);
+            return entries.Select(e => new RecordSummary(e.Name, e.ContentType, e.UpdatedUnixSeconds)).ToArray();
+        }, ct);
+
+    public Task<TextRecord?> ReadTextAsync(string name, CancellationToken ct = default) =>
+        sessions.ExecuteAsync<TextRecord?>(async (db, key, token) =>
+        {
+            var version = await db.GetVersionAsync(name, key, token);
+            if (version is null) return null;
+            using var staging = new MemoryStream();
+            await db.GetAsync(name, staging, key, token);
+            if (staging.Length > VaultV2Envelope.MaximumPlaintextLength)
+                throw new InvalidDataException("Record exceeds supported size.");
+            var current = await db.GetVersionAsync(name, key, token);
+            if (current != version)
+                throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
+            byte[] bytes = staging.ToArray();
+            try { return new TextRecord(name, new UTF8Encoding(false, true).GetString(bytes), version); }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }, ct);
+
+    public Task<VaultRecordPointer> SaveTextAsync(string name, string text,
+        VaultRecordPointer? expectedVersion, CancellationToken ct = default) =>
+        sessions.ExecuteAsync(async (db, key, token) =>
+        {
+            ArgumentNullException.ThrowIfNull(text);
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
+            try
+            {
+                if (bytes.Length > VaultV2Envelope.MaximumPlaintextLength)
+                    throw new InvalidDataException("Record exceeds supported size.");
+                using var plaintext = new MemoryStream(bytes, writable: false);
+                return await db.PutIndexedAsync(name, expectedVersion, plaintext, key, "text/plain; charset=utf-8", token);
+            }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }, ct);
+
+    public Task DeleteAsync(string name, CancellationToken ct = default) =>
+        sessions.ExecuteAsync(async (db, key, token) =>
+        {
+            // Logical deletion only; old ciphertext may remain in immutable object history.
+            await db.Catalog.TombstoneAsync(name, key, token);
+            return true;
+        }, ct);
+}
