@@ -1,17 +1,32 @@
 # Step 01 — Public landing website
 
-**Status:** in progress — `website/` documentation exists; original website files have **not** been committed.
+**Status:** in progress — original ZIP inspected and repeatable import script committed; landing assets are **not yet committed**.
 
-## Source
-User-provided `svault-website-docker (1).zip` / prepared `svault-landing-repo-package.zip`. The package contains static HTML, CSS, JS, images, multilingual redirects, privacy/terms, robots/sitemap/llms text, and Docker/Nginx.
+## Source and verified contents
+The supplied archive contains the standalone site: `index.html`, `privacy.html`, `terms.html`, Persian redirect pages, CSS, JavaScript, screenshots, icons, social preview, Dockerfile, nginx.conf, sitemap, robots.txt, `llms.txt` and `llms-full.txt`.
 
-## Required actions
-1. Extract package's `website/` content directly into repository `website/`.
-2. Preserve binary assets, fonts and screenshots byte-for-byte; do not use placeholders.
-3. Keep Docker build context at `website/`; do not include this site in the vault app's WebAssembly assets.
-4. Audit landing copy against implemented features; distinguish current web/PWA availability from **planned** native MAUI apps.
-5. Confirm `svault.ir` links to `app.svault.ir` for vault access and that legal/SEO links are correct.
-6. Add a website-specific build/deployment workflow after assets are committed.
+The original landing describes the currently available responsive PWA and links to `https://app.svault.ir`. Native Android/iOS/desktop MAUI builds are future work and must not be advertised as released.
+
+## Import procedure
+On a local clone of `feature/maui-shared-app`, with the ZIP downloaded:
+
+```bash
+python3 scripts/import-landing.py "/path/to/svault-website-docker (1).zip"
+# or use svault-landing-repo-package.zip
+git status --short
+git add website/
+git commit -m "feat(website): import original static landing and assets"
+git push origin feature/maui-shared-app
+```
+
+The importer copies all original files without re-encoding, rejects traversal/symlinks, validates required files and writes a SHA-256 source manifest. The importer intentionally does not push to GitHub.
+
+## Content review
+1. Confirm `svault.ir` canonical, OG metadata, sitemap and links are accurate.
+2. Confirm `app.svault.ir` links, privacy and terms pages.
+3. Describe MAUI native apps as **in development**, not already available.
+4. Confirm screenshots still represent the current product.
+5. Keep landing deployment separate from browser and MAUI hosts.
 
 ## Acceptance criteria
-All links, scripts and images resolve; static pages render on mobile/desktop; Docker/Nginx serve the landing and correct fallbacks; `llms.txt` and sitemap reflect current public URLs. Do not mark verified without testing.
+All original files committed intact; images and legal pages load; Docker/Nginx serve the static site; links and SEO metadata are correct; landing build verified. **Not yet verified.**
