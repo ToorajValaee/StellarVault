@@ -1,0 +1,22 @@
+@using StellarVault.Core.Services
+@inject VaultSessionManager Sessions
+@implements IDisposable
+
+<section aria-label="New vault session status">
+    <SecurityStatus Heading="@(Sessions.IsUnlocked ? "NEW VAULT SESSION ACTIVE" : "NEW VAULT SESSION LOCKED")"
+                    Message="@(Sessions.IsUnlocked
+                        ? "A new-architecture vault session is active. This status does not unlock the legacy vault."
+                        : "The new credential-backed vault is locked. Account ownership proof and persistent browser storage are required before browser creation or unlock can be enabled.")" />
+    @if (Sessions.IsUnlocked)
+    {
+        <p>Account: @Sessions.ActiveAccountId</p>
+        <button type="button" @onclick="Lock">Lock new vault session</button>
+    }
+</section>
+
+@code {
+    protected override void OnInitialized() => Sessions.StateChanged += Changed;
+    private void Changed() => _ = InvokeAsync(StateHasChanged);
+    private void Lock() => Sessions.Lock();
+    public void Dispose() => Sessions.StateChanged -= Changed;
+}
