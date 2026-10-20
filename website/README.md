@@ -1,11 +1,20 @@
-# StellarVault public website
+# StellarVault public landing site
 
-This directory is reserved for the standalone static landing site served at svault.ir. It must not be hosted from the vault application or bundled into MAUI.
+**Status: source import pending.** The actual user-supplied landing package has not yet been committed. See [Step 01](../docs/steps/01-landing-website.md) for the checklist and acceptance criteria.
 
-Import the contents of the supplied `svault-landing-repo-package.zip` **website/** directory here, preserving its Dockerfile, nginx.conf, legal pages, assets and SEO files.
+## Hosting
+- Public site: `svault.ir`
+- Vault app: `app.svault.ir`
+- Independent Docker/Nginx deployment; do not mix landing files into the vault WebAssembly host.
 
-The original ZIP contains binary screenshots and images, so those assets must be imported intact; placeholder HTML is not a substitute.
+## Content policy during migration
+- Describe the browser/PWA vault as currently available, subject to production readiness.
+- Label Android, iOS and desktop MAUI applications as **planned/in development** until tested and released.
+- Do not claim that the migration changes wallet keys, encrypted records, or user recovery phrases.
+- Keep English/Persian pages, privacy, terms, sitemap, robots, `llms.txt` and `llms-full.txt` consistent.
+- Keep links to the app and legal pages functional.
 
-The landing website and the vault app should use separate build/deployment pipelines. The app is intended for app.svault.ir.
+## Import
+Copy the full contents of the prepared landing package's `website/` folder into this directory, including binary images and screenshots. Preserve the original `Dockerfile`, `nginx.conf`, assets and legal pages. Do not replace missing files with placeholders.
 
-Do not overwrite this README when importing unless the imported documentation is intentionally preferred.
+The full landing source remains in the user-provided archive until imported.
