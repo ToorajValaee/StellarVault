@@ -319,6 +319,26 @@ try
     Console.WriteLine("PASS: filesystem CAS serialized across independent index instances");
 }
 finally { if (Directory.Exists(casRoot)) Directory.Delete(casRoot, recursive: true); }
+// Simulate a crash after a temporary pointer file was written but before atomic publication.
+var recoveryRoot = Path.Combine(Path.GetTempPath(), "svault-crash-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var recoveryIndex = new FileSystemVaultRecordIndex(recoveryRoot);
+    var recoveryId = Guid.NewGuid();
+    var recoveryPointer = new VaultRecordPointer(new string('c', 64), 0);
+    Check(await recoveryIndex.CompareExchangeAsync(recoveryId, null, recoveryPointer), "Initial crash-recovery pointer failed");
+    await File.WriteAllTextAsync(Path.Combine(recoveryRoot, ".pending-abandoned"), "{incomplete");
+    var recoveredIndex = new FileSystemVaultRecordIndex(recoveryRoot);
+    Check(await recoveredIndex.ReadAsync(recoveryId) == recoveryPointer, "Interrupted temporary file changed committed pointer");
+    var nextRecovery = new VaultRecordPointer(new string('d', 64), 1);
+    Check(await recoveredIndex.CompareExchangeAsync(recoveryId, recoveryPointer, nextRecovery), "Recovery after abandoned temporary file failed");
+    Check(await new FileSystemVaultRecordIndex(recoveryRoot).ReadAsync(recoveryId) == nextRecovery, "Recovered pointer not durable across reopen");
+    await File.WriteAllTextAsync(Path.Combine(recoveryRoot, recoveryId.ToString("N") + ".json"), "{incomplete");
+    try { await recoveredIndex.ReadAsync(recoveryId); throw new Exception("Corrupted committed pointer accepted"); }
+    catch (System.Text.Json.JsonException) { }
+    Console.WriteLine("PASS: abandoned temporary pointer recovery and corrupted committed pointer rejection");
+}
+finally { if (Directory.Exists(recoveryRoot)) Directory.Delete(recoveryRoot, recursive: true); }
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
