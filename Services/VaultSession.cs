@@ -4,7 +4,7 @@ using StellarVault.Core.Abstractions;
 
 namespace StellarVaultPwa.Services;
 
-public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable, IVaultSessionStatus
+public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable, IVaultOperations
 {
     private StellarVaultStore? _store;
 
