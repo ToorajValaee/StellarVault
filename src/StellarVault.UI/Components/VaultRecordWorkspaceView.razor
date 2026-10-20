@@ -1,0 +1,90 @@
+@using StellarVault.Core.Services
+@inject VaultRecordWorkspace Workspace
+
+<section class="sv-workspace" aria-label="Encrypted records">
+    <h2>Encrypted records</h2>
+    <button type="button" disabled="@_busy" @onclick="RefreshAsync">Refresh records</button>
+    @if (_items is not null)
+    {
+        <ul>
+            @foreach (var item in _items)
+            {
+                <li>
+                    <button type="button" disabled="@_busy" @onclick="() => OpenAsync(item.Name)">@item.Name</button>
+                </li>
+            }
+        </ul>
+    }
+    <label for="sv-record-name">Record name</label>
+    <input id="sv-record-name" maxlength="512" @bind="_name" disabled="@_busy" autocomplete="off" />
+    <label for="sv-record-content">Text content</label>
+    <textarea id="sv-record-content" rows="8" @bind="_text" disabled="@_busy"></textarea>
+    <div>
+        <button type="button" disabled="@_busy" @onclick="NewRecord">New</button>
+        <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" @onclick="SaveAsync">Save encrypted</button>
+        <button type="button" disabled="@(_busy || _version is null)" @onclick="DeleteAsync">Remove from catalog</button>
+    </div>
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <p role="status">@_message</p>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _items;
+    private string _name = string.Empty;
+    private string _text = string.Empty;
+    private StellarVault.Core.Abstractions.VaultRecordPointer? _version;
+    private bool _busy;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (_busy) return;
+        _busy = true;
+        _message = null;
+        try { await action(); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or InvalidDataException
+                                   or System.Security.Cryptography.CryptographicException or IOException)
+        {
+            _message = "Operation failed or record changed. Refresh and retry.";
+        }
+        finally { _busy = false; }
+    }
+
+    private Task RefreshAsync() => RunAsync(async () => _items = await Workspace.ListAsync());
+
+    private Task OpenAsync(string name) => RunAsync(async () =>
+    {
+        var record = await Workspace.ReadTextAsync(name);
+        if (record is null) { _message = "Record not found."; return; }
+        _name = record.Name;
+        _text = record.Text;
+        _version = record.Version;
+    });
+
+    private void NewRecord()
+    {
+        _name = string.Empty;
+        _text = string.Empty;
+        _version = null;
+        _message = null;
+    }
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        _version = await Workspace.SaveTextAsync(_name, _text, _version);
+        _items = await Workspace.ListAsync();
+        _message = "Encrypted record saved.";
+    });
+
+    private Task DeleteAsync() => RunAsync(async () =>
+    {
+        await Workspace.DeleteAsync(_name);
+        NewRecord();
+        _items = await Workspace.ListAsync();
+        _message = "Record hidden from catalog; ciphertext may remain in history.";
+    });
+}
