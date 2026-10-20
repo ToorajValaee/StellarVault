@@ -8,6 +8,10 @@ The experimental `VaultChunkedRecord` API streams input in **256 KiB chunks**. E
 
 Decrypt writes to **private, seekable staging storage** and truncates it on failure. The caller MUST NOT publish or interpret staged plaintext before the entire manifest verifies. Prefer an isolated temporary file with controlled permissions and deletion on failure. Plaintext staging on disk is not acceptable for real wallet secrets without encryption or OS-backed protection.
 
+## Atomic record pointer prototype
+
+`InMemoryVaultRecordIndex` implements the compare-and-swap record pointer contract for development and tests. An initial record uses generation 0; each successful update advances by one. Stale writers are rejected rather than silently overwriting another update. This implementation is **volatile**, so it must not be used as a persistent index, authorization source, or rollback protection mechanism.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
