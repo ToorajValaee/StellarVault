@@ -1,10 +1,11 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
 using StellarVaultPwa.Core;
+using StellarVault.Core.Abstractions;
 
 namespace StellarVaultPwa.Services;
 
-public sealed class BrowserStorage(IJSRuntime js)
+public sealed class BrowserStorage(IJSRuntime js) : IVaultPreferences, IVaultPlatformActions
 {
     private const string NetworkKey = "stellar-vault.network.v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -30,6 +31,8 @@ public sealed class BrowserStorage(IJSRuntime js)
             return null;
         }
     }
+
+    public ValueTask CopyTextAsync(string value) => CopyAsync(value);
 
     public ValueTask CopyAsync(string value) =>
         js.InvokeVoidAsync("stellarVault.copyText", value);
