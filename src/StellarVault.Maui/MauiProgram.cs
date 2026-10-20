@@ -12,6 +12,12 @@ public static class MauiProgram
         builder.Services.AddMauiBlazorWebView();
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
+        // Persist only public KDF parameters and AES-GCM-wrapped data keys.
+        // The native UI remains gated until account ownership verification is available.
+        builder.Services.AddSingleton<IVaultPassphraseCredentialStore>(_ =>
+            new FileSystemVaultPassphraseCredentialStore(
+                Path.Combine(FileSystem.AppDataDirectory, "vault-credentials")));
+        builder.Services.AddSingleton<VaultPassphraseLifecycle>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
