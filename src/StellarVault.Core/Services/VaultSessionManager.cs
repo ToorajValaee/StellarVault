@@ -34,8 +34,8 @@ public sealed class VaultSessionManager : IDisposable
             previous = _active;
             _active = session;
         }
-        previous?.Dispose();
-        StateChanged?.Invoke();
+        try { previous?.Dispose(); }
+        finally { StateChanged?.Invoke(); }
     }
 
     /// <summary>Run an operation only while a vault is unlocked.
@@ -63,8 +63,8 @@ public sealed class VaultSessionManager : IDisposable
             previous = _active;
             _active = null;
         }
-        previous?.Dispose();
-        if (previous is not null) StateChanged?.Invoke();
+        try { previous?.Dispose(); }
+        finally { if (previous is not null) StateChanged?.Invoke(); }
     }
 
     public void Dispose()
