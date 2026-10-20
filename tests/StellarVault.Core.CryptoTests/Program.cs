@@ -169,6 +169,24 @@ Check(await pointerIndex.CompareExchangeAsync(pointerRecordId, pointer0, pointer
 Check(!await pointerIndex.CompareExchangeAsync(pointerRecordId, pointer0, new VaultRecordPointer("stale", 1)), "Stale writer committed");
 Check(await pointerIndex.ReadAsync(pointerRecordId) == pointer1, "Lost update in pointer store");
 Console.WriteLine("PASS: atomic record pointers reject conflicting writers");
+// Immutable content-addressed object store returns stable identifiers and isolated readers.
+var contentStore = new InMemoryVaultChunkStore();
+var objectCiphertext = VaultV2Envelope.Seal(key, "independent chunk"u8, "test:object"u8);
+using var objectCiphertextInput = new MemoryStream(objectCiphertext);
+var contentId = await contentStore.PutAsync(objectCiphertextInput);
+Check(contentId == Convert.ToHexString(SHA256.HashData(objectCiphertext)).ToLowerInvariant(), "Unexpected content identifier");
+using var duplicateCiphertextInput = new MemoryStream(objectCiphertext);
+Check(await contentStore.PutAsync(duplicateCiphertextInput) == contentId, "Duplicate ciphertext changed identifier");
+await using (var contentReader = await contentStore.OpenReadAsync(contentId))
+{
+    using var retrieved = new MemoryStream();
+    await contentReader.CopyToAsync(retrieved);
+    Check(retrieved.ToArray().AsSpan().SequenceEqual(objectCiphertext), "Stored ciphertext mismatch");
+}
+await contentStore.DeleteAsync(contentId);
+try { await contentStore.OpenReadAsync(contentId); throw new Exception("Deleted ciphertext remained available"); }
+catch (FileNotFoundException) { }
+Console.WriteLine("PASS: content-addressed encrypted object storage");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
