@@ -27,6 +27,16 @@ else
         <EditForm Model="_form" OnValidSubmit="ReviewAsync" class="terminal-panel credential-form">
             <DataAnnotationsValidator />
 
+            <label class="terminal-label">
+                <span>FOLDER</span>
+                <InputSelect class="terminal-input" @bind-Value="_form.FolderId">
+                    <option value="">Unfiled</option>
+                    @foreach (var folder in FolderOptions)
+                    {
+                        <option value="@folder.Record.Id">@folder.Record.Title</option>
+                    }
+                </InputSelect>
+            </label>
             <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
 
             <label class="terminal-label">
@@ -110,6 +120,9 @@ else
 
 @code {
     private readonly AddCredentialForm _form = new();
+    [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
+    private IReadOnlyList<VaultRecordLocation> FolderOptions =>
+        Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
     private bool _showSecret;
     private bool _busy;
     private bool _showApproval;
@@ -122,6 +135,8 @@ else
 
     protected override void OnInitialized()
     {
+        if (InitialFolder is not null && FolderOptions.Any(x => x.Record.Id == InitialFolder))
+            _form.FolderId = InitialFolder;
         if (!Session.IsUnlocked)
             Navigation.NavigateTo("/");
     }
@@ -218,12 +233,13 @@ else
             Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            FolderId = string.IsNullOrEmpty(_form.FolderId) ? null : _form.FolderId,
             CreatedUtc = created,
             UpdatedUtc = updated
         };
 
     private string CurrentFingerprint() =>
-        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags);
+        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags, _form.FolderId);
 
     private static string Short(string? value)
     {
@@ -245,6 +261,7 @@ else
         public string Url { get; set; } = string.Empty;
         public string Notes { get; set; } = string.Empty;
         public string Tags { get; set; } = string.Empty;
+        public string? FolderId { get; set; }
 
         public void Reset()
         {
@@ -254,6 +271,7 @@ else
             Url = string.Empty;
             Notes = string.Empty;
             Tags = string.Empty;
+            FolderId = null;
         }
     }
 }

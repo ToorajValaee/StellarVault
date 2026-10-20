@@ -10,13 +10,14 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
     public event Action? Changed;
 
     public bool IsUnlocked => _store is not null;
+    public bool NeedsRegistryInitialization => _store is { RegistryInitialized: false };
     public bool IsBusy { get; private set; }
     public string? StatusMessage { get; private set; }
     public VaultReadResult? Snapshot { get; private set; }
     public VaultNetworkSettings? Network => _store?.Settings;
     public string? RootAccountId => _store?.RootAccountId;
 
-    public async Task UnlockAsync(VaultNetworkSettings settings, string secret)
+    public async Task UnlockAsync(VaultNetworkSettings settings, string secret, string bip39Passphrase = "")
     {
         if (string.IsNullOrWhiteSpace(secret))
             throw new ArgumentException("Database secret is required.", nameof(secret));
@@ -28,13 +29,15 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
         try
         {
             candidate = new StellarVaultStore(settings, js);
-            await candidate.OpenAsync(secret.Trim());
-            var snapshot = await candidate.ReadAsync();
+            await candidate.OpenAsync(secret.Trim(), bip39Passphrase);
+            var snapshot = candidate.RegistryInitialized
+                ? await candidate.ReadAsync()
+                : null;
 
             _store = candidate;
             candidate = null;
             Snapshot = snapshot;
-            StatusMessage = "DATABASE ONLINE";
+            StatusMessage = snapshot is null ? "REGISTRY INITIALIZATION REQUIRED" : "DATABASE ONLINE";
         }
         catch
         {
@@ -42,6 +45,23 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
                 await candidate.DisposeAsync();
             StatusMessage = "ACCESS DENIED";
             throw;
+        }
+        finally
+        {
+            IsBusy = false;
+            Changed?.Invoke();
+        }
+    }
+
+    public async Task InitializeHdRegistryAsync()
+    {
+        var store = RequireStore();
+        SetBusy(true, "INITIALIZING HD REGISTRY...");
+        try
+        {
+            await store.InitializeHdRegistryAsync();
+            Snapshot = await store.ReadAsync();
+            StatusMessage = "HD REGISTRY INITIALIZED";
         }
         finally
         {
@@ -65,6 +85,13 @@ public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
             Changed?.Invoke();
         }
     }
+
+    public Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
+        int additionalSponsoredUnits = 0,
+        long expectedFeeStroops = 0,
+        long safetyBufferStroops = 0) =>
+        RequireStore().InspectRootTreasuryAsync(
+            additionalSponsoredUnits, expectedFeeStroops, safetyBufferStroops);
 
     public Task<VaultCostEstimate> EstimateAddAsync(VaultRecord record) =>
         RequireStore().EstimateAddAsync(record);

@@ -36,6 +36,9 @@ public sealed class VaultRecord
     public string Url { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
     public string[] Tags { get; init; } = [];
+    public string? FolderId { get; init; }
+    public string Kind { get; init; } = "record";
+    public bool IsFolder => Kind == "folder";
     public required DateTimeOffset CreatedUtc { get; init; }
     public required DateTimeOffset UpdatedUtc { get; init; }
 }
@@ -81,3 +84,16 @@ internal sealed record RecordManifest(
     byte[] CiphertextHash,
     long UpdatedUnixSeconds,
     string? Generation);
+
+public sealed class RootTreasurySnapshot
+{
+    public string BalanceStroops { get; set; } = "0";
+    public string MinimumBalanceStroops { get; set; } = "0";
+    public string SpendableStroops { get; set; } = "0";
+    public string AvailableAfterPlanStroops { get; set; } = "0";
+    public bool CanAffordPlan { get; set; }
+    public string SponsoredReserveUnits { get; set; } = "0";
+    public string SponsoredReserveXlm { get; set; } = "0";
+    public string BalanceXlm { get; set; } = "0";
+    public string SpendableXlm { get; set; } = "0";
+}

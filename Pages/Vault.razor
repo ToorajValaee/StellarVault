@@ -14,6 +14,28 @@
         <a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a>
     </section>
 }
+else if (Session.NeedsRegistryInitialization)
+{
+    <section class="terminal-panel centered-message">
+        <div class="panel-kicker">FIRST-TIME HD SETUP</div>
+        <h1>INITIALIZE ROOT REGISTRY</h1>
+        <p>This vault needs a one-time setup on the Stellar network. Your account must have enough available XLM to cover a small network fee and storage reserve.</p>
+        <p>Root account: @Session.RootAccountId</p>
+        <label class="terminal-label">
+            <input type="checkbox" @bind="_confirmInitialization" />
+            I understand this writes to the selected Stellar network.
+        </label>
+        <button class="pixel-button primary" type="button"
+                disabled="@(!_confirmInitialization || Session.IsBusy)"
+                @onclick="InitializeRegistryAsync">
+            @(Session.IsBusy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")
+        </button>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="terminal-alert error">@_error</div>
+        }
+    </section>
+}
 else
 {
     <section class="vault-page">
@@ -31,6 +53,28 @@ else
             <div><span>NODES</span><strong>@NodeCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
             <div><span>WARNINGS</span><strong>@WarningCount.ToString("D2", CultureInfo.InvariantCulture)</strong></div>
         </div>
+
+        <details class="terminal-panel" style="margin-bottom:1rem;padding:1rem">
+            <summary>INDEX 0 // ROOT TREASURY</summary>
+            <p>Live Horizon balance, including sponsored reserve obligations. Refresh before planning writes.</p>
+            <button class="pixel-button compact" type="button"
+                    disabled="@_treasuryLoading" @onclick="RefreshTreasuryAsync">
+                @(_treasuryLoading ? "CHECKING..." : "CHECK LIVE BALANCE")
+            </button>
+            @if (_treasury is not null)
+            {
+                <div class="stats-strip">
+                    <div><span>TOTAL XLM</span><strong>@_treasury.BalanceXlm</strong></div>
+                    <div><span>SPENDABLE XLM</span><strong>@_treasury.SpendableXlm</strong></div>
+                    <div><span>SPONSORED RESERVE XLM</span><strong>@_treasury.SponsoredReserveXlm</strong></div>
+                </div>
+                <p>Minimum balance: @FormatStroops(_treasury.MinimumBalanceStroops) XLM. Sponsored reserve units: @_treasury.SponsoredReserveUnits.</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_treasuryError))
+            {
+                <div class="terminal-alert warning">@_treasuryError</div>
+            }
+        </details>
 
         <label class="search-console">
             <span class="search-prefix">FIND&gt;</span>
@@ -68,6 +112,35 @@ else
             </details>
         }
 
+        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
+            <strong>FOLDERS</strong>
+            <span> (@Folders.Count)</span>
+            <nav aria-label="Folder path" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.75rem 0">
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = null">MY VAULT</button>
+                @foreach (var crumb in Breadcrumbs)
+                {
+                    <span aria-hidden="true">/</span>
+                    <button class="pixel-button compact" type="button" @onclick="() => _folderId = crumb.Record.Id">@crumb.Record.Title</button>
+                }
+            </nav>
+            <label style="display:flex;align-items:center;gap:.5rem;margin:.75rem 0">
+                <input type="checkbox" @bind="_includeSubfolders" />
+                Include records from subfolders
+            </label>
+            @if (_folderId is not null)
+            {
+                <button class="pixel-button compact" type="button" @onclick="GoUp">UP ONE LEVEL</button>
+            }
+            @foreach (var folder in ChildFolders)
+            {
+                <button class="pixel-button compact" type="button" @onclick="() => _folderId = folder.Record.Id">📁 @folder.Record.Title</button>
+            }
+            <div style="display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap">
+                <input class="terminal-input" placeholder="New folder name" @bind="_newFolderName" />
+                <button class="pixel-button compact" type="button" disabled="@Session.IsBusy" @onclick="CreateFolderAsync">CREATE FOLDER</button>
+                <a class="pixel-button compact" href="@AddRecordUrl">ADD RECORD HERE</a>
+            </div>
+        </section>
         <div class="record-list">
             @if (FilteredRecords.Count == 0)
             {
@@ -116,9 +189,83 @@ else
 
 @code {
     private string _search = string.Empty;
+    private string? _folderId;
+    private string _newFolderName = string.Empty;
+    private bool _includeSubfolders;
+    private HashSet<string> IncludedFolderIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (_folderId is not null) ids.Add(_folderId);
+        if (!_includeSubfolders) return ids;
+        var queue = new Queue<string?>();
+        queue.Enqueue(_folderId);
+        while (queue.Count > 0)
+        {
+            var parent = queue.Dequeue();
+            foreach (var folder in Folders.Where(x => x.Record.FolderId == parent))
+                if (ids.Add(folder.Record.Id)) queue.Enqueue(folder.Record.Id);
+        }
+        return ids;
+    }
+    private IReadOnlyList<VaultRecordLocation> Breadcrumbs
+    {
+        get
+        {
+            var path = new List<VaultRecordLocation>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var current = _folderId;
+            while (current is not null && visited.Add(current))
+            {
+                var folder = Folders.FirstOrDefault(x => x.Record.Id == current);
+                if (folder is null) break;
+                path.Insert(0, folder);
+                current = folder.Record.FolderId;
+            }
+            return path;
+        }
+    }
+    private IReadOnlyList<VaultRecordLocation> Folders =>
+        Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
+    private IReadOnlyList<VaultRecordLocation> ChildFolders =>
+        Folders.Where(x => x.Record.FolderId == _folderId).ToArray();
+    private string CurrentFolderName =>
+        _folderId is null ? "Root / Unfiled" :
+        Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.Title ?? "Unknown folder";
+    private string AddRecordUrl => _folderId is null ? "/add" : $"/add?folder={_folderId}";
+    private void GoUp()
+    {
+        _folderId = Folders.FirstOrDefault(x => x.Record.Id == _folderId)?.Record.FolderId;
+    }
+    private async Task CreateFolderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newFolderName) || Session.IsBusy) return;
+        _error = null;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var folder = new VaultRecord
+            {
+                Id = Guid.NewGuid().ToString("N")[..16],
+                Title = _newFolderName.Trim(),
+                Secret = "folder-metadata",
+                Kind = "folder",
+                FolderId = _folderId,
+                CreatedUtc = now,
+                UpdatedUtc = now
+            };
+            await Session.AddAsync(folder);
+            _newFolderName = string.Empty;
+            _folderId = folder.Id;
+        }
+        catch (Exception ex) { _error = VaultErrorMessages.Friendly(ex); }
+    }
+    private bool _confirmInitialization;
     private string? _error;
     private string? _notice;
     private VaultRecordLocation? _selected;
+    private RootTreasurySnapshot? _treasury;
+    private string? _treasuryError;
+    private bool _treasuryLoading;
 
     private int RecordCount => Session.Snapshot?.Records.Count ?? 0;
     private int NodeCount => Session.Snapshot?.Nodes.Count ?? 0;
@@ -128,7 +275,10 @@ else
     {
         get
         {
-            var records = Session.Snapshot?.Records ?? [];
+            var includedIds = IncludedFolderIds();
+            var records = Session.Snapshot?.Records.Where(x => !x.Record.IsFolder &&
+                (x.Record.FolderId == _folderId ||
+                 (_includeSubfolders && x.Record.FolderId is not null && includedIds.Contains(x.Record.FolderId)))).ToArray() ?? [];
             if (string.IsNullOrWhiteSpace(_search))
                 return records;
 
@@ -150,6 +300,22 @@ else
             Navigation.NavigateTo("/");
     }
 
+    private async Task InitializeRegistryAsync()
+    {
+        if (!_confirmInitialization || Session.IsBusy)
+            return;
+        _error = null;
+        try
+        {
+            await Session.InitializeHdRegistryAsync();
+            _confirmInitialization = false;
+        }
+        catch (Exception ex)
+        {
+            _error = VaultErrorMessages.Friendly(ex);
+        }
+    }
+
     private async Task RefreshAsync()
     {
         _error = null;
@@ -160,8 +326,33 @@ else
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            _error = VaultErrorMessages.Friendly(ex);
         }
+    }
+
+    private async Task RefreshTreasuryAsync()
+    {
+        _treasuryLoading = true;
+        _treasuryError = null;
+        try
+        {
+            _treasury = await Session.InspectRootTreasuryAsync();
+        }
+        catch (Exception ex)
+        {
+            _treasury = null;
+            _treasuryError = VaultErrorMessages.Friendly(ex);
+        }
+        finally
+        {
+            _treasuryLoading = false;
+        }
+    }
+
+    private static string FormatStroops(string value)
+    {
+        var stroops = long.Parse(value, CultureInfo.InvariantCulture);
+        return (stroops / 10_000_000m).ToString("0.0000000", CultureInfo.InvariantCulture);
     }
 
     private void OpenRecord(VaultRecordLocation item)

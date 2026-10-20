@@ -36,6 +36,16 @@ else
         <EditForm Model="_form" OnValidSubmit="ReviewAsync" class="terminal-panel credential-form">
             <DataAnnotationsValidator />
 
+            <label class="terminal-label">
+                <span>FOLDER</span>
+                <InputSelect class="terminal-input" @bind-Value="_form.FolderId">
+                    <option value="">Unfiled</option>
+                    @foreach (var folder in FolderOptions)
+                    {
+                        <option value="@folder.Record.Id">@folder.Record.Title</option>
+                    }
+                </InputSelect>
+            </label>
             <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
 
             <label class="terminal-label">
@@ -129,6 +139,8 @@ else
     [Parameter] public string RecordId { get; set; } = string.Empty;
 
     private readonly EditCredentialForm _form = new();
+    private IReadOnlyList<VaultRecordLocation> FolderOptions =>
+        Session.Snapshot?.Records.Where(x => x.Record.IsFolder).ToArray() ?? [];
     private VaultRecordLocation? _location;
     private string? _loadedRecordId;
     private bool _showSecret;
@@ -165,6 +177,7 @@ else
         _form.Url = _location.Record.Url;
         _form.Notes = _location.Record.Notes;
         _form.Tags = string.Join(", ", _location.Record.Tags);
+        _form.FolderId = _location.Record.FolderId;
         ClearApproval();
     }
 
@@ -264,12 +277,13 @@ else
             Tags = _form.Tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray(),
+            FolderId = string.IsNullOrEmpty(_form.FolderId) ? null : _form.FolderId,
             CreatedUtc = _location.Record.CreatedUtc,
             UpdatedUtc = updated
         };
 
     private string CurrentFingerprint() =>
-        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags);
+        string.Join("\u001f", _form.Title, _form.UserName, _form.Secret, _form.Url, _form.Notes, _form.Tags, _form.FolderId);
 
     private static string Short(string value) =>
         value.Length <= 18 ? value : $"{value[..9]}…{value[^6..]}";
@@ -287,5 +301,6 @@ else
         public string Url { get; set; } = string.Empty;
         public string Notes { get; set; } = string.Empty;
         public string Tags { get; set; } = string.Empty;
+        public string? FolderId { get; set; }
     }
 }

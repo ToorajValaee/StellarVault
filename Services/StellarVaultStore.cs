@@ -26,6 +26,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private readonly VaultCrypto _crypto;
     private string? _rootAccountId;
     private bool _disposed;
+    public bool RegistryInitialized { get; private set; }
 
     public StellarVaultStore(VaultNetworkSettings settings, IJSRuntime js)
     {
@@ -40,23 +41,58 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     public VaultNetworkSettings Settings => _settings;
 
-    public async Task OpenAsync(string secret)
+    public async Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
+        int additionalSponsoredUnits = 0,
+        long expectedFeeStroops = 0,
+        long safetyBufferStroops = 0)
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null)
+            throw new InvalidOperationException("The Stellar session is not open.");
+        if (additionalSponsoredUnits < 0 || expectedFeeStroops < 0 || safetyBufferStroops < 0)
+            throw new ArgumentOutOfRangeException(nameof(additionalSponsoredUnits));
+        return await _js.InvokeAsync<RootTreasurySnapshot>(
+            "stellarVault.stellar.inspectRootTreasury", _sessionId,
+            _settings.BaseReserveStroops, additionalSponsoredUnits,
+            expectedFeeStroops.ToString(CultureInfo.InvariantCulture),
+            safetyBufferStroops.ToString(CultureInfo.InvariantCulture));
+    }
+
+    public async Task OpenAsync(string secret, string bip39Passphrase = "")
     {
         ThrowIfDisposed();
         if (_rootAccountId is not null)
             throw new InvalidOperationException("The Stellar session is already open.");
 
         var result = await _js.InvokeAsync<JsSessionInfo>(
-            "stellarVault.stellar.createSession",
+            "stellarVault.stellar.openHdSession",
             _sessionId,
             secret,
             _settings.HorizonUrl,
-            _settings.Passphrase);
+            _settings.Passphrase,
+            bip39Passphrase);
 
         if (string.IsNullOrWhiteSpace(result.RootAccountId))
             throw new InvalidOperationException("The browser Stellar SDK did not return a root account ID.");
 
         _rootAccountId = result.RootAccountId;
+        RegistryInitialized = result.RegistryInitialized;
+    }
+
+    public async Task InitializeHdRegistryAsync()
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null)
+            throw new InvalidOperationException("Unlock the funded HD root before initialization.");
+
+        // The JavaScript bootstrap refuses existing registries and scans derived
+        // children before writing the first authenticated registry entry.
+        await _js.InvokeVoidAsync(
+            "stellarVault.stellar.initializeHdRegistry",
+            _sessionId,
+            _settings.BaseReserveStroops,
+            _settings.BaseFeeStroops);
+        RegistryInitialized = true;
     }
 
     public async Task<VaultReadResult> ReadAsync()
@@ -92,7 +128,11 @@ public sealed class StellarVaultStore : IAsyncDisposable
                             CryptographicOperations.ZeroMemory(computedHash);
                         }
 
-                        var record = await _crypto.DecryptAsync(recordId, encrypted);
+                        if (manifest.Generation is null)
+                            throw new InvalidDataException("Legacy record manifests are not supported in HD v2.");
+
+                        var record = await _crypto.DecryptHdAsync(
+                            recordId, node.Position, manifest.Generation, encrypted);
                         if (!string.Equals(record.Id, recordId, StringComparison.Ordinal))
                             throw new InvalidDataException("The decrypted record ID does not match its ledger key.");
 
@@ -144,37 +184,17 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
             throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
 
-        var encrypted = await _crypto.EncryptAsync(record);
-        try
-        {
-            var chunkCount = SplitIntoChunks(encrypted).Count;
-            EnsureRecordFitsNode(chunkCount);
+        var chunkCount = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(chunkCount);
+        var createsChild = !CanStageRecord(nodes[^1], chunkCount, headerAlreadyExists: false);
+        var entries = chunkCount + 1;
+        var operations = entries * 3 + (createsChild ? 4 : 0);
+        var transactions = entries + (createsChild ? 1 : 0);
+        var reserve = (entries + (createsChild ? 2 : 0)) * BaseReserveNative;
 
-            var createsChild = !CanStageRecord(nodes[^1], chunkCount, headerAlreadyExists: false);
-            var recordWrites = chunkCount + 1;
-            var createOperations = createsChild ? 3 : 0;
-            var dataEntriesAdded = recordWrites + (createsChild ? 1 : 0); // sv:next on the old tail
-            var structuralReserves = createsChild ? 3 : 0; // child account: 2 base reserves + root signer
-            var reserve = BaseReserveNative;
-            var operationCount = createOperations + recordWrites;
-            var transactionCount = (createsChild ? 1 : 0) + TransactionCount(recordWrites);
-
-            return new VaultCostEstimate(
-                operationCount,
-                transactionCount,
-                chunkCount,
-                dataEntriesAdded,
-                0,
-                FeeNative(operationCount),
-                (dataEntriesAdded + structuralReserves) * reserve,
-                (dataEntriesAdded + structuralReserves) * reserve,
-                createsChild ? ParseChildStartingBalance() : 0m,
-                createsChild);
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+        return new VaultCostEstimate(
+            operations, transactions, chunkCount, entries, 0,
+            FeeNative(operations), reserve, reserve, 0m, createsChild);
     }
 
     public async Task<VaultCostEstimate> EstimateUpdateAsync(
@@ -196,65 +216,50 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
             .First();
 
-        var encrypted = await _crypto.EncryptAsync(record);
-        try
+        var chunkCount = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(chunkCount);
+
+        var source = currentCopy.Node;
+        var target = source;
+        var targetHasHeader = true;
+        var createsChild = false;
+
+        if (!CanStageRecord(source, chunkCount, headerAlreadyExists: true))
         {
-            var chunkCount = SplitIntoChunks(encrypted).Count;
-            EnsureRecordFitsNode(chunkCount);
-
-            var source = currentCopy.Node;
-            var target = source;
-            var targetHasHeader = true;
-            var createsChild = false;
-
-            if (!CanStageRecord(source, chunkCount, headerAlreadyExists: true))
+            target = nodes[^1];
+            targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
+            if (!CanStageRecord(target, chunkCount, targetHasHeader))
             {
-                target = nodes[^1];
-                targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
-                if (!CanStageRecord(target, chunkCount, targetHasHeader))
-                {
-                    createsChild = true;
-                    targetHasHeader = false;
-                }
+                createsChild = true;
+                targetHasHeader = false;
             }
-
-            var targetId = createsChild ? "NEW-CHILD-NODE" : target.AccountId;
-            var generation = "__estimate_generation__";
-            var cleanupCount = BuildUpdateCleanupWrites(
-                    oldCopies,
-                    targetId,
-                    record.Id,
-                    generation)
-                .Count;
-
-            var commitOperations = chunkCount + 1;
-            var createOperations = createsChild ? 3 : 0;
-            var dataEntriesAdded = chunkCount + (targetHasHeader ? 0 : 1) + (createsChild ? 1 : 0);
-            var structuralReserves = createsChild ? 3 : 0;
-            var operationCount = createOperations + commitOperations + cleanupCount;
-            var transactionCount = (createsChild ? 1 : 0)
-                                   + TransactionCount(commitOperations)
-                                   + TransactionCount(cleanupCount);
-            var reserve = BaseReserveNative;
-            var peakReserve = (dataEntriesAdded + structuralReserves) * reserve;
-            var netReserve = peakReserve - cleanupCount * reserve;
-
-            return new VaultCostEstimate(
-                operationCount,
-                transactionCount,
-                chunkCount,
-                dataEntriesAdded,
-                cleanupCount,
-                FeeNative(operationCount),
-                peakReserve,
-                netReserve,
-                createsChild ? ParseChildStartingBalance() : 0m,
-                createsChild);
         }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+
+        var targetId = createsChild ? "NEW-CHILD-NODE" : target.AccountId;
+        var generation = "__estimate_generation__";
+        var cleanupCount = BuildUpdateCleanupWrites(
+                oldCopies,
+                targetId,
+                record.Id,
+                generation)
+            .Count;
+
+        var commitWrites = chunkCount + 1;
+        var newEntries = chunkCount + (targetHasHeader ? 0 : 1);
+        var allocationOperations = createsChild ? 4 : 0;
+        // Each newly sponsored entry requires begin/write/end operations.
+        // Existing entries need only a ManageData operation.
+        var commitOperations = newEntries * 3 + (commitWrites - newEntries);
+        var operationCount = allocationOperations + commitOperations + cleanupCount;
+        var transactionCount = (createsChild ? 1 : 0) + commitWrites + cleanupCount;
+        var reserve = BaseReserveNative;
+        var peakReserve = (newEntries + (createsChild ? 2 : 0)) * reserve;
+        var netReserve = peakReserve - cleanupCount * reserve;
+
+        return new VaultCostEstimate(
+            operationCount, transactionCount, chunkCount, newEntries,
+            cleanupCount, FeeNative(operationCount), peakReserve,
+            netReserve, 0m, createsChild);
     }
 
     public async Task<VaultCostEstimate> EstimateDeleteAsync(VaultRecordLocation expectedLocation)
@@ -268,10 +273,11 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (headerCount == 0)
             throw new InvalidOperationException("The record no longer exists.");
 
-        var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
-        var chunkDeleteCount = readableCopies.Sum(copy => (int)copy.Manifest.ChunkCount);
+        var chunkPrefix = ChunkPrefix + expectedLocation.Record.Id + ":";
+        var chunkDeleteCount = nodes.Sum(node =>
+            node.Data.Keys.Count(name => name.StartsWith(chunkPrefix, StringComparison.Ordinal)));
         var operationCount = headerCount + chunkDeleteCount;
-        var transactionCount = TransactionCount(headerCount) + TransactionCount(chunkDeleteCount);
+        var transactionCount = operationCount;
         var released = operationCount * BaseReserveNative;
 
         return new VaultCostEstimate(
@@ -296,17 +302,22 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (nodes.Any(node => node.Data.ContainsKey(HeaderName(record.Id))))
             throw new InvalidOperationException($"A record with ID {record.Id} already exists.");
 
-        var encrypted = await _crypto.EncryptAsync(record);
+        // Ciphertext length is plaintext JSON length + v2 nonce/version/tag (29 bytes).
+        // Size before choosing the child because the child index is authenticated AAD.
+        var estimatedChunks = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(estimatedChunks);
+
+        var target = nodes[^1];
+        if (!CanStageRecord(target, estimatedChunks, headerAlreadyExists: false))
+            target = await CreateAndAppendChildAsync(target);
+
+        var generation = CreateGeneration();
+        var encrypted = await _crypto.EncryptHdAsync(record, target.Position, generation);
         try
         {
             var chunks = SplitIntoChunks(encrypted);
-            EnsureRecordFitsNode(chunks.Count);
-
-            var target = nodes[^1];
-            if (!CanStageRecord(target, chunks.Count, headerAlreadyExists: false))
-                target = await CreateAndAppendChildAsync(target);
-
-            var generation = CreateGeneration();
+            if (chunks.Count != estimatedChunks)
+                throw new InvalidDataException("Encrypted record size changed during staging.");
             var manifest = await CreateManifestAsync(
                 encrypted,
                 chunks.Count,
@@ -341,13 +352,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .OrderByDescending(x => x.Manifest.UpdatedUnixSeconds)
             .First();
 
-        var encrypted = await _crypto.EncryptAsync(record);
-        try
-        {
-            var chunks = SplitIntoChunks(encrypted);
-            EnsureRecordFitsNode(chunks.Count);
-
-            var generation = CreateGeneration(currentCopy.Manifest.Generation);
+        var estimatedChunks = await EstimateHdChunkCountAsync(record);
+        EnsureRecordFitsNode(estimatedChunks);
+        var generation = CreateGeneration(currentCopy.Manifest.Generation);
             var updatedSeconds = Math.Max(
                 record.UpdatedUtc.ToUnixTimeSeconds(),
                 currentCopy.Manifest.UpdatedUnixSeconds + 1);
@@ -355,7 +362,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
             var source = currentCopy.Node;
             VaultNodeSnapshot target;
 
-            if (CanStageRecord(source, chunks.Count, headerAlreadyExists: true))
+            if (CanStageRecord(source, estimatedChunks, headerAlreadyExists: true))
             {
                 target = source;
             }
@@ -364,9 +371,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 target = nodes[^1];
                 var targetHasHeader = target.Data.ContainsKey(HeaderName(record.Id));
 
-                if (!CanStageRecord(target, chunks.Count, targetHasHeader))
+                if (!CanStageRecord(target, estimatedChunks, targetHasHeader))
                     target = await CreateAndAppendChildAsync(target);
             }
+
+            var encrypted = await _crypto.EncryptHdAsync(record, target.Position, generation);
+            try
+            {
+                var chunks = SplitIntoChunks(encrypted);
+                if (chunks.Count != estimatedChunks)
+                    throw new InvalidDataException("Encrypted record size changed during staging.");
 
             var manifest = await CreateManifestAsync(
                 encrypted,
@@ -395,10 +409,10 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
             return new VaultMutationResult(lastHash, cleanupWarning);
         }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(encrypted);
-        }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(encrypted);
+            }
     }
 
     public async Task<VaultMutationResult> DeleteAsync(VaultRecordLocation expectedLocation)
@@ -415,25 +429,21 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (headerNodes.Length == 0)
             throw new InvalidOperationException("The record no longer exists.");
 
-        var readableCopies = FindRecordCopies(nodes, expectedLocation.Record.Id);
         var headerDeletes = headerNodes
             .Select(node => DeleteWrite(node.AccountId, headerName))
             .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
             .ToArray();
 
         var lastHash = await SubmitWritesAsync(headerDeletes);
-        string? cleanupWarning = readableCopies.Count < headerNodes.Length
-            ? "The record manifest was deleted, but at least one malformed copy could not be mapped to its encrypted chunks."
-            : null;
+        string? cleanupWarning = null;
 
         try
         {
-            var chunkDeletes = readableCopies
-                .SelectMany(copy => BuildChunkDeletes(
-                    copy.Node.AccountId,
-                    expectedLocation.Record.Id,
-                    copy.Manifest))
-                .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
+            var prefix = ChunkPrefix + expectedLocation.Record.Id + ":";
+            var chunkDeletes = nodes.SelectMany(node =>
+                    node.Data.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                        .Select(key => DeleteWrite(node.AccountId, key)))
+                .DistinctBy(write => write.SourceAccountId + "|" + write.Name, StringComparer.Ordinal)
                 .ToArray();
 
             if (chunkDeletes.Length > 0)
@@ -503,13 +513,17 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (previous.NextAccountId is not null)
             throw new InvalidOperationException("Only the tail account can be extended.");
 
+        if (!string.Equals(_settings.ChildStartingBalance, "0", StringComparison.Ordinal))
+            throw new InvalidOperationException("HD child accounts must start with zero XLM.");
+
         var node = await _js.InvokeAsync<JsVaultNode>(
             "stellarVault.stellar.createAndAppendChild",
             _sessionId,
             previous.AccountId,
             previous.Position + 1,
             _settings.ChildStartingBalance,
-            _settings.BaseFeeStroops);
+            _settings.BaseFeeStroops,
+            _settings.BaseReserveStroops);
 
         var decoded = new Dictionary<string, byte[]>(node.Data.Count, StringComparer.Ordinal);
         foreach (var pair in node.Data)
@@ -529,14 +543,30 @@ public sealed class StellarVaultStore : IAsyncDisposable
         if (materialized.Length == 0)
             return string.Empty;
 
+        // Resolve every write to its registered deterministic HD index.
+        // Index zero is the treasury/registry and must never hold record data.
+        var nodes = await LoadChainAsync();
+        var indices = nodes.Where(node => node.Position > 0)
+            .ToDictionary(node => node.AccountId, node => node.Position, StringComparer.Ordinal);
+        foreach (var write in materialized)
+        {
+            if (!indices.TryGetValue(write.SourceAccountId, out var index))
+                throw new InvalidOperationException(
+                    "Record write targets an unregistered HD child account.");
+            write.NodeIndex = index;
+        }
+
         string lastTransactionHash = string.Empty;
+        // V2 sponsorship submits each ManageData operation in its own atomic
+        // transaction; never route writes through the legacy transaction signer.
         foreach (var batch in materialized.Chunk(MaxOperationsPerTransaction))
         {
             lastTransactionHash = await _js.InvokeAsync<string>(
-                "stellarVault.stellar.submitManageData",
+                "stellarVault.stellar.submitHdManageData",
                 _sessionId,
                 batch,
-                _settings.BaseFeeStroops);
+                _settings.BaseFeeStroops,
+                _settings.BaseReserveStroops);
         }
 
         return lastTransactionHash;
@@ -653,25 +683,44 @@ public sealed class StellarVaultStore : IAsyncDisposable
         int newChunkCount,
         bool headerAlreadyExists)
     {
+        // Index zero is exclusively the authenticated registry and treasury.
+        // V2 does not reserve an sv:next entry: children are indexed by HD path.
+        if (node.Position < 1)
+            return false;
+
         var addedEntries = newChunkCount + (headerAlreadyExists ? 0 : 1);
-        var reservedNextPointer = node.NextAccountId is null ? 1 : 0;
         var respectsConfiguredDataLimit =
-            node.Data.Count + addedEntries + reservedNextPointer <= _settings.NodeDataEntryLimit;
+            node.Data.Count + addedEntries <= _settings.NodeDataEntryLimit;
         var respectsProtocolSubentryLimit =
-            node.SubentryCount + addedEntries + reservedNextPointer <= 1_000;
+            node.SubentryCount + addedEntries <= 1_000;
 
         return respectsConfiguredDataLimit && respectsProtocolSubentryLimit;
+    }
+
+    private async Task<int> EstimateHdChunkCountAsync(VaultRecord record)
+    {
+        // AES-GCM output length is invariant across the selected HD child index.
+        // Use a temporary v2 envelope to get the exact serialized record size.
+        var encrypted = await _crypto.EncryptHdAsync(record, 1, "00000000");
+        try
+        {
+            return (encrypted.Length + ChunkValueSize - 1) / ChunkValueSize;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(encrypted);
+        }
     }
 
     private void EnsureRecordFitsNode(int chunkCount)
     {
         var permanentEntries = chunkCount + 1;
-        if (permanentEntries + 1 > _settings.NodeDataEntryLimit)
+        if (permanentEntries > _settings.NodeDataEntryLimit)
         {
             throw new InvalidOperationException(
                 $"This record needs {permanentEntries} data entries. " +
-                $"The configured node limit is {_settings.NodeDataEntryLimit}, and one entry is reserved for the next-node pointer. " +
-                "Increase the node limit and fund child accounts with enough native balance.");
+                $"The configured node limit is {_settings.NodeDataEntryLimit}. " +
+                "Increase the limit or reduce the record size; the root sponsors child reserves.");
         }
     }
 
@@ -823,20 +872,6 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private decimal FeeNative(int operationCount) =>
         operationCount * _settings.BaseFeeStroops / 10_000_000m;
 
-    private decimal ParseChildStartingBalance() =>
-        decimal.TryParse(
-            _settings.ChildStartingBalance,
-            NumberStyles.Number,
-            CultureInfo.InvariantCulture,
-            out var value)
-            ? value
-            : 0m;
-
-    private static int TransactionCount(int operationCount) =>
-        operationCount <= 0
-            ? 0
-            : (operationCount + MaxOperationsPerTransaction - 1) / MaxOperationsPerTransaction;
-
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 
     private sealed record RecordCopy(VaultNodeSnapshot Node, RecordManifest Manifest);
@@ -844,6 +879,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private sealed class JsSessionInfo
     {
         public string RootAccountId { get; set; } = string.Empty;
+        public bool RegistryInitialized { get; set; }
     }
 
     private sealed class JsVaultNode
@@ -857,6 +893,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     private sealed class JsManageDataWrite
     {
+        public int NodeIndex { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? ValueBase64 { get; set; }
         public string SourceAccountId { get; set; } = string.Empty;

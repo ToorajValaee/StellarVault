@@ -189,6 +189,55 @@ window.stellarVault = (() => {
         }
     }
 
+    // Explicit v2 entrypoint: never interpret a mnemonic as a Stellar secret.
+    // This read-only path deliberately does not enable legacy account writes.
+    async function openHdSession(sessionId, mnemonic, horizonUrl, networkPassphrase, bip39Passphrase = '') {
+        if (stellarSessions.has(sessionId))
+            throw new Error('Session identifier is already in use.');
+        const seed = await window.stellarVaultHd.mnemonicSeed(mnemonic, bip39Passphrase);
+        if (!window.stellarVaultHdDiscovery || !window.stellarVaultEncryption)
+            throw new Error('V2 modules are unavailable.');
+        try {
+            const opened = await window.stellarVaultHdDiscovery.open(
+                seed, normalizeHorizonUrl(horizonUrl), String(networkPassphrase));
+            const cryptoKey = await window.stellarVaultEncryption.deriveKey(
+                seed, opened.networkPassphrase, opened.rootAccountId);
+            stellarSessions.set(sessionId, {
+                ...opened, keypair: opened.rootKeypair,
+                passphrase: opened.networkPassphrase, cryptoKey,
+                hdSeed: seed.slice(), mode: 'hd-v2'
+            });
+            return { rootAccountId: opened.rootAccountId,
+                registryInitialized: opened.registry !== null };
+        } finally {
+            seed.fill(0);
+        }
+    }
+
+    async function initializeHdRegistry(sessionId, baseReserveStroops, baseFeeStroops,
+        safetyBufferStroops = '0') {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2')
+            throw new Error('An unlocked v2 session is required.');
+        if (session.registry !== null)
+            throw new Error('Registry already initialized; refusing to overwrite it.');
+        if (!window.stellarVaultHdBootstrap)
+            throw new Error('V2 registry bootstrap module is unavailable.');
+        return window.stellarVaultHdBootstrap.initialize(session.hdSeed, session, {
+            baseReserveStroops: String(baseReserveStroops),
+            baseFeeStroops: String(baseFeeStroops),
+            safetyBufferStroops: String(safetyBufferStroops)
+        });
+    }
+
+    async function discoverHdNodes(sessionId, recoveryLookahead = 16) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2')
+            throw new Error('Indexed discovery requires a v2 session.');
+        return window.stellarVaultHdDiscovery.discover(session.hdSeed, session,
+            { recoveryLookahead });
+    }
+
     function deleteSession(sessionId) {
         const session = stellarSessions.get(sessionId);
         if (session) {
@@ -198,120 +247,86 @@ window.stellarVault = (() => {
                 // The keypair may already have been cleared.
             }
         }
+        if (session?.hdSeed) session.hdSeed.fill(0);
         stellarSessions.delete(sessionId);
     }
 
     async function loadChain(sessionId, maxChainLength) {
-        const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
-        const limit = Math.max(1, Math.min(Number(maxChainLength) || 64, 256));
-        const visited = new Set();
-        const nodes = [];
-        let current = session.rootAccountId;
-
-        while (true) {
-            if (visited.has(current)) {
-                throw new Error('The vault account chain contains a cycle.');
-            }
-            if (nodes.length >= limit) {
-                throw new Error(`The vault chain exceeds the safety limit of ${limit} accounts.`);
-            }
-
-            visited.add(current);
-            const account = await session.server.loadAccount(current);
-            const data = { ...(account.data_attr || {}) };
-            let nextAccountId = null;
-
-            if (Object.prototype.hasOwnProperty.call(data, 'sv:next')) {
-                const rawPointer = sdkBufferFromBase64(session, data['sv:next']);
-                if (rawPointer.length !== 32) {
-                    throw new Error(`Account ${current} has an invalid sv:next pointer.`);
-                }
-                nextAccountId = StellarSdk.StrKey.encodeEd25519PublicKey(rawPointer);
-            }
-
-            nodes.push({
-                accountId: account.account_id,
-                position: nodes.length,
-                subentryCount: Number(account.subentry_count || 0),
-                data,
-                nextAccountId
-            });
-
-            if (!nextAccountId) {
-                return nodes;
-            }
-
-            current = nextAccountId;
-        }
+        if (session.mode !== 'hd-v2')
+            throw new Error('Only v2 indexed sessions are supported.');
+        if (!session.registry)
+            throw new Error('Authenticated v2 registry is missing; initialize the existing root first.');
+        const max = Number(maxChainLength);
+        if (!Number.isSafeInteger(max) || max < 1)
+            throw new Error('Invalid indexed account limit.');
+        const highest = session.registry.highestAllocatedIndex;
+        if (highest > max)
+            throw new Error('Indexed registry exceeds configured account limit.');
+        // Scan the registered range plus a recovery lookahead. Never follow sv:next.
+        const discovered = await window.stellarVaultHdDiscovery.discover(
+            session.hdSeed, session, { recoveryLookahead: 16 });
+        if (discovered.requiresReconciliation)
+            throw new Error('HD account gaps or unregistered children detected; reconcile before reading.');
+        const root = await session.server.loadAccount(session.rootAccountId);
+        return [{
+            accountId: session.rootAccountId, position: 0,
+            subentryCount: Number(root.subentry_count || 0),
+            data: { ...(root.data_attr || {}) }, nextAccountId: null
+        }, ...discovered.nodes.map(node => ({
+            accountId: node.accountId, position: node.index,
+            subentryCount: node.subentryCount, data: node.data, nextAccountId: null
+        }))];
     }
 
     async function createAndAppendChild(
-        sessionId,
-        previousAccountId,
-        position,
-        childStartingBalance,
-        baseFeeStroops) {
-        const StellarSdk = requireStellarSdk();
+        sessionId, previousAccountId, position, childStartingBalance, baseFeeStroops,
+        baseReserveStroops) {
         const session = requireSession(sessionId);
-        const child = StellarSdk.Keypair.random();
-
+        if (session.mode !== 'hd-v2')
+            throw new Error('Legacy child creation is no longer supported.');
+        if (!session.registry)
+            throw new Error('Initialize the authenticated root registry first.');
+        if (typeof previousAccountId !== 'string' || !previousAccountId)
+            throw new Error('Previous account identity is required.');
+        if (Number(position) !== session.registry.highestAllocatedIndex + 1)
+            throw new Error('Stale child allocation index; refresh before retrying.');
+        const expectedPreviousIndex = session.registry.highestAllocatedIndex;
+        const previousRaw = await window.stellarVaultHd.accountSeed(
+            session.hdSeed, expectedPreviousIndex, session.derivationScheme);
+        let expectedPreviousAccount;
         try {
-            const rootAccount = await session.server.loadAccount(session.rootAccountId);
-            const transaction = new StellarSdk.TransactionBuilder(rootAccount, {
-                fee: String(baseFeeStroops),
-                networkPassphrase: session.passphrase
-            })
-                .addOperation(StellarSdk.Operation.createAccount({
-                    destination: child.publicKey(),
-                    startingBalance: String(childStartingBalance)
-                }))
-                .addOperation(StellarSdk.Operation.setOptions({
-                    source: child.publicKey(),
-                    signer: {
-                        ed25519PublicKey: session.rootAccountId,
-                        weight: 1
-                    },
-                    masterWeight: 0,
-                    lowThreshold: 1,
-                    medThreshold: 1,
-                    highThreshold: 1
-                }))
-                .addOperation(StellarSdk.Operation.manageData({
-                    source: previousAccountId,
-                    name: 'sv:next',
-                    value: child.rawPublicKey()
-                }))
-                .setTimeout(60)
-                .build();
-
-            transaction.sign(session.keypair);
-            transaction.sign(child);
-
-            await session.server.submitTransaction(transaction);
-            const childAccount = await session.server.loadAccount(child.publicKey());
-
-            return {
-                accountId: childAccount.account_id,
-                position: Number(position),
-                subentryCount: Number(childAccount.subentry_count || 0),
-                data: { ...(childAccount.data_attr || {}) },
-                nextAccountId: null
-            };
-        } catch (error) {
-            throw new Error(formatStellarError(error));
+            expectedPreviousAccount = requireStellarSdk()
+                .Keypair.fromRawEd25519Seed(previousRaw).publicKey();
         } finally {
-            try {
-                child.rawSecretKey().fill(0);
-            } catch {
-                // Best-effort cleanup.
-            }
+            previousRaw.fill(0);
         }
+        if (previousAccountId !== expectedPreviousAccount)
+            throw new Error('Previous account does not match the registered HD tail.');
+        if (String(childStartingBalance) !== '0')
+            throw new Error('V2 children must be created with zero starting balance.');
+        if (typeof window.stellarVaultSponsorship?.writeSponsoredData !== 'function')
+            throw new Error('Sponsored record writer is unavailable; refusing allocation.');
+        if (!baseReserveStroops || BigInt(String(baseReserveStroops)) <= 0n)
+            throw new Error('Detected base reserve is required for sponsorship.');
+        const result = await window.stellarVaultHdAllocator.allocate(
+            session.hdSeed, session, {
+                baseReserveStroops: String(baseReserveStroops),
+                baseFeeStroops: String(baseFeeStroops)
+            });
+        const child = await session.server.loadAccount(result.accountId);
+        return {
+            accountId: result.accountId, position: result.index,
+            subentryCount: Number(child.subentry_count || 0),
+            data: { ...(child.data_attr || {}) }, nextAccountId: null
+        };
     }
 
     async function submitManageData(sessionId, writes, baseFeeStroops) {
         const StellarSdk = requireStellarSdk();
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
 
         if (!Array.isArray(writes) || writes.length === 0) {
             throw new Error('No ManageData writes were supplied.');
@@ -346,8 +361,94 @@ window.stellarVault = (() => {
         }
     }
 
+    // Each v2 data entry is owned and signed by its deterministic child.
+    // The root pays every transaction fee and sponsors reserves for new entries.
+    async function submitHdManageData(sessionId, writes, baseFeeStroops, baseReserveStroops) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2' || !session.registry)
+            throw new Error('Authenticated v2 session required.');
+        if (!Array.isArray(writes) || writes.length === 0)
+            throw new Error('At least one v2 ManageData write is required.');
+        const sdk = requireStellarSdk();
+        const fee = BigInt(String(baseFeeStroops));
+        const reserve = BigInt(String(baseReserveStroops));
+        if (fee <= 0n || reserve <= 0n)
+            throw new Error('Valid base fee and reserve are required.');
+        // A second tab/device may have advanced the registry since unlock.
+        // Reject stale writes rather than signing against an old allocation map.
+        const latestRoot = await session.server.loadAccount(session.rootAccountId);
+        const encodedRegistry = latestRoot.data_attr?.['sv:registry:v2'];
+        if (!encodedRegistry)
+            throw new Error('V2 registry missing from root.');
+        const macKey = await window.stellarVaultRegistry.registryMacKey(
+            session.hdSeed, session.passphrase, session.rootAccountId);
+        const latestRegistry = await window.stellarVaultRegistry.decode(
+            macKey, Uint8Array.from(atob(encodedRegistry), c => c.charCodeAt(0)));
+        if (latestRegistry.revision !== session.registry.revision ||
+            latestRegistry.highestAllocatedIndex !== session.registry.highestAllocatedIndex ||
+            latestRegistry.activeWriteIndex !== session.registry.activeWriteIndex)
+            throw new Error('HD registry changed since unlock; refresh before writing.');
+        const seen = new Set();
+        const staged = [];
+        for (const write of writes) {
+            const index = Number(write.nodeIndex);
+            if (!Number.isSafeInteger(index) || index < 1 ||
+                index > session.registry.highestAllocatedIndex)
+                throw new Error('Write targets an unregistered HD child.');
+            const name = String(write.name || '');
+            if (!name || new TextEncoder().encode(name).length > 64 ||
+                name === 'sv:registry:v2' || name === 'sv:next')
+                throw new Error('Invalid or reserved v2 ManageData name.');
+            const unique = index + ':' + name;
+            if (seen.has(unique)) throw new Error('Duplicate data key in batch.');
+            seen.add(unique);
+            const raw = await window.stellarVaultHd.accountSeed(session.hdSeed, index, session.derivationScheme);
+            let child;
+            try { child = sdk.Keypair.fromRawEd25519Seed(raw); }
+            finally { raw.fill(0); }
+            if (write.sourceAccountId && write.sourceAccountId !== child.publicKey())
+                throw new Error('Data source does not match deterministic child.');
+            const value = write.valueBase64 == null
+                ? null : sdkBufferFromBase64(session, write.valueBase64);
+            if (value && value.length > 64)
+                throw new Error('Stellar ManageData values cannot exceed 64 bytes.');
+            staged.push({ child, name, value });
+        }
+        // Submit one child write per transaction. The sponsorship operations
+        // are atomic with the data write; a failed transaction creates no entry.
+        let lastHash = '';
+        for (const entry of staged) {
+            lastHash = await window.stellarVaultSponsorship.writeSponsoredData({
+                server: session.server,
+                rootKeypair: session.rootKeypair,
+                childKeypair: entry.child,
+                networkPassphrase: session.passphrase,
+                baseReserveStroops: reserve.toString(),
+                baseFeeStroops: fee.toString(),
+                name: entry.name,
+                value: entry.value
+            });
+        }
+        return lastHash;
+    }
+
+    async function inspectRootTreasury(sessionId, baseReserveStroops, additionalSponsoredUnits = 0, expectedFeeStroops = '0', safetyBufferStroops = '0') {
+        const session = requireSession(sessionId);
+        if (!window.stellarVaultTreasury) {
+            throw new Error('Treasury accounting module unavailable.');
+        }
+        return window.stellarVaultTreasury.inspect(
+            session.server, session.rootAccountId, String(baseReserveStroops), {
+                additionalSponsoredUnits,
+                expectedFeeStroops: String(expectedFeeStroops),
+                safetyBufferStroops: String(safetyBufferStroops)
+            });
+    }
+
     async function encrypt(sessionId, recordId, plaintextBytes) {
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const nonce = crypto.getRandomValues(new Uint8Array(12));
         const plaintext = new Uint8Array(plaintextBytes);
         const aad = encoder.encode(session.aadPrefix + recordId);
@@ -376,6 +477,8 @@ window.stellarVault = (() => {
 
     async function decrypt(sessionId, recordId, envelopeBytes) {
         const session = requireSession(sessionId);
+        if (session.mode === 'hd-v2')
+            throw new Error('Legacy linked-chain operations are disabled for v2 sessions.');
         const envelope = new Uint8Array(envelopeBytes);
 
         if (envelope.length < 29) {
@@ -409,6 +512,44 @@ window.stellarVault = (() => {
             tag.fill(0);
             nonce.fill(0);
         }
+    }
+
+    // V2 records bind ciphertext to its exact deterministic storage location.
+    async function encryptHdRecord(sessionId, nodeIndex, recordId, generation, plaintextBytes) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2') throw new Error('V2 session required.');
+        const nonce = crypto.getRandomValues(new Uint8Array(12));
+        const plaintext = new Uint8Array(plaintextBytes);
+        const aad = window.stellarVaultEncryption.recordAad(
+            session.passphrase, session.rootAccountId, nodeIndex, recordId, generation);
+        try {
+            const ciphertext = new Uint8Array(await crypto.subtle.encrypt({
+                name: 'AES-GCM', iv: nonce, additionalData: aad, tagLength: 128
+            }, session.cryptoKey, plaintext));
+            const envelope = new Uint8Array(13 + ciphertext.length);
+            envelope[0] = 2;
+            envelope.set(nonce, 1);
+            envelope.set(ciphertext, 13);
+            ciphertext.fill(0);
+            return envelope;
+        } finally {
+            plaintext.fill(0);
+            nonce.fill(0);
+        }
+    }
+
+    async function decryptHdRecord(sessionId, nodeIndex, recordId, generation, envelopeBytes) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2') throw new Error('V2 session required.');
+        const envelope = new Uint8Array(envelopeBytes);
+        if (envelope.length < 29 || envelope[0] !== 2)
+            throw new Error('Invalid v2 AES-GCM envelope.');
+        const aad = window.stellarVaultEncryption.recordAad(
+            session.passphrase, session.rootAccountId, nodeIndex, recordId, generation);
+        return new Uint8Array(await crypto.subtle.decrypt({
+            name: 'AES-GCM', iv: envelope.subarray(1, 13),
+            additionalData: aad, tagLength: 128
+        }, session.cryptoKey, envelope.subarray(13)));
     }
 
     async function sha256(valueBytes) {
@@ -478,12 +619,19 @@ window.stellarVault = (() => {
         },
         stellar: {
             createSession,
+            openHdSession,
+            discoverHdNodes,
+            initializeHdRegistry,
             deleteSession,
             loadChain,
             createAndAppendChild,
             submitManageData,
+            submitHdManageData,
+            inspectRootTreasury,
             encrypt,
             decrypt,
+            encryptHdRecord,
+            decryptHdRecord,
             sha256
         },
         crypto: {
