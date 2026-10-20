@@ -9,12 +9,14 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
 {
     private readonly string _directory;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly string _lockPath;
 
     public FileSystemVaultRecordIndex(string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         _directory = Path.GetFullPath(directory);
         Directory.CreateDirectory(_directory);
+        _lockPath = Path.Combine(_directory, ".record-index.lock");
     }
 
     public async Task<VaultRecordPointer?> ReadAsync(Guid recordId, CancellationToken cancellationToken = default)
@@ -38,6 +40,7 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            await using var exclusive = await AcquireProcessLockAsync(cancellationToken);
             var current = await ReadCoreAsync(recordId, cancellationToken);
             if (current != expected) return false;
             string target = PathFor(recordId);
@@ -57,6 +60,25 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task<FileStream> AcquireProcessLockAsync(CancellationToken cancellationToken)
+    {
+        // The exclusive lock file is held for the complete read/compare/replace transaction.
+        // A crashed process releases its handle automatically; never delete this lock file.
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
+                    FileShare.None, 1, FileOptions.None);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(25, cancellationToken);
+            }
+        }
     }
 
     private async Task<VaultRecordPointer?> ReadCoreAsync(Guid recordId, CancellationToken cancellationToken)
