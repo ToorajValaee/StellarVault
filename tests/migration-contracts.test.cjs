@@ -59,3 +59,12 @@ test('CI compiles the native Android preview independently', () => {
   assert.match(workflow, /dotnet workload install maui-android/);
   assert.match(workflow, /-f net8\.0-android/);
 });
+
+test('MAUI CI uses supported SDK family and Linux-only Android target', () => {
+  const sdk = JSON.parse(read('global.json'));
+  assert.match(sdk.sdk.version, /^8\./);
+  assert.equal(sdk.sdk.rollForward, 'latestFeature');
+  const project = read('src/StellarVault.Maui/StellarVault.Maui.csproj');
+  assert.match(project, /IsOSPlatform\('linux'\)/);
+  assert.match(project, /net8\.0-android<\/TargetFrameworks>/);
+});
