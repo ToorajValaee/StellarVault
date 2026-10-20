@@ -19,12 +19,19 @@ public interface IVaultBlobStore
 public static class VaultChunkIndex
 {
     public const int MaxChunks = VaultChunkedRecord.MaxChunks;
+    // JSON descriptors have variable lengths; reserve enough headroom for all supported chunks.
+    public const int MaxIndexBytes = VaultV2Envelope.MaximumPlaintextLength;
 
     /// <summary>Encrypt a record index; the index itself is a v2 authenticated envelope.</summary>
     public static byte[] Seal(VaultRecordIndex index, ReadOnlySpan<byte> key, ReadOnlySpan<byte> context)
     {
         Validate(index);
         byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(index);
+        if (serialized.Length > MaxIndexBytes)
+        {
+            CryptographicOperations.ZeroMemory(serialized);
+            throw new CryptographicException("Record index exceeds authenticated envelope capacity.");
+        }
         try { return VaultV2Envelope.Seal(key, serialized, context); }
         finally { CryptographicOperations.ZeroMemory(serialized); }
     }
