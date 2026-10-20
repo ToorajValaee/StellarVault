@@ -40,3 +40,9 @@ The shared core provides `StellarChallengeAccountAuthorizer` and two required ex
 Challenges include a random 32-byte nonce, the account G-address, selected network passphrase and a two-minute expiry. The challenge coordinator is not currently registered by MAUI: `DenyVaultAccountAuthorizer` remains the default. Consequently the create/unlock form intentionally refuses authorization. Before enabling it, implement and validate both contracts, signer-weight/threshold policy, correct network identity, wallet compatibility, and replay handling on the trusted verification boundary. A single signed challenge is a proof of signer control, not proof of ownership of an arbitrary account or authorization for a Stellar transaction.
 
 The development UI must not be treated as production-ready or enabled by substituting an always-true verifier.
+
+### Ledger verifier added
+
+The shared core now includes `StellarLedgerOwnershipVerifier`, which fetches current account signers from a configured HTTPS Horizon server and requires an Ed25519 signer with weight meeting the account's **high threshold**. It deliberately rejects multisig scenarios where no single signer independently meets that threshold. It relies on an injected `IStellarEd25519SignatureVerifier` for real Ed25519 verification and must only be configured with a pinned/trusted Horizon endpoint matching the declared network. A public Horizon endpoint alone is not an authenticated proof of network identity; endpoint trust and freshness/reorg policy need review.
+
+**Not enabled:** The native host continues to register `DenyVaultAccountAuthorizer`. Before switching it, implement a vetted Ed25519 verifier, wallet signing bridge, precise challenge-payload validation/replay policy, signer-change race handling, and live integration tests. No fallback may authorize an account merely from a supplied G-address.
