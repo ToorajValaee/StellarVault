@@ -104,3 +104,34 @@ catch (CryptographicException) { }
 Check(corruptedStage.Length == 0, "Manifest failure did not roll back staging");
 CryptographicOperations.ZeroMemory(bigPlain);
 Console.WriteLine("PASS: chunked authenticated records and rollback-on-failure staging");
+
+// Independent ciphertext objects: storage sees no plaintext and manifest controls ordering.
+var objectMap = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+var objectStore = new TestChunkStore(objectMap);
+var objectRecordId = Guid.NewGuid();
+var objectPlain = VaultCryptoPrimitives.NewRandomBytes(VaultChunkObjectStore.ChunkSize + 99);
+using var objectSource = new MemoryStream(objectPlain);
+var encryptedIndex = await VaultChunkObjectStore.WriteAsync(objectSource, objectStore, key, objectRecordId, 12);
+Check(objectMap.Count == 2, "Expected two independently stored chunks");
+using var objectStage = new MemoryStream();
+await VaultChunkObjectStore.ReadAsync(encryptedIndex, objectStore, objectStage, key, objectRecordId, 12);
+Check(objectStage.ToArray().AsSpan().SequenceEqual(objectPlain), "Content-addressed round-trip failed");
+var firstId = objectMap.Keys.First();
+objectMap[firstId][^1] ^= 1;
+using var failedStage = new MemoryStream();
+try { await VaultChunkObjectStore.ReadAsync(encryptedIndex, objectStore, failedStage, key, objectRecordId, 12); throw new Exception("Tampered chunk accepted"); }
+catch (CryptographicException) { }
+Check(failedStage.Length == 0, "Failed object verification left staged data");
+CryptographicOperations.ZeroMemory(objectPlain);
+Console.WriteLine("PASS: content-addressed chunk objects and authenticated manifest");
+
+sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
+{
+    public Task PutAsync(string objectId, ReadOnlyMemory<byte> ciphertext, CancellationToken cancellationToken = default)
+    {
+        objects[objectId] = ciphertext.ToArray();
+        return Task.CompletedTask;
+    }
+    public Task<byte[]> GetAsync(string objectId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(objects.TryGetValue(objectId, out var bytes) ? (byte[])bytes.Clone() : throw new FileNotFoundException(objectId));
+}
