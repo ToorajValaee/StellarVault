@@ -20,5 +20,6 @@ builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
 builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
 builder.Services.AddScoped<VaultSessionWorkflow>();
+builder.Services.AddScoped<VaultRecordWorkspace>();
 
 await builder.Build().RunAsync();
