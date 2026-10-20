@@ -9,3 +9,9 @@ Store the envelope as confidential application metadata; an envelope alone is no
 ## Persistent lifecycle
 
 `LocalStellarVault.Keys` exposes `CreateAsync(account, wrappingKey)`, `UnlockAsync(account, wrappingKey)`, and `RewrapAsync(account, oldWrappingKey, newWrappingKey)`. The filesystem envelope store writes an account-address-hashed filename inside the private `keys/` directory. Provisioning uses create-if-absent; rotation uses compare-and-swap against the exact prior envelope. Updates use temporary files, atomic replacement on supported local filesystems, and a cooperating-process lock. They do not guarantee power-loss durability or prevent malicious disk rollback. The returned 32-byte plaintext data key is owned by the caller and must be zeroed after use. **No password-to-key derivation is provided here.** Do not pass user passphrases directly as wrapping keys.
+
+## Unlocked sessions
+
+`LocalStellarVault.CreateSessionAsync(accountId, wrappingKey)` and `UnlockSessionAsync(accountId, wrappingKey)` return `VaultUnlockedSession`. Call `ExecuteAsync(async (db, key, ct) => ...)` to run account database operations with a short-lived key copy. The session serializes operations and zeroes temporary key copies on completion. Dispose the session after use to zero its owned data key. Do not call `Dispose` from inside an `ExecuteAsync` callback, as disposal waits for in-flight operations; instead dispose from the owning scope. Never cache, capture, or return the provided key memory. .NET cannot guarantee that all managed/runtime copies are cleared.
+
+This session is not yet wired into PWA or MAUI lifecycle events (backgrounding, screen lock, inactivity), and it does not perform Stellar ownership proof. A 32-byte wrapping key must be supplied by a secure KDF or platform keystore; passing a raw passphrase remains prohibited.
