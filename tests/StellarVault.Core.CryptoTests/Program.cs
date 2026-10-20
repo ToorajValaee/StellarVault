@@ -203,6 +203,19 @@ try { await committer.CommitAsync(committedRecordId, committed0, manifestV0); th
 catch (VaultWriteConflictException) { }
 Check((await committedIndex.ReadAsync(committedRecordId)) == committed1, "Conflict overwrote record pointer");
 Console.WriteLine("PASS: manifest upload, atomic publish and stale writer rejection");
+// Verified commit must reject a manifest for a different record or generation.
+var verifiedRecordId = Guid.NewGuid();
+var verifiedIndex = new VaultRecordIndex(verifiedRecordId, 0, 0, Array.Empty<VaultChunkDescriptor>());
+var verifiedEnvelope = VaultChunkIndex.Seal(verifiedIndex, key, "verified-manifest"u8);
+var verifiedPointer = await committer.CommitVerifiedAsync(verifiedRecordId, null, verifiedEnvelope, key, "verified-manifest"u8);
+Check(verifiedPointer.Generation == 0, "Verified commit generation mismatch");
+var verifiedRead = await committer.ReadVerifiedAsync(verifiedRecordId, key, "verified-manifest"u8);
+Check(verifiedRead.RecordId == verifiedRecordId && verifiedRead.Generation == 0, "Verified manifest read mismatch");
+try { await committer.CommitVerifiedAsync(Guid.NewGuid(), null, verifiedEnvelope, key, "verified-manifest"u8); throw new Exception("Foreign manifest accepted"); }
+catch (CryptographicException) { }
+try { await committer.CommitVerifiedAsync(verifiedRecordId, verifiedPointer, verifiedEnvelope, key, "verified-manifest"u8); throw new Exception("Old generation accepted"); }
+catch (CryptographicException) { }
+Console.WriteLine("PASS: authenticated manifest identity and generation at commit boundary");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
