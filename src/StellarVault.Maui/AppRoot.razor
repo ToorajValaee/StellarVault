@@ -1,10 +1,39 @@
 @using StellarVault.UI.Components
+@using StellarVault.Core.Services
+@inject VaultSessionManager Sessions
+@implements IDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
     <section class="native-preview" aria-labelledby="native-preview-title">
         <p class="eyebrow">DEVELOPMENT BUILD</p>
         <h1 id="native-preview-title">One vault. Every screen.</h1>
         <p>StellarVault's native application shell is being prepared for phones, tablets and desktop devices.</p>
-        <SecurityStatus Heading="NATIVE PREVIEW — VAULT DISABLED" Message="Vault unlocking, secret entry and Stellar transactions are unavailable until compatibility and security tests are complete." />
+        <SecurityStatus Heading="@(Sessions.IsUnlocked ? "SESSION ACTIVE — PREVIEW ONLY" : "VAULT LOCKED — NATIVE PREVIEW")"
+                        Message="@(Sessions.IsUnlocked
+                            ? "An application session is active, but native vault actions remain disabled until authorization and crypto integration are verified."
+                            : "No unlocked vault session is active. Vault unlocking, secret entry and Stellar transactions remain disabled during this preview.")" />
+        @if (Sessions.IsUnlocked)
+        {
+            <button type="button" class="session-lock" @onclick="LockVault">Lock vault</button>
+        }
     </section>
 </AdaptiveShell>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+    }
+
+    private void OnSessionChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void LockVault() => Sessions.Lock();
+
+    public void Dispose()
+    {
+        Sessions.StateChanged -= OnSessionChanged;
+    }
+}
