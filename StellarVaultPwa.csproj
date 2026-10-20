@@ -18,6 +18,7 @@
     <Compile Remove="Core/Models.cs" />
     <Compile Remove="Services/VaultErrorMessages.cs" />
     <Compile Remove="src/**/*.cs" />
+    <Compile Remove="tests/**/*.cs" />
     <RazorComponent Remove="src/**/*.razor" />
     <Content Remove="src/**/*.razor" />
     <None Remove="src/**/*.razor.css" />
