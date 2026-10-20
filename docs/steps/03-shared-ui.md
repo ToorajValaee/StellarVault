@@ -3,6 +3,8 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Access, Vault, Add Record and MainLayout now reside in the shared library; compilation and device verification pending.
 
 ## Implemented
+- CI on draft PR #2 confirmed shared UI builds standalone; full browser build failed with `NETSDK1082` because of the ASP.NET Core framework reference. Switched the RCL to `Microsoft.AspNetCore.Components.Web` package; awaiting CI recheck.
+- HD allocator CI revealed an invalid `rootKeypair.rawPublicKey()` call; corrected registry payload handling and added regression assertions. Awaiting CI recheck.
 - Added source-layout regression assertions for shared pages, record details and ledger approval components; CI now separately compiles the shared Razor UI before the browser host.
 - Extracted `Index`, `Vault`, `Add`, `MainLayout` and `RecordDetailModal` into the Razor Class Library; browser Router includes the shared assembly. Removed original browser copies, and updated regression test paths.
 - `CostEstimatePanel` and `CostApprovalModal` were physically extracted to `src/StellarVault.UI/Components`; browser-only originals removed and web imports updated. Native host can reference them once real vault service integration is ready.
