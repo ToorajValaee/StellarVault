@@ -234,6 +234,27 @@ try { await committer.CommitVerifiedAsync(mismatchRecordId, null, mismatchEnvelo
 catch (CryptographicException) { }
 Check(await committedIndex.ReadAsync(mismatchRecordId) is null, "Corrupted chunk pointer published");
 Console.WriteLine("PASS: reject missing and mismatched ciphertext before record publication");
+// Full encrypted record lifecycle: chunk uploads, authenticated index and CAS pointer.
+var fullStore = new InMemoryVaultChunkStore();
+var fullPointers = new InMemoryVaultRecordIndex();
+var fullService = new VaultEncryptedRecordService(fullStore, fullPointers);
+var fullRecordId = Guid.NewGuid();
+var fullPlain = VaultCryptoPrimitives.NewRandomBytes(VaultChunkedRecord.ChunkSize + 71);
+using var fullSource = new MemoryStream(fullPlain);
+var fullPointer = await fullService.WriteAsync(fullRecordId, null, fullSource, key, "full-record"u8.ToArray());
+Check(fullPointer.Generation == 0, "Full record initial generation mismatch");
+using var fullStage = new MemoryStream();
+await fullService.ReadAsync(fullRecordId, fullStage, key, "full-record"u8.ToArray());
+Check(fullStage.ToArray().AsSpan().SequenceEqual(fullPlain), "Full encrypted record round-trip failed");
+using var staleSource = new MemoryStream(fullPlain);
+try { await fullService.WriteAsync(fullRecordId, null, staleSource, key, "full-record"u8.ToArray()); throw new Exception("Full record stale write accepted"); }
+catch (VaultWriteConflictException) { }
+using var wrongContextStage = new MemoryStream();
+try { await fullService.ReadAsync(fullRecordId, wrongContextStage, key, "wrong-record"u8.ToArray()); throw new Exception("Full record wrong context accepted"); }
+catch (CryptographicException) { }
+Check(wrongContextStage.Length == 0, "Wrong context leaked staged plaintext");
+CryptographicOperations.ZeroMemory(fullPlain);
+Console.WriteLine("PASS: end-to-end encrypted chunked record service and CAS conflicts");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
