@@ -24,3 +24,8 @@ These commands have **not** been executed in this environment. Version and platf
 - Native secret lifecycle and platform security review.
 
 See [Step 05](../../docs/steps/05-maui-host.md).
+
+
+## Native vault session lifecycle
+
+The MAUI host registers `VaultSessionManager` as a singleton and locks its active session on the window `Stopped` and `Destroying` events. This is defense in depth for future unlock integration; the native preview still disables secrets and transactions. Platform-specific lifecycle handling, timeout locking, secure passphrase derivation, and end-to-end validation remain required before enabling the vault. The session manager is not the existing browser `IVaultOperations` service; no claim of complete UI migration is made.
