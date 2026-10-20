@@ -1,0 +1,18 @@
+<div class="sv-adaptive-shell">
+    <header class="sv-adaptive-header">
+        <div class="sv-brand">
+            <span class="sv-mark" aria-hidden="true">SV</span>
+            <span><strong>STELLARVAULT</strong><small>@Subtitle</small></span>
+        </div>
+        <span class="sv-platform">@PlatformName</span>
+    </header>
+    <main class="sv-adaptive-main" id="main-content">
+        @ChildContent
+    </main>
+</div>
+
+@code {
+    [Parameter] public string PlatformName { get; set; } = "WEB";
+    [Parameter] public string Subtitle { get; set; } = "ENCRYPTED VAULT";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
