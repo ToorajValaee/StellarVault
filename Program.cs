@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using StellarVaultPwa;
 using StellarVaultPwa.Services;
 using StellarVault.Core.Services;
+using StellarVault.Core.Abstractions;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -13,5 +14,8 @@ builder.Services.AddScoped<VaultSessionManager>();
 builder.Services.AddScoped<IVaultAccountAuthorizer, DenyVaultAccountAuthorizer>();
 builder.Services.AddScoped<IVaultPassphraseCredentialStore, IndexedDbVaultPassphraseCredentialStore>();
 builder.Services.AddScoped<VaultPassphraseLifecycle>();
+builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
+builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
+builder.Services.AddScoped<VaultSessionWorkflow>();
 
 await builder.Build().RunAsync();
