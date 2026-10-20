@@ -3,6 +3,7 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Access, Vault, Add Record and MainLayout now reside in the shared library; compilation and device verification pending.
 
 ## Implemented
+- Added source-layout regression assertions for shared pages, record details and ledger approval components; CI now separately compiles the shared Razor UI before the browser host.
 - Extracted `Index`, `Vault`, `Add`, `MainLayout` and `RecordDetailModal` into the Razor Class Library; browser Router includes the shared assembly. Removed original browser copies, and updated regression test paths.
 - `CostEstimatePanel` and `CostApprovalModal` were physically extracted to `src/StellarVault.UI/Components`; browser-only originals removed and web imports updated. Native host can reference them once real vault service integration is ready.
 - All three main vault pages and the approval modal now inject `IVaultClientServices` instead of concrete `BrowserStorage`; `BrowserStorage` implements the new composite contract and web DI registers it.
