@@ -18,6 +18,9 @@ public sealed class StellarAccountVaultDatabase
     private readonly IVaultRecordIndex _pointers;
     private readonly string _accountId;
 
+    /// <summary>Encrypted directory for listing and logically deleting named records.</summary>
+    public StellarVaultRecordCatalog Catalog => new(this);
+
     public StellarAccountVaultDatabase(IVaultChunkStore objects, IVaultRecordIndex pointers, string stellarAccountId)
     {
         ArgumentNullException.ThrowIfNull(objects);
@@ -61,6 +64,20 @@ public sealed class StellarAccountVaultDatabase
         var recordId = GetRecordId(name, vaultKey.Span);
         byte[] context = BuildManifestContext(recordId);
         return WriteWithContextAsync(recordId, expectedVersion, plaintext, vaultKey, context, cancellationToken);
+    }
+
+    /// <summary>Write a named record and then register it in the encrypted catalog.
+    /// These are two separate commits; if catalog registration fails the record remains
+    /// addressable by name but may be absent from listings until RegisterAsync is retried.</summary>
+    public async Task<VaultRecordPointer> PutIndexedAsync(string name, VaultRecordPointer? expectedVersion,
+        Stream plaintext, ReadOnlyMemory<byte> vaultKey, string? contentType = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (name.StartsWith("__svault/", StringComparison.Ordinal))
+            throw new ArgumentException("Reserved system record name.", nameof(name));
+        var pointer = await PutAsync(name, expectedVersion, plaintext, vaultKey, cancellationToken);
+        await Catalog.RegisterAsync(name, contentType, vaultKey, cancellationToken);
+        return pointer;
     }
 
     /// <summary>Read a named record into caller-owned private staging. Do not publish staging until success.</summary>
