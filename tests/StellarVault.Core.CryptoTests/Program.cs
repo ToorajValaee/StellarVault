@@ -192,14 +192,14 @@ var committedObjects = new InMemoryVaultChunkStore();
 var committedIndex = new InMemoryVaultRecordIndex();
 var committer = new VaultRecordCommitter(committedObjects, committedIndex);
 var committedRecordId = Guid.NewGuid();
-var manifestV0 = VaultV2Envelope.Seal(key, "manifest-zero"u8, "record-manifest"u8);
-var committed0 = await committer.CommitAsync(committedRecordId, null, manifestV0);
+var manifestV0 = VaultChunkIndex.Seal(new VaultRecordIndex(committedRecordId, 0, 0, Array.Empty<VaultChunkDescriptor>()), key, "record-manifest"u8);
+var committed0 = await committer.CommitVerifiedAsync(committedRecordId, null, manifestV0, key, "record-manifest"u8.ToArray());
 Check(committed0.Generation == 0, "Unexpected initial generation");
 Check((await committer.ReadManifestAsync(committedRecordId)).AsSpan().SequenceEqual(manifestV0), "Committed manifest could not be read");
-var manifestV1 = VaultV2Envelope.Seal(key, "manifest-one"u8, "record-manifest"u8);
-var committed1 = await committer.CommitAsync(committedRecordId, committed0, manifestV1);
+var manifestV1 = VaultChunkIndex.Seal(new VaultRecordIndex(committedRecordId, 1, 0, Array.Empty<VaultChunkDescriptor>()), key, "record-manifest"u8);
+var committed1 = await committer.CommitVerifiedAsync(committedRecordId, committed0, manifestV1, key, "record-manifest"u8.ToArray());
 Check(committed1.Generation == 1, "Generation did not advance");
-try { await committer.CommitAsync(committedRecordId, committed0, manifestV0); throw new Exception("Stale manifest commit accepted"); }
+try { await committer.CommitVerifiedAsync(committedRecordId, committed0, manifestV1, key, "record-manifest"u8.ToArray()); throw new Exception("Stale manifest commit accepted"); }
 catch (VaultWriteConflictException) { }
 Check((await committedIndex.ReadAsync(committedRecordId)) == committed1, "Conflict overwrote record pointer");
 Console.WriteLine("PASS: manifest upload, atomic publish and stale writer rejection");
