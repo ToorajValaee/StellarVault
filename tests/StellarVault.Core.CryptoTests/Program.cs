@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using StellarVault.Core.Services;
+using StellarVault.Core.Abstractions;
 
 static void Check(bool condition, string message)
 {
@@ -156,6 +157,18 @@ try { await VaultChunkedRecord.DecryptAsync(truncatedInput, truncatedStage, key,
 catch (EndOfStreamException) { }
 Check(truncatedStage.Length == 0, "Truncation did not roll back staging");
 Console.WriteLine("PASS: empty records and truncated record staging rollback");
+// Atomic record pointer updates must reject stale writers.
+var pointerIndex = new InMemoryVaultRecordIndex();
+var pointerRecordId = Guid.NewGuid();
+Check(await pointerIndex.ReadAsync(pointerRecordId) is null, "New record already exists");
+var pointer0 = new VaultRecordPointer("manifest-v0", 0);
+var pointer1 = new VaultRecordPointer("manifest-v1", 1);
+Check(await pointerIndex.CompareExchangeAsync(pointerRecordId, null, pointer0), "Initial commit failed");
+Check(!await pointerIndex.CompareExchangeAsync(pointerRecordId, null, pointer0), "Duplicate initial commit accepted");
+Check(await pointerIndex.CompareExchangeAsync(pointerRecordId, pointer0, pointer1), "Update commit failed");
+Check(!await pointerIndex.CompareExchangeAsync(pointerRecordId, pointer0, new VaultRecordPointer("stale", 1)), "Stale writer committed");
+Check(await pointerIndex.ReadAsync(pointerRecordId) == pointer1, "Lost update in pointer store");
+Console.WriteLine("PASS: atomic record pointers reject conflicting writers");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
