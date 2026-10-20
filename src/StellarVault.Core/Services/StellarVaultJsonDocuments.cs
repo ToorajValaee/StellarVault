@@ -24,7 +24,7 @@ public sealed class StellarVaultJsonDocuments(StellarAccountVaultDatabase databa
         // GetAsync may observe a later version. Never return a mismatched value/version pair.
         var current = await database.GetVersionAsync(name, vaultKey, cancellationToken);
         if (current != version)
-            throw new VaultWriteConflictException("JSON document changed during read.");
+            throw new VaultWriteConflictException(database.GetRecordId(name, vaultKey.Span));
         byte[] bytes = staging.ToArray();
         try
         {
