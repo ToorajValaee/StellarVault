@@ -1,0 +1,28 @@
+@using StellarVault.Core.Services
+@inject VaultSessionManager Sessions
+
+<AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
+    <section class="sv-fresh-home">
+        <p class="sv-fresh-kicker">STELLARVAULT / NEW ARCHITECTURE</p>
+        <h1>Secure storage for your Stellar account.</h1>
+        <p>Encrypted documents, records, and application data belong to an account-scoped vault.
+           Storage is off-chain; Stellar identity and authorization are separate from encryption.</p>
+        <ManagedVaultSessionStatus />
+        <fieldset disabled aria-describedby="sv-authorization-note">
+            <legend>Vault access</legend>
+            <p><label for="sv-account">Stellar public account</label></p>
+            <input id="sv-account" class="sv-fresh-field" placeholder="G…" maxlength="56" autocomplete="off" />
+            <p><label for="sv-passphrase">Vault passphrase</label></p>
+            <input id="sv-passphrase" class="sv-fresh-field" type="password" autocomplete="off" />
+            <p><button type="button">Create vault</button> <button type="button">Unlock vault</button></p>
+        </fieldset>
+        <p id="sv-authorization-note" role="status">
+            Account creation and unlocking are disabled until the wallet-signing bridge,
+            ownership verifier, and durable storage are connected and validated.
+        </p>
+    </section>
+</AdaptiveShell>
+
+@code {
+    [Parameter] public string Platform { get; set; } = "WEB";
+}
