@@ -9,7 +9,6 @@ namespace StellarVault.Core.Services;
 public static class VaultKeyEnvelope
 {
     private static readonly byte[] Magic = "SVKW"u8.ToArray();
-    private static readonly byte[] Domain = "StellarVault/key-wrap/v1"u8.ToArray();
     public const byte Version = 1;
     public const int DataKeyLength = 32;
     public const int WrappedLength = 4 + 1 + 12 + DataKeyLength + 16;
@@ -57,7 +56,7 @@ public static class VaultKeyEnvelope
     }
 
     private static byte[] BuildContext(string accountId) =>
-        Encoding.UTF8.GetBytes("StellarVault/key-wrap/v1\\0" + accountId);
+        Encoding.UTF8.GetBytes("StellarVault/key-wrap/v1\0" + accountId);
 
     private static void Validate(ReadOnlySpan<byte> dataKey, ReadOnlySpan<byte> wrappingKey, string accountId)
     {
