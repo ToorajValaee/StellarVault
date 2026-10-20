@@ -5,14 +5,14 @@ const fs = require('node:fs');
 const read = (path) => fs.readFileSync(path, 'utf8');
 
 test('vault pages and approval modal use portable interfaces', () => {
-  for (const path of ['Pages/Index.razor', 'Pages/Vault.razor', 'Pages/Add.razor']) {
+  for (const path of ['src/StellarVault.UI/Pages/Index.razor', 'src/StellarVault.UI/Pages/Vault.razor', 'src/StellarVault.UI/Pages/Add.razor']) {
     const source = read(path);
     assert.match(source, /@inject IVaultOperations Session/);
     assert.match(source, /@inject IVaultClientServices Storage/);
     assert.doesNotMatch(source, /@inject (?:VaultSession|BrowserStorage)/);
   }
   assert.match(read('src/StellarVault.UI/Components/CostApprovalModal.razor'), /@inject IVaultClientServices Storage/);
-  assert.match(read('Layout/MainLayout.razor'), /@inject IVaultPreferences Storage/);
+  assert.match(read('src/StellarVault.UI/Layout/MainLayout.razor'), /@inject IVaultPreferences Storage/);
 });
 
 test('browser DI resolves portable interfaces from existing scoped services', () => {
