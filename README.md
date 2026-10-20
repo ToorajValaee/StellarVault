@@ -11,7 +11,7 @@ Encrypted Stellar-backed vault with a browser/PWA application today and a shared
 | `StellarVaultPwa.csproj`, `Pages/`, `Components/`, `Services/`, `wwwroot/` | Existing browser/PWA vault | Existing implementation |
 | `website/` | Public static marketing site, independently deployed | Source imported; validation pending |
 | `src/StellarVault.Core/` | Reusable vault data contracts and portable logic | Initial library committed |
-| `src/StellarVault.UI/` | Shared Razor screens and components | Planned |
+| `src/StellarVault.UI/` | Shared Razor screens and components | Initial Razor library referenced by browser; full extraction pending |
 | `src/StellarVault.Web/` | Thin browser host | Planned |
 | `src/StellarVault.Maui/` | One native host for Android, iOS, Windows and Mac Catalyst | Planned |
 | `docs/steps/` | AI-readable implementation path and acceptance criteria | Active |
