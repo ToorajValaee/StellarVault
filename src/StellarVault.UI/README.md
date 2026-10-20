@@ -17,3 +17,7 @@ There is **no requirement to retain, read, migrate, or preserve compatibility wi
 The PWA now loads `wwwroot/js/vault-v2-indexeddb.js` and registers `IndexedDbVaultPassphraseCredentialStore`, `IndexedDbVaultObjectStore`, `IndexedDbVaultRecordIndex`, and `VaultSessionWorkflow`. Three IndexedDB object stores hold opaque wrapped credentials, content-addressed ciphertext and record pointers. Credential creation and pointer updates use IndexedDB transactions for atomic compare-and-swap within one browser database. IndexedDB is origin-local and subject to eviction, user deletion and malicious rollback; it is **not** a cross-device or independently durable backend. No legacy record data is read or migrated.
 
 Vault creation/unlock remain disabled because the browser still registers `DenyVaultAccountAuthorizer`. Browser persistence and crypto interoperability, storage eviction recovery, and external signer proof must be verified before enabling writes.
+
+## Browser lifecycle security
+
+The PWA root now listens for `visibilitychange` (hidden), `pagehide`, and `freeze` events through `vault-v2-lifecycle.js` and requests `VaultSessionManager.Lock()`. Lock invalidates pending asynchronous unlock operations via the session epoch. Events are best-effort: browsers may terminate, suspend, or kill pages without delivering them, and JavaScript-to-.NET callbacks may not finish before the page freezes. Do not use this mechanism alone as a guarantee of key erasure; the WebAssembly runtime and OS still control memory lifetime. The authorization-deny default remains active.
