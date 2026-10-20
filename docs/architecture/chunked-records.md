@@ -32,6 +32,10 @@ Verified commits now preflight each referenced encrypted chunk by reading its by
 
 `FileSystemVaultChunkStore` implements the existing encrypted-object interface with temporary-file writes, content-addressed filenames, deduplication, size limits and SHA-256 verification when reopening objects. It can retain ciphertext across process restarts. This **does not** make record pointers persistent: `InMemoryVaultRecordIndex` is still ephemeral. The directory needs platform-appropriate permissions, backups and durability policy. It is not a secure enclave, transactional database, or defense against malicious filesystem rollback.
 
+## Persistent record pointers
+
+`FileSystemVaultRecordIndex` stores each record pointer in an atomically replaced JSON file and enforces sequential generations and compare-and-swap under a process-local semaphore. Combined with `FileSystemVaultChunkStore`, the unified encrypted-record service can reopen an existing record after a process restart. **Do not use multiple writer processes** against the same directory: the semaphore is not a cross-process lock, so concurrent writers can lose updates. The pointer file is not independently authenticated or rollback-resistant; a trusted monotonic anchor and crash/power-loss durability testing are still required.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
