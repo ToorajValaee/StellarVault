@@ -1,5 +1,5 @@
 using System.Net;
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json.Serialization;
 
 namespace StellarVault.Core.Services;
@@ -29,7 +29,8 @@ public sealed class StellarLedgerOwnershipVerifier(
             challenge.NetworkPassphrase != networkPassphrase ||
             string.IsNullOrWhiteSpace(networkPassphrase) ||
             challenge.Payload.Length < 40 || challenge.Payload.Length > 2048 ||
-            challenge.ExpiresAt <= DateTimeOffset.UtcNow || signature.Length != 64)
+            challenge.ExpiresAt <= DateTimeOffset.UtcNow ||
+            challenge.ExpiresAt > DateTimeOffset.UtcNow.AddMinutes(2) || signature.Length != 64)
             return false;
         if (horizonBaseUrl.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(horizonBaseUrl.UserInfo) ||
@@ -40,7 +41,13 @@ public sealed class StellarLedgerOwnershipVerifier(
         // Verify the signature BEFORE trusting the signer's claim of account control.
         if (!signatures.Verify(signerAccountId, challenge.Payload, signature.Span)) return false;
         var endpoint = new Uri(horizonBaseUrl.AbsoluteUri.TrimEnd('/') + "/accounts/" + challenge.AccountId);
-        using var response = await http.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        // Automatic HTTP redirects may silently switch the account authority.
+        // Fail closed unless the final response originates from the exact pinned endpoint.
+        if (response.RequestMessage?.RequestUri != endpoint)
+            throw new InvalidOperationException("Horizon account response was redirected.");
         if (response.StatusCode == HttpStatusCode.NotFound) return false;
         response.EnsureSuccessStatusCode();
         // Avoid unbounded response buffering from a compromised or misconfigured endpoint.
