@@ -5,7 +5,7 @@ using StellarVault.Core.Abstractions;
 
 namespace StellarVaultPwa.Services;
 
-public sealed class BrowserStorage(IJSRuntime js) : IVaultPreferences, IVaultPlatformActions
+public sealed class BrowserStorage(IJSRuntime js) : IVaultClientServices
 {
     private const string NetworkKey = "stellar-vault.network.v1";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
