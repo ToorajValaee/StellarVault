@@ -274,8 +274,11 @@ try
     await File.WriteAllBytesAsync(Path.Combine(fsRoot, diskId), new byte[] { 1, 2, 3 });
     try { await reopenedStore.OpenReadAsync(diskId); throw new Exception("Corrupted filesystem object accepted"); }
     catch (CryptographicException) { }
+    await File.WriteAllBytesAsync(Path.Combine(fsRoot, diskId), new byte[VaultV2Envelope.MaximumLength + 1]);
+    try { await reopenedStore.OpenReadAsync(diskId); throw new Exception("Oversized filesystem object accepted"); }
+    catch (CryptographicException) { }
     CryptographicOperations.ZeroMemory(diskCiphertext);
-    Console.WriteLine("PASS: filesystem ciphertext persistence, deduplication and tamper rejection");
+    Console.WriteLine("PASS: filesystem ciphertext persistence, deduplication, bounds and tamper rejection");
 }
 finally { if (Directory.Exists(fsRoot)) Directory.Delete(fsRoot, recursive: true); }
 var persistentRoot = Path.Combine(Path.GetTempPath(), "svault-index-test-" + Guid.NewGuid().ToString("N"));
