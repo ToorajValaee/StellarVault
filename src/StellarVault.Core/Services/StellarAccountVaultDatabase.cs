@@ -15,6 +15,7 @@ public sealed class StellarAccountVaultDatabase
     private const string RecordDomain = "StellarVault/account-record/v1";
     private const string ContextDomain = "StellarVault/account-manifest/v1";
     private readonly VaultEncryptedRecordService _records;
+    private readonly IVaultRecordIndex _pointers;
     private readonly string _accountId;
 
     public StellarAccountVaultDatabase(IVaultChunkStore objects, IVaultRecordIndex pointers, string stellarAccountId)
@@ -28,6 +29,7 @@ public sealed class StellarAccountVaultDatabase
             stellarAccountId.Any(c => !((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7'))))
             throw new ArgumentException("Expected a canonical Stellar G-account address.", nameof(stellarAccountId));
         _accountId = stellarAccountId;
+        _pointers = pointers;
         _records = new VaultEncryptedRecordService(objects, pointers);
     }
 
@@ -49,11 +51,8 @@ public sealed class StellarAccountVaultDatabase
 
     /// <summary>Read the currently committed record generation, if one exists.</summary>
     public Task<VaultRecordPointer?> GetVersionAsync(string name, ReadOnlyMemory<byte> vaultKey,
-        IVaultRecordIndex pointers, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(pointers);
-        return pointers.ReadAsync(GetRecordId(name, vaultKey.Span), cancellationToken);
-    }
+        CancellationToken cancellationToken = default) =>
+        _pointers.ReadAsync(GetRecordId(name, vaultKey.Span), cancellationToken);
 
     /// <summary>Write or replace a named record using optimistic concurrency.</summary>
     public Task<VaultRecordPointer> PutAsync(string name, VaultRecordPointer? expectedVersion,
