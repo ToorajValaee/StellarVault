@@ -23,6 +23,7 @@ public static class VaultChunkedRecord
         if (!input.CanRead || !output.CanWrite || !output.CanSeek) throw new ArgumentException("Writable seekable output and readable input required.");
         if (generation < 0) throw new ArgumentOutOfRangeException(nameof(generation));
         long start = output.Position;
+        if (output.Length != start) throw new ArgumentException("Output must be an empty or append-only staging stream.", nameof(output));
         byte[] header = new byte[HeaderSize];
         Magic.CopyTo(header);
         header[4] = 1;
@@ -69,6 +70,12 @@ public static class VaultChunkedRecord
             await output.WriteAsync(header, cancellationToken);
             output.Position = end;
         }
+        catch
+        {
+            output.SetLength(start);
+            output.Position = start;
+            throw;
+        }
         finally { CryptographicOperations.ZeroMemory(buffer); }
     }
 
@@ -80,6 +87,7 @@ public static class VaultChunkedRecord
         if (key.Length != 32) throw new ArgumentException("Expected AES-256 key.", nameof(key));
         if (!staging.CanWrite || !staging.CanSeek) throw new ArgumentException("Seekable staging stream required.", nameof(staging));
         long initialPosition = staging.Position;
+        if (staging.Length != initialPosition) throw new ArgumentException("Staging must be empty or append-only.", nameof(staging));
         try
         {
         byte[] header = new byte[HeaderSize];
