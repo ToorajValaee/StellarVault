@@ -16,6 +16,7 @@ public static class VaultCryptoPrimitives
         return RandomNumberGenerator.GetBytes(count);
     }
 
+    /// <summary>Encrypt with a caller-managed nonce that must be unique for this key.</summary>
     public static byte[] Encrypt(ReadOnlySpan<byte> key, ReadOnlySpan<byte> plaintext,
         ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> nonce)
     {
@@ -27,6 +28,7 @@ public static class VaultCryptoPrimitives
         return result;
     }
 
+    /// <summary>Decrypt authenticated ciphertext; authentication failures erase the plaintext buffer.</summary>
     public static byte[] Decrypt(ReadOnlySpan<byte> key, ReadOnlySpan<byte> ciphertextAndTag,
         ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> nonce)
     {
