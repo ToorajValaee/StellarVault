@@ -8,6 +8,11 @@ public sealed class VaultSessionManager : IDisposable
     private readonly object _sync = new();
     private VaultUnlockedSession? _active;
     private bool _disposed;
+    private long _epoch;
+
+    /// <summary>Invalidation token for pending unlock operations. Lock or account change
+    /// advances it, so an operation started earlier cannot resurrect an old session.</summary>
+    public long Epoch { get { lock (_sync) return _epoch; } }
 
     public string? ActiveAccountId
     {
@@ -33,9 +38,29 @@ public sealed class VaultSessionManager : IDisposable
             if (ReferenceEquals(_active, session)) return;
             previous = _active;
             _active = session;
+            _epoch++;
         }
         try { previous?.Dispose(); }
         finally { StateChanged?.Invoke(); }
+    }
+
+    /// <summary>Install a session only if no lock or account transition occurred
+    /// after an asynchronous authorization/unlock began. Caller retains ownership on failure.</summary>
+    public bool TryActivate(VaultUnlockedSession session, long expectedEpoch)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        VaultUnlockedSession? previous;
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_epoch != expectedEpoch) return false;
+            previous = _active;
+            _active = session;
+            _epoch++;
+        }
+        try { previous?.Dispose(); }
+        finally { StateChanged?.Invoke(); }
+        return true;
     }
 
     /// <summary>Run an operation only while a vault is unlocked.
@@ -62,6 +87,7 @@ public sealed class VaultSessionManager : IDisposable
         {
             previous = _active;
             _active = null;
+            _epoch++;
         }
         try { previous?.Dispose(); }
         finally { if (previous is not null) StateChanged?.Invoke(); }
