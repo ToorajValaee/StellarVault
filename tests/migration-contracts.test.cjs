@@ -52,3 +52,10 @@ test('shared Core public manifest remains accessible to browser storage', () => 
   assert.match(read('Core/Models.cs'), /public sealed record RecordManifest\(/);
   assert.match(read('Services/StellarVaultStore.cs'), /RecordManifest/);
 });
+
+test('CI compiles the native Android preview independently', () => {
+  const workflow = read('.github/workflows/migration-build.yml');
+  assert.match(workflow, /android-preview:/);
+  assert.match(workflow, /dotnet workload install maui-android/);
+  assert.match(workflow, /-f net8\.0-android/);
+});
