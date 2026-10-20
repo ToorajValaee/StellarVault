@@ -9,6 +9,8 @@ public sealed class LocalStellarVault
 {
     public IVaultChunkStore Objects { get; }
     public IVaultRecordIndex Pointers { get; }
+    public IVaultKeyEnvelopeStore KeyEnvelopes { get; }
+    public VaultKeyLifecycle Keys { get; }
 
     public LocalStellarVault(string rootDirectory)
     {
@@ -16,6 +18,8 @@ public sealed class LocalStellarVault
         string root = Path.GetFullPath(rootDirectory);
         Objects = new FileSystemVaultChunkStore(Path.Combine(root, "objects"));
         Pointers = new FileSystemVaultRecordIndex(Path.Combine(root, "pointers"));
+        KeyEnvelopes = new FileSystemVaultKeyEnvelopeStore(Path.Combine(root, "keys"));
+        Keys = new VaultKeyLifecycle(KeyEnvelopes);
     }
 
     public StellarAccountVaultDatabase ForAccount(string stellarAccountId) =>
