@@ -34,7 +34,7 @@ Verified commits now preflight each referenced encrypted chunk by reading its by
 
 ## Persistent record pointers
 
-`FileSystemVaultRecordIndex` stores each record pointer in an atomically replaced JSON file and enforces sequential generations and compare-and-swap under a process-local semaphore. Combined with `FileSystemVaultChunkStore`, the unified encrypted-record service can reopen an existing record after a process restart. **Do not use multiple writer processes** against the same directory: the semaphore is not a cross-process lock, so concurrent writers can lose updates. The pointer file is not independently authenticated or rollback-resistant; a trusted monotonic anchor and crash/power-loss durability testing are still required.
+`FileSystemVaultRecordIndex` stores each record pointer in an atomically replaced JSON file and enforces sequential generations and compare-and-swap under a process-local semaphore. Combined with `FileSystemVaultChunkStore`, the unified encrypted-record service can reopen an existing record after a process restart. Compare-and-swap writes now hold an exclusive filesystem lock file across read/compare/replace, in addition to the process-local semaphore. This coordinates cooperating writers on local filesystems that honor exclusive file-sharing semantics. Network filesystems, hostile writers, filesystem rollback, and power-loss durability remain outside this guarantee. The pointer file is not independently authenticated or rollback-resistant; a trusted monotonic anchor and crash/power-loss durability testing are still required.
 
 ## Next steps before production
 
