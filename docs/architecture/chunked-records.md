@@ -12,6 +12,10 @@ Decrypt writes to **private, seekable staging storage** and truncates it on fail
 
 `InMemoryVaultRecordIndex` implements the compare-and-swap record pointer contract for development and tests. An initial record uses generation 0; each successful update advances by one. Stale writers are rejected rather than silently overwriting another update. This implementation is **volatile**, so it must not be used as a persistent index, authorization source, or rollback protection mechanism.
 
+## Content-addressed storage prototype
+
+`InMemoryVaultChunkStore` now provides immutable SHA-256-addressed encrypted objects, bounded writes, duplicate-object reuse, digest verification on reads, and deletion. This is an **ephemeral testing backend**, not durable or remotely accessible storage. Deduplication only applies to byte-identical ciphertext; independently encrypted plaintext uses random nonces and therefore normally produces different identifiers. A persistent backend must provide durable writes, atomic pointer updates, tenant isolation, integrity verification, garbage collection and crash recovery.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
