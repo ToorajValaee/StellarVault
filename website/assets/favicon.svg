@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SVAULT</title>
+  <desc id="desc">Square SV terminal mark</desc>
+  <rect width="64" height="64" rx="2" fill="#020b08"/>
+  <rect x="5.5" y="5.5" width="53" height="53" fill="none" stroke="#65ff9d" stroke-width="2.4"/>
+  <rect x="9.5" y="9.5" width="45" height="45" fill="none" stroke="#1a7b4b" stroke-width="1"/>
+  <path d="M5.5 14V5.5H14M50 5.5h8.5V14M58.5 50v8.5H50M14 58.5H5.5V50" fill="none" stroke="#a4ffc5" stroke-width="1.7"/>
+  <text x="32" y="39" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="700" letter-spacing="-1" fill="#baffcf">SV</text>
+</svg>

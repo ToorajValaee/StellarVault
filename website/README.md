@@ -1,29 +1,29 @@
-# SVAULT public landing site
+# SVAULT presentation website
 
-**Status:** awaiting original asset import. See [Step 01](../docs/steps/01-landing-website.md).
+Static English presentation website for `svault.ir`, with product calls to action pointing to `https://app.svault.ir`.
 
-This directory is the standalone static site for `https://svault.ir`, deployed separately from the vault at `https://app.svault.ir`.
+## Included
+- Green terminal-inspired responsive presentation website
+- Product capabilities, blockchain explanation, security model, Stellar relationship and Badje support/investment section
+- Completed Privacy Policy and Terms of Use pages
+- SEO metadata, structured data, sitemap, robots.txt and LLM-readable project descriptions
+- No build process required
 
-## Import source intact
+## Language status
+Persian is temporarily disabled. The language switch has been removed, Persian URLs are excluded from the sitemap, and the files under `/fa/` are noindex redirect pages to their English equivalents.
 
-```bash
-python3 scripts/import-landing.py "/path/to/svault-website-docker (1).zip"
-```
+When deploying over an older version, replace the entire document root so stale Persian content is not left online.
 
-Alternatively pass `svault-landing-repo-package.zip`. The script copies the original HTML/CSS/JS, images, screenshots, legal pages, SEO files and Docker/Nginx config, then creates `source-manifest.json` with SHA-256 hashes.
+## Deploy
+Upload the contents of this folder to the document root of `svault.ir`.
 
-## Content rules
-- The existing browser/PWA vault is the current product.
-- Native MAUI Android/iOS/Windows/macOS applications are **planned**, not released.
-- Do not promise zero fees or put readable secrets on Stellar.
-- Preserve the original multilingual routes and legal content.
-- Verify all site-to-app links and metadata before deployment.
+## Important legal review
+The Privacy Policy and Terms are complete product-facing drafts based on the currently described architecture. Before commercial or regulated use, have qualified counsel confirm:
+- Badje's full legal entity name and postal address
+- governing law and dispute forum
+- actual hosting/log retention and service providers
+- production encryption, browser-storage and Stellar ledger behavior
+- local consumer, privacy, export-control and sanctions requirements
 
-## Local test after import
-
-```bash
-docker build -t svault-website ./website
-docker run --rm -p 8080:80 svault-website
-```
-
-Then open `http://localhost:8080` and verify pages and images. No production deployment is implied by this step.
+## Dana font
+Dana remains configured in `assets/styles.css`, but Persian is currently disabled. Licensed font files are not included.
