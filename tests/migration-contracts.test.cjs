@@ -47,3 +47,8 @@ test('record details and ledger approvals live only in shared UI', () => {
   assert.match(read('src/StellarVault.UI/Components/RecordDetailModal.razor'), /@inject IVaultOperations Session/);
   assert.match(read('src/StellarVault.UI/Components/RecordDetailModal.razor'), /@inject IVaultClientServices Storage/);
 });
+
+test('shared Core public manifest remains accessible to browser storage', () => {
+  assert.match(read('Core/Models.cs'), /public sealed record RecordManifest\(/);
+  assert.match(read('Services/StellarVaultStore.cs'), /RecordManifest/);
+});
