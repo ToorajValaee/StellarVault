@@ -10,6 +10,7 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
     private readonly string _directory;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly string _lockPath;
+    private static readonly TimeSpan LockWaitTimeout = TimeSpan.FromSeconds(30);
 
     public FileSystemVaultRecordIndex(string directory)
     {
@@ -66,9 +67,15 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
     {
         // The exclusive lock file is held for the complete read/compare/replace transaction.
         // A crashed process releases its handle automatically; never delete this lock file.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(LockWaitTimeout);
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (timeout.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new TimeoutException("Timed out waiting for the record-index filesystem lock.");
+            }
             try
             {
                 return new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
@@ -76,7 +83,11 @@ public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
             }
             catch (IOException)
             {
-                await Task.Delay(25, cancellationToken);
+                try { await Task.Delay(25, timeout.Token); }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new TimeoutException("Timed out waiting for the record-index filesystem lock.");
+                }
             }
         }
     }
