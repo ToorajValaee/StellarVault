@@ -41,7 +41,7 @@ public sealed class StellarAccountVaultDatabase
     {
         ValidateName(name);
         ValidateKey(vaultKey);
-        byte[] message = Encoding.UTF8.GetBytes(RecordDomain + "\\0" + _accountId + "\\0" + name);
+        byte[] message = Encoding.UTF8.GetBytes(RecordDomain + "\0" + _accountId + "\0" + name);
         try
         {
             Span<byte> digest = stackalloc byte[32];
@@ -104,12 +104,12 @@ public sealed class StellarAccountVaultDatabase
     }
 
     private byte[] BuildManifestContext(Guid recordId) =>
-        Encoding.UTF8.GetBytes(ContextDomain + "\\0" + _accountId + "\\0" + recordId.ToString("N"));
+        Encoding.UTF8.GetBytes(ContextDomain + "\0" + _accountId + "\0" + recordId.ToString("N"));
 
     private static void ValidateName(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (Encoding.UTF8.GetByteCount(name) > 512 || name.IndexOf('\\0') >= 0)
+        if (Encoding.UTF8.GetByteCount(name) > 512 || name.IndexOf('\0') >= 0)
             throw new ArgumentException("Record name must be at most 512 UTF-8 bytes and contain no NUL.", nameof(name));
     }
 
