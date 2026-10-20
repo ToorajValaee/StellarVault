@@ -28,6 +28,26 @@ public static class VaultCryptoPrimitives
         return result;
     }
 
+    /// <summary>Generate a fresh random nonce and prefix it to authenticated ciphertext.
+    /// Format: 12-byte nonce || ciphertext || 16-byte tag. Never reuse a key/nonce pair.</summary>
+    public static byte[] Seal(ReadOnlySpan<byte> key, ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> associatedData)
+    {
+        byte[] nonce = NewRandomBytes(NonceLength);
+        byte[] encrypted = Encrypt(key, plaintext, associatedData, nonce);
+        byte[] envelope = new byte[NonceLength + encrypted.Length];
+        nonce.CopyTo(envelope, 0);
+        encrypted.CopyTo(envelope, NonceLength);
+        return envelope;
+    }
+
+    /// <summary>Open a nonce-prefixed authenticated envelope.</summary>
+    public static byte[] Open(ReadOnlySpan<byte> key, ReadOnlySpan<byte> envelope, ReadOnlySpan<byte> associatedData)
+    {
+        if (envelope.Length < NonceLength + TagLength)
+            throw new CryptographicException("Invalid encrypted envelope.");
+        return Decrypt(key, envelope[NonceLength..], associatedData, envelope[..NonceLength]);
+    }
+
     /// <summary>Decrypt authenticated ciphertext; authentication failures erase the plaintext buffer.</summary>
     public static byte[] Decrypt(ReadOnlySpan<byte> key, ReadOnlySpan<byte> ciphertextAndTag,
         ReadOnlySpan<byte> associatedData, ReadOnlySpan<byte> nonce)
