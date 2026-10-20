@@ -3,6 +3,7 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Access, Vault, Add Record and MainLayout now reside in the shared library; compilation and device verification pending.
 
 ## Implemented
+- Android CI initially failed during SDK/workload evaluation: SDK 10 selected `NETSDK1202` for net8 Android and Linux evaluated iOS (`NETSDK1147`). Added a .NET 8 SDK pin and Linux-only Android target evaluation. Native compilation remains unverified until rerun.
 - PR #2 commit `1df28c5` passed both Migration build and HD v2 validation workflows, including the full browser build and JavaScript regressions.
 - Added an independent `android-preview` CI job to install the Android MAUI workload and compile the disabled native shell; native build outcome pending.
 - CI confirmed the scoped CSS exclusion eliminated `BLAZOR102`. Browser compilation then exposed `CS0122` for `RecordManifest` crossing the Core/host boundary. Promoted the record to public without modifying its fields; regression contract added. Browser build rerun pending.
