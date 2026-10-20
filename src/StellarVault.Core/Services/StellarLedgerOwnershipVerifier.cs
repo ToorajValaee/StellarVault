@@ -40,30 +40,13 @@ public sealed class StellarLedgerOwnershipVerifier(
 
         // Verify the signature BEFORE trusting the signer's claim of account control.
         if (!signatures.Verify(signerAccountId, challenge.Payload, signature.Span)) return false;
+        // Horizon's root descriptor identifies the network. A signer list from a
+        // wrong-network Horizon instance must never authorize a vault.
+        var root = await FetchBoundedJsonAsync<NetworkResponse>(horizonBaseUrl, cancellationToken);
+        if (root?.NetworkPassphrase != networkPassphrase) return false;
+
         var endpoint = new Uri(horizonBaseUrl.AbsoluteUri.TrimEnd('/') + "/accounts/" + challenge.AccountId);
-        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-        request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
-        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        // Automatic HTTP redirects may silently switch the account authority.
-        // Fail closed unless the final response originates from the exact pinned endpoint.
-        if (response.RequestMessage?.RequestUri != endpoint)
-            throw new InvalidOperationException("Horizon account response was redirected.");
-        if (response.StatusCode == HttpStatusCode.NotFound) return false;
-        response.EnsureSuccessStatusCode();
-        // Avoid unbounded response buffering from a compromised or misconfigured endpoint.
-        if (response.Content.Headers.ContentLength is > 131072) throw new InvalidDataException("Account response exceeds limit.");
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var bounded = new MemoryStream();
-        byte[] buffer = new byte[8192];
-        while (true)
-        {
-            int count = await stream.ReadAsync(buffer, cancellationToken);
-            if (count == 0) break;
-            if (bounded.Length + count > 131072) throw new InvalidDataException("Account response exceeds limit.");
-            await bounded.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
-        }
-        bounded.Position = 0;
-        var account = await System.Text.Json.JsonSerializer.DeserializeAsync<AccountResponse>(bounded, cancellationToken: cancellationToken);
+        var account = await FetchBoundedJsonAsync<AccountResponse>(endpoint, cancellationToken);
         if (account is null || account.Id != challenge.AccountId || account.Thresholds is null || account.Signers is null)
             return false;
         // Vault control is conservatively limited to an Ed25519 signer whose own
@@ -73,6 +56,38 @@ public sealed class StellarLedgerOwnershipVerifier(
         if (threshold <= 0 || threshold > 255) return false;
         return account.Signers.Any(s => s.Type == "ed25519_public_key" &&
             s.Key == signerAccountId && s.Weight >= threshold && s.Weight > 0 && s.Weight <= 255);
+    }
+
+    private async Task<T?> FetchBoundedJsonAsync<T>(Uri endpoint, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        if (response.RequestMessage?.RequestUri != endpoint)
+            throw new InvalidOperationException("Horizon response was redirected.");
+        if (response.StatusCode == HttpStatusCode.NotFound) return default;
+        response.EnsureSuccessStatusCode();
+        const int maximumBytes = 131072;
+        if (response.Content.Headers.ContentLength is > maximumBytes)
+            throw new InvalidDataException("Horizon response exceeds limit.");
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var bounded = new MemoryStream();
+        byte[] buffer = new byte[8192];
+        while (true)
+        {
+            int count = await stream.ReadAsync(buffer.AsMemory(), cancellationToken);
+            if (count == 0) break;
+            if (bounded.Length + count > maximumBytes)
+                throw new InvalidDataException("Horizon response exceeds limit.");
+            await bounded.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
+        }
+        bounded.Position = 0;
+        return await System.Text.Json.JsonSerializer.DeserializeAsync<T>(bounded, cancellationToken: cancellationToken);
+    }
+
+    private sealed class NetworkResponse
+    {
+        [JsonPropertyName("network_passphrase")] public string? NetworkPassphrase { get; set; }
     }
 
     private sealed class AccountResponse
