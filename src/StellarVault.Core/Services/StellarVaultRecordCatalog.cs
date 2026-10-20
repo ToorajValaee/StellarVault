@@ -39,9 +39,9 @@ public sealed class StellarVaultRecordCatalog(StellarAccountVaultDatabase databa
         ReadOnlyMemory<byte> vaultKey, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(name) || name.StartsWith("__svault/", StringComparison.Ordinal) ||
-            System.Text.Encoding.UTF8.GetByteCount(name) > 512 || name.Contains('\\0'))
+            System.Text.Encoding.UTF8.GetByteCount(name) > 512 || name.Contains('\0'))
             throw new ArgumentException("Invalid or reserved catalog record name.", nameof(name));
-        if (contentType is not null && (contentType.Length > 128 || contentType.Contains('\\0')))
+        if (contentType is not null && (contentType.Length > 128 || contentType.Contains('\0')))
             throw new ArgumentException("Content type exceeds limits.", nameof(contentType));
         for (int attempt = 0; attempt < 8; attempt++)
         {
