@@ -121,20 +121,9 @@ try { await VaultChunkObjectStore.ReadAsync(encryptedIndex, objectStore, failedS
 catch (CryptographicException) { }
 Check(failedStage.Length == 0, "Failed object verification left staged data");
 CryptographicOperations.ZeroMemory(objectPlain);
-CryptographicOperations.ZeroMemory(key);
-CryptographicOperations.ZeroMemory(wrongKey);
+
 Console.WriteLine("PASS: content-addressed chunk objects and authenticated manifest");
 
-sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
-{
-    public Task PutAsync(string objectId, ReadOnlyMemory<byte> ciphertext, CancellationToken cancellationToken = default)
-    {
-        objects[objectId] = ciphertext.ToArray();
-        return Task.CompletedTask;
-    }
-    public Task<byte[]> GetAsync(string objectId, CancellationToken cancellationToken = default) =>
-        Task.FromResult(objects.TryGetValue(objectId, out var bytes) ? (byte[])bytes.Clone() : throw new FileNotFoundException(objectId));
-}
 
 var blob = VaultCryptoPrimitives.Seal(key, "indexed chunk"u8, "record-1:chunk-0"u8);
 var descriptor = new VaultChunkDescriptor(0, "objects/record-1/0", 13, Convert.ToHexString(SHA256.HashData(blob)));
@@ -167,3 +156,16 @@ try { await VaultChunkedRecord.DecryptAsync(truncatedInput, truncatedStage, key,
 catch (EndOfStreamException) { }
 Check(truncatedStage.Length == 0, "Truncation did not roll back staging");
 Console.WriteLine("PASS: empty records and truncated record staging rollback");
+CryptographicOperations.ZeroMemory(key);
+CryptographicOperations.ZeroMemory(wrongKey);
+
+sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
+{
+    public Task PutAsync(string objectId, ReadOnlyMemory<byte> ciphertext, CancellationToken cancellationToken = default)
+    {
+        objects[objectId] = ciphertext.ToArray();
+        return Task.CompletedTask;
+    }
+    public Task<byte[]> GetAsync(string objectId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(objects.TryGetValue(objectId, out var bytes) ? (byte[])bytes.Clone() : throw new FileNotFoundException(objectId));
+}
