@@ -1,9 +1,10 @@
 using Microsoft.JSInterop;
 using StellarVaultPwa.Core;
+using StellarVault.Core.Abstractions;
 
 namespace StellarVaultPwa.Services;
 
-public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable
+public sealed class VaultSession(IJSRuntime js) : IAsyncDisposable, IVaultSessionStatus
 {
     private StellarVaultStore? _store;
 
