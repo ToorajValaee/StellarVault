@@ -17,7 +17,47 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
         var manifest = VaultChunkIndex.Open(encryptedManifest.Span, key.Span, context.Span);
         if (manifest.RecordId != recordId || manifest.Generation != generation)
             throw new CryptographicException("Manifest identity or generation mismatch.");
+        await VerifyReferencedChunksAsync(manifest, cancellationToken);
         return await CommitAsync(recordId, expected, encryptedManifest, cancellationToken);
+    }
+
+    /// <summary>Check every referenced ciphertext object before publishing the manifest.</summary>
+    private async Task VerifyReferencedChunksAsync(VaultRecordIndex manifest, CancellationToken cancellationToken)
+    {
+        foreach (var descriptor in manifest.Chunks)
+        {
+            await using var source = await objects.OpenReadAsync(descriptor.ObjectKey, cancellationToken);
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            byte[] buffer = new byte[64 * 1024];
+            long length = 0;
+            try
+            {
+                while (true)
+                {
+                    int read = await source.ReadAsync(buffer, cancellationToken);
+                    if (read == 0) break;
+                    length += read;
+                    if (length > VaultV2Envelope.MaximumLength)
+                        throw new CryptographicException("Referenced ciphertext exceeds maximum size.");
+                    hash.AppendData(buffer, 0, read);
+                }
+                if (length != (long)descriptor.PlaintextLength + VaultV2Envelope.MinimumLength)
+                    throw new CryptographicException("Referenced ciphertext length mismatch.");
+                byte[] digest = hash.GetHashAndReset();
+                try
+                {
+                    byte[] expected = Convert.FromHexString(descriptor.Sha256Hex);
+                    try
+                    {
+                        if (!CryptographicOperations.FixedTimeEquals(digest, expected))
+                            throw new CryptographicException("Referenced ciphertext hash mismatch.");
+                    }
+                    finally { CryptographicOperations.ZeroMemory(expected); }
+                }
+                finally { CryptographicOperations.ZeroMemory(digest); }
+            }
+            finally { CryptographicOperations.ZeroMemory(buffer); }
+        }
     }
 
     /// <summary>Read and authenticate a record index against the committed pointer.</summary>
