@@ -26,7 +26,7 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
     {
         var pointer = await index.ReadAsync(recordId, cancellationToken)
             ?? throw new FileNotFoundException("Record does not exist.");
-        byte[] encrypted = await ReadManifestAsync(recordId, cancellationToken);
+        byte[] encrypted = await ReadManifestByPointerAsync(pointer, cancellationToken);
         try
         {
             var manifest = VaultChunkIndex.Open(encrypted, key.Span, context.Span);
@@ -59,6 +59,11 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
     {
         var pointer = await index.ReadAsync(recordId, cancellationToken)
             ?? throw new FileNotFoundException("Record does not exist.");
+        return await ReadManifestByPointerAsync(pointer, cancellationToken);
+    }
+
+    private async Task<byte[]> ReadManifestByPointerAsync(VaultRecordPointer pointer, CancellationToken cancellationToken)
+    {
         await using var stream = await objects.OpenReadAsync(pointer.ManifestContentId, cancellationToken);
         using var output = new MemoryStream();
         byte[] buffer = new byte[64 * 1024];
