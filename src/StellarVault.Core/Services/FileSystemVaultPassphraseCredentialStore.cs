@@ -30,7 +30,8 @@ public sealed class FileSystemVaultPassphraseCredentialStore : IVaultPassphraseC
         byte[] bytes = await File.ReadAllBytesAsync(path, ct);
         try
         {
-            VaultPassphraseCredentials.Decode(bytes);
+            var (_, envelope) = VaultPassphraseCredentials.Decode(bytes);
+            CryptographicOperations.ZeroMemory(envelope);
             return bytes;
         }
         catch
@@ -51,7 +52,8 @@ public sealed class FileSystemVaultPassphraseCredentialStore : IVaultPassphraseC
         ReadOnlyMemory<byte> next, CancellationToken ct)
     {
         // Validate before any write.
-        VaultPassphraseCredentials.Decode(next.Span);
+        var (_, validatedEnvelope) = VaultPassphraseCredentials.Decode(next.Span);
+        CryptographicOperations.ZeroMemory(validatedEnvelope);
         string target = PathFor(accountId);
         string lockPath = Path.Combine(_directory, ".passphrase.lock");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
