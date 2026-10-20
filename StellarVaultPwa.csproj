@@ -15,6 +15,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Core/Models.cs" />
+    <Compile Remove="src/**/*.cs" />
+    <ProjectReference Include="src/StellarVault.Core/StellarVault.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
   </ItemGroup>
 
