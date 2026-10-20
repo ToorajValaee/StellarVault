@@ -20,6 +20,20 @@ var modifiedEnvelope = (byte[])sealedEnvelope.Clone();
 modifiedEnvelope[0] ^= 1;
 try { VaultCryptoPrimitives.Open(key, modifiedEnvelope, aad); throw new Exception("Modified envelope nonce accepted"); }
 catch (CryptographicException) { }
+var v2 = VaultV2Envelope.Seal(key, plaintext, aad);
+Check(v2.Length == plaintext.Length + VaultV2Envelope.MinimumLength, "Unexpected v2 envelope length");
+Check(VaultV2Envelope.Open(key, v2, aad).AsSpan().SequenceEqual(plaintext), "v2 round-trip failed");
+var wrongVersion = (byte[])v2.Clone();
+wrongVersion[4] = 3;
+MustReject(() => VaultV2Envelope.Open(key, wrongVersion, aad), "Unsupported version accepted");
+var wrongMagic = (byte[])v2.Clone();
+wrongMagic[0] ^= 1;
+MustReject(() => VaultV2Envelope.Open(key, wrongMagic, aad), "Incorrect magic accepted");
+var tamperedV2 = (byte[])v2.Clone();
+tamperedV2[^1] ^= 1;
+MustReject(() => VaultV2Envelope.Open(key, tamperedV2, aad), "v2 tampering accepted");
+MustReject(() => VaultV2Envelope.Open(key, v2, "other-context"u8), "v2 context mismatch accepted");
+MustReject(() => VaultV2Envelope.Open(key, v2.AsSpan(0, 10), aad), "Truncated v2 envelope accepted");
 var encrypted = VaultCryptoPrimitives.Encrypt(key, plaintext, aad, nonce);
 Check(encrypted.Length == plaintext.Length + 16, "Unexpected ciphertext size");
 Check(!encrypted.AsSpan(0, plaintext.Length).SequenceEqual(plaintext), "Plaintext leaked");
