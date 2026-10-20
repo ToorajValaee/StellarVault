@@ -218,7 +218,7 @@ catch (CryptographicException) { }
 Console.WriteLine("PASS: authenticated manifest identity and generation at commit boundary");
 // A valid authenticated manifest must not publish dangling or corrupted ciphertext references.
 var danglingRecordId = Guid.NewGuid();
-var danglingDescriptor = new VaultChunkDescriptor(0, new string('a', 64), 1, new string('b', 64));
+var danglingDescriptor = new VaultChunkDescriptor(0, new string('a', 64), 1, new string('a', 64));
 var danglingIndex = new VaultRecordIndex(danglingRecordId, 0, 1, new[] { danglingDescriptor });
 var danglingEnvelope = VaultChunkIndex.Seal(danglingIndex, key, "verified-manifest"u8);
 try { await committer.CommitVerifiedAsync(danglingRecordId, null, danglingEnvelope, key, "verified-manifest"u8.ToArray()); throw new Exception("Missing chunk was published"); }
