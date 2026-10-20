@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using StellarVault.Core.Services;
+using StellarVault.Core.Abstractions;
 
 namespace StellarVault.Maui;
 
@@ -18,6 +19,12 @@ public static class MauiProgram
             new FileSystemVaultPassphraseCredentialStore(
                 Path.Combine(FileSystem.AppDataDirectory, "vault-credentials")));
         builder.Services.AddSingleton<VaultPassphraseLifecycle>();
+        builder.Services.AddSingleton<IVaultAccountAuthorizer, DenyVaultAccountAuthorizer>();
+        builder.Services.AddSingleton<IVaultChunkStore>(_ =>
+            new FileSystemVaultChunkStore(Path.Combine(FileSystem.AppDataDirectory, "vault-objects")));
+        builder.Services.AddSingleton<IVaultRecordIndex>(_ =>
+            new FileSystemVaultRecordIndex(Path.Combine(FileSystem.AppDataDirectory, "vault-index")));
+        builder.Services.AddSingleton<VaultSessionWorkflow>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
