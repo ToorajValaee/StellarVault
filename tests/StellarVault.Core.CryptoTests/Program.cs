@@ -34,6 +34,17 @@ tamperedV2[^1] ^= 1;
 MustReject(() => VaultV2Envelope.Open(key, tamperedV2, aad), "v2 tampering accepted");
 MustReject(() => VaultV2Envelope.Open(key, v2, "other-context"u8), "v2 context mismatch accepted");
 MustReject(() => VaultV2Envelope.Open(key, v2.AsSpan(0, 10), aad), "Truncated v2 envelope accepted");
+static void MustRejectArgument(Action operation, string message)
+{
+    try { operation(); }
+    catch (ArgumentOutOfRangeException) { return; }
+    throw new Exception(message);
+}
+MustRejectArgument(() => VaultV2Envelope.Seal(key, new byte[VaultV2Envelope.MaximumPlaintextLength + 1], aad), "Oversized plaintext accepted");
+MustRejectArgument(() => VaultV2Envelope.Seal(key, plaintext, new byte[VaultV2Envelope.MaximumContextLength + 1]), "Oversized context accepted");
+MustReject(() => VaultV2Envelope.Open(key, new byte[VaultV2Envelope.MaximumLength + 1], aad), "Oversized envelope accepted");
+var emptyEnvelope = VaultV2Envelope.Seal(key, ReadOnlySpan<byte>.Empty, aad);
+Check(VaultV2Envelope.Open(key, emptyEnvelope, aad).Length == 0, "Empty plaintext round-trip failed");
 var encrypted = VaultCryptoPrimitives.Encrypt(key, plaintext, aad, nonce);
 Check(encrypted.Length == plaintext.Length + 16, "Unexpected ciphertext size");
 Check(!encrypted.AsSpan(0, plaintext.Length).SequenceEqual(plaintext), "Plaintext leaked");
