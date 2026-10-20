@@ -3,6 +3,7 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Existing vault pages/layouts have **not** been extracted; compilation and device verification pending.
 
 ## Implemented
+- `CostEstimatePanel` and `CostApprovalModal` were physically extracted to `src/StellarVault.UI/Components`; browser-only originals removed and web imports updated. Native host can reference them once real vault service integration is ready.
 - All three main vault pages and the approval modal now inject `IVaultClientServices` instead of concrete `BrowserStorage`; `BrowserStorage` implements the new composite contract and web DI registers it.
 - Node regression test `tests/migration-contracts.test.cjs` checks interface injection and prevents native preview accidentally exposing active vault operations.
 - Access, Vault, Add Record and Main Layout now inject `IVaultOperations`; Main Layout also injects `IVaultPreferences`. The browser host provides these interfaces via its existing services. This is dependency decoupling, not yet moving the pages into the shared RCL.
