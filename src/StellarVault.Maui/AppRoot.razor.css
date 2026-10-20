@@ -6,3 +6,8 @@
 
 .session-lock{justify-self:start;padding:.75rem 1.1rem;border:1px solid #8ebf9b;border-radius:.35rem;background:#183424;color:#ecfff0;font:inherit;font-weight:600;cursor:pointer}
 .session-lock:focus-visible{outline:3px solid #d7b96e;outline-offset:3px}
+
+.vault-field{box-sizing:border-box;width:100%;min-height:2.75rem;padding:.65rem .75rem;border:1px solid #6a9877;border-radius:.35rem;background:#07110c;color:#ecfff0;font:inherit}
+.vault-field:focus-visible{outline:3px solid #d7b96e;outline-offset:2px}
+.vault-actions{display:flex;gap:.75rem;flex-wrap:wrap}
+.session-lock:disabled{opacity:.55;cursor:not-allowed}
