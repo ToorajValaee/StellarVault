@@ -21,6 +21,9 @@ public sealed class StellarAccountVaultDatabase
     /// <summary>Encrypted directory for listing and logically deleting named records.</summary>
     public StellarVaultRecordCatalog Catalog => new(this);
 
+    /// <summary>Typed encrypted JSON document operations for application data.</summary>
+    public StellarVaultJsonDocuments Documents => new(this);
+
     public StellarAccountVaultDatabase(IVaultChunkStore objects, IVaultRecordIndex pointers, string stellarAccountId)
     {
         ArgumentNullException.ThrowIfNull(objects);
