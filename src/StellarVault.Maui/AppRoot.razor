@@ -1,39 +1,89 @@
 @using StellarVault.UI.Components
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
+@inject VaultSessionWorkflow Workflow
 @implements IDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
     <section class="native-preview" aria-labelledby="native-preview-title">
         <p class="eyebrow">DEVELOPMENT BUILD</p>
-        <h1 id="native-preview-title">One vault. Every screen.</h1>
-        <p>StellarVault's native application shell is being prepared for phones, tablets and desktop devices.</p>
+        <h1 id="native-preview-title">StellarVault access</h1>
         <SecurityStatus Heading="@(Sessions.IsUnlocked ? "SESSION ACTIVE — PREVIEW ONLY" : "VAULT LOCKED — NATIVE PREVIEW")"
                         Message="@(Sessions.IsUnlocked
-                            ? "An application session is active, but native vault actions remain disabled until authorization and crypto integration are verified."
-                            : "No unlocked vault session is active. Vault unlocking, secret entry and Stellar transactions remain disabled during this preview.")" />
+                            ? "The local session is active. Record access remains disabled until ownership verification and compatibility testing are complete."
+                            : "Create and unlock operations require cryptographic Stellar account ownership verification. The current native authorization provider denies access.")" />
         @if (Sessions.IsUnlocked)
         {
+            <p>Active account: @Sessions.ActiveAccountId</p>
             <button type="button" class="session-lock" @onclick="LockVault">Lock vault</button>
+        }
+        else
+        {
+            <label for="vault-account">Stellar account (public G-address)</label>
+            <input id="vault-account" class="vault-field" autocomplete="off" spellcheck="false"
+                   @bind="_accountId" disabled="@_busy" maxlength="56" />
+            <label for="vault-passphrase">Vault passphrase</label>
+            <input id="vault-passphrase" class="vault-field" type="password"
+                   autocomplete="off" @bind="_passphrase" disabled="@_busy" />
+            <div class="vault-actions">
+                <button type="button" class="session-lock" disabled="@_busy" @onclick="CreateVault">Create vault</button>
+                <button type="button" class="session-lock" disabled="@_busy" @onclick="UnlockVault">Unlock vault</button>
+            </div>
+            <p class="notice">Authorization is not configured: these actions currently fail closed and will not create or unlock credentials.</p>
+        }
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <p role="status" aria-live="polite">@_message</p>
         }
     </section>
 </AdaptiveShell>
 
 @code {
-    protected override void OnInitialized()
+    private string _accountId = string.Empty;
+    private string _passphrase = string.Empty;
+    private string? _message;
+    private bool _busy;
+
+    protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private Task CreateVault() => RunAsync(create: true);
+    private Task UnlockVault() => RunAsync(create: false);
+
+    private async Task RunAsync(bool create)
     {
-        Sessions.StateChanged += OnSessionChanged;
+        if (_busy) return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            if (create) await Workflow.CreateAsync(_accountId.Trim(), _passphrase);
+            else await Workflow.UnlockAsync(_accountId.Trim(), _passphrase);
+            _message = "Session activated.";
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or
+                                     System.Security.Cryptography.CryptographicException or
+                                     FileNotFoundException or InvalidOperationException)
+        {
+            // Never disclose underlying credentials or intermediate cryptographic values.
+            _message = ex is UnauthorizedAccessException
+                ? "Account ownership verification is unavailable. Vault remains locked."
+                : "Vault operation failed. Check the account and credentials.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
     }
 
-    private void OnSessionChanged()
+    private void LockVault()
     {
-        _ = InvokeAsync(StateHasChanged);
+        Workflow.Lock();
+        _passphrase = string.Empty;
+        _message = "Vault locked.";
     }
 
-    private void LockVault() => Sessions.Lock();
-
-    public void Dispose()
-    {
-        Sessions.StateChanged -= OnSessionChanged;
-    }
+    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
 }
