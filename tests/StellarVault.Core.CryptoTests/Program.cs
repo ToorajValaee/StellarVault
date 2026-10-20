@@ -319,7 +319,21 @@ try
     Check(attempts.Count(won => won) == 1, "Independent filesystem index instances both won CAS");
     var winner = await firstIndex.ReadAsync(casRecord);
     Check(winner == firstCandidate || winner == secondCandidate, "Filesystem CAS winner not persisted");
-    Console.WriteLine("PASS: filesystem CAS serialized across independent index instances");
+    // A separate holder must block CAS, and caller cancellation must terminate the wait.
+    await using (var heldLock = new FileStream(Path.Combine(casRoot, ".record-index.lock"),
+        FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+    {
+        using var cancelled = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        try
+        {
+            await secondIndex.CompareExchangeAsync(casRecord, winner,
+                new VaultRecordPointer(new string('e', 64), 1), cancelled.Token);
+            throw new Exception("CAS bypassed held cross-process lock");
+        }
+        catch (OperationCanceledException) when (cancelled.IsCancellationRequested) { }
+    }
+    Check(await firstIndex.ReadAsync(casRecord) == winner, "Cancelled CAS changed the committed pointer");
+    Console.WriteLine("PASS: filesystem CAS serializes writers and cancels lock contention safely");
 }
 finally { if (Directory.Exists(casRoot)) Directory.Delete(casRoot, recursive: true); }
 // Simulate a crash after a temporary pointer file was written but before atomic publication.
