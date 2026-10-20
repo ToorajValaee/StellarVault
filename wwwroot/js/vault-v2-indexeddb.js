@@ -15,7 +15,11 @@ window.stellarVaultV2Db = (() => {
       };
       request.onsuccess = () => {
         const db = request.result;
-        db.onversionchange = () => db.close();
+        db.onversionchange = () => {
+          db.close();
+          pending = null; // A closed connection must never be reused.
+        };
+        db.onclose = () => { pending = null; };
         resolve(db);
       };
       request.onerror = () => reject(request.error);
