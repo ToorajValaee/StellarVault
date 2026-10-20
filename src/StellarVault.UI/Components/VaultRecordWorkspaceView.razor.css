@@ -1,0 +1,8 @@
+.sv-workspace{display:grid;gap:.75rem;margin-top:1.5rem;padding:1rem;border:1px solid #365e44;max-width:100%;min-width:0}
+.sv-workspace h2{margin:0}
+.sv-workspace input,.sv-workspace textarea{box-sizing:border-box;width:100%;max-width:100%;background:#07110c;color:#f0fff1;border:1px solid #688777;padding:.65rem;font:inherit}
+.sv-workspace textarea{resize:vertical}
+.sv-workspace button{padding:.5rem .75rem;cursor:pointer}
+.sv-workspace button:disabled{cursor:not-allowed;opacity:.55}
+.sv-workspace ul{margin:.25rem 0;padding-left:1.5rem;max-height:12rem;overflow-y:auto}
+.sv-workspace li{margin:.35rem 0}
