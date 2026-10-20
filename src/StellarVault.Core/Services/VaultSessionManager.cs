@@ -14,6 +14,8 @@ public sealed class VaultSessionManager : IDisposable
         get { lock (_sync) return _active?.AccountId; }
     }
 
+    public event Action? StateChanged;
+
     public bool IsUnlocked
     {
         get { lock (_sync) return _active is not null; }
@@ -33,6 +35,7 @@ public sealed class VaultSessionManager : IDisposable
             _active = session;
         }
         previous?.Dispose();
+        StateChanged?.Invoke();
     }
 
     /// <summary>Run an operation only while a vault is unlocked.
@@ -61,6 +64,7 @@ public sealed class VaultSessionManager : IDisposable
             _active = null;
         }
         previous?.Dispose();
+        if (previous is not null) StateChanged?.Invoke();
     }
 
     public void Dispose()
