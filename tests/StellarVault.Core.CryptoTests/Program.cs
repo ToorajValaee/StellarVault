@@ -302,6 +302,23 @@ try
     Console.WriteLine("PASS: encrypted record survives service restart and rejects stale CAS updates");
 }
 finally { if (Directory.Exists(persistentRoot)) Directory.Delete(persistentRoot, recursive: true); }
+var casRoot = Path.Combine(Path.GetTempPath(), "svault-cas-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var firstIndex = new FileSystemVaultRecordIndex(casRoot);
+    var secondIndex = new FileSystemVaultRecordIndex(casRoot);
+    var casRecord = Guid.NewGuid();
+    var firstCandidate = new VaultRecordPointer(new string('a', 64), 0);
+    var secondCandidate = new VaultRecordPointer(new string('b', 64), 0);
+    var attempts = await Task.WhenAll(
+        firstIndex.CompareExchangeAsync(casRecord, null, firstCandidate),
+        secondIndex.CompareExchangeAsync(casRecord, null, secondCandidate));
+    Check(attempts.Count(won => won) == 1, "Independent filesystem index instances both won CAS");
+    var winner = await firstIndex.ReadAsync(casRecord);
+    Check(winner == firstCandidate || winner == secondCandidate, "Filesystem CAS winner not persisted");
+    Console.WriteLine("PASS: filesystem CAS serialized across independent index instances");
+}
+finally { if (Directory.Exists(casRoot)) Directory.Delete(casRoot, recursive: true); }
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
