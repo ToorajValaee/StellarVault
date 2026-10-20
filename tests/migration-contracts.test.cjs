@@ -68,3 +68,9 @@ test('MAUI CI uses supported SDK family and Linux-only Android target', () => {
   assert.match(project, /IsOSPlatform\('linux'\)/);
   assert.match(project, /net8\.0-android<\/TargetFrameworks>/);
 });
+
+test('Android preview disables backup and cleartext HTTP traffic', () => {
+  const manifest = read('src/StellarVault.Maui/Platforms/Android/AndroidManifest.xml');
+  assert.match(manifest, /android:allowBackup="false"/);
+  assert.match(manifest, /android:usesCleartextTraffic="false"/);
+});
