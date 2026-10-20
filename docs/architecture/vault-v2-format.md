@@ -12,6 +12,8 @@ This design intentionally **does not read or migrate older vault formats**. The 
 | 17 | variable | Encrypted bytes |
 | end - 16 | 16 | AES-GCM authentication tag |
 
+The current envelope limits plaintext to 1 MiB and associated context to 1 KiB. Oversized encrypted inputs are rejected before decryption or large allocations. These are deliberately conservative limits for mnemonic-oriented vault data, not general-purpose file encryption.
+
 The complete five-byte header and caller-supplied context (length-prefixed) are authenticated as associated data. Unknown versions, invalid magic, truncated payloads and authentication failures are rejected. Each encryption generates a fresh random 96-bit nonce; the caller must ensure a key is not used for excessive numbers of encryptions.
 
 ## Security boundary and remaining work
