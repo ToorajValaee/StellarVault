@@ -3,6 +3,7 @@
 **Status:** in progress — shared Razor Class Library, portable adaptive shell, and native preview integration committed. Existing vault pages/layouts have **not** been extracted; compilation and device verification pending.
 
 ## Implemented
+- Access, Vault, Add Record and Main Layout now inject `IVaultOperations`; Main Layout also injects `IVaultPreferences`. The browser host provides these interfaces via its existing services. This is dependency decoupling, not yet moving the pages into the shared RCL.
 - `IVaultOperations` now defines the existing vault read/write, cost-estimation, registry and lock/unlock signatures. Browser `VaultSession` implements it and DI resolves the same scoped instance. No encryption or derivation changes.
 - Portable interfaces for non-secret preferences, platform actions and read-only session status in `StellarVault.Core.Abstractions`.
 - Existing browser `BrowserStorage` and `VaultSession` implement these interfaces, registered in browser DI without changing crypto behavior.
