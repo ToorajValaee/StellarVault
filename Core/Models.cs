@@ -77,7 +77,7 @@ public sealed record VaultCostEstimate(
     decimal ChildFundingTransferNative,
     bool CreatesChildNode);
 
-internal sealed record RecordManifest(
+public sealed record RecordManifest(
     byte FormatVersion,
     ushort ChunkCount,
     int EncryptedLength,
