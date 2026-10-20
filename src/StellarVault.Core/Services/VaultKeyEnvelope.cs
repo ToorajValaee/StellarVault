@@ -73,8 +73,6 @@ public static class VaultKeyEnvelope
     private static void ValidateAccount(string accountId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
-        if (accountId.Length != 56 || accountId[0] != 'G' ||
-            accountId.Any(c => !((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7'))))
-            throw new ArgumentException("Expected canonical Stellar G-account address.", nameof(accountId));
+        StellarAccountAddress.Validate(accountId);
     }
 }
