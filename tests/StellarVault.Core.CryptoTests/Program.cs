@@ -135,3 +135,18 @@ sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObj
     public Task<byte[]> GetAsync(string objectId, CancellationToken cancellationToken = default) =>
         Task.FromResult(objects.TryGetValue(objectId, out var bytes) ? (byte[])bytes.Clone() : throw new FileNotFoundException(objectId));
 }
+
+var blob = VaultCryptoPrimitives.Seal(key, "indexed chunk"u8, "record-1:chunk-0"u8);
+var descriptor = new VaultChunkDescriptor(0, "objects/record-1/0", 13, Convert.ToHexString(SHA256.HashData(blob)));
+var index = new VaultRecordIndex(Guid.NewGuid(), 1, 13, new[] { descriptor });
+var sealedIndex = VaultChunkIndex.Seal(index, key, "vault-index"u8);
+var restoredIndex = VaultChunkIndex.Open(sealedIndex, key, "vault-index"u8);
+Check(restoredIndex.RecordId == index.RecordId && restoredIndex.Chunks.Count == 1, "Index round-trip failed");
+Check(VaultChunkIndex.VerifyCiphertext(restoredIndex.Chunks[0], blob), "Chunk digest verification failed");
+var corruptedBlob = (byte[])blob.Clone();
+corruptedBlob[^1] ^= 1;
+Check(!VaultChunkIndex.VerifyCiphertext(descriptor, corruptedBlob), "Tampered blob passed digest verification");
+MustReject(() => VaultChunkIndex.Open(sealedIndex, key, "wrong-index"u8), "Wrong index context accepted");
+MustReject(() => VaultChunkIndex.Validate(new VaultRecordIndex(index.RecordId, 1, 13, new[] { descriptor with { Index = 1 } })), "Out-of-order descriptor accepted");
+MustReject(() => VaultChunkIndex.Validate(new VaultRecordIndex(index.RecordId, 1, 13, new[] { descriptor with { Sha256Hex = "BAD" } })), "Malformed digest accepted");
+Console.WriteLine("PASS: authenticated record index, descriptor bounds and ciphertext hash validation");
