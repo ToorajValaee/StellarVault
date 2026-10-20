@@ -26,6 +26,8 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
     {
         foreach (var descriptor in manifest.Chunks)
         {
+            if (!string.Equals(descriptor.ObjectKey, descriptor.Sha256Hex, StringComparison.OrdinalIgnoreCase))
+                throw new CryptographicException("Chunk object identifier must match its ciphertext digest.");
             await using var source = await objects.OpenReadAsync(descriptor.ObjectKey, cancellationToken);
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             byte[] buffer = new byte[64 * 1024];
