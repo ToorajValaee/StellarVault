@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../Core/Models.cs" Link="Models.cs" />
+    <Compile Include="../../Services/VaultErrorMessages.cs" Link="VaultErrorMessages.cs" />
   </ItemGroup>
 </Project>
