@@ -13,7 +13,7 @@ Encrypted Stellar-backed vault with a browser/PWA application today and a shared
 | `src/StellarVault.Core/` | Reusable vault data contracts and portable logic | Initial library committed |
 | `src/StellarVault.UI/` | Shared Razor screens and components | Initial Razor library referenced by browser; full extraction pending |
 | `src/StellarVault.Web/` | Thin browser host | Planned |
-| `src/StellarVault.Maui/` | One native host for Android, iOS, Windows and Mac Catalyst | Planned |
+| `src/StellarVault.Maui/` | One native host for Android, iOS, Windows and Mac Catalyst | Preview scaffold committed; not build-verified or vault-enabled |
 | `docs/steps/` | AI-readable implementation path and acceptance criteria | Active |
 
 **Start here:** [Development map](docs/README.md) → [Step 00: path](docs/steps/00-path.md) → [Step 01: landing](docs/steps/01-landing-website.md).
