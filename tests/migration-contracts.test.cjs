@@ -57,12 +57,12 @@ test('CI compiles the native Android preview independently', () => {
   const workflow = read('.github/workflows/migration-build.yml');
   assert.match(workflow, /android-preview:/);
   assert.match(workflow, /dotnet workload install maui-android/);
-  assert.match(workflow, /-f net8\.0-android/);
+  assert.match(workflow, /-f net10\.0-android/);
 });
 
 test('MAUI CI uses supported SDK family and Linux-only Android target', () => {
   const sdk = JSON.parse(read('global.json'));
-  assert.match(sdk.sdk.version, /^8\./);
+  assert.match(sdk.sdk.version, /^10\./);
   assert.equal(sdk.sdk.rollForward, 'latestFeature');
   const project = read('src/StellarVault.Maui/StellarVault.Maui.csproj');
   assert.match(project, /IsOSPlatform\('linux'\)/);
@@ -73,4 +73,13 @@ test('Android preview disables backup and cleartext HTTP traffic', () => {
   const manifest = read('src/StellarVault.Maui/Platforms/Android/AndroidManifest.xml');
   assert.match(manifest, /android:allowBackup="false"/);
   assert.match(manifest, /android:usesCleartextTraffic="false"/);
+});
+
+test('all application hosts and shared projects target .NET 10', () => {
+  for (const path of ['StellarVaultPwa.csproj', 'src/StellarVault.Core/StellarVault.Core.csproj', 'src/StellarVault.UI/StellarVault.UI.csproj', 'src/StellarVault.Maui/StellarVault.Maui.csproj']) {
+    const project = read(path);
+    assert.match(project, /net10\.0/);
+    assert.doesNotMatch(project, /net8\.0|Version="8\.0/);
+  }
+  assert.match(read('.github/workflows/migration-build.yml'), /dotnet-version: '10\.0\.x'/);
 });
