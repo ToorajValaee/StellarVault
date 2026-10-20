@@ -38,6 +38,27 @@ public static class StellarAccountAddress
         return decoded[33] == (byte)crc && decoded[34] == (byte)(crc >> 8);
     }
 
+    /// <summary>Decode a checksummed Stellar G-address into its raw 32-byte Ed25519 public key.</summary>
+    public static byte[] DecodePublicKey(string address)
+    {
+        Validate(address);
+        const string alphabet = Alphabet;
+        byte[] raw = new byte[35];
+        int value = 0, bits = 0, offset = 0;
+        foreach (char character in address)
+        {
+            value = (value << 5) | alphabet.IndexOf(character);
+            bits += 5;
+            if (bits >= 8)
+            {
+                bits -= 8;
+                raw[offset++] = (byte)(value >> bits);
+                value &= (1 << bits) - 1;
+            }
+        }
+        return raw.AsSpan(1, 32).ToArray();
+    }
+
     public static void Validate(string address)
     {
         if (!IsValid(address))
