@@ -278,6 +278,30 @@ try
     Console.WriteLine("PASS: filesystem ciphertext persistence, deduplication and tamper rejection");
 }
 finally { if (Directory.Exists(fsRoot)) Directory.Delete(fsRoot, recursive: true); }
+var persistentRoot = Path.Combine(Path.GetTempPath(), "svault-index-test-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var diskObjects = new FileSystemVaultChunkStore(Path.Combine(persistentRoot, "objects"));
+    var diskIndex = new FileSystemVaultRecordIndex(Path.Combine(persistentRoot, "pointers"));
+    var diskService = new VaultEncryptedRecordService(diskObjects, diskIndex);
+    var diskRecord = Guid.NewGuid();
+    using var firstInput = new MemoryStream("persisted record"u8.ToArray());
+    var firstPointer = await diskService.WriteAsync(diskRecord, null, firstInput, key, "persisted"u8.ToArray());
+    var reopenedService = new VaultEncryptedRecordService(
+        new FileSystemVaultChunkStore(Path.Combine(persistentRoot, "objects")),
+        new FileSystemVaultRecordIndex(Path.Combine(persistentRoot, "pointers")));
+    using var recovered = new MemoryStream();
+    await reopenedService.ReadAsync(diskRecord, recovered, key, "persisted"u8.ToArray());
+    Check(recovered.ToArray().AsSpan().SequenceEqual("persisted record"u8), "Record failed to survive index and object reopen");
+    using var updateInput = new MemoryStream("new generation"u8.ToArray());
+    var secondPointer = await reopenedService.WriteAsync(diskRecord, firstPointer, updateInput, key, "persisted"u8.ToArray());
+    Check(secondPointer.Generation == 1, "Persistent record generation did not advance");
+    using var conflictingInput = new MemoryStream("conflict"u8.ToArray());
+    try { await reopenedService.WriteAsync(diskRecord, firstPointer, conflictingInput, key, "persisted"u8.ToArray()); throw new Exception("Persistent stale writer accepted"); }
+    catch (VaultWriteConflictException) { }
+    Console.WriteLine("PASS: encrypted record survives service restart and rejects stale CAS updates");
+}
+finally { if (Directory.Exists(persistentRoot)) Directory.Delete(persistentRoot, recursive: true); }
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
