@@ -11,3 +11,9 @@ The browser host now registers an isolated `VaultSessionManager` and fail-closed
 ## Fresh v2 product direction
 
 There is **no requirement to retain, read, migrate, or preserve compatibility with legacy vault records**. The PWA entry point now renders `FreshVaultHome` directly, without the old HD-registry Router or legacy browser session injection. The old implementation files remain in source temporarily for controlled cleanup; they are not a supported migration path. Do not restore legacy account-chain records in the new database design. The new native and browser interfaces remain authorization-gated until wallet proof and persistent storage are complete.
+
+## Browser persistent storage adapter (fresh v2)
+
+The PWA now loads `wwwroot/js/vault-v2-indexeddb.js` and registers `IndexedDbVaultPassphraseCredentialStore`, `IndexedDbVaultObjectStore`, `IndexedDbVaultRecordIndex`, and `VaultSessionWorkflow`. Three IndexedDB object stores hold opaque wrapped credentials, content-addressed ciphertext and record pointers. Credential creation and pointer updates use IndexedDB transactions for atomic compare-and-swap within one browser database. IndexedDB is origin-local and subject to eviction, user deletion and malicious rollback; it is **not** a cross-device or independently durable backend. No legacy record data is read or migrated.
+
+Vault creation/unlock remain disabled because the browser still registers `DenyVaultAccountAuthorizer`. Browser persistence and crypto interoperability, storage eviction recovery, and external signer proof must be verified before enabling writes.
