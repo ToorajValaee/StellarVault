@@ -68,8 +68,9 @@ public static class VaultChunkIndex
     public static bool VerifyCiphertext(VaultChunkDescriptor descriptor, ReadOnlySpan<byte> ciphertext)
     {
         Span<byte> expected = stackalloc byte[32];
-        if (descriptor.Sha256Hex is null || !Convert.TryFromHexString(descriptor.Sha256Hex, expected, out int written) || written != 32)
+        if (descriptor.Sha256Hex is null || descriptor.Sha256Hex.Length != 64 || !IsHex(descriptor.Sha256Hex))
             return false;
+        Convert.FromHexString(descriptor.Sha256Hex).CopyTo(expected);
         Span<byte> actual = stackalloc byte[32];
         SHA256.HashData(ciphertext, actual);
         return CryptographicOperations.FixedTimeEquals(expected, actual);
