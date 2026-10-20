@@ -28,6 +28,10 @@ Verified commits now preflight each referenced encrypted chunk by reading its by
 
 `VaultEncryptedRecordService` provides a development-stage end-to-end path: streaming plaintext into individually encrypted 256 KiB objects, storing those objects by ciphertext SHA-256, sealing an authenticated index, verifying all referenced objects, and atomically publishing the manifest pointer. Reads authenticate the manifest and every chunk before returning successfully; partial plaintext is rolled back from private staging on failure. The staging stream **must remain private until success**, and should not be an unencrypted disk file for secrets. The implementation currently rewrites all chunks for updates and has no persistent backend, account authorization, garbage collection, or trusted rollback anchor.
 
+## Persistent ciphertext objects
+
+`FileSystemVaultChunkStore` implements the existing encrypted-object interface with temporary-file writes, content-addressed filenames, deduplication, size limits and SHA-256 verification when reopening objects. It can retain ciphertext across process restarts. This **does not** make record pointers persistent: `InMemoryVaultRecordIndex` is still ephemeral. The directory needs platform-appropriate permissions, backups and durability policy. It is not a secure enclave, transactional database, or defense against malicious filesystem rollback.
+
 ## Next steps before production
 
 - Split manifest, record index and ciphertext blobs into separately addressable storage objects to support random reads, updates and deduplication policies.
