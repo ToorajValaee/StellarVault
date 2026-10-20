@@ -35,9 +35,10 @@ public sealed class VaultSessionWorkflow(
         try
         {
             sessions.Lock();
+            long epoch = sessions.Epoch;
             await authorizer.VerifyOwnershipAsync(accountId, ct);
             byte[] key = await credentials.CreateAsync(accountId, passphrase, ct);
-            Activate(accountId, key);
+            Activate(accountId, key, epoch);
         }
         finally { _transitions.Release(); }
     }
@@ -49,9 +50,10 @@ public sealed class VaultSessionWorkflow(
         {
             // Clear any other account before attempting authorization or derivation.
             sessions.Lock();
+            long epoch = sessions.Epoch;
             await authorizer.VerifyOwnershipAsync(accountId, ct);
             byte[] key = await credentials.UnlockAsync(accountId, passphrase, ct);
-            Activate(accountId, key);
+            Activate(accountId, key, epoch);
         }
         finally { _transitions.Release(); }
     }
@@ -71,14 +73,18 @@ public sealed class VaultSessionWorkflow(
 
     public void Lock() => sessions.Lock();
 
-    private void Activate(string accountId, byte[] ownedKey)
+    private void Activate(string accountId, byte[] ownedKey, long expectedEpoch)
     {
         bool transferred = false;
         try
         {
             var session = new VaultUnlockedSession(accountId, ownedKey, objects, pointers);
             transferred = true;
-            try { sessions.Activate(session); }
+            try
+            {
+                if (!sessions.TryActivate(session, expectedEpoch))
+                    throw new OperationCanceledException("Vault was locked while unlocking; retry explicitly.");
+            }
             catch { session.Dispose(); throw; }
         }
         finally
