@@ -21,3 +21,7 @@ Vault creation/unlock remain disabled because the browser still registers `DenyV
 ## Browser lifecycle security
 
 The PWA root now listens for `visibilitychange` (hidden), `pagehide`, and `freeze` events through `vault-v2-lifecycle.js` and requests `VaultSessionManager.Lock()`. Lock invalidates pending asynchronous unlock operations via the session epoch. Events are best-effort: browsers may terminate, suspend, or kill pages without delivering them, and JavaScript-to-.NET callbacks may not finish before the page freezes. Do not use this mechanism alone as a guarantee of key erasure; the WebAssembly runtime and OS still control memory lifetime. The authorization-deny default remains active.
+
+## Horizon network binding
+
+The ownership verifier now reads the configured Horizon root resource and requires its `network_passphrase` to match the signed challenge/network configuration before fetching the account signer list. Both requests reject redirected responses and enforce a 128 KiB response bound. This protects against accidental wrong-network configuration, but does **not** establish independent ledger authenticity: the application's trust in the chosen HTTPS Horizon provider and its signer freshness remains security-critical. MAUI and PWA still register the deny authorizer by default; real message signing and end-to-end proof verification are not yet enabled.
