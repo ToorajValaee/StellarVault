@@ -8,6 +8,42 @@ namespace StellarVault.Core.Services;
 public sealed record StellarOwnershipChallenge(
     string AccountId, string NetworkPassphrase, byte[] Payload, DateTimeOffset ExpiresAt);
 
+/// <summary>Validate the exact signed payload, not only mutable challenge metadata.
+/// This prevents an independently constructed challenge object from substituting
+/// an unrelated signature payload while claiming a valid account/network/expiry.</summary>
+public static class StellarOwnershipChallengeCodec
+{
+    private const string Domain = "StellarVault/ownership/v1";
+
+    public static bool IsWellFormed(StellarOwnershipChallenge? challenge)
+    {
+        if (challenge is null || !StellarAccountAddress.IsValid(challenge.AccountId) ||
+            string.IsNullOrWhiteSpace(challenge.NetworkPassphrase) ||
+            challenge.Payload is null || challenge.Payload.Length > 2048 ||
+            challenge.Payload.Length < 80)
+            return false;
+
+        try
+        {
+            using var stream = new MemoryStream(challenge.Payload, writable: false);
+            using var reader = new BinaryReader(stream, Encoding.UTF8);
+            if (reader.ReadString() != Domain ||
+                reader.ReadString() != challenge.AccountId ||
+                reader.ReadString() != challenge.NetworkPassphrase ||
+                reader.ReadInt64() != challenge.ExpiresAt.ToUnixTimeSeconds() ||
+                reader.ReadInt32() != 32 ||
+                reader.ReadBytes(32).Length != 32)
+                return false;
+            return stream.Position == stream.Length;
+        }
+        catch (Exception ex) when (ex is EndOfStreamException or IOException or
+                                    ArgumentException or FormatException or DecoderFallbackException)
+        {
+            return false;
+        }
+    }
+}
+
 /// <summary>Platform wallet bridge. The implementation must return a signer public
 /// StrKey and signature of the exact challenge bytes without exporting private keys.</summary>
 public interface IStellarChallengeSigner
