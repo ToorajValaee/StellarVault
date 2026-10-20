@@ -20,6 +20,8 @@
     <Compile Remove="src/**/*.cs" />
     <RazorComponent Remove="src/**/*.razor" />
     <Content Remove="src/**/*.razor" />
+    <None Remove="src/**/*.razor.css" />
+    <Content Remove="src/**/*.razor.css" />
     <ProjectReference Include="src/StellarVault.Core/StellarVault.Core.csproj" />
     <ProjectReference Include="src/StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
