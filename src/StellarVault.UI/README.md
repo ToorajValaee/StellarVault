@@ -7,3 +7,7 @@ This Razor Class Library is the first portable UI project. It references Stellar
 ## PWA v2 session preview
 
 The browser host now registers an isolated `VaultSessionManager` and fail-closed `IVaultAccountAuthorizer`, exposing `/vault-v2-preview`. Both MAUI and PWA render the portable `ManagedVaultSessionStatus` component. The legacy browser `VaultSession` and production routes are unchanged. This is UI/session integration only: browser credential persistence, browser storage providers, external wallet signing, and live ownership verification must be implemented before v2 create/unlock can be activated. Never use an in-memory credential backend as a substitute for durable vault storage or enable a bypass verifier.
+
+## Fresh v2 product direction
+
+There is **no requirement to retain, read, migrate, or preserve compatibility with legacy vault records**. The PWA entry point now renders `FreshVaultHome` directly, without the old HD-registry Router or legacy browser session injection. The old implementation files remain in source temporarily for controlled cleanup; they are not a supported migration path. Do not restore legacy account-chain records in the new database design. The new native and browser interfaces remain authorization-gated until wallet proof and persistent storage are complete.
