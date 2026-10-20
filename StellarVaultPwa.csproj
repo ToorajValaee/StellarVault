@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Compile Remove="Core/Models.cs" />
+    <Compile Remove="Services/VaultErrorMessages.cs" />
     <Compile Remove="src/**/*.cs" />
     <ProjectReference Include="src/StellarVault.Core/StellarVault.Core.csproj" />
   </ItemGroup>
