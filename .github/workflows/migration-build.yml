@@ -16,6 +16,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Build shared Razor UI and Core
+        run: dotnet build src/StellarVault.UI/StellarVault.UI.csproj --configuration Release
       - name: Restore existing browser host and shared core
         run: dotnet restore StellarVaultPwa.csproj
       - name: Build existing browser host and shared core
