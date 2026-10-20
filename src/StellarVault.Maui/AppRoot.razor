@@ -61,7 +61,7 @@
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or
                                      System.Security.Cryptography.CryptographicException or
-                                     FileNotFoundException or InvalidOperationException)
+                                     FileNotFoundException or InvalidOperationException or OperationCanceledException)
         {
             // Never disclose underlying credentials or intermediate cryptographic values.
             _message = ex is UnauthorizedAccessException
