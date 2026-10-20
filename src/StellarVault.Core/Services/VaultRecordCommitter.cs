@@ -8,6 +8,36 @@ namespace StellarVault.Core.Services;
 /// This does not provide durability, rollback resistance, or authorization by itself.</summary>
 public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordIndex index)
 {
+    /// <summary>Verify the authenticated record index and expected generation before publication.</summary>
+    public async Task<VaultRecordPointer> CommitVerifiedAsync(Guid recordId, VaultRecordPointer? expected,
+        ReadOnlyMemory<byte> encryptedManifest, ReadOnlyMemory<byte> key,
+        ReadOnlyMemory<byte> context, CancellationToken cancellationToken = default)
+    {
+        long generation = expected is null ? 0 : checked(expected.Generation + 1);
+        var manifest = VaultChunkIndex.Open(encryptedManifest.Span, key.Span, context.Span);
+        if (manifest.RecordId != recordId || manifest.Generation != generation)
+            throw new CryptographicException("Manifest identity or generation mismatch.");
+        return await CommitAsync(recordId, expected, encryptedManifest, cancellationToken);
+    }
+
+    /// <summary>Read and authenticate a record index against the committed pointer.</summary>
+    public async Task<VaultRecordIndex> ReadVerifiedAsync(Guid recordId, ReadOnlyMemory<byte> key,
+        ReadOnlyMemory<byte> context, CancellationToken cancellationToken = default)
+    {
+        var pointer = await index.ReadAsync(recordId, cancellationToken)
+            ?? throw new FileNotFoundException("Record does not exist.");
+        byte[] encrypted = await ReadManifestAsync(recordId, cancellationToken);
+        try
+        {
+            var manifest = VaultChunkIndex.Open(encrypted, key.Span, context.Span);
+            if (manifest.RecordId != recordId || manifest.Generation != pointer.Generation)
+                throw new CryptographicException("Committed manifest identity or generation mismatch.");
+            return manifest;
+        }
+        finally { CryptographicOperations.ZeroMemory(encrypted); }
+    }
+
+    [Obsolete("Use CommitVerifiedAsync with an authenticated manifest key and context.")]
     public async Task<VaultRecordPointer> CommitAsync(Guid recordId, VaultRecordPointer? expected,
         ReadOnlyMemory<byte> authenticatedManifest, CancellationToken cancellationToken = default)
     {
