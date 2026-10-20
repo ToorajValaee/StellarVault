@@ -34,6 +34,7 @@ public sealed class VaultSessionWorkflow(
         await _transitions.WaitAsync(ct);
         try
         {
+            sessions.Lock();
             await authorizer.VerifyOwnershipAsync(accountId, ct);
             byte[] key = await credentials.CreateAsync(accountId, passphrase, ct);
             Activate(accountId, key);
