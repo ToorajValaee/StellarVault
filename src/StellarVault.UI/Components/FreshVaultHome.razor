@@ -1,5 +1,6 @@
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
+@implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
     <section class="sv-fresh-home">
@@ -29,4 +30,8 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
+
+    protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
 }
