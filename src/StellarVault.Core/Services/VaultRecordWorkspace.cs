@@ -22,6 +22,12 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
     public Task<TextRecord?> ReadTextAsync(string name, CancellationToken ct = default) =>
         sessions.ExecuteAsync<TextRecord?>(async (db, key, token) =>
         {
+            var entries = await db.Catalog.ListAsync(key, token);
+            var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (metadata is null) return null;
+            if (metadata.ContentType is not null &&
+                !metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This record contains a binary file, not editable text.");
             var version = await db.GetVersionAsync(name, key, token);
             if (version is null) return null;
             using var staging = new MemoryStream();
