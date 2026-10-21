@@ -8,6 +8,15 @@ static void Check(bool condition, string message)
     if (!condition) throw new Exception(message);
 }
 
+// Canonical Stellar StrKey vector: G-address encoding of the zero Ed25519 key.
+// This catches accidental use of reflected CRC16 instead of CRC16-XModem.
+const string zeroAccount = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+Check(StellarAccountAddress.IsValid(zeroAccount), "Valid Stellar StrKey was rejected");
+Check(StellarAccountAddress.DecodePublicKey(zeroAccount).All(b => b == 0), "G-address public key decode mismatch");
+var invalidAccount = zeroAccount[..^1] + "G";
+Check(!StellarAccountAddress.IsValid(invalidAccount), "Bad StrKey CRC was accepted");
+Console.WriteLine("PASS: Stellar StrKey CRC16-XModem and public key decoding");
+
 var key = VaultCryptoPrimitives.NewRandomBytes(32);
 var nonce = VaultCryptoPrimitives.NewRandomBytes(12);
 var plaintext = Encoding.UTF8.GetBytes("StellarVault test secret");
