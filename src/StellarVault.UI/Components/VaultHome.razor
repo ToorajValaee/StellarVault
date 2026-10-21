@@ -37,7 +37,7 @@
             }
             <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
             <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
-                   autocomplete="off" spellcheck="false" @bind="_account" disabled="@_busy" />
+                   autocomplete="off" spellcheck="false" @bind="AccountInput" disabled="@_busy" />
 
             <div class="panel-heading unlock-heading">
                 <div>
@@ -90,6 +90,16 @@
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _account = string.Empty;
+    private string AccountInput
+    {
+        get => _account;
+        set
+        {
+            if (string.Equals(_account, value, StringComparison.Ordinal)) return;
+            _account = value;
+            _hasLocalVault = null;
+        }
+    }
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
