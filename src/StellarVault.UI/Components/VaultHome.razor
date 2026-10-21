@@ -3,6 +3,7 @@
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
 @inject VaultNetworkSelection NetworkSelection
+@inject IStellarLedgerRecords LedgerRecords
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -139,6 +140,46 @@
     {
         <section class="sv-vault-data" aria-label="Encrypted vault records">
             <VaultRecordWorkspaceView />
+            <section class="terminal-panel" aria-label="Stellar ledger records">
+                <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
+                <h2>STELLAR LEDGER</h2>
+                <p class="advanced-help">These records are written to Stellar ManageData entries. This is separate from browser-only records. Transactions cost XLM and require a funded root and initialized HD registry.</p>
+                @if (LedgerRecords.IsConnected)
+                {
+                    <p class="advanced-help" role="status">Signed ledger session connected.</p>
+                    @if (!_ledgerRegistryReady)
+                    {
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="InitializeLedgerAsync">INITIALIZE ACCOUNT REGISTRY</button>
+                    }
+                    else
+                    {
+                        <label class="terminal-label" for="sv-ledger-title">RECORD TITLE</label>
+                        <input id="sv-ledger-title" class="terminal-input" @bind="_ledgerTitle" @bind:event="oninput" disabled="@_busy" />
+                        <label class="terminal-label" for="sv-ledger-content">RECORD CONTENT</label>
+                        <textarea id="sv-ledger-content" class="terminal-input" rows="3" @bind="_ledgerContent" @bind:event="oninput" disabled="@_busy"></textarea>
+                        <button class="pixel-button primary" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_ledgerTitle) || string.IsNullOrWhiteSpace(_ledgerContent))" @onclick="PublishLedgerAsync">PUBLISH TO STELLAR</button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshLedgerAsync">READ FROM STELLAR</button>
+                        @if (_ledgerItems is not null)
+                        {
+                            <ul>
+                                @foreach (var item in _ledgerItems)
+                                {
+                                    <li><strong>@item.Title</strong> — @item.Content</li>
+                                }
+                            </ul>
+                        }
+                    }
+                }
+                else
+                {
+                    <p class="advanced-help">Ledger connection is unavailable. Local records are not automatically published.</p>
+                }
+                @if (!string.IsNullOrEmpty(_ledgerMessage))
+                {
+                    <p role="status" class="advanced-help">@_ledgerMessage</p>
+                }
+            </section>
+
             @if (string.Equals(Platform, "WEB PWA", StringComparison.OrdinalIgnoreCase))
             {
                 <VaultBinaryFilesView />
@@ -150,6 +191,51 @@
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _mnemonic = string.Empty;
+    private bool _ledgerRegistryReady;
+    private string _ledgerTitle = string.Empty;
+    private string _ledgerContent = string.Empty;
+    private string? _ledgerMessage;
+    private IReadOnlyList<LedgerRecordItem>? _ledgerItems;
+
+    private async Task InitializeLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            await LedgerRecords.InitializeRegistryAsync();
+            _ledgerRegistryReady = true;
+            _ledgerMessage = "Ledger registry initialized. You can now publish encrypted records.";
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger initialization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            string hash = await LedgerRecords.PublishAsync(_ledgerTitle, _ledgerContent);
+            _ledgerContent = string.Empty;
+            _ledgerMessage = "Stellar transaction confirmed: " + hash;
+            _ledgerItems = await LedgerRecords.ReadAsync();
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger publishing failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task RefreshLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            _ledgerItems = await LedgerRecords.ReadAsync();
+            _ledgerMessage = "Ledger records loaded from Horizon.";
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger read failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
@@ -221,6 +307,30 @@
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
+                await LedgerRecords.DisconnectAsync();
+                var horizonUrl = _network switch
+                {
+                    "testnet" => "https://horizon-testnet.stellar.org",
+                    "public" => "https://horizon.stellar.org",
+                    _ => _customHorizon
+                };
+                var networkPassphrase = _network switch
+                {
+                    "testnet" => "Test SDF Network ; September 2015",
+                    "public" => "Public Global Stellar Network ; September 2015",
+                    _ => _customPassphrase ?? throw new InvalidOperationException("Custom network not detected.")
+                };
+                await LedgerRecords.ConnectAsync(_mnemonic, horizonUrl, networkPassphrase);
+                _ledgerRegistryReady = await LedgerRecords.HasRegistryAsync();
+                if (_ledgerRegistryReady) _ledgerItems = await LedgerRecords.ReadAsync();
+                _ledgerMessage = "On-chain vault connected.";
+            }
+            catch (Exception ex)
+            {
+                _ledgerMessage = "On-chain connection failed: " + ex.Message;
+            }
+            try
+            {
                 bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network, _customHorizon, _customPassphrase);
                 _networkStatus = found ? "Root account found on the selected network." : "Root account not found on selected network. Local vault remains accessible.";
                 if (found && Sessions.IsUnlocked)
@@ -265,10 +375,14 @@
         }
     }
 
-    private void LockAsync()
+    private async Task LockAsync()
     {
         if (_busy) return;
         Workflow.Lock();
+        await LedgerRecords.DisconnectAsync();
+        _ledgerItems = null;
+        _ledgerRegistryReady = false;
+        _ledgerMessage = null;
         _mnemonic = string.Empty;
         _passphrase = string.Empty;
         _childAccounts = null;
