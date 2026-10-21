@@ -40,7 +40,7 @@ public sealed class VaultSessionWorkflow(
             await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
             pending.EnsureValid();
             byte[] key = await credentials.CreateAsync(accountId, passphrase, pending.Token);
-            Activate(accountId, key, epoch);
+            ActivateAfterAuthorization(accountId, key, epoch, pending);
         }
         finally { _transitions.Release(); }
     }
@@ -57,7 +57,7 @@ public sealed class VaultSessionWorkflow(
             await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
             pending.EnsureValid();
             byte[] key = await credentials.UnlockAsync(accountId, passphrase, pending.Token);
-            Activate(accountId, key, epoch);
+            ActivateAfterAuthorization(accountId, key, epoch, pending);
         }
         finally { _transitions.Release(); }
     }
@@ -121,6 +121,19 @@ public sealed class VaultSessionWorkflow(
             _sessions.StateChanged -= OnStateChanged;
             _cancel.Dispose();
         }
+    }
+
+    /// <summary>Recheck cancellation after KDF and clear a rejected derived key.</summary>
+    private void ActivateAfterAuthorization(string accountId, byte[] ownedKey,
+        long expectedEpoch, PendingTransition pending)
+    {
+        try { pending.EnsureValid(); }
+        catch
+        {
+            CryptographicOperations.ZeroMemory(ownedKey);
+            throw;
+        }
+        Activate(accountId, ownedKey, expectedEpoch);
     }
 
     private void Activate(string accountId, byte[] ownedKey, long expectedEpoch)
