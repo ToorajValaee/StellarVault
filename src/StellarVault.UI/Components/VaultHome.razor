@@ -250,6 +250,7 @@
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
+    private string _accessStage = "starting";
     private string _network = "testnet";
     private string _customHorizon = string.Empty;
     private string? _customPassphrase;
@@ -307,14 +308,18 @@
         {
             // The mnemonic identifies the namespace; never persist it or derive
             // a second, different account identity for an existing local vault.
+            _accessStage = "deriving account";
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
+            _accessStage = "checking local credentials";
             bool exists = await Workflow.HasLocalVaultAsync(account);
+            _accessStage = exists ? "unlocking encrypted credentials" : "creating encrypted credentials";
             if (exists)
                 await Workflow.UnlockAsync(account, _passphrase);
             else
                 await Workflow.CreateAsync(account, _passphrase);
+            _accessStage = "opened";
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
@@ -355,7 +360,7 @@
         }
         catch (JSException)
         {
-            _message = "Recovery phrase validation failed or browser derivation is unavailable.";
+            _message = $"Vault access failed during {_accessStage} (browser interop). Check the recovery phrase and browser console.";
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
@@ -376,7 +381,7 @@
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException or OperationCanceledException)
         {
-            _message = "Could not open the vault. Check your browser storage and try again.";
+            _message = $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
         }
         finally
         {
