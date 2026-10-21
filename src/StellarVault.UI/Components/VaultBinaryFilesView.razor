@@ -28,6 +28,9 @@
     <input id="sv-file-open-name" maxlength="512" @bind="_openName" disabled="@_busy" />
     <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_openName))"
             @onclick="DownloadAsync">Download and decrypt</button>
+    <label><input type="checkbox" @bind="_confirmRemoval" disabled="@_busy" /> Confirm removal of the selected file from the catalog</label>
+    <button type="button" disabled="@(_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName))"
+            @onclick="RemoveAsync">Remove selected file</button>
     @if (!string.IsNullOrWhiteSpace(_status))
     {
         <p role="status">@_status</p>
@@ -41,7 +44,11 @@
 
     protected override async Task OnInitializedAsync() => await RefreshFilesAsync();
 
-    private void SelectStoredFile(string name) => _openName = name;
+    private void SelectStoredFile(string name)
+    {
+        _openName = name;
+        _confirmRemoval = false;
+    }
 
     private async Task RefreshFilesAsync()
     {
@@ -65,6 +72,7 @@
     private string _openName = string.Empty;
     private string? _status;
     private bool _busy;
+    private bool _confirmRemoval;
 
     private void SelectFile(InputFileChangeEventArgs args)
     {
@@ -126,6 +134,37 @@
             _status = "File could not be downloaded or authenticated.";
         }
         finally { _busy = false; }
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName)) return;
+        _busy = true;
+        try
+        {
+            // Opening authenticates the ciphertext and supplies the exact version
+            // that is required for a compare-and-swap-style logical deletion.
+            using var record = await Files.OpenAsync(_openName);
+            if (record is null)
+            {
+                _status = "File not found in the active catalog.";
+                return;
+            }
+            await Files.DeleteAsync(_openName, record.Version);
+            _status = "File removed from the catalog. Historical ciphertext may remain in storage.";
+            _openName = string.Empty;
+            _confirmRemoval = false;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "Removal failed or the file changed. Refresh the list and retry.";
+            _confirmRemoval = false;
+        }
+        finally { _busy = false; }
+        if (_status?.StartsWith("File removed from the catalog.", StringComparison.Ordinal) == true)
+            await RefreshFilesAsync();
     }
 
     public void Dispose() => _file = null;
