@@ -25,15 +25,24 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
             var version = await db.GetVersionAsync(name, key, token);
             if (version is null) return null;
             using var staging = new MemoryStream();
-            await db.GetAsync(name, staging, key, token);
-            if (staging.Length > VaultV2Envelope.MaximumPlaintextLength)
-                throw new InvalidDataException("Record exceeds supported size.");
-            var current = await db.GetVersionAsync(name, key, token);
-            if (current != version)
-                throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
-            byte[] bytes = staging.ToArray();
-            try { return new TextRecord(name, new UTF8Encoding(false, true).GetString(bytes), version); }
-            finally { CryptographicOperations.ZeroMemory(bytes); }
+            try
+            {
+                await db.GetAsync(name, staging, key, token);
+                if (staging.Length > VaultV2Envelope.MaximumPlaintextLength)
+                    throw new InvalidDataException("Record exceeds supported size.");
+                var current = await db.GetVersionAsync(name, key, token);
+                if (current != version)
+                    throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
+                byte[] bytes = staging.ToArray();
+                try { return new TextRecord(name, new UTF8Encoding(false, true).GetString(bytes), version); }
+                finally { CryptographicOperations.ZeroMemory(bytes); }
+            }
+            finally
+            {
+                // Disposing a MemoryStream does not erase its decrypted backing array.
+                if (staging.TryGetBuffer(out ArraySegment<byte> segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
         }, ct);
 
     public Task<VaultRecordPointer> SaveTextAsync(string name, string text,
