@@ -51,6 +51,11 @@ public interface IVaultPassphraseCredentialStore
 /// moved into a disposable session or cleared immediately. Account ownership is NOT proven.</summary>
 public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore store)
 {
+    /// <summary>Read wrapped credential metadata for local-vault discovery.
+    /// The caller owns the returned buffer and must clear it.</summary>
+    public Task<byte[]?> ReadCredentialForDiscoveryAsync(string accountId, CancellationToken ct = default) =>
+        store.ReadAsync(accountId, ct);
+
     public async Task<byte[]> CreateAsync(string accountId, string passphrase, CancellationToken ct = default)
     {
         var parameters = VaultKdfParameters.Create();
