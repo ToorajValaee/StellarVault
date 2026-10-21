@@ -4,34 +4,71 @@
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
-    <section class="sv-fresh-home">
-        <p class="sv-fresh-kicker">STELLARVAULT / NEW ARCHITECTURE</p>
-        <h1>Secure storage for your Stellar account.</h1>
-        <p>Encrypted documents, records, and application data belong to an account-scoped vault.
-           Storage is off-chain; Stellar identity and authorization are separate from encryption.</p>
-        <ManagedVaultSessionStatus />
-        @if (Sessions.IsUnlocked)
-        {
+    <div class="access-grid">
+        <section class="hero-terminal terminal-panel" aria-label="StellarVault overview">
+            <div class="panel-kicker">SECURE DATA LINK // ACCOUNT VAULT</div>
+            <h1>OPEN STELLAR<br />CHAIN DATABASE<span class="blink-cursor">_</span></h1>
+            <p class="hero-copy">
+                An encrypted database for your Stellar account. Keep private records and files
+                in an account-scoped vault using the new shared .NET 10 architecture.
+            </p>
+            <div class="boot-log" aria-label="Vault capabilities">
+                <span><b>[OK]</b> AES-256-GCM ENCRYPTED RECORDS</span>
+                <span><b>[OK]</b> ACCOUNT-SCOPED PRIVATE STORAGE</span>
+                <span><b>[OK]</b> SHARED PWA + NATIVE INTERFACE</span>
+                <span><b>[WAIT]</b> WALLET OWNERSHIP SIGNING</span>
+            </div>
+            <ManagedVaultSessionStatus />
+        </section>
+
+        <section class="access-form terminal-panel" aria-label="Vault access">
+            <div class="panel-heading">
+                <div>
+                    <div class="panel-kicker">STEP 01</div>
+                    <h2>STELLAR ACCOUNT</h2>
+                </div>
+                <span class="step-led">01</span>
+            </div>
+            <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
+            <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
+                   autocomplete="off" spellcheck="false" @bind="_account" disabled="@_busy" />
+
+            <div class="panel-heading unlock-heading">
+                <div>
+                    <div class="panel-kicker">STEP 02</div>
+                    <h2>VAULT PASSPHRASE</h2>
+                </div>
+                <span class="step-led">02</span>
+            </div>
+            <label class="terminal-label" for="sv-passphrase">LOCAL ENCRYPTION PASSPHRASE</label>
+            <input id="sv-passphrase" class="terminal-input" type="password"
+                   autocomplete="off" @bind="_passphrase" disabled="@_busy" />
+            <p class="advanced-help">Your passphrase unlocks the encrypted local vault key. The Stellar wallet must separately prove account ownership.</p>
+
+            <div class="sv-access-actions">
+                <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="UnlockAsync">UNLOCK VAULT</button>
+                <button class="pixel-button" type="button" disabled="@_busy" @onclick="CreateAsync">CREATE NEW VAULT</button>
+            </div>
+            <div class="terminal-alert warning" role="status">
+                <strong>AUTHORIZATION NOT CONFIGURED</strong>
+                <span>The wallet-signing bridge remains fail-closed. This screen is available for preview; real Create/Unlock cannot yet succeed.</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="terminal-alert warning" role="status"><strong>VAULT STATUS</strong><span>@_message</span></div>
+            }
+        </section>
+    </div>
+    @if (Sessions.IsUnlocked)
+    {
+        <section class="sv-vault-data" aria-label="Encrypted vault records">
             <VaultRecordWorkspaceView />
-            <VaultBinaryFilesView />
-        }
-        <fieldset disabled="@_busy" aria-describedby="sv-authorization-note">
-            <legend>Vault access</legend>
-            <p><label for="sv-account">Stellar public account</label></p>
-            <input id="sv-account" class="sv-fresh-field" placeholder="G…" maxlength="56" autocomplete="off" @bind="_account" />
-            <p><label for="sv-passphrase">Vault passphrase</label></p>
-            <input id="sv-passphrase" class="sv-fresh-field" type="password" autocomplete="off" @bind="_passphrase" />
-            <p><button type="button" @onclick="CreateAsync">Create vault</button> <button type="button" @onclick="UnlockAsync">Unlock vault</button></p>
-        </fieldset>
-        <p id="sv-authorization-note" role="status">
-            Account ownership verification is not yet connected. Create and Unlock will fail closed
-            until a verified Stellar wallet-signing integration is available.
-        </p>
-        @if (!string.IsNullOrWhiteSpace(_message))
-        {
-            <p role="status">@_message</p>
-        }
-    </section>
+            @if (string.Equals(Platform, "WEB PWA", StringComparison.OrdinalIgnoreCase))
+            {
+                <VaultBinaryFilesView />
+            }
+        </section>
+    }
 </AdaptiveShell>
 
 @code {
