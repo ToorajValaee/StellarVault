@@ -37,6 +37,9 @@ public sealed class VaultSessionWorkflow(
             sessions.Lock();
             long epoch = sessions.Epoch;
             await authorizer.VerifyOwnershipAsync(accountId, ct);
+            ct.ThrowIfCancellationRequested();
+            if (sessions.Epoch != epoch)
+                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
             byte[] key = await credentials.CreateAsync(accountId, passphrase, ct);
             Activate(accountId, key, epoch);
         }
@@ -52,6 +55,9 @@ public sealed class VaultSessionWorkflow(
             sessions.Lock();
             long epoch = sessions.Epoch;
             await authorizer.VerifyOwnershipAsync(accountId, ct);
+            ct.ThrowIfCancellationRequested();
+            if (sessions.Epoch != epoch)
+                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
             byte[] key = await credentials.UnlockAsync(accountId, passphrase, ct);
             Activate(accountId, key, epoch);
         }
@@ -65,7 +71,11 @@ public sealed class VaultSessionWorkflow(
         try
         {
             sessions.Lock();
+            long epoch = sessions.Epoch;
             await authorizer.VerifyOwnershipAsync(accountId, ct);
+            ct.ThrowIfCancellationRequested();
+            if (sessions.Epoch != epoch)
+                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
             await credentials.RotateAsync(accountId, oldPassphrase, newPassphrase, ct);
         }
         finally { _transitions.Release(); }
