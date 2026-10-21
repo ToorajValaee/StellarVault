@@ -90,7 +90,12 @@ public sealed class VaultSessionManager : IDisposable
             _epoch++;
         }
         try { previous?.Dispose(); }
-        finally { if (previous is not null) StateChanged?.Invoke(); }
+        finally
+        {
+            // Notify even if already locked: an in-flight ownership verification
+            // or KDF operation must learn that its starting epoch was invalidated.
+            StateChanged?.Invoke();
+        }
     }
 
     public void Dispose()
