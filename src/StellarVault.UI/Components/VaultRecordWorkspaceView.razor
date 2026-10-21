@@ -2,12 +2,12 @@
 @inject VaultRecordWorkspace Workspace
 
 <section class="sv-workspace" aria-label="Encrypted records">
-    <h2>Encrypted records</h2>
+    <h2>Encrypted text records</h2>
     <button type="button" disabled="@_busy" @onclick="RefreshAsync">Refresh records</button>
     @if (_items is not null)
     {
         <ul>
-            @foreach (var item in _items)
+            @foreach (var item in _items.Where(item => item.ContentType is null || item.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
             {
                 <li>
                     <button type="button" disabled="@_busy" @onclick="() => OpenAsync(item.Name)">@item.Name</button>
