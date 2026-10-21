@@ -14,7 +14,17 @@
     {
         if (!firstRender) return;
         _callback = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback);
+        try
+        {
+            await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback);
+        }
+        catch (JSException)
+        {
+            // Browser privacy restrictions or an outdated cached script may
+            // disable this optional lifecycle hook. Fail closed: do not keep
+            // a vault session alive without the background-lock mechanism.
+            Sessions.Lock();
+        }
     }
 
     [JSInvokable]
@@ -25,6 +35,7 @@
         Sessions.Lock();
         try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
         catch (JSDisconnectedException) { }
+        catch (JSException) { /* The page is already locking and disposing. */ }
         _callback?.Dispose();
     }
 }
