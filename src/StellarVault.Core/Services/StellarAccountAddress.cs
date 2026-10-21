@@ -28,12 +28,15 @@ public static class StellarAccountAddress
         }
         if (position != 35 || bits != 0 || value != 0 || decoded[0] != AccountVersion)
             return false;
+        // Stellar StrKey uses CRC16-XModem (polynomial 0x1021, init 0),
+        // serialized least-significant byte first. The reflected CRC16
+        // variant (0x8408) is NOT compatible with Stellar addresses.
         ushort crc = 0;
         for (int i = 0; i < 33; i++)
         {
-            crc ^= decoded[i];
+            crc ^= (ushort)(decoded[i] << 8);
             for (int j = 0; j < 8; j++)
-                crc = (ushort)((crc & 1) != 0 ? (crc >> 1) ^ 0x8408 : crc >> 1);
+                crc = (ushort)((crc & 0x8000) != 0 ? (crc << 1) ^ 0x1021 : crc << 1);
         }
         return decoded[33] == (byte)crc && decoded[34] == (byte)(crc >> 8);
     }
