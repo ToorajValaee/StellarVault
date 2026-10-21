@@ -19,8 +19,17 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (_store is not null) throw new InvalidOperationException("A ledger session is already connected.");
         if (string.IsNullOrWhiteSpace(mnemonic) || string.IsNullOrWhiteSpace(networkPassphrase))
             throw new ArgumentException("Mnemonic and network passphrase are required.");
+        var info = await js.InvokeAsync<HorizonNetworkInfo>(
+            "stellarVault.network.inspectHorizon", horizonUrl.TrimEnd('/'));
+        if (!string.Equals(info.NetworkPassphrase, networkPassphrase, StringComparison.Ordinal))
+            throw new InvalidOperationException("Horizon network passphrase changed or does not match the selected network.");
+        if (info.BaseReserveStroops <= 0)
+            throw new InvalidOperationException("Horizon did not report a valid base reserve.");
+        uint fee = Math.Max(info.RecommendedBaseFeeStroops, info.MinimumBaseFeeStroops);
+        if (fee == 0)
+            throw new InvalidOperationException("Horizon did not report a valid network fee.");
         var settings = new VaultNetworkSettings("Selected network", horizonUrl, networkPassphrase,
-            "0", 80, 100);
+            "0", 80, fee, info.BaseReserveStroops);
         var candidate = new StellarVaultStore(settings, js);
         try
         {
