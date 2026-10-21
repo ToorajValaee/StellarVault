@@ -21,6 +21,13 @@ window.stellarVaultV2Wallet = Object.freeze({
         typeof networkPassphrase !== 'string' || !networkPassphrase ||
         typeof challengeBase64 !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(challengeBase64))
       throw new TypeError('Invalid ownership challenge request');
+    if (networkPassphrase !== 'Test SDF Network ; September 2015')
+      throw new Error('Only Stellar Testnet is enabled for this development preview');
+    if (typeof wallet.getNetwork !== 'function')
+      throw new Error('Wallet network verification is unavailable');
+    const currentNetwork = await wallet.getNetwork();
+    if (currentNetwork?.error || currentNetwork?.networkPassphrase !== networkPassphrase)
+      throw new Error('Switch Freighter to Stellar Testnet before signing');
     const response = await wallet.signMessage(challengeBase64, { address: accountId });
     if (response?.error || response?.signerAddress !== accountId ||
         typeof response.signedMessage !== 'string')
