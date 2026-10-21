@@ -2,7 +2,6 @@
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
-@inject Microsoft.JSInterop.IJSRuntime JS
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
@@ -31,11 +30,7 @@
                 </div>
                 <span class="step-led">01</span>
             </div>
-            @if (Platform == "WEB PWA")
-            {
-                <p class="advanced-help">Testnet preview — connect your Freighter desktop wallet. A funded Testnet account and an authorized high-threshold signer are required.</p>
-                <button class="pixel-button" type="button" disabled="@_busy" @onclick="ConnectWalletAsync">CONNECT FREIGHTER</button>
-            }
+            <p class="advanced-help">SWallet account authorization integration is planned. Vault access remains unavailable until it is verified.</p>
             <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
             <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
                    autocomplete="off" spellcheck="false" @bind="AccountInput" disabled="@_busy" />
@@ -67,8 +62,8 @@
                 <button class="pixel-button" type="button" disabled="@(_busy || _hasLocalVault != false)" @onclick="CreateAsync">CREATE NEW VAULT</button>
             </div>
             <div class="terminal-alert warning" role="status">
-                <strong>TESTNET DEVELOPMENT PREVIEW</strong>
-                <span>Browser: Freighter SEP-53 wallet signing and live Stellar Testnet signer verification. Native: account authorization is not configured. Do not store valuable secrets until tested.</span>
+                <strong>VAULT ACCESS NOT YET AVAILABLE</strong>
+                <span>SWallet authorization has not been integrated. This development build cannot create or unlock a vault. Do not store secrets.</span>
             </div>
             @if (!string.IsNullOrWhiteSpace(_message))
             {
@@ -105,24 +100,6 @@
     private string? _message;
     private bool _busy;
     private bool? _hasLocalVault;
-
-    private async Task ConnectWalletAsync()
-    {
-        if (_busy || Platform != "WEB PWA") return;
-        _busy = true;
-        _message = null;
-        try
-        {
-            _account = await JS.InvokeAsync<string>("stellarVaultV2Wallet.connect");
-            _hasLocalVault = await Workflow.HasLocalVaultAsync(_account);
-            _message = _hasLocalVault.Value ? "Freighter connected. Local vault found: choose UNLOCK." : "Freighter connected. No local vault found: choose CREATE.";
-        }
-        catch (Exception ex) when (ex is Microsoft.JSInterop.JSException or InvalidOperationException)
-        {
-            _message = "Could not connect Freighter. Install or unlock the desktop extension and approve access.";
-        }
-        finally { _busy = false; }
-    }
 
     private async Task CheckLocalVaultAsync()
     {
@@ -164,7 +141,7 @@
         }
         catch (UnauthorizedAccessException)
         {
-            _message = "Wallet ownership proof failed or was rejected. Confirm Freighter Testnet and the account signer policy.";
+            _message = "Account authorization is not yet available. SWallet integration is pending.";
         }
         catch (ArgumentException)
         {
