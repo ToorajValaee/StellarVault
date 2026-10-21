@@ -34,6 +34,9 @@ public sealed class VaultSessionWorkflow(
         await _transitions.WaitAsync(ct);
         try
         {
+            // A request canceled while waiting for the transition gate must not
+            // lock the currently active account.
+            ct.ThrowIfCancellationRequested();
             sessions.Lock();
             long epoch = sessions.Epoch;
             using var pending = new PendingTransition(sessions, epoch, ct);
@@ -50,6 +53,8 @@ public sealed class VaultSessionWorkflow(
         await _transitions.WaitAsync(ct);
         try
         {
+            // A canceled request must not lock a different active account.
+            ct.ThrowIfCancellationRequested();
             // Clear any other account before attempting authorization or derivation.
             sessions.Lock();
             long epoch = sessions.Epoch;
@@ -68,12 +73,18 @@ public sealed class VaultSessionWorkflow(
         await _transitions.WaitAsync(ct);
         try
         {
+            // A request canceled while waiting for the transition gate must not
+            // lock the currently active account.
+            ct.ThrowIfCancellationRequested();
             sessions.Lock();
             long epoch = sessions.Epoch;
             using var pending = new PendingTransition(sessions, epoch, ct);
             await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
             pending.EnsureValid();
             await credentials.RotateAsync(accountId, oldPassphrase, newPassphrase, pending.Token);
+            // Storage commits cannot be rolled back, but never report a canceled
+            // rotation as successful after an explicit user lock.
+            pending.EnsureValid();
         }
         finally { _transitions.Release(); }
     }
