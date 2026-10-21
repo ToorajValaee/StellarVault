@@ -51,9 +51,19 @@
                    autocomplete="off" @bind="_passphrase" disabled="@_busy" />
             <p class="advanced-help">Your passphrase unlocks the encrypted local vault key. The Stellar wallet must separately prove account ownership.</p>
 
+            <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_account))"
+                    @onclick="CheckLocalVaultAsync">CHECK LOCAL VAULT</button>
+            @if (_hasLocalVault is not null)
+            {
+                <p class="advanced-help" role="status">
+                    @(_hasLocalVault.Value
+                        ? "An encrypted vault already exists for this account in this browser/device. Choose UNLOCK."
+                        : "No local vault was found for this account. Choose CREATE to initialize one.")
+                </p>
+            }
             <div class="sv-access-actions">
-                <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="UnlockAsync">UNLOCK VAULT</button>
-                <button class="pixel-button" type="button" disabled="@_busy" @onclick="CreateAsync">CREATE NEW VAULT</button>
+                <button class="pixel-button primary" type="button" disabled="@(_busy || _hasLocalVault != true)" @onclick="UnlockAsync">UNLOCK VAULT</button>
+                <button class="pixel-button" type="button" disabled="@(_busy || _hasLocalVault != false)" @onclick="CreateAsync">CREATE NEW VAULT</button>
             </div>
             <div class="terminal-alert warning" role="status">
                 <strong>TESTNET DEVELOPMENT PREVIEW</strong>
@@ -83,6 +93,7 @@
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
+    private bool? _hasLocalVault;
 
     private async Task ConnectWalletAsync()
     {
@@ -92,11 +103,33 @@
         try
         {
             _account = await JS.InvokeAsync<string>("stellarVaultV2Wallet.connect");
-            _message = "Freighter connected. Sign the ownership request when creating or unlocking.";
+            _hasLocalVault = await Workflow.HasLocalVaultAsync(_account);
+            _message = _hasLocalVault.Value ? "Freighter connected. Local vault found: choose UNLOCK." : "Freighter connected. No local vault found: choose CREATE.";
         }
         catch (Exception ex) when (ex is Microsoft.JSInterop.JSException or InvalidOperationException)
         {
             _message = "Could not connect Freighter. Install or unlock the desktop extension and approve access.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CheckLocalVaultAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _hasLocalVault = null;
+        _message = null;
+        try
+        {
+            _hasLocalVault = await Workflow.HasLocalVaultAsync(_account.Trim());
+        }
+        catch (ArgumentException)
+        {
+            _message = "Enter a valid Stellar public G-address before checking local storage.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or Microsoft.JSInterop.JSException)
+        {
+            _message = "Could not read local vault status. Check browser storage permissions.";
         }
         finally { _busy = false; }
     }
@@ -115,6 +148,7 @@
         try
         {
             await operation(_account.Trim(), _passphrase);
+            _hasLocalVault = true;
             _message = "Vault unlocked.";
         }
         catch (UnauthorizedAccessException)
@@ -124,6 +158,11 @@
         catch (ArgumentException)
         {
             _message = "Enter a valid Stellar public account and a nonempty vault passphrase.";
+        }
+        catch (FileNotFoundException)
+        {
+            _hasLocalVault = false;
+            _message = "No vault credentials exist for this account on this device. Create a new local vault.";
         }
         catch (OperationCanceledException)
         {
