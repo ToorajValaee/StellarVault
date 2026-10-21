@@ -370,6 +370,18 @@ Console.WriteLine("PASS: reject mismatched content-addressed object keys");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
+// Official SEP-53 public test vector: verify canonical prefix + SHA-256
+// and reject altered messages, signatures, and signer addresses.
+var sep53Verifier = new Sep53StellarEd25519Verifier(new NsecStellarEd25519Verifier());
+const string vectorSigner = "GBXFXNDLV4LSWA4VB7YIL5GBD7BVNR22SGBTDKMO2SBZZHDXSKZYCP7L";
+byte[] vectorSignature = Convert.FromBase64String("fO5dbYhXUhBMhe6kId/cuVq/AfEnHRHEvsP8vXh03M1uLpi5e46yO2Q8rEBzu3feXQewcQE5GArp88u6ePK6BA==");
+Check(sep53Verifier.Verify(vectorSigner, "Hello, World!"u8, vectorSignature), "SEP-53 canonical signature vector rejected");
+Check(!sep53Verifier.Verify(vectorSigner, "Hello, World?"u8, vectorSignature), "SEP-53 accepted altered message");
+vectorSignature[0] ^= 1;
+Check(!sep53Verifier.Verify(vectorSigner, "Hello, World!"u8, vectorSignature), "SEP-53 accepted altered signature");
+CryptographicOperations.ZeroMemory(vectorSignature);
+Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
+
 sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
 {
     public Task PutAsync(string objectId, ReadOnlyMemory<byte> ciphertext, CancellationToken cancellationToken = default)
