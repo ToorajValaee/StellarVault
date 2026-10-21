@@ -1,0 +1,5 @@
+.sv-workspace{display:grid;gap:.75rem;margin-top:1.5rem;padding:1rem;border:1px solid #365e44;max-width:100%;min-width:0}
+.sv-workspace h2{margin:0}
+.sv-workspace input{box-sizing:border-box;width:100%;max-width:100%;background:#07110c;color:#f0fff1;border:1px solid #688777;padding:.65rem;font:inherit}
+.sv-workspace button{padding:.6rem .8rem}
+.sv-workspace button:disabled{cursor:not-allowed;opacity:.55}
