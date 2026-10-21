@@ -14,6 +14,7 @@ public static class MauiProgram
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
         builder.Services.AddSingleton<VaultNetworkSelection>();
+        builder.Services.AddSingleton<IStellarLedgerRecords, UnavailableStellarLedgerRecords>();
         // Persist only public KDF parameters and AES-GCM-wrapped data keys.
         // The native UI remains gated until account ownership verification is available.
         builder.Services.AddSingleton<IVaultPassphraseCredentialStore>(_ =>
