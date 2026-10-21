@@ -16,7 +16,7 @@ builder.Services.AddScoped(_ => new HttpClient());
 // PWA local-only encrypted storage: G-address is a namespace, NOT an ownership proof.
 // SWallet integration can replace this with real challenge verification later.
 builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAuthorizer>();
-builder.Services.AddScoped<BrowserVaultNetworkContext>();
+builder.Services.AddScoped<VaultNetworkSelection>();
 builder.Services.AddScoped<IVaultPassphraseCredentialStore, IndexedDbVaultPassphraseCredentialStore>();
 builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
