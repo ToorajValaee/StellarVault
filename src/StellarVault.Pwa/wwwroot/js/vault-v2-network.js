@@ -34,8 +34,8 @@ window.stellarVaultV2Network = Object.freeze({
     if (root.missing || root.data?.network_passphrase !== selected.passphrase)
       throw new Error('Horizon network identity mismatch');
     const record = await fetchJson(selected.base + '/accounts/' + encodeURIComponent(account));
-    if (record.missing) return { found: false, network, account };
+    if (record.missing) return false;
     if (record.data?.id !== account) throw new Error('Horizon returned a mismatched account');
-    return { found: true, network, account };
+    return true;
   }
 });
