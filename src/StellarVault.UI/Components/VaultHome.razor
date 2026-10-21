@@ -65,7 +65,7 @@
                 <div class="sv-access-actions">
                     @if (Sessions.IsUnlocked)
                     {
-                        <button class="pixel-button primary" type="button" @onclick="LockAsync">LOCK VAULT</button>
+                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
                     }
                     else
                     {
@@ -175,7 +175,7 @@
                 : root.Found
                     ? "Root account found on the selected Stellar network."
                     : "No funded root account was found on the selected network. Local encrypted records remain accessible.";
-            if (root.Found)
+            if (root.Found && Sessions.IsUnlocked)
             {
                 try
                 {
@@ -224,6 +224,7 @@
 
     private void LockAsync()
     {
+        if (_busy) return;
         Workflow.Lock();
         _mnemonic = string.Empty;
         _passphrase = string.Empty;
