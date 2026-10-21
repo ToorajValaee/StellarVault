@@ -142,15 +142,15 @@
         _busy = true;
         try
         {
-            // Opening authenticates the ciphertext and supplies the exact version
-            // that is required for a compare-and-swap-style logical deletion.
-            using var record = await Files.OpenAsync(_openName);
-            if (record is null)
+            // A catalog/version lookup is enough for logical removal.
+            // Do not decrypt and allocate an entire file just to remove its listing.
+            var version = await Files.GetFileVersionAsync(_openName);
+            if (version is null)
             {
                 _status = "File not found in the active catalog.";
                 return;
             }
-            await Files.DeleteAsync(_openName, record.Version);
+            await Files.DeleteAsync(_openName, version);
             _status = "File removed from the catalog. Historical ciphertext may remain in storage.";
             _openName = string.Empty;
             _confirmRemoval = false;
