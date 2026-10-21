@@ -29,6 +29,17 @@ public sealed class VaultSessionWorkflow(
 {
     private readonly SemaphoreSlim _transitions = new(1, 1);
 
+    /// <summary>Check whether this browser/device has local wrapped credentials for an
+    /// account. This is not ownership proof and does not access or decrypt vault data.</summary>
+    public async Task<bool> HasLocalVaultAsync(string accountId, CancellationToken ct = default)
+    {
+        StellarAccountAddress.Validate(accountId);
+        byte[]? credential = await credentials.ReadCredentialForDiscoveryAsync(accountId, ct);
+        if (credential is null) return false;
+        CryptographicOperations.ZeroMemory(credential);
+        return true;
+    }
+
     public async Task CreateAsync(string accountId, string passphrase, CancellationToken ct = default)
     {
         ValidateRequest(accountId, passphrase);
