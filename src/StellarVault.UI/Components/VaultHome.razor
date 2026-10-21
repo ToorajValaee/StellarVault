@@ -171,7 +171,7 @@
             }
             catch (JSException)
             {
-                _networkStatus = "Root/child network discovery was unavailable or interrupted. Your encrypted local vault remains accessible.";
+                _networkStatus = "Root/child discovery could not complete. Registry integrity failures and network errors are not treated as an empty account chain.";
             }
         }
         catch (JSException)
