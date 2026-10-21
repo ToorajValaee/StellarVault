@@ -1,7 +1,7 @@
 using Microsoft.JSInterop;
 using StellarVault.Core.Services;
 
-namespace StellarVaultPwa.Services;
+namespace StellarVault.Pwa.Services;
 
 /// <summary>Bridge for a future user-approved wallet that supports signing arbitrary
 /// domain-separated bytes. This bridge NEVER imports secret keys or signs locally.
