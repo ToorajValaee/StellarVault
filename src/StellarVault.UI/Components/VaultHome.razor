@@ -169,7 +169,7 @@
                 try
                 {
                     _childAccounts = await JS.InvokeAsync<string[]>(
-                        "stellarVaultV2Chain.discover", _mnemonic, _network, root.Scheme, 16);
+                        "stellarVaultV2Chain.discover", _mnemonic, _network, 16);
                 }
                 catch (JSException)
                 {
