@@ -1,5 +1,6 @@
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
+@inject VaultSessionWorkflow Workflow
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
@@ -14,23 +15,72 @@
             <VaultRecordWorkspaceView />
             <VaultBinaryFilesView />
         }
-        <fieldset disabled aria-describedby="sv-authorization-note">
+        <fieldset disabled="@_busy" aria-describedby="sv-authorization-note">
             <legend>Vault access</legend>
             <p><label for="sv-account">Stellar public account</label></p>
-            <input id="sv-account" class="sv-fresh-field" placeholder="G…" maxlength="56" autocomplete="off" />
+            <input id="sv-account" class="sv-fresh-field" placeholder="G…" maxlength="56" autocomplete="off" @bind="_account" />
             <p><label for="sv-passphrase">Vault passphrase</label></p>
-            <input id="sv-passphrase" class="sv-fresh-field" type="password" autocomplete="off" />
-            <p><button type="button">Create vault</button> <button type="button">Unlock vault</button></p>
+            <input id="sv-passphrase" class="sv-fresh-field" type="password" autocomplete="off" @bind="_passphrase" />
+            <p><button type="button" @onclick="CreateAsync">Create vault</button> <button type="button" @onclick="UnlockAsync">Unlock vault</button></p>
         </fieldset>
         <p id="sv-authorization-note" role="status">
-            Account creation and unlocking are disabled until the wallet-signing bridge,
-            ownership verifier, and durable storage are connected and validated.
+            Account ownership verification is not yet connected. Create and Unlock will fail closed
+            until a verified Stellar wallet-signing integration is available.
         </p>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p role="status">@_message</p>
+        }
     </section>
 </AdaptiveShell>
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
+    private string _account = string.Empty;
+    private string _passphrase = string.Empty;
+    private string? _message;
+    private bool _busy;
+
+    private Task CreateAsync() => RunAsync((account, passphrase) =>
+        Workflow.CreateAsync(account, passphrase));
+
+    private Task UnlockAsync() => RunAsync((account, passphrase) =>
+        Workflow.UnlockAsync(account, passphrase));
+
+    private async Task RunAsync(Func<string, string, Task> operation)
+    {
+        if (_busy) return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            await operation(_account.Trim(), _passphrase);
+            _message = "Vault unlocked.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _message = "Stellar wallet ownership verification is not configured. No vault was unlocked.";
+        }
+        catch (ArgumentException)
+        {
+            _message = "Enter a valid Stellar public account and a nonempty vault passphrase.";
+        }
+        catch (OperationCanceledException)
+        {
+            _message = "Vault operation canceled.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or
+            System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Vault operation failed. Check the account, passphrase, and storage.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
 
     protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
