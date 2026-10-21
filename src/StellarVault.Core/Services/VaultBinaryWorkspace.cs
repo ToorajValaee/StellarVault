@@ -48,6 +48,12 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
     public Task<BinaryRecord?> OpenAsync(string name, CancellationToken cancellationToken = default) =>
         sessions.ExecuteAsync<BinaryRecord?>(async (database, key, ct) =>
         {
+            var entries = await database.Catalog.ListAsync(key, ct);
+            var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (metadata is null) return null;
+            if (metadata.ContentType is null ||
+                metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This record contains text, not a binary file.");
             var before = await database.GetVersionAsync(name, key, ct);
             if (before is null) return null;
 
