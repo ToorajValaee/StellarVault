@@ -5,7 +5,7 @@ namespace StellarVault.Pwa.Services;
 
 /// <summary>Browser-backed v2 wrapped credential storage. No plaintext keys are persisted.
 /// IndexedDB transactions provide per-account create-if-absent and compare-and-swap.</summary>
-public sealed class IndexedDbVaultPassphraseCredentialStore(IJSRuntime js, BrowserVaultNetworkContext network) : IVaultPassphraseCredentialStore
+public sealed class IndexedDbVaultPassphraseCredentialStore(IJSRuntime js, VaultNetworkSelection network) : IVaultPassphraseCredentialStore
 {
     public Task<byte[]?> ReadAsync(string accountId, CancellationToken ct = default)
     {
