@@ -1,7 +1,7 @@
 using Microsoft.JSInterop;
 using StellarVault.Core.Services;
 
-namespace StellarVaultPwa.Services;
+namespace StellarVault.Pwa.Services;
 
 /// <summary>Browser-backed v2 wrapped credential storage. No plaintext keys are persisted.
 /// IndexedDB transactions provide per-account create-if-absent and compare-and-swap.</summary>
