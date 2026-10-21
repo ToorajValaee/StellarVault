@@ -1,20 +1,13 @@
-# StellarVault — AI-readable development map
+# StellarVault documentation
 
-This directory is the **source of truth for implementation steps**. Each milestone has its own Markdown file, with scope, prerequisites, compatibility rules, acceptance criteria, and status.
+StellarVault is a fresh .NET 10 encrypted, Stellar-account-centered database with PWA and MAUI hosts.
 
-## Read in order
+## Current architecture
+- [Vault v2 format](architecture/vault-v2-format.md)
+- [Stellar account database](architecture/stellar-account-database.md)
+- [Chunked encrypted records](architecture/chunked-records.md)
+- [Vault key management](architecture/vault-key-management.md)
 
-1. [00 — Product and architecture path](steps/00-path.md)
-2. [01 — Landing website](steps/01-landing-website.md)
-3. [02 — Shared Core](steps/02-shared-core.md)
-4. [03 — Shared Razor UI](steps/03-shared-ui.md)
-5. [04 — Web host](steps/04-web-host.md)
-6. [05 — MAUI host](steps/05-maui-host.md)
-7. [06 — Compatibility and production cutover](steps/06-compatibility-release.md)
+The code under `src/` is authoritative. Previous HD-account registry / v1 compatibility plans are not part of the current product. The project is not yet production-ready: wallet proof integration and application builds still need validation.
 
-## Working rules
-- Make changes on `feature/maui-shared-app`; never deploy or merge automatically.
-- Update the corresponding step file whenever implementation changes.
-- Distinguish **planned**, **in progress**, **implemented**, and **verified**. A commit is not a successful build.
-- Keep browser and native recovery formats identical.
-- Never put secrets or real mnemonics into tests, documentation, or logs.
+Work only on `feature/maui-shared-app`, without automatic merge or deployment.
