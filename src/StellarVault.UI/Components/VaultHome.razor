@@ -219,7 +219,17 @@
             string hash = await LedgerRecords.PublishAsync(_ledgerTitle, _ledgerContent);
             _ledgerContent = string.Empty;
             _ledgerMessage = "Stellar transaction confirmed: " + hash;
-            _ledgerItems = await LedgerRecords.ReadAsync();
+            try
+            {
+                _ledgerItems = await LedgerRecords.ReadAsync();
+            }
+            catch (Exception ex)
+            {
+                _ledgerItems = null;
+                _ledgerMessage = "Stellar transaction confirmed: " + hash +
+                    ". The subsequent refresh failed: " + ex.Message +
+                    ". Do not publish again before checking the ledger.";
+            }
         }
         catch (Exception ex) { _ledgerMessage = "Ledger publishing failed: " + ex.Message; }
         finally { _busy = false; }
