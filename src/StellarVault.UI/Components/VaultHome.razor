@@ -55,12 +55,12 @@
                 <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
-                          autocomplete="off" spellcheck="false" @bind="_mnemonic"
+                          autocomplete="off" spellcheck="false" @bind="_mnemonic" @bind:event="oninput"
                           disabled="@(_busy || Sessions.IsUnlocked)"
                           placeholder="Enter your BIP-39 recovery words"></textarea>
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
-                       autocomplete="off" @bind="_passphrase" disabled="@(_busy || Sessions.IsUnlocked)" />
+                       autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <p class="advanced-help">Your recovery phrase selects its vault automatically. Your separate encryption passphrase protects the vault data stored in this browser.</p>
                 <div class="sv-access-actions">
                     @if (Sessions.IsUnlocked)
@@ -142,9 +142,14 @@
         {
             _message = "Vault could not be unlocked. Check your encryption passphrase.";
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
-            _message = "The derived Stellar address or encryption passphrase was invalid. Check the input and try again.";
+            _message = ex.ParamName switch
+            {
+                "accountId" or "address" => "The derived Stellar address failed validation.",
+                "passphrase" => "Enter a nonempty vault encryption passphrase.",
+                _ => "Vault input was rejected. Check the recovery phrase and passphrase."
+            };
         }
         catch (UnauthorizedAccessException)
         {
