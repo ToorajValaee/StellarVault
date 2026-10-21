@@ -1,42 +1,66 @@
-// Bounded, read-only discovery of SEP-5 child accounts for an entered mnemonic.
-// No mnemonic/seed/private key is persisted or sent to Horizon.
-// Registry-based recovery and legacy derivation fallback are separate milestones.
+// Registry-aware, read-only account discovery. Only public addresses reach Horizon.
+// Validates the authenticated original SVault registry and scans a bounded lookahead.
 window.stellarVaultV2Chain = Object.freeze({
-  async discover(mnemonic, network, count = 16) {
-    if (!Number.isInteger(count) || count < 1 || count > 32)
-      throw new RangeError('Invalid child-account scan limit');
-    const endpoints = {
+  async discover(mnemonic, network, lookahead = 16) {
+    if (!Number.isInteger(lookahead) || lookahead < 1 || lookahead > 32)
+      throw new RangeError('Invalid recovery lookahead');
+    const networks = Object.freeze({
       testnet: ['https://horizon-testnet.stellar.org', 'Test SDF Network ; September 2015'],
       public: ['https://horizon.stellar.org', 'Public Global Stellar Network ; September 2015']
-    };
-    if (!Object.prototype.hasOwnProperty.call(endpoints, network))
+    });
+    if (!Object.prototype.hasOwnProperty.call(networks, network))
       throw new Error('Unsupported network');
-    const [url, expectedPassphrase] = endpoints[network];
-    const response = await fetch(url + '/', { credentials: 'omit', cache: 'no-store', redirect: 'error' });
-    if (!response.ok) throw new Error('Horizon network unavailable');
-    const metadata = await response.json();
-    if (metadata.network_passphrase !== expectedPassphrase)
-      throw new Error('Horizon network mismatch');
-
-    const seed = await window.stellarVaultHd.mnemonicSeed(mnemonic);
-    const found = [];
-    try {
-      const sdk = window.StellarSdk;
-      if (!sdk?.Keypair?.fromRawEd25519Seed)
-        throw new Error('Stellar derivation SDK unavailable');
-      for (let index = 1; index <= count; index++) {
-        const raw = await window.stellarVaultHd.accountSeed(seed, index, 'sep5');
-        let address;
-        try { address = sdk.Keypair.fromRawEd25519Seed(raw).publicKey(); }
-        finally { raw.fill(0); }
-        const accountResponse = await fetch(url + '/accounts/' + encodeURIComponent(address), {
-          credentials: 'omit', cache: 'no-store', redirect: 'error'
+    if (!window.stellarVaultRegistry || !window.stellarVaultHd || !window.StellarSdk)
+      throw new Error('HD recovery dependencies unavailable');
+    const [baseUrl, networkPassphrase] = networks[network];
+    const fetchAccount = async (address) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(baseUrl + '/accounts/' + encodeURIComponent(address), {
+          credentials: 'omit', cache: 'no-store', redirect: 'error',
+          headers: { Accept: 'application/json' }, signal: controller.signal
         });
-        if (accountResponse.status === 404) continue;
-        if (!accountResponse.ok) throw new Error('Child account lookup failed');
-        const account = await accountResponse.json();
-        if (account.id !== address) throw new Error('Horizon account mismatch');
-        found.push(index + ': ' + address);
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error('Horizon lookup failed (' + response.status + ')');
+        const account = await response.json();
+        if (account.id !== address) throw new Error('Horizon returned another account');
+        return account;
+      } finally { clearTimeout(timeout); }
+    };
+    const seed = await window.stellarVaultHd.mnemonicSeed(mnemonic);
+    try {
+      const addressFor = async (index) => {
+        const raw = await window.stellarVaultHd.accountSeed(seed, index, 'sep5');
+        try { return window.StellarSdk.Keypair.fromRawEd25519Seed(raw).publicKey(); }
+        finally { raw.fill(0); }
+      };
+      const rootAddress = await addressFor(0);
+      const root = await fetchAccount(rootAddress);
+      if (!root) return [];
+      const macKey = await window.stellarVaultRegistry.registryMacKey(seed, networkPassphrase, rootAddress);
+      let highest = 0;
+      const encoded = root.data_attr?.['sv:registry:v2'];
+      if (encoded) {
+        const envelope = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+        try {
+          const registry = await window.stellarVaultRegistry.decode(macKey, envelope);
+          highest = registry.highestAllocatedIndex;
+        } finally { envelope.fill(0); }
+      }
+      const MAX_SCAN = 256; // Defensive preview cap; larger registries require pagination.
+      if (highest > MAX_SCAN)
+        throw new Error('Registry exceeds current scan cap; recovery requires paginated discovery');
+      const limit = Math.min(MAX_SCAN, highest + lookahead);
+      const found = [];
+      for (let start = 1; start <= limit; start += 8) {
+        const batch = Array.from({ length: Math.min(8, limit - start + 1) },
+          (_, offset) => start + offset);
+        const results = await Promise.all(batch.map(async index => {
+          const address = await addressFor(index);
+          return (await fetchAccount(address)) ? index + ': ' + address : null;
+        }));
+        for (const item of results) if (item !== null) found.push(item);
       }
       return found;
     } finally { seed.fill(0); }
