@@ -25,7 +25,7 @@
             <ManagedVaultSessionStatus />
         </section>
 
-        <section class="access-form terminal-panel" aria-label="Vault access">
+        <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
             <div class="panel-heading">
                 <div>
                     <div class="panel-kicker">SECURE ACCESS</div>
@@ -134,7 +134,7 @@
                     <strong>VAULT STATUS</strong><span>@_message</span>
                 </div>
             }
-        </section>
+        </form>
     </div>
     @if (Sessions.IsUnlocked)
     {
