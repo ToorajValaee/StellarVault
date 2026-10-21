@@ -83,6 +83,27 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             }
         }, cancellationToken);
 
+    /// <summary>Logically remove an encrypted file only at its expected revision.
+    /// Encrypted historical objects may remain in immutable storage.</summary>
+    public Task DeleteAsync(string name, VaultRecordPointer expectedVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(expectedVersion);
+        return sessions.ExecuteAsync(async (database, key, ct) =>
+        {
+            var entries = await database.Catalog.ListAsync(key, ct);
+            var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (entry is null || entry.ContentType is null ||
+                entry.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The selected file is no longer in the catalog.");
+            var current = await database.GetVersionAsync(name, key, ct);
+            if (current != expectedVersion)
+                throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+            await database.Catalog.TombstoneAsync(name, key, ct);
+            return true;
+        }, cancellationToken);
+    }
+
     public sealed class BinaryRecord : IDisposable
     {
         private byte[]? _plaintext;
