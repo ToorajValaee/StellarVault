@@ -1,18 +1,26 @@
 // Registry-aware, read-only account discovery. Only public addresses reach Horizon.
 // Validates the authenticated original SVault registry and scans a bounded lookahead.
 window.stellarVaultV2Chain = Object.freeze({
-  async discover(mnemonic, network, lookahead = 16) {
+  async discover(mnemonic, network, lookahead = 16, customUrl = null, customPassphrase = null) {
     if (!Number.isInteger(lookahead) || lookahead < 1 || lookahead > 32)
       throw new RangeError('Invalid recovery lookahead');
     const networks = Object.freeze({
       testnet: ['https://horizon-testnet.stellar.org', 'Test SDF Network ; September 2015'],
       public: ['https://horizon.stellar.org', 'Public Global Stellar Network ; September 2015']
     });
-    if (!Object.prototype.hasOwnProperty.call(networks, network))
+    if (network !== 'custom' && !Object.prototype.hasOwnProperty.call(networks, network))
       throw new Error('Unsupported network');
     if (!window.stellarVaultRegistry || !window.stellarVaultHd || !window.StellarSdk)
       throw new Error('HD recovery dependencies unavailable');
-    const [baseUrl, networkPassphrase] = networks[network];
+    let baseUrl, networkPassphrase;
+    if (network === 'custom') {
+      const detected = await window.stellarVaultV2Network.probeCustom(customUrl);
+      if (detected !== customPassphrase) throw new Error('Custom network identity changed');
+      baseUrl = new URL(customUrl).origin;
+      networkPassphrase = detected;
+    } else {
+      [baseUrl, networkPassphrase] = networks[network];
+    }
     const fetchAccount = async (address) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
