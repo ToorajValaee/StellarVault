@@ -42,12 +42,12 @@
                 <div class="network-selector" role="group" aria-label="Stellar network">
                     <button type="button" class="network-option @(_network == "testnet" ? "active" : "")"
                             aria-pressed="@(_network == "testnet")" disabled="@_busy"
-                            @onclick="() => SelectNetwork("testnet")">
+                            @onclick='() => SelectNetwork("testnet")'>
                         <span class="network-symbol">T</span><span><strong>TESTNET</strong><small>STELLAR TEST NETWORK</small></span>
                     </button>
                     <button type="button" class="network-option @(_network == "public" ? "active" : "")"
                             aria-pressed="@(_network == "public")" disabled="@_busy"
-                            @onclick="() => SelectNetwork("public")">
+                            @onclick='() => SelectNetwork("public")'>
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
                 </div>
