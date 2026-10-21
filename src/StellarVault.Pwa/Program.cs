@@ -13,7 +13,9 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped<VaultSessionManager>();
 builder.Services.AddScoped(_ => new HttpClient());
 // SWallet integration is planned. Never treat an unverified account address as ownership.
-builder.Services.AddScoped<IVaultAccountAuthorizer, DenyVaultAccountAuthorizer>();
+// PWA local-only encrypted storage: G-address is a namespace, NOT an ownership proof.
+// SWallet integration can replace this with real challenge verification later.
+builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAuthorizer>();
 builder.Services.AddScoped<IVaultPassphraseCredentialStore, IndexedDbVaultPassphraseCredentialStore>();
 builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
