@@ -18,7 +18,7 @@
     <label for="sv-record-name">Record name</label>
     <input id="sv-record-name" maxlength="512" @bind="_name" disabled="@_busy" autocomplete="off" />
     <label for="sv-record-content">Text content</label>
-    <textarea id="sv-record-content" rows="8" @bind="_text" disabled="@_busy"></textarea>
+    <textarea id="sv-record-content" rows="8" @bind="_text" @bind:event="oninput" disabled="@_busy"></textarea>
     <div>
         <button type="button" disabled="@_busy" @onclick="NewRecord">New</button>
         <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" @onclick="SaveAsync">Save encrypted</button>
