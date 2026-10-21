@@ -60,34 +60,9 @@ window.stellarVaultHd = (() => {
         return state.slice(0, 32);
       } finally { state.fill(0); }
     }
-    if (scheme !== 'bip32-compat') throw new Error('Unsupported HD derivation scheme');
-    // Match @scure/bip32 HDKey.fromMasterSeed(seed).derive("m/44'/148'/i'").
-    // BIP32 uses Bitcoin seed and secp256k1 scalar addition, NOT SLIP-0010.
-    const order = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
-    const toScalar = bytes => BigInt('0x' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(''));
-    const toBytes = value => Uint8Array.from(
-      value.toString(16).padStart(64, '0').match(/../g), hex => parseInt(hex, 16));
-    let state = await hmac(text.encode('Bitcoin seed'), bip39Seed);
-    try {
-      let scalar = toScalar(state.subarray(0, 32));
-      if (scalar === 0n || scalar >= order) throw new Error('Invalid BIP32 master key');
-      for (const segment of [44, 148, index]) {
-        const data = new Uint8Array(37);
-        data[0] = 0;
-        data.set(toBytes(scalar), 1);
-        new DataView(data.buffer).setUint32(33, harden(segment), false);
-        const next = await hmac(state.subarray(32, 64), data);
-        const tweak = toScalar(next.subarray(0, 32));
-        data.fill(0);
-        if (tweak >= order) { next.fill(0); throw new Error('Invalid BIP32 child key'); }
-        scalar = (scalar + tweak) % order;
-        if (scalar === 0n) { next.fill(0); throw new Error('Invalid BIP32 child key'); }
-        state.fill(0);
-        state = next;
-      }
-      return toBytes(scalar);
-    } finally { state.fill(0); }
+    throw new Error('Unsupported HD derivation scheme');
   }
+
   async function deriveKeypair(validatedMnemonic, index, passphrase = '', scheme = 'sep5') {
     if (!window.StellarSdk?.Keypair?.fromRawEd25519Seed) throw new Error('Stellar SDK unavailable');
     const seed = await mnemonicSeed(validatedMnemonic, passphrase);
