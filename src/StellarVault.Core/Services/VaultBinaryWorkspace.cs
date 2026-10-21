@@ -64,6 +64,13 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
                 var after = await database.GetVersionAsync(name, key, ct);
                 if (after != before)
                     throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+                // A concurrent tombstone or content-type change must not allow
+                // a stale read to return a file hidden from the active catalog.
+                var currentEntries = await database.Catalog.ListAsync(key, ct);
+                var current = currentEntries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+                if (current is null || current.ContentType is null ||
+                    current.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                    throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
 
                 // The returned copy belongs to BinaryRecord, which clears it on disposal.
                 return new BinaryRecord(name, before, staging.ToArray());
