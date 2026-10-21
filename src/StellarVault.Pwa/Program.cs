@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using StellarVaultPwa;
-using StellarVaultPwa.Services;
+using StellarVault.Pwa;
+using StellarVault.Pwa.Services;
 using StellarVault.Core.Services;
 using StellarVault.Core.Abstractions;
 
