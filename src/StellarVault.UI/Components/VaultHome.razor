@@ -51,7 +51,7 @@
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
                 </div>
-                <p class="advanced-help">The selected network determines where account-chain discovery will run. This local preview has not connected to Horizon yet; switching networks does not fetch ledger data.</p>
+                <p class="advanced-help">After vault access, the app checks this network against Horizon. Local storage is not yet separated by network.</p>
                 <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
@@ -86,6 +86,10 @@
                     <span>The shared native UI awaits secure mnemonic handling and SWallet integration.</span>
                 </div>
             }
+            @if (!string.IsNullOrWhiteSpace(_networkStatus))
+            {
+                <p class="advanced-help" role="status">@_networkStatus</p>
+            }
             @if (!string.IsNullOrWhiteSpace(_message))
             {
                 <div class="terminal-alert warning" role="status">
@@ -113,7 +117,8 @@
     private string? _message;
     private bool _busy;
     private string _network = "testnet";
-    private void SelectNetwork(string value) => _network = value;
+    private string? _networkStatus;
+    private void SelectNetwork(string value) { _network = value; _networkStatus = null; }
 
     private async Task AccessVaultAsync()
     {
@@ -133,6 +138,17 @@
             else
                 await Workflow.CreateAsync(account, _passphrase);
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
+            try
+            {
+                bool existsOnNetwork = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network);
+                _networkStatus = existsOnNetwork
+                    ? "Root account found on the selected Stellar network."
+                    : "Root account not found on the selected network. The local encrypted vault remains accessible.";
+            }
+            catch (JSException)
+            {
+                _networkStatus = "Horizon verification failed. The local vault remains accessible; on-chain discovery is unavailable.";
+            }
         }
         catch (JSException)
         {
