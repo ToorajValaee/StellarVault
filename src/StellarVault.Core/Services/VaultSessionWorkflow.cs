@@ -36,11 +36,10 @@ public sealed class VaultSessionWorkflow(
         {
             sessions.Lock();
             long epoch = sessions.Epoch;
-            await authorizer.VerifyOwnershipAsync(accountId, ct);
-            ct.ThrowIfCancellationRequested();
-            if (sessions.Epoch != epoch)
-                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
-            byte[] key = await credentials.CreateAsync(accountId, passphrase, ct);
+            using var pending = new PendingTransition(sessions, epoch, ct);
+            await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
+            pending.EnsureValid();
+            byte[] key = await credentials.CreateAsync(accountId, passphrase, pending.Token);
             Activate(accountId, key, epoch);
         }
         finally { _transitions.Release(); }
@@ -54,11 +53,10 @@ public sealed class VaultSessionWorkflow(
             // Clear any other account before attempting authorization or derivation.
             sessions.Lock();
             long epoch = sessions.Epoch;
-            await authorizer.VerifyOwnershipAsync(accountId, ct);
-            ct.ThrowIfCancellationRequested();
-            if (sessions.Epoch != epoch)
-                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
-            byte[] key = await credentials.UnlockAsync(accountId, passphrase, ct);
+            using var pending = new PendingTransition(sessions, epoch, ct);
+            await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
+            pending.EnsureValid();
+            byte[] key = await credentials.UnlockAsync(accountId, passphrase, pending.Token);
             Activate(accountId, key, epoch);
         }
         finally { _transitions.Release(); }
@@ -72,16 +70,58 @@ public sealed class VaultSessionWorkflow(
         {
             sessions.Lock();
             long epoch = sessions.Epoch;
-            await authorizer.VerifyOwnershipAsync(accountId, ct);
-            ct.ThrowIfCancellationRequested();
-            if (sessions.Epoch != epoch)
-                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
-            await credentials.RotateAsync(accountId, oldPassphrase, newPassphrase, ct);
+            using var pending = new PendingTransition(sessions, epoch, ct);
+            await authorizer.VerifyOwnershipAsync(accountId, pending.Token);
+            pending.EnsureValid();
+            await credentials.RotateAsync(accountId, oldPassphrase, newPassphrase, pending.Token);
         }
         finally { _transitions.Release(); }
     }
 
     public void Lock() => sessions.Lock();
+
+    /// <summary>
+    /// A user lock cancels in-flight authorization/KDF work, including when no
+    /// active session was installed. The epoch is still checked at activation.
+    /// Cancellation cannot roll back an already committed credential write.
+    /// </summary>
+    private sealed class PendingTransition : IDisposable
+    {
+        private readonly VaultSessionManager _sessions;
+        private readonly long _epoch;
+        private readonly CancellationTokenSource _cancel;
+
+        public PendingTransition(VaultSessionManager sessions, long epoch, CancellationToken requested)
+        {
+            _sessions = sessions;
+            _epoch = epoch;
+            _cancel = CancellationTokenSource.CreateLinkedTokenSource(requested);
+            _sessions.StateChanged += OnStateChanged;
+            OnStateChanged();
+        }
+
+        public CancellationToken Token => _cancel.Token;
+
+        public void EnsureValid()
+        {
+            Token.ThrowIfCancellationRequested();
+            if (_sessions.Epoch != _epoch)
+                throw new OperationCanceledException("Vault was locked during authorization; retry explicitly.");
+        }
+
+        private void OnStateChanged()
+        {
+            if (_sessions.Epoch == _epoch) return;
+            try { _cancel.Cancel(); }
+            catch (ObjectDisposedException) { /* In-flight event during unsubscribe. */ }
+        }
+
+        public void Dispose()
+        {
+            _sessions.StateChanged -= OnStateChanged;
+            _cancel.Dispose();
+        }
+    }
 
     private void Activate(string accountId, byte[] ownedKey, long expectedEpoch)
     {
