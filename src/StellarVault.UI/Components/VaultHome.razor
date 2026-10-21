@@ -51,7 +51,23 @@
                             @onclick='() => SelectNetwork("public")'>
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
+                    <button type="button" class="network-option" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("custom")'>
+                        <span class="network-symbol">C</span><span><strong>CUSTOM</strong><small>PRIVATE NETWORK</small></span>
+                    </button>
                 </div>
+                @if (_network == "custom")
+                {
+                    <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
+                    <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url"
+                           @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)"
+                           placeholder="https://horizon.example.com/" />
+                    <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync"
+                            disabled="@(_busy || Sessions.IsUnlocked || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
+                    @if (!string.IsNullOrEmpty(_customPassphrase))
+                    {
+                        <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
+                    }
+                }
                 <p class="advanced-help">Network selection determines which funded root and account chain to discover. Local encrypted vault credentials are separated by network.</p>
                 <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
@@ -71,7 +87,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="button"
-                                disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic) || string.IsNullOrWhiteSpace(_passphrase))"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
                                 @onclick="AccessVaultAsync">ACCESS VAULT</button>
                     }
                 </div>
@@ -138,21 +154,49 @@
     private string? _message;
     private bool _busy;
     private string _network = "testnet";
+    private string _customHorizon = string.Empty;
+    private string? _customPassphrase;
     private string? _networkStatus;
     private string[]? _childAccounts;
     private void SelectNetwork(string value)
     {
-        if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public")) return;
-        NetworkSelection.Select(value);
+        if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public" && value != "custom")) return;
+        if (value != "custom") NetworkSelection.Select(value);
         _network = value;
         _networkStatus = null;
         _childAccounts = null;
         _message = null;
     }
 
+    private async Task DetectCustomAsync()
+    {
+        if (_busy || Sessions.IsUnlocked || _network != "custom") return;
+        _busy = true;
+        _message = null;
+        _customPassphrase = null;
+        NetworkSelection.ResetCustom();
+        try
+        {
+            _customPassphrase = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon);
+            NetworkSelection.ConfigureCustom(_customPassphrase);
+            _networkStatus = "Private network detected.";
+        }
+        catch (JSException)
+        {
+            _message = "Private network detection failed. Check Horizon URL, HTTPS and browser CORS permissions.";
+        }
+        finally { _busy = false; }
+    }
+
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
+        if (_network == "custom" && (string.IsNullOrWhiteSpace(_customPassphrase) ||
+            NetworkSelection.CustomPassphrase != _customPassphrase))
+        {
+            _message = "Detect the custom network before accessing the vault.";
+            return;
+        }
         NetworkSelection.Select(_network);
         _busy = true;
         _message = null;
@@ -173,10 +217,10 @@
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
-                bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network);
+                bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network, _customHorizon, _customPassphrase);
                 _networkStatus = found ? "Root account found on the selected network." : "Root account not found on selected network. Local vault remains accessible.";
                 if (found && Sessions.IsUnlocked)
-                    _childAccounts = await JS.InvokeAsync<string[]>("stellarVaultV2Chain.discover", _mnemonic, _network, 16);
+                    _childAccounts = await JS.InvokeAsync<string[]>("stellarVaultV2Chain.discover", _mnemonic, _network, 16, _customHorizon, _customPassphrase);
             }
             catch (JSException)
             {
