@@ -50,6 +50,13 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
         sessions.ExecuteAsync(async (db, key, token) =>
         {
             ArgumentNullException.ThrowIfNull(text);
+            // A text edit must never silently replace a file with the same name.
+            // Catalog metadata is encrypted and scoped to the unlocked account.
+            var catalog = await db.Catalog.ListAsync(key, token);
+            var existing = catalog.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (existing is not null && existing.ContentType is not null &&
+                !existing.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This record contains a binary file, not editable text.");
             byte[] bytes = Encoding.UTF8.GetBytes(text);
             try
             {
