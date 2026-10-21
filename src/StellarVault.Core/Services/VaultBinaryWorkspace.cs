@@ -43,14 +43,22 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             if (before is null) return null;
 
             using var staging = new MemoryStream();
-            await database.GetAsync(name, staging, key, ct);
-            var after = await database.GetVersionAsync(name, key, ct);
-            if (after != before)
-                throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+            try
+            {
+                await database.GetAsync(name, staging, key, ct);
+                var after = await database.GetVersionAsync(name, key, ct);
+                if (after != before)
+                    throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
 
-            // The caller owns the plaintext buffer and is responsible for
-            // disposing the returned stream as soon as possible.
-            return new BinaryRecord(name, before, staging.ToArray());
+                // The returned copy belongs to BinaryRecord, which clears it on disposal.
+                return new BinaryRecord(name, before, staging.ToArray());
+            }
+            finally
+            {
+                // MemoryStream.Dispose does not clear its backing plaintext buffer.
+                if (staging.TryGetBuffer(out ArraySegment<byte> segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
         }, cancellationToken);
 
     public sealed class BinaryRecord : IDisposable
