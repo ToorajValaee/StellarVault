@@ -52,9 +52,15 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
             finally { CryptographicOperations.ZeroMemory(bytes); }
         }, ct);
 
-    public Task DeleteAsync(string name, CancellationToken ct = default) =>
+    public Task DeleteAsync(string name, VaultRecordPointer expectedVersion, CancellationToken ct = default) =>
         sessions.ExecuteAsync(async (db, key, token) =>
         {
+            // A logical deletion must not silently target a different record revision.
+            ArgumentNullException.ThrowIfNull(expectedVersion);
+            var current = await db.GetVersionAsync(name, key, token);
+            if (current != expectedVersion)
+                throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
+            // This check and catalog update are not atomic across separate record pointers.
             // Logical deletion only; old ciphertext may remain in immutable object history.
             await db.Catalog.TombstoneAsync(name, key, token);
             return true;
