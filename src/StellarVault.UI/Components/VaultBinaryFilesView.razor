@@ -1,0 +1,87 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using StellarVault.Core.Services
+@inject VaultBinaryWorkspace Files
+@inject IJSRuntime JS
+@implements IDisposable
+
+<section class="sv-workspace" aria-label="Encrypted file records">
+    <h2>Encrypted files</h2>
+    <p>Choose a file up to 1 MiB. Its contents are encrypted before entering the storage backend.</p>
+    <InputFile OnChange="SelectFile" disabled="@_busy" />
+    <label for="sv-file-record-name">Encrypted record name</label>
+    <input id="sv-file-record-name" maxlength="512" @bind="_name" disabled="@_busy" />
+    <button type="button" disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
+            @onclick="UploadAsync">Save encrypted file</button>
+    <label for="sv-file-open-name">Existing encrypted file record name</label>
+    <input id="sv-file-open-name" maxlength="512" @bind="_openName" disabled="@_busy" />
+    <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_openName))"
+            @onclick="DownloadAsync">Download and decrypt</button>
+    @if (!string.IsNullOrWhiteSpace(_status))
+    {
+        <p role="status">@_status</p>
+    }
+</section>
+
+@code {
+    private const long MaximumFileLength = 1024 * 1024;
+    private IBrowserFile? _file;
+    private string _name = string.Empty;
+    private string _openName = string.Empty;
+    private string? _status;
+    private bool _busy;
+
+    private void SelectFile(InputFileChangeEventArgs args)
+    {
+        _file = args.File;
+        _name = _file.Name;
+        _status = _file.Size > MaximumFileLength ? "File exceeds the current 1 MiB upload limit." : null;
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_busy || _file is null) return;
+        _busy = true;
+        try
+        {
+            if (_file.Size > MaximumFileLength) throw new InvalidDataException("File too large.");
+            // Use create-only semantics; existing record updates require explicit version handling.
+            await using var input = _file.OpenReadStream(MaximumFileLength);
+            await Files.SaveAsync(_name, input,
+                string.IsNullOrWhiteSpace(_file.ContentType) ? "application/octet-stream" : _file.ContentType);
+            _openName = _name;
+            _status = "Encrypted file saved.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "File could not be saved. Verify name, size and session state.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            using var record = await Files.OpenAsync(_openName);
+            if (record is null) { _status = "File record not found."; return; }
+            if (record.Content.Length > MaximumFileLength)
+                throw new InvalidDataException("File exceeds current download limit.");
+            await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, record.Content.ToArray());
+            _status = "Decrypted file downloaded.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "File could not be downloaded or authenticated.";
+        }
+        finally { _busy = false; }
+    }
+
+    public void Dispose() => _file = null;
+}
