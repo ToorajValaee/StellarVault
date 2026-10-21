@@ -31,6 +31,7 @@ public sealed class VaultSessionWorkflow(
 
     public async Task CreateAsync(string accountId, string passphrase, CancellationToken ct = default)
     {
+        ValidateRequest(accountId, passphrase);
         await _transitions.WaitAsync(ct);
         try
         {
@@ -50,6 +51,7 @@ public sealed class VaultSessionWorkflow(
 
     public async Task UnlockAsync(string accountId, string passphrase, CancellationToken ct = default)
     {
+        ValidateRequest(accountId, passphrase);
         await _transitions.WaitAsync(ct);
         try
         {
@@ -70,6 +72,8 @@ public sealed class VaultSessionWorkflow(
     public async Task RotatePassphraseAsync(string accountId, string oldPassphrase,
         string newPassphrase, CancellationToken ct = default)
     {
+        ValidateRequest(accountId, oldPassphrase);
+        ValidatePassphrase(newPassphrase, nameof(newPassphrase));
         await _transitions.WaitAsync(ct);
         try
         {
@@ -87,6 +91,18 @@ public sealed class VaultSessionWorkflow(
             pending.EnsureValid();
         }
         finally { _transitions.Release(); }
+    }
+
+    private static void ValidateRequest(string accountId, string passphrase)
+    {
+        StellarAccountAddress.Validate(accountId);
+        ValidatePassphrase(passphrase, nameof(passphrase));
+    }
+
+    private static void ValidatePassphrase(string passphrase, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(passphrase))
+            throw new ArgumentException("A nonempty vault passphrase is required.", parameterName);
     }
 
     public void Lock() => sessions.Lock();
