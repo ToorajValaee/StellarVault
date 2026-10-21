@@ -90,7 +90,7 @@
             {
                 <section class="terminal-panel" aria-label="Discovered Stellar child accounts">
                     <h3>DISCOVERED ACCOUNT CHAIN</h3>
-                    <p class="advanced-help">Read-only SEP-5 scan of indices 1–16. This is not full registry recovery.</p>
+                    <p class="advanced-help">Authenticated registry-aware SEP-5 scan with 16-index recovery lookahead (maximum 256 indices).</p>
                     @if (_childAccounts.Length == 0)
                     {
                         <p>No funded child accounts were found in this scan.</p>
