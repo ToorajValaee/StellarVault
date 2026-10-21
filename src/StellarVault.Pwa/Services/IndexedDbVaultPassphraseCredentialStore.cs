@@ -5,18 +5,18 @@ namespace StellarVault.Pwa.Services;
 
 /// <summary>Browser-backed v2 wrapped credential storage. No plaintext keys are persisted.
 /// IndexedDB transactions provide per-account create-if-absent and compare-and-swap.</summary>
-public sealed class IndexedDbVaultPassphraseCredentialStore(IJSRuntime js) : IVaultPassphraseCredentialStore
+public sealed class IndexedDbVaultPassphraseCredentialStore(IJSRuntime js, BrowserVaultNetworkContext network) : IVaultPassphraseCredentialStore
 {
     public Task<byte[]?> ReadAsync(string accountId, CancellationToken ct = default)
     {
         StellarAccountAddress.Validate(accountId);
-        return js.InvokeAsync<byte[]?>("stellarVaultV2Db.readCredential", ct, accountId).AsTask();
+        return js.InvokeAsync<byte[]?>("stellarVaultV2Db.readCredential", ct, network.CredentialKey(accountId)).AsTask();
     }
 
     public Task<bool> CreateAsync(string accountId, ReadOnlyMemory<byte> record, CancellationToken ct = default)
     {
         StellarAccountAddress.Validate(accountId);
-        return js.InvokeAsync<bool>("stellarVaultV2Db.createCredential", ct, accountId, record.ToArray()).AsTask();
+        return js.InvokeAsync<bool>("stellarVaultV2Db.createCredential", ct, network.CredentialKey(accountId), record.ToArray()).AsTask();
     }
 
     public Task<bool> ReplaceAsync(string accountId, ReadOnlyMemory<byte> expected,
@@ -24,6 +24,6 @@ public sealed class IndexedDbVaultPassphraseCredentialStore(IJSRuntime js) : IVa
     {
         StellarAccountAddress.Validate(accountId);
         return js.InvokeAsync<bool>("stellarVaultV2Db.replaceCredential", ct,
-            accountId, expected.ToArray(), replacement.ToArray()).AsTask();
+            network.CredentialKey(accountId), expected.ToArray(), replacement.ToArray()).AsTask();
     }
 }
