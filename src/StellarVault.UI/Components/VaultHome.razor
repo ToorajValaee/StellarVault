@@ -33,6 +33,26 @@
             </div>
             @if (Platform == "WEB PWA")
             {
+                <div class="panel-heading">
+                    <div>
+                        <div class="panel-kicker">STEP 01</div>
+                        <h2>SELECT NETWORK</h2>
+                    </div>
+                </div>
+                <div class="network-selector" role="group" aria-label="Stellar network">
+                    <button type="button" class="network-option @(_network == "testnet" ? "active" : "")"
+                            aria-pressed="@(_network == "testnet")" disabled="@_busy"
+                            @onclick="() => SelectNetwork("testnet")">
+                        <span class="network-symbol">T</span><span><strong>TESTNET</strong><small>STELLAR TEST NETWORK</small></span>
+                    </button>
+                    <button type="button" class="network-option @(_network == "public" ? "active" : "")"
+                            aria-pressed="@(_network == "public")" disabled="@_busy"
+                            @onclick="() => SelectNetwork("public")">
+                        <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
+                    </button>
+                </div>
+                <p class="advanced-help">The selected network determines where account-chain discovery will run. This local preview has not connected to Horizon yet; switching networks does not fetch ledger data.</p>
+                <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
                           autocomplete="off" spellcheck="false" @bind="_mnemonic"
@@ -92,6 +112,8 @@
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
+    private string _network = "testnet";
+    private void SelectNetwork(string value) => _network = value;
 
     private async Task AccessVaultAsync()
     {
@@ -103,6 +125,8 @@
             // The mnemonic identifies the namespace; never persist it or derive
             // a second, different account identity for an existing local vault.
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
+            if (!StellarAccountAddress.IsValid(account))
+                throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
             bool exists = await Workflow.HasLocalVaultAsync(account);
             if (exists)
                 await Workflow.UnlockAsync(account, _passphrase);
@@ -120,13 +144,13 @@
         }
         catch (ArgumentException)
         {
-            _message = "Enter a valid recovery phrase and encryption passphrase.";
+            _message = "The derived Stellar address or encryption passphrase was invalid. Check the input and try again.";
         }
         catch (UnauthorizedAccessException)
         {
             _message = "Vault access is not authorized in this environment.";
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException or OperationCanceledException)
         {
             _message = "Could not open the vault. Check your browser storage and try again.";
         }
