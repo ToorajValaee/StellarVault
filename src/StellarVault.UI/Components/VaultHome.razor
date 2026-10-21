@@ -35,7 +35,7 @@
             @if (Platform == "WEB PWA")
             {
                 <label class="terminal-label" for="sv-mnemonic">BIP-39 RECOVERY WORDS (LOCAL DERIVATION)</label>
-                <textarea id="sv-mnemonic" class="terminal-input" rows="3" type="password"
+                <textarea id="sv-mnemonic" class="terminal-input" rows="3"
                           autocomplete="off" spellcheck="false" @bind="_mnemonic" disabled="@_busy"
                           placeholder="Enter a test mnemonic to derive your index-0 account"></textarea>
                 <button class="pixel-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic))"
