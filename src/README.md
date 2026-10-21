@@ -1,7 +1,10 @@
-# Shared application migration
+# StellarVault source projects
 
-See [migration plan](../docs/architecture/maui-migration.md).
+All application projects are under `src/`:
 
-The current production Blazor WebAssembly project remains at the repository root until the shared UI and Core libraries are extracted and tested. Do not duplicate vault implementations across mobile, desktop and web.
+- `StellarVault.Core/`: .NET 10 encrypted storage, sessions and Stellar authorization abstractions.
+- `StellarVault.UI/`: shared Razor component library.
+- `StellarVault.Maui/`: Android, iOS, Windows and Mac Catalyst Blazor Hybrid host.
+- `StellarVault.Pwa/`: Blazor WebAssembly host, browser storage adapters and PWA assets.
 
-Planned projects: StellarVault.Core, StellarVault.UI, StellarVault.Web, StellarVault.Maui.
+Open the repository-root `StellarVault.sln`. There is no legacy PWA at the repository root and no v1 compatibility target. Hosts depend on the shared Core/UI projects. See the root README for commands and release limitations.
