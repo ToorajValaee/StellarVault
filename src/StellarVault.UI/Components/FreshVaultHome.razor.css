@@ -1,2 +1,2 @@
-.sv-access-actions{display:flex;flex-wrap:wrap;gap:.7rem;margin:1.25rem 0}.sv-access-actions .pixel-button{flex:1 1 12rem}.sv-vault-data{display:grid;gap:1rem;margin-top:1.25rem}.sv-vault-data :global(.sv-workspace){background:var(--panel,#06100b);border:1px solid var(--border,#365e44);padding:1rem}
+.sv-access-actions{display:flex;flex-wrap:wrap;gap:.7rem;margin:1.25rem 0}.sv-access-actions .pixel-button{flex:1 1 12rem}.sv-vault-data{display:grid;gap:1rem;margin-top:1.25rem}.sv-vault-data ::deep .sv-workspace{background:var(--panel,#06100b);border:1px solid var(--border,#365e44);padding:1rem}
 @media(max-width:640px){.sv-access-actions{flex-direction:column}.sv-access-actions .pixel-button{flex:auto}}
