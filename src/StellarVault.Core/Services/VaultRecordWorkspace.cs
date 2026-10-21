@@ -39,6 +39,11 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
                 var current = await db.GetVersionAsync(name, key, token);
                 if (current != version)
                     throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
+                var currentEntries = await db.Catalog.ListAsync(key, token);
+                var currentMetadata = currentEntries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+                if (currentMetadata is null || (currentMetadata.ContentType is not null &&
+                    !currentMetadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+                    throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
                 byte[] bytes = staging.ToArray();
                 try { return new TextRecord(name, new UTF8Encoding(false, true).GetString(bytes), version); }
                 finally { CryptographicOperations.ZeroMemory(bytes); }
