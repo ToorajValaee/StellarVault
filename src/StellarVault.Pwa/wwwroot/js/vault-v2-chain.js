@@ -1,7 +1,9 @@
 // Registry-aware, read-only account discovery. Only public addresses reach Horizon.
 // Validates the authenticated original SVault registry and scans a bounded lookahead.
 window.stellarVaultV2Chain = Object.freeze({
-  async discover(mnemonic, network, lookahead = 16) {
+  async discover(mnemonic, network, scheme = 'sep5', lookahead = 16) {
+    if (scheme !== 'sep5' && scheme !== 'bip32-compat')
+      throw new Error('Unsupported root derivation scheme');
     if (!Number.isInteger(lookahead) || lookahead < 1 || lookahead > 32)
       throw new RangeError('Invalid recovery lookahead');
     const networks = Object.freeze({
@@ -31,7 +33,7 @@ window.stellarVaultV2Chain = Object.freeze({
     const seed = await window.stellarVaultHd.mnemonicSeed(mnemonic);
     try {
       const addressFor = async (index) => {
-        const raw = await window.stellarVaultHd.accountSeed(seed, index, 'sep5');
+        const raw = await window.stellarVaultHd.accountSeed(seed, index, scheme);
         try { return window.StellarSdk.Keypair.fromRawEd25519Seed(raw).publicKey(); }
         finally { raw.fill(0); }
       };
