@@ -26,59 +26,51 @@
         <section class="access-form terminal-panel" aria-label="Vault access">
             <div class="panel-heading">
                 <div>
-                    <div class="panel-kicker">STEP 01</div>
-                    <h2>STELLAR ACCOUNT</h2>
+                    <div class="panel-kicker">SECURE ACCESS</div>
+                    <h2>OPEN YOUR VAULT</h2>
                 </div>
                 <span class="step-led">01</span>
             </div>
-            <p class="advanced-help">Local encrypted vault mode: your public G-address is only a storage namespace. It does not prove Stellar ownership or connect to the blockchain. SWallet support will follow.</p>
             @if (Platform == "WEB PWA")
             {
-                <label class="terminal-label" for="sv-mnemonic">BIP-39 RECOVERY WORDS (LOCAL DERIVATION)</label>
-                <textarea id="sv-mnemonic" class="terminal-input" rows="3"
-                          autocomplete="off" spellcheck="false" @bind="_mnemonic" disabled="@_busy"
-                          placeholder="Enter a test mnemonic to derive your index-0 account"></textarea>
-                <button class="pixel-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic))"
-                        @onclick="DeriveRootAsync">DERIVE ROOT ACCOUNT</button>
-                <p class="advanced-help">This derives the standard SEP-5 index-0 public account in this browser. It does not yet scan child accounts or import existing on-chain records. Use only disposable test phrases in this preview.</p>
-            }
-            <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
-            <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
-                   autocomplete="off" spellcheck="false" @bind="AccountInput" disabled="@_busy" />
-
-            <div class="panel-heading unlock-heading">
-                <div>
-                    <div class="panel-kicker">STEP 02</div>
-                    <h2>VAULT PASSPHRASE</h2>
+                <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
+                <textarea id="sv-mnemonic" class="terminal-input" rows="4"
+                          autocomplete="off" spellcheck="false" @bind="_mnemonic"
+                          disabled="@(_busy || Sessions.IsUnlocked)"
+                          placeholder="Enter your BIP-39 recovery words"></textarea>
+                <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
+                <input id="sv-passphrase" class="terminal-input" type="password"
+                       autocomplete="off" @bind="_passphrase" disabled="@(_busy || Sessions.IsUnlocked)" />
+                <p class="advanced-help">Your recovery phrase selects its vault automatically. Your separate encryption passphrase protects the vault data stored in this browser.</p>
+                <div class="sv-access-actions">
+                    @if (Sessions.IsUnlocked)
+                    {
+                        <button class="pixel-button primary" type="button" @onclick="LockAsync">LOCK VAULT</button>
+                    }
+                    else
+                    {
+                        <button class="pixel-button primary" type="button"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic) || string.IsNullOrWhiteSpace(_passphrase))"
+                                @onclick="AccessVaultAsync">ACCESS VAULT</button>
+                    }
                 </div>
-                <span class="step-led">02</span>
-            </div>
-            <label class="terminal-label" for="sv-passphrase">LOCAL ENCRYPTION PASSPHRASE</label>
-            <input id="sv-passphrase" class="terminal-input" type="password"
-                   autocomplete="off" @bind="_passphrase" disabled="@_busy" />
-            <p class="advanced-help">Your passphrase protects the locally encrypted vault key. No wallet authorization is performed in this PWA mode.</p>
-
-            <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_account))"
-                    @onclick="CheckLocalVaultAsync">CHECK LOCAL VAULT</button>
-            @if (_hasLocalVault is not null)
-            {
-                <p class="advanced-help" role="status">
-                    @(_hasLocalVault.Value
-                        ? "An encrypted vault already exists for this account in this browser/device. Choose UNLOCK."
-                        : "No local vault was found for this account. Choose CREATE to initialize one.")
-                </p>
+                <div class="terminal-alert warning" role="status">
+                    <strong>LOCAL ENCRYPTED VAULT PREVIEW</strong>
+                    <span>The account is derived privately from your mnemonic. Existing encrypted credentials are detected automatically; otherwise a new local vault is initialized. This does not yet discover on-chain child accounts, synchronize across devices, or provide a backup. Use only test credentials.</span>
+                </div>
             }
-            <div class="sv-access-actions">
-                <button class="pixel-button primary" type="button" disabled="@(_busy || _hasLocalVault != true)" @onclick="UnlockAsync">UNLOCK VAULT</button>
-                <button class="pixel-button" type="button" disabled="@(_busy || _hasLocalVault != false)" @onclick="CreateAsync">CREATE NEW VAULT</button>
-            </div>
-            <div class="terminal-alert warning" role="status">
-                <strong>LOCAL-ONLY PREVIEW — NOT WALLET AUTHENTICATION</strong>
-                <span>Create, save, lock and reopen local encrypted records with a test passphrase. The Stellar address is not verified, and browser storage is not a backup or cross-device sync. Do not use real secrets before release validation.</span>
-            </div>
+            else
+            {
+                <div class="terminal-alert warning" role="status">
+                    <strong>NATIVE ACCESS COMING LATER</strong>
+                    <span>The shared native UI awaits secure mnemonic handling and SWallet integration.</span>
+                </div>
+            }
             @if (!string.IsNullOrWhiteSpace(_message))
             {
-                <div class="terminal-alert warning" role="status"><strong>VAULT STATUS</strong><span>@_message</span></div>
+                <div class="terminal-alert warning" role="status">
+                    <strong>VAULT STATUS</strong><span>@_message</span>
+                </div>
             }
         </section>
     </div>
@@ -96,116 +88,63 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
-    private string _account = string.Empty;
     private string _mnemonic = string.Empty;
+    private string _passphrase = string.Empty;
+    private string? _message;
+    private bool _busy;
 
-    private async Task DeriveRootAsync()
+    private async Task AccessVaultAsync()
     {
-        if (_busy || Platform != "WEB PWA") return;
+        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
         _busy = true;
         _message = null;
         try
         {
+            // The mnemonic identifies the namespace; never persist it or derive
+            // a second, different account identity for an existing local vault.
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
-            AccountInput = account;
-            _hasLocalVault = await Workflow.HasLocalVaultAsync(account);
-            _message = _hasLocalVault.Value
-                ? "Derived root account. Local vault found; choose UNLOCK."
-                : "Derived root account. No local vault found; choose CREATE.";
+            bool exists = await Workflow.HasLocalVaultAsync(account);
+            if (exists)
+                await Workflow.UnlockAsync(account, _passphrase);
+            else
+                await Workflow.CreateAsync(account, _passphrase);
+            _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
         }
-        catch (Exception ex) when (ex is JSException or ArgumentException or InvalidOperationException)
+        catch (JSException)
         {
-            _message = "Mnemonic validation or root derivation failed. Check the test phrase and try again.";
+            _message = "Recovery phrase validation failed or browser derivation is unavailable.";
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Vault could not be unlocked. Check your encryption passphrase.";
+        }
+        catch (ArgumentException)
+        {
+            _message = "Enter a valid recovery phrase and encryption passphrase.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _message = "Vault access is not authorized in this environment.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            _message = "Could not open the vault. Check your browser storage and try again.";
         }
         finally
         {
             _mnemonic = string.Empty;
-            _busy = false;
-        }
-    }
-
-    private string AccountInput
-    {
-        get => _account;
-        set
-        {
-            if (string.Equals(_account, value, StringComparison.Ordinal)) return;
-            _account = value;
-            _hasLocalVault = null;
-        }
-    }
-    private string _passphrase = string.Empty;
-    private string? _message;
-    private bool _busy;
-    private bool? _hasLocalVault;
-
-    private async Task CheckLocalVaultAsync()
-    {
-        if (_busy) return;
-        _busy = true;
-        _hasLocalVault = null;
-        _message = null;
-        try
-        {
-            _hasLocalVault = await Workflow.HasLocalVaultAsync(_account.Trim());
-        }
-        catch (ArgumentException)
-        {
-            _message = "Enter a valid Stellar public G-address before checking local storage.";
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or Microsoft.JSInterop.JSException)
-        {
-            _message = "Could not read local vault status. Check browser storage permissions.";
-        }
-        finally { _busy = false; }
-    }
-
-    private Task CreateAsync() => RunAsync((account, passphrase) =>
-        Workflow.CreateAsync(account, passphrase));
-
-    private Task UnlockAsync() => RunAsync((account, passphrase) =>
-        Workflow.UnlockAsync(account, passphrase));
-
-    private async Task RunAsync(Func<string, string, Task> operation)
-    {
-        if (_busy) return;
-        _busy = true;
-        _message = null;
-        try
-        {
-            await operation(_account.Trim(), _passphrase);
-            _hasLocalVault = true;
-            _message = "Vault unlocked.";
-        }
-        catch (UnauthorizedAccessException)
-        {
-            _message = "Vault authorization failed. This platform may require a connected SWallet in a later release.";
-        }
-        catch (ArgumentException)
-        {
-            _message = "Enter a valid Stellar public account and a nonempty vault passphrase.";
-        }
-        catch (FileNotFoundException)
-        {
-            _hasLocalVault = false;
-            _message = "No vault credentials exist for this account on this device. Create a new local vault.";
-        }
-        catch (OperationCanceledException)
-        {
-            _message = "Vault operation canceled.";
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or
-            System.Security.Cryptography.CryptographicException)
-        {
-            _message = "Vault operation failed. Check the account, passphrase, and storage.";
-        }
-        finally
-        {
             _passphrase = string.Empty;
             _busy = false;
         }
     }
 
+    private void LockAsync()
+    {
+        Workflow.Lock();
+        _mnemonic = string.Empty;
+        _passphrase = string.Empty;
+        _message = "Vault locked.";
+    }
 
     protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
