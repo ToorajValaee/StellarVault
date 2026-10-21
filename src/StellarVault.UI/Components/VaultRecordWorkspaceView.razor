@@ -33,6 +33,7 @@
 @code {
     private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _items;
     private string _name = string.Empty;
+    private string? _loadedName;
     private string _text = string.Empty;
     private StellarVault.Core.Abstractions.VaultRecordPointer? _version;
     private bool _busy;
@@ -47,7 +48,8 @@
         _message = null;
         try { await action(); }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or InvalidDataException
-                                   or System.Security.Cryptography.CryptographicException or IOException)
+                                   or System.Security.Cryptography.CryptographicException or IOException
+                                   or Microsoft.JSInterop.JSException or OperationCanceledException)
         {
             _message = "Operation failed or record changed. Refresh and retry.";
         }
@@ -61,6 +63,7 @@
         var record = await Workspace.ReadTextAsync(name);
         if (record is null) { _message = "Record not found."; return; }
         _name = record.Name;
+        _loadedName = record.Name;
         _text = record.Text;
         _version = record.Version;
     });
@@ -68,6 +71,7 @@
     private void NewRecord()
     {
         _name = string.Empty;
+        _loadedName = null;
         _text = string.Empty;
         _version = null;
         _message = null;
@@ -75,13 +79,27 @@
 
     private Task SaveAsync() => RunAsync(async () =>
     {
+        // A version belongs to exactly one opaque, name-derived record ID.
+        // Editing the name while retaining that version must never create a
+        // mismatched compare-and-swap or overwrite an unrelated record.
+        if (_version is not null && !string.Equals(_loadedName, _name, StringComparison.Ordinal))
+        {
+            _message = "Record names cannot be changed while editing. Choose New to create another record.";
+            return;
+        }
         _version = await Workspace.SaveTextAsync(_name, _text, _version);
+        _loadedName = _name;
         _items = await Workspace.ListAsync();
         _message = "Encrypted record saved.";
     });
 
     private Task DeleteAsync() => RunAsync(async () =>
     {
+        if (_version is null || !string.Equals(_loadedName, _name, StringComparison.Ordinal))
+        {
+            _message = "Reopen the original record before removing it.";
+            return;
+        }
         await Workspace.DeleteAsync(_name);
         NewRecord();
         _items = await Workspace.ListAsync();
