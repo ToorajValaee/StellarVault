@@ -2,8 +2,6 @@ name: HD v2 validation
 on:
   push:
     branches: [feature/hd-indexed-storage-v2]
-  pull_request:
-    branches: [main]
 jobs:
   javascript:
     runs-on: ubuntu-latest
