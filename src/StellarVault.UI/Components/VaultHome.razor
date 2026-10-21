@@ -51,7 +51,7 @@
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
                 </div>
-                <p class="advanced-help">After vault access, the app checks this network against Horizon. Local storage is not yet separated by network.</p>
+                <p class="advanced-help">Network selection determines which funded root and account chain to discover. Local encrypted storage is not yet separated by network.</p>
                 <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
@@ -76,7 +76,7 @@
                 </div>
                 <div class="terminal-alert warning" role="status">
                     <strong>LOCAL ENCRYPTED VAULT PREVIEW</strong>
-                    <span>The account is derived privately from your mnemonic. Existing encrypted credentials are detected automatically; otherwise a new local vault is initialized. This does not yet discover on-chain child accounts, synchronize across devices, or provide a backup. Use only test credentials.</span>
+                    <span>The account is derived privately from your mnemonic. Existing encrypted credentials are detected automatically; otherwise a new local vault is initialized. Read-only child discovery runs for funded roots; cross-device sync and encrypted backup are not yet available. Use only test credentials.</span>
                 </div>
             }
             else
@@ -132,6 +132,7 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
+    private sealed record RootDiscovery(string Account, string Scheme, bool Found);
     private string _mnemonic = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
@@ -139,7 +140,7 @@
     private string _network = "testnet";
     private string? _networkStatus;
     private string[]? _childAccounts;
-    private void SelectNetwork(string value) { _network = value; _networkStatus = null; }
+    private void SelectNetwork(string value) { _network = value; _networkStatus = null; _childAccounts = null; }
 
     private async Task AccessVaultAsync()
     {
@@ -150,7 +151,8 @@
         {
             // The mnemonic identifies the namespace; never persist it or derive
             // a second, different account identity for an existing local vault.
-            var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
+            var root = await JS.InvokeAsync<RootDiscovery>("stellarVaultV2Mnemonic.resolveRoot", _mnemonic, _network);
+            var account = root.Account;
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
             bool exists = await Workflow.HasLocalVaultAsync(account);
@@ -159,19 +161,21 @@
             else
                 await Workflow.CreateAsync(account, _passphrase);
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
-            try
+            _networkStatus = root.Found
+                ? "Root account found on the selected Stellar network."
+                : "No funded root account was found. Local encrypted data is still accessible.";
+            if (root.Found)
             {
-                bool existsOnNetwork = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network);
-                _networkStatus = existsOnNetwork
-                    ? "Root account found on the selected Stellar network."
-                    : "Root account not found on the selected network. The local encrypted vault remains accessible.";
-                if (existsOnNetwork)
+                try
+                {
                     _childAccounts = await JS.InvokeAsync<string[]>(
-                        "stellarVaultV2Chain.discover", _mnemonic, _network, 16);
-            }
-            catch (JSException)
-            {
-                _networkStatus = "Root/child discovery could not complete. Registry integrity failures and network errors are not treated as an empty account chain.";
+                        "stellarVaultV2Chain.discover", _mnemonic, _network, root.Scheme, 16);
+                }
+                catch (JSException)
+                {
+                    _childAccounts = null;
+                    _networkStatus = "Child discovery failed; existing local encrypted records remain accessible. The account chain has not been fully verified.";
+                }
             }
         }
         catch (JSException)
