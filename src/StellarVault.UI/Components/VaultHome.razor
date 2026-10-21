@@ -139,7 +139,6 @@
     @if (Sessions.IsUnlocked)
     {
         <section class="sv-vault-data" aria-label="Encrypted vault records">
-            <VaultRecordWorkspaceView />
             <section class="terminal-panel" aria-label="Stellar ledger records">
                 <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
                 <h2>STELLAR LEDGER</h2>
@@ -180,6 +179,8 @@
                 }
             </section>
 
+            <section class="terminal-panel"><h2>LOCAL-ONLY RECORDS</h2><p class="advanced-help">These records stay in this browser. Use PUBLISH TO STELLAR above for the actual on-chain database.</p></section>
+            <VaultRecordWorkspaceView />
             @if (string.Equals(Platform, "WEB PWA", StringComparison.OrdinalIgnoreCase))
             {
                 <VaultBinaryFilesView />
