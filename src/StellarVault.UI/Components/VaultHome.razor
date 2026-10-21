@@ -133,7 +133,6 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
-    private sealed record RootDiscovery(string Account, bool Found, bool NetworkAvailable);
     private string _mnemonic = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
@@ -163,8 +162,7 @@
         {
             // The mnemonic identifies the namespace; never persist it or derive
             // a second, different account identity for an existing local vault.
-            var root = await JS.InvokeAsync<RootDiscovery>("stellarVaultV2Mnemonic.resolveRoot", _mnemonic, _network);
-            var account = root.Account;
+            var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
             bool exists = await Workflow.HasLocalVaultAsync(account);
@@ -173,23 +171,17 @@
             else
                 await Workflow.CreateAsync(account, _passphrase);
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
-            _networkStatus = !root.NetworkAvailable
-                ? "Horizon is unavailable or returned an unexpected network identity. Local encrypted records remain accessible; account discovery was not performed."
-                : root.Found
-                    ? "Root account found on the selected Stellar network."
-                    : "No funded root account was found on the selected network. Local encrypted records remain accessible.";
-            if (root.Found && Sessions.IsUnlocked)
+            try
             {
-                try
-                {
-                    _childAccounts = await JS.InvokeAsync<string[]>(
-                        "stellarVaultV2Chain.discover", _mnemonic, _network, 16);
-                }
-                catch (JSException)
-                {
-                    _childAccounts = null;
-                    _networkStatus = "Child discovery failed; existing local encrypted records remain accessible. The account chain has not been fully verified.";
-                }
+                bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network);
+                _networkStatus = found ? "Root account found on the selected network." : "Root account not found on selected network. Local vault remains accessible.";
+                if (found && Sessions.IsUnlocked)
+                    _childAccounts = await JS.InvokeAsync<string[]>("stellarVaultV2Chain.discover", _mnemonic, _network, 16);
+            }
+            catch (JSException)
+            {
+                _childAccounts = null;
+                _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
         }
         catch (JSException)
