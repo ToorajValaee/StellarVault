@@ -25,10 +25,19 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             contentType.Contains('\0'))
             throw new ArgumentException("Invalid content type.", nameof(contentType));
 
-        return sessions.ExecuteAsync(
-            (database, key, ct) => database.PutIndexedAsync(
-                name, expectedVersion, plaintext, key, contentType, ct),
-            cancellationToken);
+        return sessions.ExecuteAsync(async (database, key, ct) =>
+        {
+            // Do not overwrite a visible text record by uploading a file with
+            // the same catalog name. Existing binary files require an explicit
+            // version for replacement; the initial UI uses create-only writes.
+            var entries = await database.Catalog.ListAsync(key, ct);
+            var existing = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (existing is not null && (existing.ContentType is null ||
+                existing.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("This name belongs to a text record.");
+            return await database.PutIndexedAsync(
+                name, expectedVersion, plaintext, key, contentType, ct);
+        }, cancellationToken);
     }
 
     /// <summary>
