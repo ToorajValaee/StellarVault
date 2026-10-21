@@ -26,6 +26,7 @@ public static class MauiProgram
             new FileSystemVaultRecordIndex(Path.Combine(FileSystem.AppDataDirectory, "vault-index")));
         builder.Services.AddSingleton<VaultSessionWorkflow>();
         builder.Services.AddSingleton<VaultRecordWorkspace>();
+        builder.Services.AddSingleton<VaultBinaryWorkspace>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
         builder.Logging.AddDebug();
