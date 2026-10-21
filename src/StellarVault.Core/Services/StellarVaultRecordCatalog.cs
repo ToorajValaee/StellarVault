@@ -77,6 +77,21 @@ public sealed class StellarVaultRecordCatalog(StellarAccountVaultDatabase databa
         var version = await database.GetVersionAsync(CatalogName, key, ct);
         if (version is null) return (null, new Document(1, new List<Entry>()));
         using var staging = new MemoryStream();
+        try
+        {
+            return await LoadDecryptedCatalogAsync(version, staging, key, ct);
+        }
+        finally
+        {
+            // The stream's decrypted backing buffer otherwise survives Dispose.
+            if (staging.TryGetBuffer(out ArraySegment<byte> segment) && segment.Array is not null)
+                CryptographicOperations.ZeroMemory(segment.Array);
+        }
+    }
+
+    private async Task<(VaultRecordPointer? Version, Document Data)> LoadDecryptedCatalogAsync(
+        VaultRecordPointer version, MemoryStream staging, ReadOnlyMemory<byte> key, CancellationToken ct)
+    {
         await database.GetAsync(CatalogName, staging, key, ct);
         // Prevent using a newer catalog body with an older CAS pointer.
         var afterRead = await database.GetVersionAsync(CatalogName, key, ct);
