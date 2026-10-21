@@ -1,6 +1,19 @@
 // SEP-5-only local derivation; Horizon receives only the public account address.
 // Network failures must never make encrypted local records inaccessible.
 window.stellarVaultV2Mnemonic = Object.freeze({
+  async rootPublicKey(mnemonic) {
+    if (typeof mnemonic !== 'string' || mnemonic.length > 4096)
+      throw new TypeError('Invalid recovery phrase input');
+    if (!window.stellarVaultHd || !window.StellarSdk)
+      throw new Error('Mnemonic derivation dependencies were not loaded');
+    const validated = await window.stellarVaultHd.validateMnemonic(mnemonic);
+    const seed = await window.stellarVaultHd.mnemonicSeed(validated);
+    try {
+      const raw = await window.stellarVaultHd.accountSeed(seed, 0, 'sep5');
+      try { return window.StellarSdk.Keypair.fromRawEd25519Seed(raw).publicKey(); }
+      finally { raw.fill(0); }
+    } finally { seed.fill(0); }
+  },
   async resolveRoot(mnemonic, network) {
     if (typeof mnemonic !== 'string' || mnemonic.length > 4096)
       throw new TypeError('Invalid recovery phrase input');
