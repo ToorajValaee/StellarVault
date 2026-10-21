@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.JSInterop;
 using StellarVault.Core.Abstractions;
 
-namespace StellarVaultPwa.Services;
+namespace StellarVault.Pwa.Services;
 
 /// <summary>Transactional browser pointer CAS; cannot prevent malicious rollback of IndexedDB.</summary>
 public sealed class IndexedDbVaultRecordIndex(IJSRuntime js) : IVaultRecordIndex
