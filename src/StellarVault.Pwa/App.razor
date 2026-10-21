@@ -1,0 +1,30 @@
+@using StellarVault.UI.Components
+@using StellarVault.Core.Services
+@using Microsoft.JSInterop
+@inject VaultSessionManager Sessions
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<FreshVaultHome Platform="WEB PWA" />
+
+@code {
+    private DotNetObjectReference<App>? _callback;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _callback = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback);
+    }
+
+    [JSInvokable]
+    public void LockForBrowserLifecycle() => Sessions.Lock();
+
+    public async ValueTask DisposeAsync()
+    {
+        Sessions.Lock();
+        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
+        catch (JSDisconnectedException) { }
+        _callback?.Dispose();
+    }
+}

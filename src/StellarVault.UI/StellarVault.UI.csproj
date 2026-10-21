@@ -4,15 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <!-- Fresh v2 application only: old HD registry pages and record modal components
-       are not part of the shared Razor compilation. No legacy data compatibility. -->
   <ItemGroup>
-    <RazorComponent Remove="Pages/**/*.razor" />
-    <RazorComponent Remove="Layout/**/*.razor" />
-    <RazorComponent Remove="Components/CostApprovalModal.razor" />
-    <RazorComponent Remove="Components/CostEstimatePanel.razor" />
-    <RazorComponent Remove="Components/PlatformBanner.razor" />
-    <RazorComponent Remove="Components/RecordDetailModal.razor" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
     <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
   </ItemGroup>
