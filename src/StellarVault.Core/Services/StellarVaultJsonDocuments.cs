@@ -18,21 +18,30 @@ public sealed class StellarVaultJsonDocuments(StellarAccountVaultDatabase databa
         var version = await database.GetVersionAsync(name, vaultKey, cancellationToken);
         if (version is null) return null;
         using var staging = new MemoryStream();
-        await database.GetAsync(name, staging, vaultKey, cancellationToken);
-        if (staging.Length > VaultV2Envelope.MaximumPlaintextLength)
-            throw new InvalidDataException("JSON document exceeds supported size.");
-        // GetAsync may observe a later version. Never return a mismatched value/version pair.
-        var current = await database.GetVersionAsync(name, vaultKey, cancellationToken);
-        if (current != version)
-            throw new VaultWriteConflictException(database.GetRecordId(name, vaultKey.Span));
-        byte[] bytes = staging.ToArray();
         try
         {
-            var value = JsonSerializer.Deserialize<T>(bytes, options)
-                ?? throw new InvalidDataException("JSON document deserialized to null.");
-            return new Snapshot<T>(value, version);
+            await database.GetAsync(name, staging, vaultKey, cancellationToken);
+            if (staging.Length > VaultV2Envelope.MaximumPlaintextLength)
+                throw new InvalidDataException("JSON document exceeds supported size.");
+            // GetAsync may observe a later version. Never return a mismatched value/version pair.
+            var current = await database.GetVersionAsync(name, vaultKey, cancellationToken);
+            if (current != version)
+                throw new VaultWriteConflictException(database.GetRecordId(name, vaultKey.Span));
+            byte[] bytes = staging.ToArray();
+            try
+            {
+                var value = JsonSerializer.Deserialize<T>(bytes, options)
+                    ?? throw new InvalidDataException("JSON document deserialized to null.");
+                return new Snapshot<T>(value, version);
+            }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
         }
-        finally { CryptographicOperations.ZeroMemory(bytes); }
+        finally
+        {
+            // Stream disposal does not erase decrypted JSON in its backing array.
+            if (staging.TryGetBuffer(out ArraySegment<byte> segment) && segment.Array is not null)
+                CryptographicOperations.ZeroMemory(segment.Array);
+        }
     }
 
     /// <summary>Write a typed JSON document with compare-and-swap semantics.
