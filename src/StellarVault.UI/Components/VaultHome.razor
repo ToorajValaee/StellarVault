@@ -132,7 +132,7 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
-    private sealed record RootDiscovery(string Account, string Scheme, bool Found);
+    private sealed record RootDiscovery(string Account, bool Found);
     private string _mnemonic = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
