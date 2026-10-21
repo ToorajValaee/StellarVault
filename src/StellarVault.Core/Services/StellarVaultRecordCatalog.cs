@@ -83,11 +83,29 @@ public sealed class StellarVaultRecordCatalog(StellarAccountVaultDatabase databa
         if (afterRead != version)
             throw new VaultWriteConflictException(database.GetRecordId(CatalogName, key.Span));
         if (staging.Length > MaxCatalogBytes) throw new InvalidDataException("Catalog exceeds size limit.");
-        var document = JsonSerializer.Deserialize<Document>(staging.ToArray())
-            ?? throw new InvalidDataException("Catalog is missing.");
-        if (document.SchemaVersion != 1 || document.Entries is null || document.Entries.Count > MaxEntries ||
-            document.Entries.Any(e => e is null || string.IsNullOrWhiteSpace(e.Name)))
-            throw new InvalidDataException("Invalid encrypted catalog schema.");
-        return (version, document);
+        byte[] plaintext = staging.ToArray();
+        try
+        {
+            var document = JsonSerializer.Deserialize<Document>(plaintext)
+                ?? throw new InvalidDataException("Catalog is missing.");
+            if (document.SchemaVersion != 1 || document.Entries is null ||
+                document.Entries.Count > MaxEntries)
+                throw new InvalidDataException("Invalid encrypted catalog schema.");
+
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in document.Entries)
+            {
+                if (entry is null || string.IsNullOrWhiteSpace(entry.Name) ||
+                    entry.Name.StartsWith("__svault/", StringComparison.Ordinal) ||
+                    System.Text.Encoding.UTF8.GetByteCount(entry.Name) > 512 ||
+                    entry.Name.Contains('\\0') || !names.Add(entry.Name) ||
+                    entry.UpdatedUnixSeconds < 0 ||
+                    (entry.ContentType is not null &&
+                     (entry.ContentType.Length > 128 || entry.ContentType.Contains('\\0'))))
+                    throw new InvalidDataException("Invalid encrypted catalog entry.");
+            }
+            return (version, document);
+        }
+        finally { CryptographicOperations.ZeroMemory(plaintext); }
     }
 }
