@@ -1,6 +1,7 @@
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
+@inject Microsoft.JSInterop.IJSRuntime JS
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
@@ -29,6 +30,11 @@
                 </div>
                 <span class="step-led">01</span>
             </div>
+            @if (Platform == "WEB PWA")
+            {
+                <p class="advanced-help">Testnet preview — connect your Freighter desktop wallet. A funded Testnet account and an authorized high-threshold signer are required.</p>
+                <button class="pixel-button" type="button" disabled="@_busy" @onclick="ConnectWalletAsync">CONNECT FREIGHTER</button>
+            }
             <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
             <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
                    autocomplete="off" spellcheck="false" @bind="_account" disabled="@_busy" />
@@ -50,8 +56,8 @@
                 <button class="pixel-button" type="button" disabled="@_busy" @onclick="CreateAsync">CREATE NEW VAULT</button>
             </div>
             <div class="terminal-alert warning" role="status">
-                <strong>AUTHORIZATION NOT CONFIGURED</strong>
-                <span>The wallet-signing bridge remains fail-closed. This screen is available for preview; real Create/Unlock cannot yet succeed.</span>
+                <strong>TESTNET DEVELOPMENT PREVIEW</strong>
+                <span>Browser: Freighter SEP-53 wallet signing and live Stellar Testnet signer verification. Native: account authorization is not configured. Do not store valuable secrets until tested.</span>
             </div>
             @if (!string.IsNullOrWhiteSpace(_message))
             {
@@ -78,6 +84,23 @@
     private string? _message;
     private bool _busy;
 
+    private async Task ConnectWalletAsync()
+    {
+        if (_busy || Platform != "WEB PWA") return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            _account = await JS.InvokeAsync<string>("stellarVaultV2Wallet.connect");
+            _message = "Freighter connected. Sign the ownership request when creating or unlocking.";
+        }
+        catch (Exception ex) when (ex is Microsoft.JSInterop.JSException or InvalidOperationException)
+        {
+            _message = "Could not connect Freighter. Install or unlock the desktop extension and approve access.";
+        }
+        finally { _busy = false; }
+    }
+
     private Task CreateAsync() => RunAsync((account, passphrase) =>
         Workflow.CreateAsync(account, passphrase));
 
@@ -96,7 +119,7 @@
         }
         catch (UnauthorizedAccessException)
         {
-            _message = "Stellar wallet ownership verification is not configured. No vault was unlocked.";
+            _message = "Wallet ownership proof failed or was rejected. Confirm Freighter Testnet and the account signer policy.";
         }
         catch (ArgumentException)
         {
