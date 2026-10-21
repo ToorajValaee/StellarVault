@@ -41,12 +41,12 @@
                 </div>
                 <div class="network-selector" role="group" aria-label="Stellar network">
                     <button type="button" class="network-option @(_network == "testnet" ? "active" : "")"
-                            aria-pressed="@(_network == "testnet")" disabled="@_busy"
+                            aria-pressed="@(_network == "testnet")" disabled="@(_busy || Sessions.IsUnlocked)"
                             @onclick='() => SelectNetwork("testnet")'>
                         <span class="network-symbol">T</span><span><strong>TESTNET</strong><small>STELLAR TEST NETWORK</small></span>
                     </button>
                     <button type="button" class="network-option @(_network == "public" ? "active" : "")"
-                            aria-pressed="@(_network == "public")" disabled="@_busy"
+                            aria-pressed="@(_network == "public")" disabled="@(_busy || Sessions.IsUnlocked)"
                             @onclick='() => SelectNetwork("public")'>
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
@@ -140,13 +140,22 @@
     private string _network = "testnet";
     private string? _networkStatus;
     private string[]? _childAccounts;
-    private void SelectNetwork(string value) { _network = value; _networkStatus = null; _childAccounts = null; }
+    private void SelectNetwork(string value)
+    {
+        if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public")) return;
+        _network = value;
+        _networkStatus = null;
+        _childAccounts = null;
+        _message = null;
+    }
 
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
         _busy = true;
         _message = null;
+        _networkStatus = null;
+        _childAccounts = null;
         try
         {
             // The mnemonic identifies the namespace; never persist it or derive
@@ -218,6 +227,8 @@
         Workflow.Lock();
         _mnemonic = string.Empty;
         _passphrase = string.Empty;
+        _childAccounts = null;
+        _networkStatus = null;
         _message = "Vault locked.";
     }
 
