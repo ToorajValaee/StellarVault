@@ -84,6 +84,11 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
         {
             // A logical deletion must not silently target a different record revision.
             ArgumentNullException.ThrowIfNull(expectedVersion);
+            var entries = await db.Catalog.ListAsync(key, token);
+            var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (metadata is null || (metadata.ContentType is not null &&
+                !metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("The selected text record is no longer in the catalog.");
             var current = await db.GetVersionAsync(name, key, token);
             if (current != expectedVersion)
                 throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
