@@ -21,5 +21,6 @@ builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
 builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
 builder.Services.AddScoped<VaultSessionWorkflow>();
 builder.Services.AddScoped<VaultRecordWorkspace>();
+builder.Services.AddScoped<VaultBinaryWorkspace>();
 
 await builder.Build().RunAsync();
