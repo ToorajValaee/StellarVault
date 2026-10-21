@@ -83,6 +83,29 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             }
         }, cancellationToken);
 
+    /// <summary>Retrieve the visible file revision without decrypting its contents.
+    /// Used for version-checked catalog removal, not for reading file plaintext.</summary>
+    public Task<VaultRecordPointer?> GetFileVersionAsync(string name,
+        CancellationToken cancellationToken = default) =>
+        sessions.ExecuteAsync<VaultRecordPointer?>(async (database, key, ct) =>
+        {
+            var entries = await database.Catalog.ListAsync(key, ct);
+            var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (entry is null) return null;
+            if (entry.ContentType is null ||
+                entry.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("This record is not an encrypted file.");
+            var version = await database.GetVersionAsync(name, key, ct);
+            if (version is null) return null;
+            // Avoid returning a pointer after a concurrent catalog tombstone.
+            var current = await database.Catalog.ListAsync(key, ct);
+            var visible = current.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+            if (visible is null || visible.ContentType is null ||
+                visible.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+            return version;
+        }, cancellationToken);
+
     /// <summary>Logically remove an encrypted file only at its expected revision.
     /// Encrypted historical objects may remain in immutable storage.</summary>
     public Task DeleteAsync(string name, VaultRecordPointer expectedVersion,
