@@ -2,6 +2,7 @@
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
+@inject IJSRuntime JS
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
@@ -31,6 +32,16 @@
                 <span class="step-led">01</span>
             </div>
             <p class="advanced-help">Local encrypted vault mode: your public G-address is only a storage namespace. It does not prove Stellar ownership or connect to the blockchain. SWallet support will follow.</p>
+            @if (Platform == "WEB PWA")
+            {
+                <label class="terminal-label" for="sv-mnemonic">BIP-39 RECOVERY WORDS (LOCAL DERIVATION)</label>
+                <textarea id="sv-mnemonic" class="terminal-input" rows="3" type="password"
+                          autocomplete="off" spellcheck="false" @bind="_mnemonic" disabled="@_busy"
+                          placeholder="Enter a test mnemonic to derive your index-0 account"></textarea>
+                <button class="pixel-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic))"
+                        @onclick="DeriveRootAsync">DERIVE ROOT ACCOUNT</button>
+                <p class="advanced-help">This derives the standard SEP-5 index-0 public account in this browser. It does not yet scan child accounts or import existing on-chain records. Use only disposable test phrases in this preview.</p>
+            }
             <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
             <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
                    autocomplete="off" spellcheck="false" @bind="AccountInput" disabled="@_busy" />
@@ -86,6 +97,33 @@
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _account = string.Empty;
+    private string _mnemonic = string.Empty;
+
+    private async Task DeriveRootAsync()
+    {
+        if (_busy || Platform != "WEB PWA") return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
+            AccountInput = account;
+            _hasLocalVault = await Workflow.HasLocalVaultAsync(account);
+            _message = _hasLocalVault.Value
+                ? "Derived root account. Local vault found; choose UNLOCK."
+                : "Derived root account. No local vault found; choose CREATE.";
+        }
+        catch (Exception ex) when (ex is JSException or ArgumentException or InvalidOperationException)
+        {
+            _message = "Mnemonic validation or root derivation failed. Check the test phrase and try again.";
+        }
+        finally
+        {
+            _mnemonic = string.Empty;
+            _busy = false;
+        }
+    }
+
     private string AccountInput
     {
         get => _account;
