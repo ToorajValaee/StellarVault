@@ -1,5 +1,5 @@
 // Derive a public account locally; network lookup receives public addresses only.
-// The legacy BIP32-compatible path is tried only after a definite SEP-5 404.
+// SEP-5 only: no obsolete alternative derivation schemes.
 window.stellarVaultV2Mnemonic = Object.freeze({
   async resolveRoot(mnemonic, network) {
     if (typeof mnemonic !== 'string' || mnemonic.length > 4096)
@@ -32,19 +32,15 @@ window.stellarVaultV2Mnemonic = Object.freeze({
       throw new Error('Horizon network identity mismatch');
     const seed = await window.stellarVaultHd.mnemonicSeed(validated);
     try {
-      const derive = async scheme => {
-        const raw = await window.stellarVaultHd.accountSeed(seed, 0, scheme);
+      const derive = async () => {
+        const raw = await window.stellarVaultHd.accountSeed(seed, 0, 'sep5');
         try { return window.StellarSdk.Keypair.fromRawEd25519Seed(raw).publicKey(); }
         finally { raw.fill(0); }
       };
-      const primary = await derive('sep5');
+      const primary = await derive();
       if (await fetchJson(base + '/accounts/' + encodeURIComponent(primary)))
         return { account: primary, scheme: 'sep5', found: true };
-      const legacy = await derive('bip32-compat');
-      if (await fetchJson(base + '/accounts/' + encodeURIComponent(legacy)))
-        return { account: legacy, scheme: 'bip32-compat', found: true };
-      // Keep local vault access possible for an unfunded root. Do not
-      // present either unobserved address as an existing ledger account.
+      // Keep local vault access possible for an unfunded SEP-5 root.
       return { account: primary, scheme: 'sep5', found: false };
     } finally { seed.fill(0); }
   }
