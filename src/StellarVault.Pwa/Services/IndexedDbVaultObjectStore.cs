@@ -3,7 +3,7 @@ using Microsoft.JSInterop;
 using StellarVault.Core.Abstractions;
 using StellarVault.Core.Services;
 
-namespace StellarVaultPwa.Services;
+namespace StellarVault.Pwa.Services;
 
 /// <summary>Encrypted immutable object persistence in IndexedDB. No plaintext is stored.</summary>
 public sealed class IndexedDbVaultObjectStore(IJSRuntime js) : IVaultChunkStore
