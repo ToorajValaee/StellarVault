@@ -17,7 +17,7 @@
                 <span><b>[OK]</b> AES-256-GCM ENCRYPTED RECORDS</span>
                 <span><b>[OK]</b> ACCOUNT-SCOPED PRIVATE STORAGE</span>
                 <span><b>[OK]</b> SHARED PWA + NATIVE INTERFACE</span>
-                <span><b>[WAIT]</b> WALLET OWNERSHIP SIGNING</span>
+                <span><b>[LOCAL]</b> SWALLET INTEGRATION PLANNED</span>
             </div>
             <ManagedVaultSessionStatus />
         </section>
@@ -30,7 +30,7 @@
                 </div>
                 <span class="step-led">01</span>
             </div>
-            <p class="advanced-help">SWallet account authorization integration is planned. Vault access remains unavailable until it is verified.</p>
+            <p class="advanced-help">Local encrypted vault mode: your public G-address is only a storage namespace. It does not prove Stellar ownership or connect to the blockchain. SWallet support will follow.</p>
             <label class="terminal-label" for="sv-account">PUBLIC ACCOUNT ADDRESS</label>
             <input id="sv-account" class="terminal-input" placeholder="G…" maxlength="56"
                    autocomplete="off" spellcheck="false" @bind="AccountInput" disabled="@_busy" />
@@ -45,7 +45,7 @@
             <label class="terminal-label" for="sv-passphrase">LOCAL ENCRYPTION PASSPHRASE</label>
             <input id="sv-passphrase" class="terminal-input" type="password"
                    autocomplete="off" @bind="_passphrase" disabled="@_busy" />
-            <p class="advanced-help">Your passphrase unlocks the encrypted local vault key. The Stellar wallet must separately prove account ownership.</p>
+            <p class="advanced-help">Your passphrase protects the locally encrypted vault key. No wallet authorization is performed in this PWA mode.</p>
 
             <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_account))"
                     @onclick="CheckLocalVaultAsync">CHECK LOCAL VAULT</button>
@@ -62,8 +62,8 @@
                 <button class="pixel-button" type="button" disabled="@(_busy || _hasLocalVault != false)" @onclick="CreateAsync">CREATE NEW VAULT</button>
             </div>
             <div class="terminal-alert warning" role="status">
-                <strong>VAULT ACCESS NOT YET AVAILABLE</strong>
-                <span>SWallet authorization has not been integrated. This development build cannot create or unlock a vault. Do not store secrets.</span>
+                <strong>LOCAL-ONLY PREVIEW — NOT WALLET AUTHENTICATION</strong>
+                <span>Create, save, lock and reopen local encrypted records with a test passphrase. The Stellar address is not verified, and browser storage is not a backup or cross-device sync. Do not use real secrets before release validation.</span>
             </div>
             @if (!string.IsNullOrWhiteSpace(_message))
             {
@@ -141,7 +141,7 @@
         }
         catch (UnauthorizedAccessException)
         {
-            _message = "Account authorization is not yet available. SWallet integration is pending.";
+            _message = "Vault authorization failed. This platform may require a connected SWallet in a later release.";
         }
         catch (ArgumentException)
         {
