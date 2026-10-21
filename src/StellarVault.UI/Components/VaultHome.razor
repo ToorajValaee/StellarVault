@@ -156,6 +156,7 @@
     private string _network = "testnet";
     private string _customHorizon = string.Empty;
     private string? _customPassphrase;
+    private string? _detectedHorizon;
     private string? _networkStatus;
     private string[]? _childAccounts;
     private void SelectNetwork(string value)
@@ -174,11 +175,13 @@
         _busy = true;
         _message = null;
         _customPassphrase = null;
+        _detectedHorizon = null;
         NetworkSelection.ResetCustom();
         try
         {
             _customPassphrase = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon);
             NetworkSelection.ConfigureCustom(_customPassphrase);
+            _detectedHorizon = _customHorizon.Trim();
             _networkStatus = "Private network detected.";
         }
         catch (JSException)
@@ -192,7 +195,8 @@
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
         if (_network == "custom" && (string.IsNullOrWhiteSpace(_customPassphrase) ||
-            NetworkSelection.CustomPassphrase != _customPassphrase))
+            NetworkSelection.CustomPassphrase != _customPassphrase ||
+            !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
         {
             _message = "Detect the custom network before accessing the vault.";
             return;
