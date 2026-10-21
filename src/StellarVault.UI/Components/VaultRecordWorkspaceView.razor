@@ -100,7 +100,7 @@
             _message = "Reopen the original record before removing it.";
             return;
         }
-        await Workspace.DeleteAsync(_name);
+        await Workspace.DeleteAsync(_name, _version);
         NewRecord();
         _items = await Workspace.ListAsync();
         _message = "Record hidden from catalog; ciphertext may remain in history.";
