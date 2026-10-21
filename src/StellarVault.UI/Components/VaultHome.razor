@@ -132,7 +132,7 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
-    private sealed record RootDiscovery(string Account, bool Found);
+    private sealed record RootDiscovery(string Account, bool Found, bool NetworkAvailable);
     private string _mnemonic = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
@@ -161,9 +161,11 @@
             else
                 await Workflow.CreateAsync(account, _passphrase);
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
-            _networkStatus = root.Found
-                ? "Root account found on the selected Stellar network."
-                : "No funded root account was found. Local encrypted data is still accessible.";
+            _networkStatus = !root.NetworkAvailable
+                ? "Horizon is unavailable or returned an unexpected network identity. Local encrypted records remain accessible; account discovery was not performed."
+                : root.Found
+                    ? "Root account found on the selected Stellar network."
+                    : "No funded root account was found on the selected network. Local encrypted records remain accessible.";
             if (root.Found)
             {
                 try
