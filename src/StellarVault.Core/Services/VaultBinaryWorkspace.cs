@@ -7,7 +7,7 @@ namespace StellarVault.Core.Services;
 /// Shared encrypted binary record operations for native and browser hosts.
 /// All plaintext is supplied by the caller and is encrypted before reaching the
 /// chunk store. Reads stage the entire decrypted record privately before exposing
-/// any bytes to a caller; callers must dispose their returned stream.
+/// any bytes to a caller; callers must dispose the returned BinaryRecord.
 /// </summary>
 public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
 {
@@ -32,7 +32,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
     }
 
     /// <summary>
-    /// Returns a caller-owned plaintext stream only after authentication succeeds
+    /// Returns a caller-owned plaintext buffer only after authentication succeeds
     /// and its version is stable. Never stream unauthenticated plaintext into a
     /// download destination.
     /// </summary>
