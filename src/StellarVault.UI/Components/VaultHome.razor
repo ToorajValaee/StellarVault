@@ -2,6 +2,7 @@
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
+@inject VaultNetworkSelection NetworkSelection
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -51,7 +52,7 @@
                         <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
                     </button>
                 </div>
-                <p class="advanced-help">Network selection determines which funded root and account chain to discover. Local encrypted storage is not yet separated by network.</p>
+                <p class="advanced-help">Network selection determines which funded root and account chain to discover. Local encrypted vault credentials are separated by network.</p>
                 <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
@@ -143,6 +144,7 @@
     private void SelectNetwork(string value)
     {
         if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public")) return;
+        NetworkSelection.Select(value);
         _network = value;
         _networkStatus = null;
         _childAccounts = null;
@@ -152,6 +154,7 @@
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
+        NetworkSelection.Select(_network);
         _busy = true;
         _message = null;
         _networkStatus = null;
