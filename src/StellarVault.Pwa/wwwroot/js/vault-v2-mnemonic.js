@@ -39,7 +39,7 @@ window.stellarVaultV2Mnemonic = Object.freeze({
       };
       const primary = await derive();
       if (await fetchJson(base + '/accounts/' + encodeURIComponent(primary)))
-        return { account: primary, scheme: 'sep5', found: true };
+        return { account: primary, found: true };
       // Keep local vault access possible for an unfunded SEP-5 root.
       return { account: primary, scheme: 'sep5', found: false };
     } finally { seed.fill(0); }
