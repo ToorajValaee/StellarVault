@@ -98,10 +98,10 @@ public sealed class StellarVaultRecordCatalog(StellarAccountVaultDatabase databa
                 if (entry is null || string.IsNullOrWhiteSpace(entry.Name) ||
                     entry.Name.StartsWith("__svault/", StringComparison.Ordinal) ||
                     System.Text.Encoding.UTF8.GetByteCount(entry.Name) > 512 ||
-                    entry.Name.Contains('\\0') || !names.Add(entry.Name) ||
+                    entry.Name.Contains('\0') || !names.Add(entry.Name) ||
                     entry.UpdatedUnixSeconds < 0 ||
                     (entry.ContentType is not null &&
-                     (entry.ContentType.Length > 128 || entry.ContentType.Contains('\\0'))))
+                     (entry.ContentType.Length > 128 || entry.ContentType.Contains('\0'))))
                     throw new InvalidDataException("Invalid encrypted catalog entry.");
             }
             return (version, document);
