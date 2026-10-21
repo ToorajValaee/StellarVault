@@ -71,7 +71,15 @@
             if (record is null) { _status = "File record not found."; return; }
             if (record.Content.Length > MaximumFileLength)
                 throw new InvalidDataException("File exceeds current download limit.");
-            await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, record.Content.ToArray());
+            byte[] temporaryDownload = record.Content.ToArray();
+            try
+            {
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, temporaryDownload);
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(temporaryDownload);
+            }
             _status = "Decrypted file downloaded.";
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
