@@ -86,6 +86,26 @@
                     <span>The shared native UI awaits secure mnemonic handling and SWallet integration.</span>
                 </div>
             }
+            @if (_childAccounts is not null)
+            {
+                <section class="terminal-panel" aria-label="Discovered Stellar child accounts">
+                    <h3>DISCOVERED ACCOUNT CHAIN</h3>
+                    <p class="advanced-help">Read-only SEP-5 scan of indices 1–16. This is not full registry recovery.</p>
+                    @if (_childAccounts.Length == 0)
+                    {
+                        <p>No funded child accounts were found in this scan.</p>
+                    }
+                    else
+                    {
+                        <ul>
+                            @foreach (var child in _childAccounts)
+                            {
+                                <li>@child</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
             @if (!string.IsNullOrWhiteSpace(_networkStatus))
             {
                 <p class="advanced-help" role="status">@_networkStatus</p>
@@ -118,6 +138,7 @@
     private bool _busy;
     private string _network = "testnet";
     private string? _networkStatus;
+    private string[]? _childAccounts;
     private void SelectNetwork(string value) { _network = value; _networkStatus = null; }
 
     private async Task AccessVaultAsync()
@@ -144,10 +165,13 @@
                 _networkStatus = existsOnNetwork
                     ? "Root account found on the selected Stellar network."
                     : "Root account not found on the selected network. The local encrypted vault remains accessible.";
+                if (existsOnNetwork)
+                    _childAccounts = await JS.InvokeAsync<string[]>(
+                        "stellarVaultV2Chain.discover", _mnemonic, _network, 16);
             }
             catch (JSException)
             {
-                _networkStatus = "Horizon verification failed. The local vault remains accessible; on-chain discovery is unavailable.";
+                _networkStatus = "Root/child network discovery was unavailable or interrupted. Your encrypted local vault remains accessible.";
             }
         }
         catch (JSException)
