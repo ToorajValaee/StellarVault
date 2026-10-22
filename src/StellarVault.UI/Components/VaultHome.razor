@@ -68,11 +68,33 @@
             </div>
             @if (Platform == "WEB PWA")
             {
-                <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
-                <textarea id="sv-mnemonic" class="terminal-input" rows="4"
-                          autocomplete="off" spellcheck="false" @bind="_mnemonic" @bind:event="oninput"
-                          disabled="@(_busy || Sessions.IsUnlocked)"
-                          placeholder="Enter your BIP-39 recovery words"></textarea>
+                <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
+                <div class="sv-mnemonic-controls">
+                    <label class="terminal-label">WORDS
+                        <select class="terminal-input" @bind="_mnemonicWordCount" disabled="@(_busy || Sessions.IsUnlocked)">
+                            @foreach (var count in new[] { 12, 15, 18, 21, 24 })
+                            {
+                                <option value="@count">@count</option>
+                            }
+                        </select>
+                    </label>
+                    <button class="pixel-button compact" type="button" @onclick="() => _showMnemonic = !_showMnemonic">@(_showMnemonic ? "HIDE WORDS" : "SHOW WORDS")</button>
+                </div>
+                <div class="sv-mnemonic-grid">
+                    @for (var i = 0; i < _mnemonicWordCount; i++)
+                    {
+                        var index = i;
+                        <label class="terminal-label">
+                            <span>WORD @(index + 1)</span>
+                            <input class="terminal-input" type="@(_showMnemonic ? "text" : "password")"
+                                   value="@_mnemonicWords[index]"
+                                   @oninput="e => UpdateMnemonicWord(index, e.Value?.ToString() ?? string.Empty)"
+                                   autocomplete="off" autocapitalize="none" spellcheck="false"
+                                   disabled="@(_busy || Sessions.IsUnlocked)" placeholder="••••••" />
+                        </label>
+                    }
+                </div>
+                <p class="advanced-help">Each recovery word is masked by default. Choose the correct word count before unlocking.</p>
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
@@ -93,7 +115,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit"
-                                disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
+                                disabled="@(_busy || _mnemonicWords.Take(_mnemonicWordCount).Any(x => string.IsNullOrWhiteSpace(x)) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
                                 >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
                     }
                 </div>
@@ -232,6 +254,21 @@
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _workspaceMode = "ledger";
     private string _mnemonic = string.Empty;
+    private readonly string[] _mnemonicWords = new string[24];
+    private int _mnemonicWordCount = 12;
+    private bool _showMnemonic;
+    private void UpdateMnemonicWord(int index, string value)
+    {
+        _mnemonicWords[index] = value.Trim();
+    }
+    private string AssembleMnemonic() =>
+        string.Join(' ', _mnemonicWords.Take(_mnemonicWordCount).Select(x => x?.Trim() ?? ""));
+    private void ClearMnemonic()
+    {
+        Array.Clear(_mnemonicWords);
+        _mnemonic = string.Empty;
+        _showMnemonic = false;
+    }
     private bool _ledgerRegistryReady;
     private string _ledgerTitle = string.Empty;
     private string _ledgerContent = string.Empty;
@@ -340,6 +377,7 @@
             return;
         }
         NetworkSelection.Select(_network);
+        _mnemonic = AssembleMnemonic();
         _busy = true;
         _accessStage = "starting";
         await InvokeAsync(StateHasChanged);
@@ -441,7 +479,7 @@
         }
         finally
         {
-            _mnemonic = string.Empty;
+            ClearMnemonic();
             _passphrase = string.Empty;
             _busy = false;
         }
