@@ -6,6 +6,7 @@
 @inject VaultStorageModeGate StorageMode
 @inject VaultNetworkSelection NetworkSelection
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject CommunityToolkit.Maui.Storage.IFileSaver FileSaver
 @implements IAsyncDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
@@ -69,6 +70,8 @@
                         @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
                         {
                             <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
+                            <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
+                            <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
                             @if (!string.IsNullOrEmpty(_verifiedFileMessage))
                             {
                                 <p role="status">@_verifiedFileMessage</p>
@@ -205,6 +208,41 @@
         catch (Exception ex) when (ex is InvalidDataException or FormatException or System.Text.Json.JsonException or InvalidOperationException)
         {
             _verifiedFileMessage = "File verification failed. An incomplete or corrupted ledger file cannot be opened.";
+        }
+    }
+
+    private async Task ExportSelectedFileAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected) return;
+        var selected = _selectedRecord;
+        if (selected is null || !StellarLedgerFileProtocol.IsFile(selected)) return;
+        _ledgerBusy = true;
+        _verifiedFileMessage = null;
+        byte[]? plaintext = null;
+        try
+        {
+            // Always reconstruct and re-verify just before exporting, rather
+            // than trusting an earlier verification of mutable ledger state.
+            plaintext = StellarLedgerFileProtocol.DecodeFile(selected, _ledgerRecords);
+            var name = StellarLedgerFileProtocol.FileName(selected);
+            StellarLedgerFileProtocol.ValidateName(name);
+            using var stream = new MemoryStream(plaintext, writable: false);
+            var result = await FileSaver.SaveAsync(name, stream, CancellationToken.None);
+            _verifiedFileMessage = result.IsSuccessful
+                ? "Unencrypted file exported to the location you selected."
+                : "File export was canceled or failed. Your vault remains unchanged.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException or
+                                    System.Text.Json.JsonException or InvalidOperationException or
+                                    UnauthorizedAccessException or IOException or NotSupportedException)
+        {
+            _verifiedFileMessage = "File export failed. The file was not marked as exported.";
+        }
+        finally
+        {
+            if (plaintext is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext);
+            _ledgerBusy = false;
         }
     }
 
