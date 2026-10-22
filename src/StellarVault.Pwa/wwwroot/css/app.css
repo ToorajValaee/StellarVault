@@ -2241,3 +2241,32 @@ html.ios-device.standalone-app .terminal-footer {
  .approval-modal-actions { grid-template-columns: minmax(0, 1fr); }
  .record-list .record-card { grid-template-columns: 2rem minmax(0, 1fr) 1.7rem; }
 }
+
+/* Header dropdown must size relative to the header, never to its tiny icon.
+   The generic .terminal-panel { max-width:100% } overflow rule otherwise
+   constrains the popup to the width of the network trigger. */
+.sv-adaptive-header .sv-network-menu { position:static; flex:0 0 auto; }
+.sv-adaptive-header .sv-network-menu > summary { white-space:nowrap; flex-shrink:0; }
+.sv-adaptive-header .sv-network-menu .sv-network-popover {
+  position:absolute;
+  top:calc(100% + .5rem);
+  right:max(1rem,env(safe-area-inset-right,0px));
+  left:auto;
+  width:min(38rem,calc(100vw - 2rem));
+  min-width:0;
+  max-width:calc(100vw - 2rem);
+  box-sizing:border-box;
+  overflow-x:clip;
+}
+@media (max-width:640px) {
+  .sv-adaptive-header .sv-network-menu .sv-network-popover {
+    position:absolute;
+    top:calc(100% + .5rem);
+    left:1rem;
+    right:1rem;
+    width:calc(100% - 2rem);
+    max-width:none;
+    max-height:calc(100dvh - 6rem);
+    overflow-y:auto;
+  }
+}
