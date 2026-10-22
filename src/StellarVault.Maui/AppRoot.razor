@@ -67,6 +67,7 @@
                     {
                         <p>File: @_uploadFileName · @_uploadBytes?.Length bytes · @_uploadPlan.Entries.Count stages</p>
                         <p>Remaining stages: @_uploadRemaining</p>
+                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReconcileUploadAsync">Recheck on-chain progress</button>
                         <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReviewUploadStageAsync">Review next transaction</button>
                         @if (_uploadCost is not null)
                         {
@@ -415,6 +416,44 @@
         {
             CancelUpload();
             _uploadMessage = "File staging failed, or saved checkpoint does not match this file. Nothing was submitted.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private async Task ReconcileUploadAsync()
+    {
+        if (_ledgerBusy || _uploadPlan is null || _rootAccountId is null ||
+            _uploadFingerprint is null || !Ledger.IsConnected) return;
+        _ledgerBusy = true;
+        ClearUploadReview();
+        try
+        {
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
+            _uploadRemaining = remaining.Count;
+            if (_uploadRemaining == 0)
+            {
+                await UploadCheckpoints.ClearAsync(_rootAccountId);
+                CancelUpload();
+                _ledgerRecords = await Ledger.ReadAsync();
+                _uploadMessage = "All parts confirmed. Checkpoint cleared.";
+            }
+            else
+            {
+                var done = _uploadPlan.Entries.Count - remaining.Count;
+                await UploadCheckpoints.SaveAsync(_rootAccountId,
+                    new StellarUploadCheckpoint(StellarUploadCheckpoint.CurrentVersion,
+                        _uploadFingerprint, _uploadPlan.Entries.Select(x => x.Id).ToArray(), done));
+                _uploadMessage = $"Ledger reports {done} completed stages and {remaining.Count} remaining. Review before continuing.";
+            }
+        }
+        catch
+        {
+            _uploadMessage = "Could not reconcile this upload. Keep your original file and checkpoint.";
         }
         finally
         {
