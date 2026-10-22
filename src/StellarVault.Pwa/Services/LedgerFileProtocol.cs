@@ -26,7 +26,7 @@ public static class LedgerFileProtocol
     /// <summary>Preallocates identifiers and immutable draft contents for one staged upload.
     /// Each part is approved and confirmed separately; the manifest is always last.</summary>
     public static IReadOnlyList<(string Id, LedgerRecordDraft Draft)> BuildUpload(
-        string title, string filename, string contentType, ReadOnlySpan<byte> bytes, string? folderId = null)
+        string title, string filename, string contentType, ReadOnlySpan<byte> bytes, string? folderId = null, string[]? existingIds = null)
     {
         ValidateName(filename);
         if (bytes.Length > MaxFileBytes)
@@ -34,13 +34,15 @@ public static class LedgerFileProtocol
         if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
             throw new ArgumentException("Invalid file record title.", nameof(title));
         if (bytes.Length <= MaxChunkBytes)
-            return [(Guid.NewGuid().ToString("N")[..16], new LedgerRecordDraft(
+            return [(existingIds is { Length: 1 } ? existingIds[0] : Guid.NewGuid().ToString("N")[..16], new LedgerRecordDraft(
                 title, EncodeSingle(filename, contentType, bytes), folderId, ["file", "svfile-v1"]))];
 
-        string fileId = Guid.NewGuid().ToString("N")[..16];
+        string fileId = existingIds is null ? Guid.NewGuid().ToString("N")[..16] : existingIds[^1];
         int partCount = (bytes.Length + MaxChunkBytes - 1) / MaxChunkBytes;
-        string[] partIds = Enumerable.Range(0, partCount)
-            .Select(_ => Guid.NewGuid().ToString("N")[..16]).ToArray();
+        if (existingIds is not null && (existingIds.Length != partCount + 1 || existingIds.Distinct().Count() != existingIds.Length || existingIds.Any(id => id.Length != 16 || !id.All(Uri.IsHexDigit))))
+            throw new InvalidDataException("Invalid checkpoint identifiers.");
+        string[] partIds = existingIds is null ? Enumerable.Range(0, partCount)
+            .Select(_ => Guid.NewGuid().ToString("N")[..16]).ToArray() : existingIds[..partCount];
         var result = new List<(string Id, LedgerRecordDraft Draft)>(partCount + 1);
         for (int i = 0; i < partCount; i++)
         {
