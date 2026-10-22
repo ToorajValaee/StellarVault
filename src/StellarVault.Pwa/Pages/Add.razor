@@ -33,8 +33,9 @@ else
                     <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
                     <InputFile id="sv-ledger-file" class="sv-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
                 </div>
-                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 2 KiB. Larger-file batching is not yet implemented.</p>
+                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 16 KiB. Each encrypted part requires a separate fee approval; the manifest is committed last.</p>
                 @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
+                @if (_filePlan is not null) { <p class="advanced-help">CONFIRMED STAGES: @_fileStep / @_filePlan.Count. Each requires approval.</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
                 <input id="sv-ledger-file-title" class="terminal-input" maxlength="256" @bind="_title" @bind:event="oninput" disabled="@(_busy || _loading)" />
                 <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
@@ -91,7 +92,10 @@ else
     private string _title = "", _secret = "", _username = "", _url = "", _notes = "", _tags = "";
     private string _folder = "";
     private bool _showSecret, _busy;
-    private const long MaximumLedgerFileLength = 2048;
+    private const long MaximumLedgerFileLength = 16384;
+    private IReadOnlyList<(string Id, LedgerRecordDraft Draft)>? _filePlan;
+    private int _fileStep;
+    private string? _fileFingerprint;
     private byte[]? _fileBytes;
     private string _fileOriginalName = "";
     private string _fileContentType = "application/octet-stream";
@@ -100,11 +104,14 @@ else
         _status = null;
         _estimate = null;
         _reviewedDraft = null;
+        _filePlan = null;
+        _fileStep = 0;
+        _fileFingerprint = null;
         ClearFileBytes();
         var file = args.File;
         if (file.Size > MaximumLedgerFileLength)
         {
-            _status = "On-chain upload currently supports up to 2 KiB. No transaction was submitted.";
+            _status = "On-chain upload currently supports up to 16 KiB. No transaction was submitted.";
             return;
         }
         _busy = true;
@@ -198,9 +205,35 @@ else
     }
     private async Task ReviewAsync() {
         if (_busy || !Ledger.IsConnected || (_kind == "file" && _fileBytes is null)) return;
-        _busy = true; _status = "CALCULATING LEDGER COST...";
-        try { _reviewedDraft = Draft(); _reviewedRecordId = RecordId; _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId); _status = null; }
-        catch (Exception ex) { _reviewedDraft = null; _estimate = null; _status = "File cannot fit the current Stellar node allocation or cost estimation failed: " + ex.Message; }
+        _busy = true;
+        _status = "CALCULATING LEDGER COST...";
+        try {
+            if (_kind == "file") {
+                var fingerprint = _title + "|" + _folder + "|" + Convert.ToHexString(SHA256.HashData(_fileBytes!));
+                if (_filePlan is null) {
+                    _filePlan = LedgerFileProtocol.BuildUpload(_title, _fileOriginalName, _fileContentType,
+                        _fileBytes!, string.IsNullOrWhiteSpace(_folder) ? null : _folder);
+                    _fileFingerprint = fingerprint;
+                }
+                if (_fileFingerprint != fingerprint)
+                    throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
+                if (_fileStep >= _filePlan.Count)
+                    throw new InvalidOperationException("All file stages are already complete.");
+                var next = _filePlan[_fileStep];
+                _reviewedDraft = next.Draft;
+                _reviewedRecordId = next.Id;
+                _estimate = await Ledger.EstimateAsync(next.Draft);
+            } else {
+                _reviewedDraft = Draft();
+                _reviewedRecordId = RecordId;
+                _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId);
+            }
+            _status = null;
+        }
+        catch (Exception ex) {
+            _estimate = null;
+            _status = "Cannot estimate ledger stage: " + ex.Message;
+        }
         finally { _busy = false; }
     }
     private void ClearFileBytes() {
@@ -214,21 +247,50 @@ else
         x.Notes == y.Notes && (x.Tags ?? []).SequenceEqual(y.Tags ?? []);
     private void CancelReview() { if (!_busy) { _estimate = null; _reviewedDraft = null; } }
     private async Task CommitAsync() {
-        if (_busy || _estimate is null || !Ledger.IsConnected || _reviewedDraft is null) { _status = "Review network costs before publishing."; return; }
-        if (_reviewedRecordId != RecordId || !SameDraft(_reviewedDraft, Draft())) { _estimate = null; _status = "Record changed since estimation. Review network costs again."; return; }
-        _busy = true; _status = "Signing and submitting to the network...";
-        try {
-            var draft = Draft();
-            if (!string.IsNullOrWhiteSpace(RecordId)) {
-                var result = await Ledger.UpdateAsync(RecordId, draft);
-                _status = "UPDATED TX: " + result.TransactionHash + " " + result.Warning;
-            } else {
-                var hash = await Ledger.PublishDetailedAsync(draft);
-                _status = (_kind == "file" ? "FILE PUBLISHED ON STELLAR. TX: " : "COMMITTED TX: ") + hash;
+        if (_busy || _estimate is null || !Ledger.IsConnected || _reviewedDraft is null) return;
+        if (_kind == "file") {
+            if (_filePlan is null || _fileStep >= _filePlan.Count ||
+                _filePlan[_fileStep].Id != _reviewedRecordId ||
+                !SameDraft(_filePlan[_fileStep].Draft, _reviewedDraft)) {
+                _estimate = null;
+                _status = "File stage changed; review again.";
+                return;
             }
-            ClearFileBytes();
-            Nav.NavigateTo(ReturnUrl);
-        } catch (Exception ex) { _status = "Ledger commit failed: " + ex.Message; }
+        } else if (_reviewedRecordId != RecordId || !SameDraft(_reviewedDraft, Draft())) {
+            _estimate = null;
+            _status = "Record changed; review costs again.";
+            return;
+        }
+        _busy = true;
+        _status = "SIGNING AND SUBMITTING TO STELLAR...";
+        try {
+            if (_kind == "file") {
+                var hash = await Ledger.PublishWithIdAsync(_reviewedRecordId!, _reviewedDraft);
+                _fileStep++;
+                _estimate = null;
+                _reviewedDraft = null;
+                _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash;
+                if (_fileStep == _filePlan.Count) {
+                    ClearFileBytes();
+                    Nav.NavigateTo(ReturnUrl);
+                }
+            } else {
+                var draft = Draft();
+                if (!string.IsNullOrWhiteSpace(RecordId)) {
+                    var result = await Ledger.UpdateAsync(RecordId, draft);
+                    _status = "UPDATED TX: " + result.TransactionHash + " " + result.Warning;
+                } else {
+                    var hash = await Ledger.PublishDetailedAsync(draft);
+                    _status = "COMMITTED TX: " + hash;
+                }
+                Nav.NavigateTo(ReturnUrl);
+            }
+        }
+        catch (Exception ex) {
+            _estimate = null;
+            _status = "Ledger submission failed or confirmation is uncertain: " + ex.Message +
+                ". Check the ledger before attempting the same stage again.";
+        }
         finally { _busy = false; }
     }
 }
