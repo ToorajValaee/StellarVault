@@ -74,6 +74,10 @@
                         <strong>RESTORE LOCAL VAULT AFTER REFRESH</strong>
                         <span>Account @_recentAccount — your encrypted records remain in this browser. Enter the vault passphrase below and choose REOPEN LOCAL VAULT. A mnemonic is still required to reconnect to Stellar.</span>
                         <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase))" @onclick="ReopenLocalAsync">REOPEN LOCAL VAULT</button>
+                        @if (_recentHasDeviceUnlock)
+                        {
+                            <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ReopenWithDeviceAsync">UNLOCK WITH DEVICE</button>
+                        }
                         <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET THIS ACCOUNT</button>
                     </div>
                 }
@@ -281,11 +285,14 @@
     [Parameter] public string Platform { get; set; } = "WEB";
     private string? _recentAccount;
     private string? _recentNetwork;
+    private string? _recentHorizonUrl;
+    private bool _recentHasDeviceUnlock;
 
     private sealed class RecentVault
     {
         public string? Account { get; set; }
         public string? Network { get; set; }
+        public string? HorizonUrl { get; set; }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -294,29 +301,71 @@
         try
         {
             var recent = await JS.InvokeAsync<RecentVault?>("stellarVaultRecentVault.load");
-            if (recent is not null && recent.Network is "testnet" or "public" &&
-                recent.Account is not null && StellarAccountAddress.IsValid(recent.Account))
+            if (recent is null || recent.Account is null ||
+                !StellarAccountAddress.IsValid(recent.Account) ||
+                recent.Network is not ("testnet" or "public" or "custom")) return;
+
+            _recentAccount = recent.Account;
+            _recentNetwork = recent.Network;
+            _recentHorizonUrl = recent.HorizonUrl;
+            if (!Sessions.IsUnlocked && !_busy)
             {
-                _recentAccount = recent.Account;
-                _recentNetwork = recent.Network;
-                // The scoped network selection resets to Testnet after a full reload.
-                // Restore the public-only preset before rendering the reopen action.
-                if (!Sessions.IsUnlocked && !_busy)
+                if (recent.Network == "custom")
+                {
+                    // Never trust a stale custom-network identity. Re-query the
+                    // endpoint before deriving the scoped credential lookup key.
+                    if (string.IsNullOrWhiteSpace(recent.HorizonUrl)) return;
+                    _customHorizon = recent.HorizonUrl;
+                    var detected = await JS.InvokeAsync<string>(
+                        "stellarVaultV2Network.probeCustom", recent.HorizonUrl);
+                    NetworkSelection.ConfigureCustom(detected);
+                    NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
+                    _customPassphrase = detected;
+                    _detectedHorizon = recent.HorizonUrl;
+                    _network = "custom";
+                }
+                else
                 {
                     NetworkSelection.ChoosePreset(recent.Network);
                     _network = recent.Network;
                 }
-                await InvokeAsync(StateHasChanged);
+                _recentHasDeviceUnlock = await JS.InvokeAsync<bool>(
+                    "stellarVaultBiometric.has", recent.Account);
             }
+            await InvokeAsync(StateHasChanged);
         }
-        catch (JSException) { /* Remembered selection is optional. */ }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            _message = "Saved custom network could not be verified. Check the Horizon endpoint and detect the network again.";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ReopenWithDeviceAsync()
+    {
+        if (_busy || !_recentHasDeviceUnlock || _recentAccount is null) return;
+        _busy = true;
+        try
+        {
+            _passphrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", _recentAccount);
+        }
+        catch
+        {
+            _message = "Device unlock failed or was canceled. Use your vault passphrase.";
+            _passphrase = string.Empty;
+        }
+        finally { _busy = false; }
+        if (!string.IsNullOrWhiteSpace(_passphrase)) await ReopenLocalAsync();
     }
 
     private async Task ReopenLocalAsync()
     {
         if (_busy || Sessions.IsUnlocked || _recentAccount is null ||
-            _recentNetwork != _network || _network is not ("testnet" or "public") ||
-            string.IsNullOrWhiteSpace(_passphrase)) return;
+            _recentNetwork != _network || string.IsNullOrWhiteSpace(_passphrase) ||
+            (_network == "custom" &&
+             (string.IsNullOrWhiteSpace(_customPassphrase) ||
+              _detectedHorizon != _recentHorizonUrl ||
+              NetworkSelection.CustomPassphrase != _customPassphrase))) return;
         _busy = true;
         try
         {
@@ -330,8 +379,6 @@
         }
         catch
         {
-            // A failed reopen must never leave a stale unlocked session or a
-            // misleading on-chain storage selection.
             Workflow.Lock();
             StorageMode.Reset();
             _message = "Unable to reopen local vault. Verify your passphrase and browser storage.";
@@ -348,6 +395,8 @@
         await JS.InvokeVoidAsync("stellarVaultRecentVault.clear");
         _recentAccount = null;
         _recentNetwork = null;
+        _recentHorizonUrl = null;
+        _recentHasDeviceUnlock = false;
     }
 
     private string _workspaceMode = "ledger";
@@ -560,13 +609,15 @@
                 await Workflow.UnlockAsync(account, _passphrase);
             else
                 await Workflow.CreateAsync(account, _passphrase);
-            if (_network is "testnet" or "public")
+            if (_network is "testnet" or "public" or "custom")
             {
                 try
                 {
-                    await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network);
+                    await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network,
+                        _network == "custom" ? _detectedHorizon : null);
                     _recentAccount = account;
                     _recentNetwork = _network;
+                    _recentHorizonUrl = _network == "custom" ? _detectedHorizon : null;
                 }
                 catch (JSException) { /* Local storage selection is optional. */ }
             }
