@@ -262,6 +262,7 @@ else
         }
         catch (Exception ex) {
             _estimate = null;
+            if (_kind == "file") { _filePlan = null; _fileFingerprint = null; _uncertainStage = false; _fileStep = 0; }
             _status = "Cannot estimate ledger stage: " + ex.Message;
         }
         finally { _busy = false; }
