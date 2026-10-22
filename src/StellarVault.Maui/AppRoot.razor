@@ -502,16 +502,17 @@
             _uploadStageId is null || _reviewedUploadFingerprint != _uploadFingerprint ||
             !Ledger.IsConnected || _rootAccountId is null ||
             _uploadFingerprint is null) return;
-        _ledgerBusy = true;
         var approvedId = _uploadStageId;
         var approvedPlan = _uploadPlan;
-        var approvedDraft = approvedPlan.Entries.SingleOrDefault(x => x.Id == approvedId).Draft;
-        if (approvedDraft is null)
+        var approvedEntry = approvedPlan.Entries.FirstOrDefault(x => x.Id == approvedId);
+        if (approvedEntry.Draft is null)
         {
             ClearUploadReview();
             _uploadMessage = "Approved file stage no longer exists. Review the upload again.";
             return;
         }
+        var approvedDraft = approvedEntry.Draft;
+        _ledgerBusy = true;
         ClearUploadReview();
         try
         {
@@ -532,9 +533,26 @@
                     : "Stage changed during review. Re-approve before proceeding.";
             if (_uploadRemaining == 0)
             {
+                // Reconstruct from the authoritative ledger, not the original
+                // upload bytes, before clearing the recovery checkpoint.
+                var snapshot = await Ledger.ReadAsync();
+                var manifest = snapshot.SingleOrDefault(x => x.Id == _uploadPlan.ManifestId)
+                    ?? throw new InvalidDataException("Confirmed manifest was not found.");
+                var recovered = StellarLedgerFileProtocol.DecodeFile(manifest, snapshot);
+                try
+                {
+                    if (_uploadBytes is null ||
+                        !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(recovered, _uploadBytes))
+                        throw new InvalidDataException("Recovered file content differs from the submitted bytes.");
+                }
+                finally
+                {
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered);
+                }
                 await UploadCheckpoints.ClearAsync(_rootAccountId);
+                _ledgerRecords = snapshot;
                 CancelUpload();
-                _ledgerRecords = await Ledger.ReadAsync();
+                _uploadMessage = "File recovered and verified from Stellar. Upload complete.";
             }
         }
         catch
