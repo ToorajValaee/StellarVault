@@ -13,6 +13,7 @@ public interface IStellarLedgerRecords
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
     Task<string> PublishDetailedAsync(LedgerRecordDraft draft);
+    Task<string> PublishWithIdAsync(string recordId, LedgerRecordDraft draft);
     Task<LedgerCostPreview> EstimateAsync(LedgerRecordDraft draft, string? recordId = null);
     Task<LedgerCostPreview> EstimateDeleteAsync(string id);
     Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft);
@@ -39,6 +40,7 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
     public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) => Task.FromException<string>(Unavailable());
+    public Task<string> PublishWithIdAsync(string recordId, LedgerRecordDraft draft) => Task.FromException<string>(Unavailable());
     public Task<LedgerCostPreview> EstimateAsync(LedgerRecordDraft draft, string? recordId = null) => Task.FromException<LedgerCostPreview>(Unavailable());
     public Task<LedgerCostPreview> EstimateDeleteAsync(string id) => Task.FromException<LedgerCostPreview>(Unavailable());
     public Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft) => Task.FromException<LedgerMutationResult>(Unavailable());
