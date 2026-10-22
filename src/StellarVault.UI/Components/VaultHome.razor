@@ -11,6 +11,36 @@
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
+    <HeaderActions>
+        @if (Platform == "WEB PWA")
+        {
+            <details class="sv-network-menu">
+                <summary title="Select Stellar network" aria-label="Select Stellar network">
+                    <span aria-hidden="true">◎</span> <span class="sv-network-name">@_network.ToUpperInvariant()</span>
+                </summary>
+                <div class="sv-network-popover terminal-panel">
+                    <div class="panel-kicker">ACTIVE STELLAR NETWORK</div>
+                    <div class="sv-network-choice">
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("testnet")'>TESTNET @(_network == "testnet" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("public")'>PUBLIC @(_network == "public" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("custom")'>CUSTOM @(_network == "custom" ? "✓" : "")</button>
+                    </div>
+                    @if (_network == "custom")
+                    {
+                        <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
+                        <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url" @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" placeholder="https://horizon.example.com/" />
+                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
+                        @if (!string.IsNullOrEmpty(_customPassphrase))
+                        {
+                            <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
+                        }
+                    }
+                    <p class="advanced-help">Choose the network before unlocking. Lock the vault to change networks.</p>
+                </div>
+            </details>
+        }
+    </HeaderActions>
+    <ChildContent>
     <div class="access-grid">
         <section class="hero-terminal terminal-panel" aria-label="StellarVault overview">
             <div class="panel-kicker">SECURE DATA LINK // ACCOUNT VAULT</div>
@@ -38,42 +68,6 @@
             </div>
             @if (Platform == "WEB PWA")
             {
-                <div class="panel-heading">
-                    <div>
-                        <div class="panel-kicker">STEP 01</div>
-                        <h2>SELECT NETWORK</h2>
-                    </div>
-                </div>
-                <div class="network-selector" role="group" aria-label="Stellar network">
-                    <button type="button" class="network-option @(_network == "testnet" ? "active" : "")"
-                            aria-pressed="@(_network == "testnet")" disabled="@(_busy || Sessions.IsUnlocked)"
-                            @onclick='() => SelectNetwork("testnet")'>
-                        <span class="network-symbol">T</span><span><strong>TESTNET</strong><small>STELLAR TEST NETWORK</small></span>
-                    </button>
-                    <button type="button" class="network-option @(_network == "public" ? "active" : "")"
-                            aria-pressed="@(_network == "public")" disabled="@(_busy || Sessions.IsUnlocked)"
-                            @onclick='() => SelectNetwork("public")'>
-                        <span class="network-symbol">P</span><span><strong>PUBLIC</strong><small>STELLAR MAIN NETWORK</small></span>
-                    </button>
-                    <button type="button" class="network-option" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("custom")'>
-                        <span class="network-symbol">C</span><span><strong>CUSTOM</strong><small>PRIVATE NETWORK</small></span>
-                    </button>
-                </div>
-                @if (_network == "custom")
-                {
-                    <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
-                    <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url"
-                           @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)"
-                           placeholder="https://horizon.example.com/" />
-                    <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync"
-                            disabled="@(_busy || Sessions.IsUnlocked || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
-                    @if (!string.IsNullOrEmpty(_customPassphrase))
-                    {
-                        <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
-                    }
-                }
-                <p class="advanced-help">Network selection determines which funded root and account chain to discover. Local encrypted vault credentials are separated by network.</p>
-                <div class="panel-heading"><div><div class="panel-kicker">STEP 02</div><h2>ACCESS VAULT</h2></div></div>
                 <label class="terminal-label" for="sv-mnemonic">RECOVERY PHRASE</label>
                 <textarea id="sv-mnemonic" class="terminal-input" rows="4"
                           autocomplete="off" spellcheck="false" @bind="_mnemonic" @bind:event="oninput"
@@ -231,6 +225,7 @@
             }
         </section>
     }
+    </ChildContent>
 </AdaptiveShell>
 
 @code {
