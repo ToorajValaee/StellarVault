@@ -196,13 +196,21 @@
     {
         if (_ledgerBusy) return;
         _ledgerBusy = true;
-        try { await Ledger.DisconnectAsync(); }
+        try
+        {
+            await Ledger.DisconnectAsync();
+            _ledgerMessage = "Ledger disconnected.";
+        }
+        catch
+        {
+            // Do not claim disconnection when session-key cleanup is uncertain.
+            _ledgerMessage = "Ledger disconnect failed. Close this application before reusing the vault.";
+        }
         finally
         {
             StorageMode.Reset();
             _ledgerMnemonic = string.Empty;
             _ledgerRecords = [];
-            _ledgerMessage = "Ledger disconnected.";
             _ledgerBusy = false;
         }
     }
