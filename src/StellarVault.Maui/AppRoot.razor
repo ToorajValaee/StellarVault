@@ -32,12 +32,48 @@
             }
             else
             {
-                <p>Ledger connected. Recovered records: @_ledgerRecords.Count</p>
+                <p>Ledger connected to @_ledgerNetwork. Recovered records: @_ledgerRecords.Count</p>
+                @if (!string.IsNullOrWhiteSpace(_rootAccountId))
+                {
+                    <p>Root account: <code>@_rootAccountId</code></p>
+                }
+                <p>Folders: @_ledgerRecords.Count(x => x.IsFolder) | Records: @_ledgerRecords.Count(x => !x.IsFolder)</p>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
-                @foreach (var item in _ledgerRecords)
+                <label for="native-ledger-folder">Folder</label>
+                <select id="native-ledger-folder" class="vault-field" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
+                    <option value="">Root</option>
+                    @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder))
+                    {
+                        <option value="@folder.Id">@folder.Title</option>
+                    }
+                </select>
+                @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId))
                 {
-                    <p>@(item.IsFolder ? "FOLDER" : "RECORD") — @item.Title</p>
+                    <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="() => SelectRecord(item.Id)">
+                        @(item.IsFolder ? "Open folder: " : "View record: ") @item.Title
+                    </button>
+                }
+                @if (_selectedRecord is not null && !_selectedRecord.IsFolder)
+                {
+                    <section aria-label="Selected ledger record">
+                        <h3>@_selectedRecord.Title</h3>
+                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
+                        {
+                            <p>Username: @_selectedRecord.UserName</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
+                        {
+                            <p>URL: @_selectedRecord.Url</p>
+                        }
+                        <button type="button" class="session-lock" @onclick="ToggleSecret">
+                            @(_revealSecret ? "Hide secret" : "Reveal secret")
+                        </button>
+                        @if (_revealSecret)
+                        {
+                            <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@_selectedRecord.Content</pre>
+                        }
+                    </section>
                 }
             }
             @if (!string.IsNullOrEmpty(_ledgerMessage))
@@ -132,6 +168,39 @@
     private bool _ledgerBusy;
     private string? _ledgerMessage;
     private IReadOnlyList<LedgerRecordItem> _ledgerRecords = [];
+    private string? _rootAccountId;
+    private string _selectedFolderId = string.Empty;
+    private LedgerRecordItem? _selectedRecord;
+    private bool _revealSecret;
+
+    private void ResetSelection()
+    {
+        _selectedRecord = null;
+        _revealSecret = false;
+    }
+
+    private void SelectRecord(string id)
+    {
+        _revealSecret = false;
+        var record = _ledgerRecords.SingleOrDefault(x => x.Id == id);
+        if (record is null) { _selectedRecord = null; return; }
+        if (record.IsFolder)
+        {
+            _selectedFolderId = record.Id;
+            _selectedRecord = null;
+        }
+        else _selectedRecord = record;
+    }
+
+    private void ToggleSecret() => _revealSecret = !_revealSecret;
+
+    private void ClearLedgerView()
+    {
+        _ledgerRecords = [];
+        _rootAccountId = null;
+        _selectedFolderId = string.Empty;
+        ResetSelection();
+    }
 
     private async Task ConnectLedgerAsync()
     {
@@ -159,12 +228,16 @@
             // A connected transport is not permission to write: remain local.
             StorageMode.Reset();
             _ledgerRecords = await Ledger.ReadAsync();
+            var account = await Ledger.InspectAccountInfoAsync();
+            _rootAccountId = account.RootAccountId;
+            _selectedFolderId = string.Empty;
+            ResetSelection();
             _ledgerMessage = "Ledger records recovered (read-only).";
         }
         catch
         {
             StorageMode.Reset();
-            _ledgerRecords = [];
+            ClearLedgerView();
             _ledgerMessage = "Ledger connection or recovery failed. Check your mnemonic, network and connection.";
             try { await Ledger.DisconnectAsync(); } catch { /* Do not mask the recovery failure. */ }
         }
@@ -182,11 +255,13 @@
         try
         {
             _ledgerRecords = await Ledger.ReadAsync();
+            _selectedFolderId = string.Empty;
+            ResetSelection();
             _ledgerMessage = "Ledger records refreshed.";
         }
         catch
         {
-            _ledgerRecords = [];
+            ClearLedgerView();
             _ledgerMessage = "Ledger recovery failed. No records were displayed.";
         }
         finally { _ledgerBusy = false; }
@@ -210,7 +285,7 @@
         {
             StorageMode.Reset();
             _ledgerMnemonic = string.Empty;
-            _ledgerRecords = [];
+            ClearLedgerView();
             _ledgerBusy = false;
         }
     }
@@ -266,7 +341,7 @@
         Sessions.StateChanged -= OnSessionChanged;
         StorageMode.Reset();
         _ledgerMnemonic = string.Empty;
-        _ledgerRecords = [];
+        ClearLedgerView();
         // Closing the WebView must release any session keys retained by JS.
         if (Ledger.IsConnected)
         {
