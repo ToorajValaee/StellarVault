@@ -1,4 +1,5 @@
 @page "/add"
+@page "/edit/{RecordId}"
 @using StellarVault.Core.Services
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
@@ -13,7 +14,7 @@ else
 {
     <section class="form-page">
         <header class="page-command-header">
-            <div><div class="panel-kicker">WRITE OPERATION // NEW @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(_kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">Encrypted Stellar ledger operation. Network fees and account reserves apply.</p></div>
+            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">Encrypted Stellar ledger operation. Network fees and account reserves apply.</p></div>
             <a class="pixel-button compact" href="/vault">← CANCEL</a>
         </header>
         @if (_kind == "file")
@@ -61,19 +62,39 @@ else
 </AdaptiveShell>
 
 @code {
+    [Parameter] public string? RecordId { get; set; }
     [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
     [SupplyParameterFromQuery(Name = "kind")] public string? Kind { get; set; }
-    private string _kind => Kind is "folder" or "file" ? Kind : "record";
+    private string _kind => _editingFolder ? "folder" : Kind is "folder" or "file" ? Kind : "record";
+    private bool _editingFolder;
+    private string? _loadedId;
     private string _title = "", _secret = "", _username = "", _url = "", _notes = "", _tags = "";
     private string _folder = "";
     private bool _showSecret, _busy;
     private string? _status;
     private IReadOnlyList<LedgerRecordItem> _folders = [];
     protected override async Task OnParametersSetAsync() {
-        _folder = InitialFolder ?? "";
         if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
-        try { _folders = (await Ledger.ReadAsync()).Where(x => x.IsFolder).ToArray(); }
-        catch (Exception ex) { _status = "Cannot load folder list: " + ex.Message; }
+        try {
+            var all = await Ledger.ReadAsync();
+            _folders = all.Where(x => x.IsFolder).ToArray();
+            if (!string.IsNullOrWhiteSpace(RecordId)) {
+                if (_loadedId == RecordId) return;
+                var current = all.SingleOrDefault(x => x.Id == RecordId)
+                    ?? throw new InvalidOperationException("Record not found on the Stellar ledger.");
+                _loadedId = RecordId;
+                _editingFolder = current.IsFolder;
+                _title = current.Title;
+                _secret = current.Content;
+                _username = current.UserName ?? "";
+                _url = current.Url ?? "";
+                _notes = current.Notes ?? "";
+                _tags = string.Join(", ", current.Tags ?? []);
+                _folder = current.FolderId ?? "";
+            }
+            else _folder = InitialFolder ?? "";
+        }
+        catch (Exception ex) { _status = "Cannot load record: " + ex.Message; }
     }
     private async Task CommitAsync() {
         if (_busy || !Ledger.IsConnected) { _status = "Connect a funded Stellar root before publishing."; return; }
@@ -84,8 +105,13 @@ else
             var draft = new LedgerRecordDraft(_title, _kind == "folder" ? "folder" : _secret,
                 string.IsNullOrWhiteSpace(_folder) ? null : _folder, tags, _kind == "folder",
                 _username, _url, _notes);
-            var hash = await Ledger.PublishDetailedAsync(draft);
-            _status = "COMMITTED TX: " + hash;
+            if (!string.IsNullOrWhiteSpace(RecordId)) {
+                var result = await Ledger.UpdateAsync(RecordId, draft);
+                _status = "UPDATED TX: " + result.TransactionHash + " " + result.Warning;
+            } else {
+                var hash = await Ledger.PublishDetailedAsync(draft);
+                _status = "COMMITTED TX: " + hash;
+            }
             Nav.NavigateTo("/vault");
         } catch (Exception ex) { _status = "Ledger commit failed: " + ex.Message; }
         finally { _busy = false; }
