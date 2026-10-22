@@ -48,7 +48,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<VaultBinaryWorkspace>();
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
-        builder.Logging.AddDebug();
+        // Debug logging provider is optional; do not require its separate package.
 #endif
         return builder.Build();
     }
