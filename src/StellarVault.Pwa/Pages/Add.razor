@@ -217,6 +217,15 @@ else
         return new LedgerRecordDraft(_title, _kind == "folder" ? "folder" : _secret,
             string.IsNullOrWhiteSpace(_folder) ? null : _folder, tags, _kind == "folder", _username, _url, _notes);
     }
+    private string CurrentFileFingerprint()
+    {
+        if (_fileBytes is null)
+            throw new InvalidOperationException("Select the original file before resuming.");
+        return Convert.ToHexString(SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(_title + "|" + _folder + "|" +
+            _fileOriginalName + "|" + _fileContentType + "|" +
+            Convert.ToHexString(SHA256.HashData(_fileBytes)))));
+    }
     private async Task SaveCheckpointAsync(string fingerprint) {
         var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
         await Checkpoints.SaveAsync(account, new StellarUploadCheckpoint(
@@ -233,10 +242,7 @@ else
         _status = "CALCULATING LEDGER COST...";
         try {
             if (_kind == "file") {
-                var fingerprint = Convert.ToHexString(SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(_title + "|" + _folder + "|" +
-                    _fileOriginalName + "|" + _fileContentType + "|" +
-                    Convert.ToHexString(SHA256.HashData(_fileBytes!)))));
+                var fingerprint = CurrentFileFingerprint();
                 if (_filePlan is null) {
                     var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
                     var saved = await Checkpoints.LoadAsync(account);
@@ -293,6 +299,7 @@ else
         if (_busy || _estimate is null || !Ledger.IsConnected || _reviewedDraft is null) return;
         if (_kind == "file") {
             if (_filePlan is null || _fileStep >= _filePlan.Count ||
+                _fileFingerprint != CurrentFileFingerprint() ||
                 _filePlan[_fileStep].Id != _reviewedRecordId ||
                 !SameDraft(_filePlan[_fileStep].Draft, _reviewedDraft)) {
                 _estimate = null;
