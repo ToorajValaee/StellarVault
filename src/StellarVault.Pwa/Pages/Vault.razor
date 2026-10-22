@@ -10,6 +10,14 @@
 {
     <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
 }
+else if (!Ledger.IsConnected)
+{
+    <section class="terminal-panel centered-message"><h1>STELLAR CONNECTION REQUIRED</h1><p>Your local vault is unlocked, but the on-chain session is not connected. Return to the access terminal, lock and retry to see the underlying connection error. A funded root and accessible Horizon endpoint may be required.</p><a class="pixel-button primary" href="/">ACCESS TERMINAL</a></section>
+}
+else if (_registryReady == false)
+{
+    <section class="terminal-panel centered-message"><div class="panel-kicker">FIRST-TIME HD SETUP</div><h1>INITIALIZE ROOT REGISTRY</h1><p>The connected Stellar account has no authenticated HD registry yet. Initialize it before browsing or publishing records. This writes to the selected Stellar network and requires XLM for fees and reserves.</p><label class="terminal-label"><input type="checkbox" @bind="_confirmInitialize" /> I understand this is a real ledger transaction.</label><button class="pixel-button primary" disabled="@(!_confirmInitialize || _busy)" @onclick="InitializeAsync">@(_busy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")</button>@if (!string.IsNullOrEmpty(_error)) { <div class="terminal-alert warning" role="alert">@_error</div> }</section>
+}
 else
 {
     <section class="vault-page">
@@ -29,7 +37,7 @@ else
                     <span>/</span><button class="pixel-button compact" @onclick="() => _folder = crumb.Id">@crumb.Title</button>
                 }
             </nav>
-            <label class="terminal-label"><input type="checkbox" @bind="_includeChildren"/> INCLUDE SUBFOLDERS</label>
+            <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>INCLUDE RECORDS FROM SUBFOLDERS</span></label>
             @foreach (var item in Folders.Where(f => f.FolderId == _folder))
             {
                 <button class="pixel-button compact" style="margin:.3rem" @onclick="() => _folder = item.Id">📁 @item.Title</button>
@@ -76,6 +84,19 @@ else
     private string _search = "";
     private string? _folder;
     private bool _includeChildren;
+    private bool? _registryReady;
+    private bool _confirmInitialize;
+    private async Task InitializeAsync() {
+        if (!_confirmInitialize || _busy || !Ledger.IsConnected) return;
+        _busy = true; _error = null;
+        try {
+            await Ledger.InitializeRegistryAsync();
+            _registryReady = await Ledger.HasRegistryAsync();
+            if (_registryReady != true) throw new InvalidOperationException("Registry transaction did not establish an active registry.");
+            _records = await Ledger.ReadAsync();
+        } catch (Exception ex) { _error = "Registry initialization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
     private bool _busy;
     private LedgerRecordItem? _deleteCandidate;
     private void SelectDelete(LedgerRecordItem item) => _deleteCandidate = item;
@@ -127,7 +148,13 @@ else
         }
     }
     private string FolderName(string? id) => Folders.FirstOrDefault(f => f.Id == id)?.Title ?? "";
-    protected override async Task OnInitializedAsync() { if (Sessions.IsUnlocked) await RefreshAsync(); }
+    protected override async Task OnInitializedAsync() {
+        if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+        try {
+            _registryReady = await Ledger.HasRegistryAsync();
+            if (_registryReady == true) await RefreshAsync();
+        } catch (Exception ex) { _error = "Ledger setup check failed: " + ex.Message; }
+    }
     private async Task RefreshAsync() {
         if (_busy) return;
         _busy = true; _error = null;
