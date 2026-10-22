@@ -247,13 +247,14 @@ else
                     _fileFingerprint = fingerprint;
                     _fileStep = saved?.Step ?? 0;
                     _uncertainStage = saved is not null;
-                    if (saved is not null) await VerifyCheckpointAsync();
                     if (saved is null) await SaveCheckpointAsync(fingerprint);
                 }
                 if (_fileFingerprint != fingerprint)
                     throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
-                if (_uncertainStage)
-                    await ReconcileFileStageAsync();
+                // Always read the ledger before estimating another stage, even when
+                // the previous attempt appeared successful. Another client or a
+                // stale ledger view must never silently advance this checkpoint.
+                await VerifyCheckpointAsync();
                 if (_fileStep >= _filePlan.Count) {
                     _status = "All file stages are confirmed on Stellar.";
                     await ClearCheckpointAsync();
@@ -368,7 +369,5 @@ else
         await SaveCheckpointAsync(_fileFingerprint!);
         _uncertainStage = false;
     }
-
-    private Task ReconcileFileStageAsync() => VerifyCheckpointAsync();
 
 }
