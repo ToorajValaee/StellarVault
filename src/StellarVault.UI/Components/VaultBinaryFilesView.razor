@@ -25,47 +25,12 @@
         <button class="pixel-button primary" type="button"
                 disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
                 @onclick="UploadAsync">@(_busy ? "PROCESSING..." : "SAVE ENCRYPTED FILE")</button>
-        <div class="form-section-title"><span>02</span> STORED FILE ACTIONS</div>
-        <label class="terminal-label" for="sv-file-open-name">EXISTING FILE RECORD</label>
-        <input id="sv-file-open-name" class="terminal-input" maxlength="512" @bind="_openName"
-               @bind:event="oninput" disabled="@_busy" />
-        <div class="sv-access-actions">
-            <button class="pixel-button compact" type="button"
-                    disabled="@(_busy || string.IsNullOrWhiteSpace(_openName))"
-                    @onclick="DownloadAsync">DOWNLOAD AND DECRYPT</button>
-            <label class="terminal-label"><input type="checkbox" @bind="_confirmRemoval" disabled="@_busy" /> CONFIRM REMOVAL</label>
-            <button class="pixel-button compact" type="button"
-                    disabled="@(_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName))"
-                    @onclick="RemoveAsync">REMOVE FILE</button>
-        </div>
         @if (!string.IsNullOrWhiteSpace(_status))
         {
             <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div>
         }
     </div>
-    <section class="terminal-panel">
-        <div class="panel-kicker">STORED FILES</div>
-        <h3>FILE DIRECTORY</h3>
-        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshFilesAsync">↻ REFRESH FILES</button>
-        @if (_files is null)
-        {
-            <p class="advanced-help">File directory unavailable.</p>
-        }
-        else if (_files.Count == 0)
-        {
-            <p class="advanced-help">No encrypted files yet.</p>
-        }
-        else
-        {
-            <ul class="sv-record-directory">
-                @foreach (var item in _files)
-                {
-                    <li><button class="pixel-button compact" type="button" disabled="@_busy"
-                                @onclick="() => SelectStoredFile(item.Name)">@item.Name</button></li>
-                }
-            </ul>
-        }
-    </section>
+
 </section>
 
 @code {
@@ -73,7 +38,7 @@
     private IBrowserFile? _file;
     private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _files;
 
-    protected override async Task OnInitializedAsync() => await RefreshFilesAsync();
+    // The Add File form only selects and saves a new encrypted file.
 
     private void SelectStoredFile(string name)
     {
@@ -109,9 +74,17 @@
 
     private void SelectFile(InputFileChangeEventArgs args)
     {
-        _file = args.File;
-        _name = _file.Name;
-        _status = _file.Size > MaximumFileLength ? "File exceeds the current 1 MiB upload limit." : null;
+        try
+        {
+            _file = args.File;
+            _name = _file.Name;
+            _status = _file.Size > MaximumFileLength ? "File exceeds the current 1 MiB upload limit." : null;
+        }
+        catch (Exception ex)
+        {
+            _file = null;
+            _status = "Unable to select file: " + ex.Message;
+        }
     }
 
     private async Task UploadAsync()
@@ -137,7 +110,7 @@
             _status = "File could not be saved. Verify name, size and session state.";
         }
         finally { _busy = false; }
-        if (_status == "Encrypted file saved.") await RefreshFilesAsync();
+
     }
 
     private async Task DownloadAsync()
