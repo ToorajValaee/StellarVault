@@ -17,11 +17,14 @@ window.stellarVaultV2Lifecycle = (() => {
       if (document.visibilityState === 'hidden')
         Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     };
+    const blur = () => Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     const pagehide = () => lock();
     document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('blur', blur);
     window.addEventListener('pagehide', pagehide);
     instance = () => {
       document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('blur', blur);
       window.removeEventListener('pagehide', pagehide);
     };
   }
