@@ -222,11 +222,21 @@ else
         _status = "CALCULATING LEDGER COST...";
         try {
             if (_kind == "file") {
-                var fingerprint = _title + "|" + _folder + "|" + Convert.ToHexString(SHA256.HashData(_fileBytes!));
+                var fingerprint = Convert.ToHexString(SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(_title + "|" + _folder + "|" +
+                    _fileOriginalName + "|" + _fileContentType + "|" +
+                    Convert.ToHexString(SHA256.HashData(_fileBytes!)))));
                 if (_filePlan is null) {
+                    var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
+                    var saved = await JS.InvokeAsync<UploadCheckpoint?>("stellarVaultUploadCheckpoint.load", account);
+                    if (saved is not null && saved.Fingerprint != fingerprint)
+                        throw new InvalidOperationException("Another upload checkpoint exists. Select the matching original file and title.");
                     _filePlan = LedgerFileProtocol.BuildUpload(_title, _fileOriginalName, _fileContentType,
-                        _fileBytes!, string.IsNullOrWhiteSpace(_folder) ? null : _folder);
+                        _fileBytes!, string.IsNullOrWhiteSpace(_folder) ? null : _folder, saved?.Ids);
                     _fileFingerprint = fingerprint;
+                    _fileStep = saved?.Step ?? 0;
+                    _uncertainStage = saved is not null;
+                    if (saved is null) await SaveCheckpointAsync(fingerprint);
                 }
                 if (_fileFingerprint != fingerprint)
                     throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
