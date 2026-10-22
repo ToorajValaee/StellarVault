@@ -221,8 +221,11 @@ else
                     throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
                 if (_uncertainStage)
                     await ReconcileFileStageAsync();
-                if (_fileStep >= _filePlan.Count)
-                    throw new InvalidOperationException("All file stages are already complete.");
+                if (_fileStep >= _filePlan.Count) {
+                    _status = "All file stages are confirmed on Stellar.";
+                    ClearFileBytes();
+                    return;
+                }
                 var next = _filePlan[_fileStep];
                 _reviewedDraft = next.Draft;
                 _reviewedRecordId = next.Id;
