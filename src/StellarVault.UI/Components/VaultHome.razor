@@ -6,6 +6,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
 @inject VaultStorageModeGate StorageMode
+@inject VaultLedgerRecordWorkspace LedgerWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
@@ -371,12 +372,12 @@
         _busy = true;
         try
         {
-            string hash = await LedgerRecords.PublishAsync(_ledgerTitle, _ledgerContent);
+            string hash = await LedgerWorkspace.PublishAsync(new LedgerRecordDraft(_ledgerTitle, _ledgerContent));
             _ledgerContent = string.Empty;
             _ledgerMessage = "Stellar transaction confirmed: " + hash;
             try
             {
-                _ledgerItems = await LedgerRecords.ReadAsync();
+                _ledgerItems = await LedgerWorkspace.ListAsync();
             }
             catch (Exception ex)
             {
@@ -395,7 +396,7 @@
         _busy = true;
         try
         {
-            _ledgerItems = await LedgerRecords.ReadAsync();
+            _ledgerItems = await LedgerWorkspace.ListAsync();
             _ledgerMessage = "Ledger records loaded from Horizon.";
         }
         catch (Exception ex) { _ledgerMessage = "Ledger read failed: " + ex.Message; }
@@ -500,7 +501,7 @@
                 if (_workspaceMode == "ledger")
                     StorageMode.Select(VaultStorageMode.StellarLedger);
                 _ledgerRegistryReady = await LedgerRecords.HasRegistryAsync();
-                if (_ledgerRegistryReady) _ledgerItems = await LedgerRecords.ReadAsync();
+                if (_ledgerRegistryReady) _ledgerItems = await LedgerWorkspace.ListAsync();
                 _ledgerMessage = "On-chain vault connected.";
             }
             catch (Exception ex)
