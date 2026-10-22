@@ -88,6 +88,16 @@
     }
 
     private bool? _runtimeReady;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // JS interop is available after the WebView's first render. Run the
+        // credential-free check automatically so the UI fails closed promptly.
+        await CheckRuntimeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task CheckRuntimeAsync()
     {
         if (_ledgerBusy) return;
@@ -241,6 +251,12 @@
         _ledgerRecords = [];
         // Closing the WebView must release any session keys retained by JS.
         if (Ledger.IsConnected)
-            await Ledger.DisconnectAsync();
+        {
+            try { await Ledger.DisconnectAsync(); }
+            catch (Microsoft.JSInterop.JSDisconnectedException)
+            {
+                // The native WebView may already be gone during app shutdown.
+            }
+        }
     }
 }
