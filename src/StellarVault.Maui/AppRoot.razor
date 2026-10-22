@@ -363,10 +363,17 @@
                         throw new InvalidDataException("Selected file exceeds the supported upload bound.");
                     buffer.Write(block, 0, read);
                 }
+                _uploadBytes = buffer.ToArray();
             }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(block); }
-
-            _uploadBytes = buffer.ToArray();
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(block);
+                // MemoryStream.ToArray creates a separate copy. Clear its
+                // backing buffer on success and on interrupted reads.
+                if (buffer.TryGetBuffer(out var owned) && owned.Array is not null)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                        owned.Array.AsSpan());
+            }
             _uploadFileName = picked.FileName;
             var fileHash = System.Security.Cryptography.SHA256.HashData(_uploadBytes);
             var metadata = System.Text.Encoding.UTF8.GetBytes(
@@ -455,15 +462,22 @@
             _uploadFingerprint is null) return;
         _ledgerBusy = true;
         var approvedId = _uploadStageId;
+        var approvedPlan = _uploadPlan;
+        var approvedDraft = approvedPlan.Entries.SingleOrDefault(x => x.Id == approvedId).Draft;
+        if (approvedDraft is null)
+        {
+            ClearUploadReview();
+            _uploadMessage = "Approved file stage no longer exists. Review the upload again.";
+            return;
+        }
         ClearUploadReview();
         try
         {
             StorageMode.Select(VaultStorageMode.StellarLedger);
             if (!await Ledger.HasRegistryAsync())
                 throw new InvalidOperationException("Ledger registry not initialized.");
-            var published = await UploadCoordinator.PublishNextApprovedAsync(_uploadPlan,
-                draft => Task.FromResult(_uploadPlan.Entries.Any(x =>
-                    x.Id == approvedId && x.Draft == draft)));
+            var published = await UploadCoordinator.PublishNextApprovedAsync(approvedPlan,
+                draft => Task.FromResult(ReferenceEquals(draft, approvedDraft)));
             var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
             _uploadRemaining = remaining.Count;
             await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
