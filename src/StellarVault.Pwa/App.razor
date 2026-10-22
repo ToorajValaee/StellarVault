@@ -53,9 +53,9 @@ else
     }
     private async Task FullLockAsync()
     {
-        Privacy.Clear();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
+        Privacy.Clear();
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
