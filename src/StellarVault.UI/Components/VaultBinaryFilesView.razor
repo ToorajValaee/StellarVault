@@ -6,35 +6,69 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
-<section class="sv-workspace" aria-label="Encrypted file records">
-    <h2>Encrypted files</h2>
-    <p>Choose a file up to 1 MiB. Its contents are encrypted before entering the storage backend.</p>
-    <button type="button" disabled="@_busy" @onclick="RefreshFilesAsync">Refresh file list</button>
-    @if (_files is not null)
-    {
-        <ul>
-            @foreach (var item in _files)
-            {
-                <li><button type="button" disabled="@_busy" @onclick="() => SelectStoredFile(item.Name)">@item.Name</button></li>
-            }
-        </ul>
-    }
-    <InputFile OnChange="SelectFile" disabled="@_busy" />
-    <label for="sv-file-record-name">Encrypted record name</label>
-    <input id="sv-file-record-name" maxlength="512" @bind="_name" disabled="@_busy" />
-    <button type="button" disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
-            @onclick="UploadAsync">Save encrypted file</button>
-    <label for="sv-file-open-name">Existing encrypted file record name</label>
-    <input id="sv-file-open-name" maxlength="512" @bind="_openName" disabled="@_busy" />
-    <button type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_openName))"
-            @onclick="DownloadAsync">Download and decrypt</button>
-    <label><input type="checkbox" @bind="_confirmRemoval" disabled="@_busy" /> Confirm removal of the selected file from the catalog</label>
-    <button type="button" disabled="@(_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName))"
-            @onclick="RemoveAsync">Remove selected file</button>
-    @if (!string.IsNullOrWhiteSpace(_status))
-    {
-        <p role="status">@_status</p>
-    }
+<section class="form-page" aria-label="Encrypted file records">
+    <header class="page-command-header">
+        <div>
+            <div class="panel-kicker">WRITE OPERATION // LOCAL ENCRYPTED FILE</div>
+            <h2>ADD FILE</h2>
+            <p class="page-subtitle">Encrypt files in the browser vault. Ledger file publishing is not connected yet.</p>
+        </div>
+        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshFilesAsync">REFRESH FILES</button>
+    </header>
+    <div class="terminal-panel credential-form">
+        <div class="form-section-title"><span>01</span> FILE SELECTION</div>
+        <p class="advanced-help">Current browser implementation supports files up to 1 MiB. Larger files and on-chain chunking are still pending.</p>
+        <InputFile OnChange="SelectFile" disabled="@_busy" />
+        <label class="terminal-label" for="sv-file-record-name">FILE RECORD NAME *</label>
+        <input id="sv-file-record-name" class="terminal-input" maxlength="512" @bind="_name"
+               @bind:event="oninput" disabled="@_busy" placeholder="Encrypted file name" />
+        <div class="commit-preview">
+            <span>MODE</span><strong>LOCAL ENCRYPTED FILE</strong>
+            <span>STORAGE</span><strong>BROWSER INDEXEDDB — NOT LEDGER</strong>
+        </div>
+        <button class="pixel-button primary" type="button"
+                disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
+                @onclick="UploadAsync">@(_busy ? "PROCESSING..." : "SAVE ENCRYPTED FILE")</button>
+        <div class="form-section-title"><span>02</span> RETRIEVE / REMOVE</div>
+        <label class="terminal-label" for="sv-file-open-name">EXISTING FILE RECORD</label>
+        <input id="sv-file-open-name" class="terminal-input" maxlength="512" @bind="_openName"
+               @bind:event="oninput" disabled="@_busy" />
+        <div class="sv-access-actions">
+            <button class="pixel-button compact" type="button"
+                    disabled="@(_busy || string.IsNullOrWhiteSpace(_openName))"
+                    @onclick="DownloadAsync">DOWNLOAD AND DECRYPT</button>
+            <label class="terminal-label"><input type="checkbox" @bind="_confirmRemoval" disabled="@_busy" /> CONFIRM REMOVAL</label>
+            <button class="pixel-button compact" type="button"
+                    disabled="@(_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName))"
+                    @onclick="RemoveAsync">REMOVE FILE</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div>
+        }
+    </div>
+    <section class="terminal-panel">
+        <div class="panel-kicker">STORED FILES</div>
+        <h3>FILE DIRECTORY</h3>
+        @if (_files is null)
+        {
+            <p class="advanced-help">File directory unavailable.</p>
+        }
+        else if (_files.Count == 0)
+        {
+            <p class="advanced-help">No encrypted files yet.</p>
+        }
+        else
+        {
+            <ul class="sv-record-directory">
+                @foreach (var item in _files)
+                {
+                    <li><button class="pixel-button compact" type="button" disabled="@_busy"
+                                @onclick="() => SelectStoredFile(item.Name)">@item.Name</button></li>
+                }
+            </ul>
+        }
+    </section>
 </section>
 
 @code {
