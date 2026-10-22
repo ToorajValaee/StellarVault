@@ -94,7 +94,7 @@
                         </label>
                     }
                 </div>
-                <p class="advanced-help">Each recovery word is masked by default. Choose the correct word count before unlocking.</p>
+                <p class="advanced-help">Each word is masked. You can also paste a complete 12–24 word phrase into the first slot.</p>
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
@@ -259,7 +259,16 @@
     private bool _showMnemonic;
     private void UpdateMnemonicWord(int index, string value)
     {
-        _mnemonicWords[index] = value.Trim();
+        var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length > 1)
+        {
+            if (index == 0 && new[] { 12, 15, 18, 21, 24 }.Contains(words.Length))
+                _mnemonicWordCount = words.Length;
+            for (var i = 0; i < words.Length && index + i < _mnemonicWords.Length; i++)
+                _mnemonicWords[index + i] = words[i];
+        }
+        else
+            _mnemonicWords[index] = value.Trim();
     }
     private string AssembleMnemonic() =>
         string.Join(' ', _mnemonicWords.Take(_mnemonicWordCount).Select(x => x?.Trim() ?? ""));
@@ -500,7 +509,7 @@
         _ledgerItems = null;
         _ledgerRegistryReady = false;
         _ledgerMessage = null;
-        _mnemonic = string.Empty;
+        ClearMnemonic();
         _passphrase = string.Empty;
         _childAccounts = null;
         _networkStatus = null;
