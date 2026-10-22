@@ -4,7 +4,10 @@
 window.stellarVaultUploadCheckpoint = (() => {
   const prefix = 'sv-upload-checkpoint-v1:';
   function key(account) {
-    if (!/^[A-Z0-9]{56}$/.test(account || '')) throw new Error('Invalid account for checkpoint.');
+    // Testnet keeps its existing key for recovery compatibility. Public and
+    // custom networks use separate namespaced keys derived in shared Core.
+    if (!/^(?:[A-Z0-9]{56}|public:[A-Z0-9]{56}|custom:[a-f0-9]{64}:[A-Z0-9]{56})$/.test(account || ''))
+      throw new Error('Invalid network-scoped account for checkpoint.');
     return prefix + account;
   }
   function load(account) {
