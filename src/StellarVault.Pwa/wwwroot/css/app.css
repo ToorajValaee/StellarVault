@@ -2270,3 +2270,16 @@ html.ios-device.standalone-app .terminal-footer {
     overflow-y:auto;
   }
 }
+
+/* InputFile renders an input in a child component. Parent CSS isolation
+   does not reach it; hide the native control in global styles instead. */
+.sv-file-workspace input[type="file"].sv-file-native-input {
+  position:absolute !important;
+  width:1px !important;height:1px !important;
+  padding:0 !important;margin:0 !important;border:0 !important;
+  opacity:0 !important;overflow:hidden !important;
+  clip-path:inset(50%) !important;
+  pointer-events:none;
+}
+.sv-file-workspace .sv-file-picker { position:relative; }
+.sv-file-workspace .sv-file-picker-button { cursor:pointer; }
