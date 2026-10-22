@@ -23,6 +23,41 @@ public static class LedgerFileProtocol
     public sealed record Manifest(string FileName, string ContentType, long Length, string Sha256Hex, string[] PartIds);
     public sealed record Part(string FileId, int Index, string DataBase64, string Sha256Hex);
 
+    /// <summary>Preallocates identifiers and immutable draft contents for one staged upload.
+    /// Each part is approved and confirmed separately; the manifest is always last.</summary>
+    public static IReadOnlyList<(string Id, LedgerRecordDraft Draft)> BuildUpload(
+        string title, string filename, string contentType, ReadOnlySpan<byte> bytes, string? folderId = null)
+    {
+        ValidateName(filename);
+        if (bytes.Length > MaxFileBytes)
+            throw new InvalidDataException("File exceeds the maximum supported manifest size.");
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
+            throw new ArgumentException("Invalid file record title.", nameof(title));
+        if (bytes.Length <= MaxChunkBytes)
+            return [(Guid.NewGuid().ToString("N")[..16], new LedgerRecordDraft(
+                title, EncodeSingle(filename, contentType, bytes), folderId, ["file", "svfile-v1"]))];
+
+        string fileId = Guid.NewGuid().ToString("N")[..16];
+        int partCount = (bytes.Length + MaxChunkBytes - 1) / MaxChunkBytes;
+        string[] partIds = Enumerable.Range(0, partCount)
+            .Select(_ => Guid.NewGuid().ToString("N")[..16]).ToArray();
+        var result = new List<(string Id, LedgerRecordDraft Draft)>(partCount + 1);
+        for (int i = 0; i < partCount; i++)
+        {
+            var chunk = bytes.Slice(i * MaxChunkBytes, Math.Min(MaxChunkBytes, bytes.Length - i * MaxChunkBytes));
+            var data = ChunkPrefix + JsonSerializer.Serialize(new Part(fileId, i,
+                Convert.ToBase64String(chunk), Convert.ToHexString(SHA256.HashData(chunk))));
+            result.Add((partIds[i], new LedgerRecordDraft(
+                "FILE PART " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                data, null, ["svchunk-v2"])));
+        }
+        var manifest = new Manifest(filename, contentType, bytes.Length,
+            Convert.ToHexString(SHA256.HashData(bytes)), partIds);
+        result.Add((fileId, new LedgerRecordDraft(title,
+            ManifestPrefix + JsonSerializer.Serialize(manifest), folderId, ["file", "svfile-v2"])));
+        return result;
+    }
+
     public static bool IsFile(LedgerRecordItem item) =>
         item.Content.StartsWith(SinglePrefix, StringComparison.Ordinal) ||
         item.Content.StartsWith(ManifestPrefix, StringComparison.Ordinal);
