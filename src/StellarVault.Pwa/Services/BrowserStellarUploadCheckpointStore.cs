@@ -7,12 +7,12 @@ namespace StellarVault.Pwa.Services;
 /// Adapter for legacy browser recovery checkpoints. Storage is localStorage
 /// metadata only, not encrypted. This adapter never persists file plaintext.
 /// </summary>
-public sealed class BrowserStellarUploadCheckpointStore(IJSRuntime js) : IStellarUploadCheckpointStore
+public sealed class BrowserStellarUploadCheckpointStore(IJSRuntime js, VaultNetworkSelection network) : IStellarUploadCheckpointStore
 {
     public async Task<StellarUploadCheckpoint?> LoadAsync(string accountId, CancellationToken ct = default)
     {
         var checkpoint = await js.InvokeAsync<StellarUploadCheckpoint?>(
-            "stellarVaultUploadCheckpoint.load", ct, accountId);
+            "stellarVaultUploadCheckpoint.load", ct, network.CredentialKey(accountId));
         checkpoint?.Validate();
         return checkpoint;
     }
@@ -22,9 +22,9 @@ public sealed class BrowserStellarUploadCheckpointStore(IJSRuntime js) : IStella
         ArgumentNullException.ThrowIfNull(checkpoint);
         checkpoint.Validate();
         await js.InvokeVoidAsync("stellarVaultUploadCheckpoint.save", ct,
-            accountId, checkpoint.Fingerprint, checkpoint.Ids, checkpoint.Step);
+            network.CredentialKey(accountId), checkpoint.Fingerprint, checkpoint.Ids, checkpoint.Step);
     }
 
     public Task ClearAsync(string accountId, CancellationToken ct = default) =>
-        js.InvokeVoidAsync("stellarVaultUploadCheckpoint.clear", ct, accountId).AsTask();
+        js.InvokeVoidAsync("stellarVaultUploadCheckpoint.clear", ct, network.CredentialKey(accountId)).AsTask();
 }
