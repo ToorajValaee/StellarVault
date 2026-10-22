@@ -135,6 +135,10 @@
                     }
                 </section>
             }
+            @if (Sessions.IsUnlocked && !LedgerRecords.IsConnected && !string.IsNullOrWhiteSpace(_ledgerMessage))
+            {
+                <div class="terminal-alert warning" role="alert"><strong>STELLAR CONNECTION FAILED</strong><span>@_ledgerMessage</span></div>
+            }
             @if (!string.IsNullOrWhiteSpace(_networkStatus))
             {
                 <p class="advanced-help" role="status">@_networkStatus</p>
@@ -401,8 +405,10 @@
                 _childAccounts = null;
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
-            if (Sessions.IsUnlocked && Platform == "WEB PWA")
+            if (Sessions.IsUnlocked && Platform == "WEB PWA" && LedgerRecords.IsConnected)
                 Navigation.NavigateTo("/vault");
+            else if (Sessions.IsUnlocked && Platform == "WEB PWA")
+                _message = "Local vault unlocked, but Stellar ledger setup failed. See the on-chain connection error below; LOCK VAULT to retry.";
         }
         catch (JSException ex)
         {
