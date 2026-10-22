@@ -33,7 +33,7 @@ public static class StellarLedgerFileProtocol
             throw new InvalidDataException("File exceeds the maximum supported manifest size.");
         if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
             throw new ArgumentException("Invalid file record title.", nameof(title));
-        if (bytes.Length <= MaxChunkBytes && existingIds is not null && (existingIds.Length != 1 || existingIds[0].Length != 16 || !existingIds[0].All(Uri.IsHexDigit)))
+        if (bytes.Length <= MaxChunkBytes && existingIds is not null && (existingIds.Length != 1 || existingIds[0] is null || existingIds[0].Length != 16 || !existingIds[0].All(Uri.IsHexDigit)))
             throw new InvalidDataException("Invalid single-record checkpoint ID.");
         if (bytes.Length <= MaxChunkBytes)
             return [(existingIds is { Length: 1 } ? existingIds[0] : Guid.NewGuid().ToString("N")[..16], new LedgerRecordDraft(
