@@ -44,6 +44,10 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions)
                 if (currentMetadata is null || (currentMetadata.ContentType is not null &&
                     !currentMetadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
                     throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
+                // Close the gap between catalog revalidation and returning plaintext.
+                // This narrows the race; fully atomic snapshots require a storage-level transaction.
+                if (await db.GetVersionAsync(name, key, token) != version)
+                    throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
                 byte[] bytes = staging.ToArray();
                 try { return new TextRecord(name, new UTF8Encoding(false, true).GetString(bytes), version); }
                 finally { CryptographicOperations.ZeroMemory(bytes); }
