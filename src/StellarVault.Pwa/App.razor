@@ -145,7 +145,8 @@ else
     {
         if (Privacy.IsSuspended)
         {
-            try { _biometricEnrolled = await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(Privacy.SuspendedAccountId)); }
+            try { _biometricEnrolled = Privacy.SuspendedAccountId is { } accountId &&
+                await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(accountId)); }
             catch (JSException) { _biometricEnrolled = false; }
         }
         else
