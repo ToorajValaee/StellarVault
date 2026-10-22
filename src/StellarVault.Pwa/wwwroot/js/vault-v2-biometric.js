@@ -36,6 +36,8 @@ window.stellarVaultBiometric = (() => {
   }
   async function enroll(account, passphrase) {
     requireApi();
+    window.stellarVaultV2Lifecycle?.setCredentialPrompt(true);
+    try {
     if (!account || !passphrase) throw new Error('Account and vault passphrase are required.');
     const userId = random(32);
     const credential = await navigator.credentials.create({
@@ -58,15 +60,19 @@ window.stellarVaultBiometric = (() => {
     const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: encoder.encode(account) }, key, encoder.encode(passphrase));
     localStorage.setItem(keyFor(account), JSON.stringify({ credentialId, salt: to64(salt), iv: to64(iv), data: to64(new Uint8Array(data)) }));
     return true;
+    } finally { window.stellarVaultV2Lifecycle?.setCredentialPrompt(false); }
   }
   async function unlock(account) {
     requireApi();
+    window.stellarVaultV2Lifecycle?.setCredentialPrompt(true);
+    try {
     const raw = localStorage.getItem(keyFor(account));
     if (!raw) throw new Error('Biometric unlock has not been set up on this device.');
     const item = JSON.parse(raw);
     const key = await assert(item.credentialId, from64(item.salt));
     const data = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: from64(item.iv), additionalData: encoder.encode(account) }, key, from64(item.data));
     return decoder.decode(data);
+    } finally { window.stellarVaultV2Lifecycle?.setCredentialPrompt(false); }
   }
   return Object.freeze({ available, has, enroll, unlock });
 })();
