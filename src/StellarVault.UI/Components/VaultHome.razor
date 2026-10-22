@@ -5,6 +5,7 @@
 @inject VaultSessionWorkflow Workflow
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
+@inject VaultStorageModeGate StorageMode
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
@@ -195,17 +196,17 @@
             </header>
             <nav class="network-selector" aria-label="Vault workspace mode">
                 <button class="network-option @(_workspaceMode == "ledger" ? "active" : "")" type="button"
-                        aria-pressed="@(_workspaceMode == "ledger")" @onclick='() => _workspaceMode = "ledger"'>
+                        aria-pressed="@(_workspaceMode == "ledger")" @onclick='() => SelectWorkspace("ledger")'>
                     <span class="network-symbol">S</span><span><strong>STELLAR RECORD</strong><small>ON-CHAIN</small></span>
                 </button>
                 <button class="network-option @(_workspaceMode == "record" ? "active" : "")" type="button"
-                        aria-pressed="@(_workspaceMode == "record")" @onclick='() => _workspaceMode = "record"'>
+                        aria-pressed="@(_workspaceMode == "record")" @onclick='() => SelectWorkspace("record")'>
                     <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>LOCAL ENCRYPTED</small></span>
                 </button>
                 @if (Platform == "WEB PWA")
                 {
                     <button class="network-option @(_workspaceMode == "file" ? "active" : "")" type="button"
-                            aria-pressed="@(_workspaceMode == "file")" @onclick='() => _workspaceMode = "file"'>
+                            aria-pressed="@(_workspaceMode == "file")" @onclick='() => SelectWorkspace("file")'>
                         <span class="network-symbol">F</span><span><strong>ADD FILE</strong><small>LOCAL ENCRYPTED</small></span>
                     </button>
                 }
@@ -269,6 +270,27 @@
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _workspaceMode = "ledger";
+
+    private void SelectWorkspace(string workspace)
+    {
+        if (_busy) return;
+        if (workspace is not ("ledger" or "record" or "file"))
+            throw new ArgumentOutOfRangeException(nameof(workspace));
+        if (workspace == "ledger")
+        {
+            // The connection panel remains accessible before ledger authorization.
+            // Never label the selected persistence mode as on-chain without a transport.
+            if (LedgerRecords.IsConnected)
+                StorageMode.Select(VaultStorageMode.StellarLedger);
+            else
+                StorageMode.Reset();
+        }
+        else
+        {
+            StorageMode.Select(VaultStorageMode.LocalEncrypted);
+        }
+        _workspaceMode = workspace;
+    }
     private bool _requestBiometricEnrollment;
     private string? _pendingBiometricAccount;
     private string? _pendingBiometricPassphrase;
@@ -475,12 +497,15 @@
                     _ => _customPassphrase ?? throw new InvalidOperationException("Custom network not detected.")
                 };
                 await LedgerRecords.ConnectAsync(_mnemonic, horizonUrl, networkPassphrase);
+                if (_workspaceMode == "ledger")
+                    StorageMode.Select(VaultStorageMode.StellarLedger);
                 _ledgerRegistryReady = await LedgerRecords.HasRegistryAsync();
                 if (_ledgerRegistryReady) _ledgerItems = await LedgerRecords.ReadAsync();
                 _ledgerMessage = "On-chain vault connected.";
             }
             catch (Exception ex)
             {
+                StorageMode.Reset();
                 _ledgerMessage = "On-chain connection failed: " + ex.Message;
             }
             try
@@ -561,6 +586,7 @@
     {
         if (_busy) return;
         Workflow.Lock();
+        StorageMode.Reset();
         await LedgerRecords.DisconnectAsync();
         _ledgerItems = null;
         _ledgerRegistryReady = false;
