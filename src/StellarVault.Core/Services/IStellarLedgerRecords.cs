@@ -10,9 +10,11 @@ public interface IStellarLedgerRecords
     Task InitializeRegistryAsync();
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
+    Task<string> PublishDetailedAsync(LedgerRecordDraft draft);
     Task DisconnectAsync();
 }
-public sealed record LedgerRecordItem(string Id, string Title, string Content);
+public sealed record LedgerRecordItem(string Id, string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
+public sealed record LedgerRecordDraft(string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
 
 /// <summary>Native hosts fail closed until their signing transport is implemented.</summary>
 public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
@@ -24,5 +26,6 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     public Task InitializeRegistryAsync() => Task.FromException(Unavailable());
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
+    public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) => Task.FromException<string>(Unavailable());
     public Task DisconnectAsync() => Task.CompletedTask;
 }
