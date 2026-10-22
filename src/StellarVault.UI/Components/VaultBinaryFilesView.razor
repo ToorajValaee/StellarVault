@@ -4,6 +4,7 @@
 @inject VaultBinaryWorkspace Files
 @inject VaultRecordWorkspace Records
 @inject IJSRuntime JS
+@inject Microsoft.Extensions.Logging.ILogger<VaultBinaryFilesView> Logger
 @implements IDisposable
 
 <section class="sv-file-workspace" aria-label="Encrypted file records">
@@ -108,6 +109,11 @@
                                     or JSException or OperationCanceledException)
         {
             _status = "File could not be saved. Verify name, size and session state.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected encrypted file save failure");
+            _status = "File save failed unexpectedly. No successful save was confirmed; inspect the application logs before retrying.";
         }
         finally { _busy = false; }
 
