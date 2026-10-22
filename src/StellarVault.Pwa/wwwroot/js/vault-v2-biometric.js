@@ -5,7 +5,7 @@ window.stellarVaultBiometric = (() => {
   const prefix = 'sv-biometric-v1:';
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
-  const to64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+  const to64 = bytes => btoa(String.fromCharCode(...bytes)).split('+').join('-').split('/').join('_').replace(/=+$/, '');
   const from64 = data => Uint8Array.from(atob(data.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - data.length % 4) % 4)), c => c.charCodeAt(0));
   const random = n => crypto.getRandomValues(new Uint8Array(n));
   const keyFor = account => prefix + account;
