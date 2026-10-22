@@ -10,6 +10,24 @@
 </head>
 <body style="margin:0;background:#07110c">
   <div id="app">Loading native preview…</div>
+  <!-- Shared PWA Stellar ledger runtime. Signing remains disabled in MAUI until
+       a verified .NET adapter and native session lifecycle are implemented. -->
+  <script src="js/vendor/stellar-sdk.min.js"></script>
+  <script src="js/bip39-english.js"></script>
+  <script src="js/hd-keys.js"></script>
+  <script src="js/vault-v2-mnemonic.js"></script>
+  <script src="js/vault-v2-network.js"></script>
+  <script src="js/hd-registry.js"></script>
+  <script src="js/vault-v2-chain.js"></script>
+  <script src="js/ledger-compat/hd-encryption.js"></script>
+  <script src="js/ledger-compat/hd-allocation-preflight.js"></script>
+  <script src="js/ledger-compat/hd-allocator.js"></script>
+  <script src="js/ledger-compat/hd-sponsorship.js"></script>
+  <script src="js/ledger-compat/hd-treasury.js"></script>
+  <script src="js/ledger-compat/hd-fee-bump.js"></script>
+  <script src="js/ledger-compat/hd-discovery.js"></script>
+  <script src="js/ledger-compat/hd-bootstrap.js"></script>
+  <script src="js/ledger-compat/app.js"></script>
   <script src="_framework/blazor.webview.js"></script>
 </body>
 </html>
