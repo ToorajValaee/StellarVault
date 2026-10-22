@@ -97,6 +97,24 @@
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <p class="advanced-help">Your recovery phrase selects its vault automatically. Your separate encryption passphrase protects the vault data stored in this browser.</p>
+                @if (!Sessions.IsUnlocked)
+                {
+                    <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
+                        OFFER DEVICE UNLOCK AFTER ACCESS (OPTIONAL)
+                    </label>
+                    <p class="advanced-help">Use a passkey protected by your device's biometrics or PIN for future privacy unlocks on this device. Enrollment happens only here, after your passphrase is verified.</p>
+                }
+                @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
+                {
+                    <div class="terminal-alert" role="status">
+                        <strong>ENABLE DEVICE UNLOCK?</strong>
+                        <span>A supported passkey is needed. Otherwise, you can continue using your vault passphrase.</span>
+                    </div>
+                    <div class="sv-access-actions">
+                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="EnrollBiometricAsync">ENABLE DEVICE UNLOCK</button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="SkipBiometricEnrollment">NOT NOW</button>
+                    </div>
+                }
                 @if (_busy)
                 {
                     <div class="terminal-alert" role="status" aria-live="polite" aria-busy="true">
@@ -251,6 +269,37 @@
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
     private string _workspaceMode = "ledger";
+    private bool _requestBiometricEnrollment;
+    private string? _pendingBiometricAccount;
+    private string? _pendingBiometricPassphrase;
+    private string? _postAccessUrl;
+    private async Task EnrollBiometricAsync()
+    {
+        if (_busy || _pendingBiometricAccount is null || _pendingBiometricPassphrase is null) return;
+        _busy = true;
+        _accessStage = "registering device unlock";
+        try
+        {
+            await JS.InvokeVoidAsync("stellarVaultBiometric.enroll", _pendingBiometricAccount, _pendingBiometricPassphrase);
+            _message = "Device unlock enabled. Your vault passphrase remains available as a fallback.";
+            FinishBiometricEnrollment();
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or OperationCanceledException)
+        {
+            _message = "Device unlock could not be enabled. Your vault passphrase still works. " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+    private void SkipBiometricEnrollment() => FinishBiometricEnrollment();
+    private void FinishBiometricEnrollment()
+    {
+        _pendingBiometricAccount = null;
+        _pendingBiometricPassphrase = null;
+        _requestBiometricEnrollment = false;
+        var destination = _postAccessUrl;
+        _postAccessUrl = null;
+        if (destination is not null) Navigation.NavigateTo(destination);
+    }
     private string _mnemonic = string.Empty;
     private readonly string[] _mnemonicWords = new string[24];
     private int _mnemonicWordCount = 12;
@@ -447,7 +496,17 @@
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
             if (Sessions.IsUnlocked && Platform == "WEB PWA" && LedgerRecords.IsConnected)
-                Navigation.NavigateTo(_ledgerRegistryReady ? "/vault" : "/initialize");
+            {
+                var destination = _ledgerRegistryReady ? "/vault" : "/initialize";
+                if (_requestBiometricEnrollment)
+                {
+                    _pendingBiometricAccount = account;
+                    _pendingBiometricPassphrase = _passphrase;
+                    _postAccessUrl = destination;
+                    _message = "Vault opened. Choose whether to register device unlock.";
+                }
+                else Navigation.NavigateTo(destination);
+            }
             else if (Sessions.IsUnlocked && Platform == "WEB PWA")
                 _message = "Local vault unlocked, but Stellar ledger setup failed. See the on-chain connection error below; LOCK VAULT to retry.";
         }
@@ -509,6 +568,9 @@
         _ledgerRegistryReady = false;
         _ledgerMessage = null;
         ClearMnemonic();
+        _pendingBiometricAccount = null;
+        _pendingBiometricPassphrase = null;
+        _postAccessUrl = null;
         _passphrase = string.Empty;
         _childAccounts = null;
         _networkStatus = null;
