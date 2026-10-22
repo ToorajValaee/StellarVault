@@ -85,8 +85,13 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     public Task<string> PublishAsync(string title, string content) =>
         PublishDetailedAsync(new LedgerRecordDraft(title, content));
 
-    public async Task<string> PublishDetailedAsync(LedgerRecordDraft draft)
+    public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) =>
+        PublishWithIdAsync(Guid.NewGuid().ToString("N")[..16], draft);
+
+    public async Task<string> PublishWithIdAsync(string recordId, LedgerRecordDraft draft)
     {
+        if (recordId.Length != 16 || !recordId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid 16-character record identifier.", nameof(recordId));
         ArgumentNullException.ThrowIfNull(draft);
         if (string.IsNullOrWhiteSpace(draft.Title) || string.IsNullOrEmpty(draft.Content))
             throw new ArgumentException("Record title and contents are required.");
@@ -96,7 +101,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         var now = DateTimeOffset.UtcNow;
         var record = new VaultRecord
         {
-            Id = Guid.NewGuid().ToString("N")[..16],
+            Id = recordId,
             Title = draft.Title.Trim(),
             Secret = draft.Content,
             FolderId = draft.FolderId,
