@@ -6,31 +6,26 @@
 @inject IJSRuntime JS
 @implements IDisposable
 
-<section class="form-page" aria-label="Encrypted file records">
-    <header class="page-command-header">
-        <div>
-            <div class="panel-kicker">WRITE OPERATION // LOCAL ENCRYPTED FILE</div>
-            <h2>ADD FILE</h2>
-            <p class="page-subtitle">Encrypt files in the browser vault. Ledger file publishing is not connected yet.</p>
-        </div>
-        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshFilesAsync">REFRESH FILES</button>
-    </header>
+<section class="sv-file-workspace" aria-label="Encrypted file records">
     @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> @_loadingMessage</div> }
     <div class="terminal-panel credential-form">
-        <div class="form-section-title"><span>01</span> FILE SELECTION</div>
-        <p class="advanced-help">Current browser implementation supports files up to 1 MiB. Larger files and on-chain chunking are still pending.</p>
-        <InputFile OnChange="SelectFile" disabled="@_busy" />
+        <div class="form-section-title"><span>01</span> FILE DETAILS</div>
+        <label class="terminal-label">SELECT FILE *</label>
+        <div class="sv-file-picker">
+            <label class="pixel-button compact sv-file-picker-button" for="sv-file-select">+ CHOOSE FILE</label>
+            <span class="sv-file-picked-name">@(_file is null ? "NO FILE SELECTED" : _file.Name)</span>
+            <InputFile id="sv-file-select" class="sv-file-native-input" OnChange="SelectFile" disabled="@_busy" />
+        </div>
+        @if (_file is not null) { <p class="advanced-help">FILE SIZE: @(_file.Size.ToString("N0")) BYTES</p> }
+        <p class="advanced-help">Files are currently stored encrypted in this browser. Maximum file size: 1 MiB.</p>
         <label class="terminal-label" for="sv-file-record-name">FILE RECORD NAME *</label>
         <input id="sv-file-record-name" class="terminal-input" maxlength="512" @bind="_name"
                @bind:event="oninput" disabled="@_busy" placeholder="Encrypted file name" />
-        <div class="commit-preview">
-            <span>MODE</span><strong>LOCAL ENCRYPTED FILE</strong>
-            <span>STORAGE</span><strong>BROWSER INDEXEDDB — NOT LEDGER</strong>
-        </div>
+
         <button class="pixel-button primary" type="button"
                 disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
                 @onclick="UploadAsync">@(_busy ? "PROCESSING..." : "SAVE ENCRYPTED FILE")</button>
-        <div class="form-section-title"><span>02</span> RETRIEVE / REMOVE</div>
+        <div class="form-section-title"><span>02</span> STORED FILE ACTIONS</div>
         <label class="terminal-label" for="sv-file-open-name">EXISTING FILE RECORD</label>
         <input id="sv-file-open-name" class="terminal-input" maxlength="512" @bind="_openName"
                @bind:event="oninput" disabled="@_busy" />
@@ -51,6 +46,7 @@
     <section class="terminal-panel">
         <div class="panel-kicker">STORED FILES</div>
         <h3>FILE DIRECTORY</h3>
+        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshFilesAsync">↻ REFRESH FILES</button>
         @if (_files is null)
         {
             <p class="advanced-help">File directory unavailable.</p>
