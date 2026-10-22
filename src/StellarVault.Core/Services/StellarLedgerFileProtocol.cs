@@ -157,7 +157,7 @@ public static class StellarLedgerFileProtocol
     private static void Verify(ReadOnlySpan<byte> bytes, string? hex)
     {
         if (hex is null) return; // SVFILE1 predates checksums.
-        if (hex.Length != 64 || !Convert.TryFromHexString(hex, stackalloc byte[32], out int written) || written != 32)
+        if (hex.Length != 64 || !hex.All(Uri.IsHexDigit))
             throw new InvalidDataException("Invalid file hash.");
         var actual = SHA256.HashData(bytes);
         try
