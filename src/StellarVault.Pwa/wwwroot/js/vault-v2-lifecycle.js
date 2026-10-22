@@ -7,6 +7,7 @@ window.stellarVaultV2Lifecycle = (() => {
   const timeoutMs = 5000;
   let detachCurrent = null;
   let filePickerOpen = false;
+  let credentialPromptOpen = false;
   let pickerReturnTimer = null;
 
   function attach(dotnet) {
@@ -16,13 +17,13 @@ window.stellarVaultV2Lifecycle = (() => {
     let exited = false;
 
     const suspend = () => {
-      if (exited || filePickerOpen) return;
+      if (exited || filePickerOpen || credentialPromptOpen) return;
       Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     };
     const clearAway = () => { if (awayTimer !== null) clearTimeout(awayTimer); awayTimer = null; };
 
     const goAway = () => {
-      if (filePickerOpen || exited || awaySince !== null) return;
+      if (filePickerOpen || credentialPromptOpen || exited || awaySince !== null) return;
       awaySince = Date.now();
       clearAway();
       awayTimer = setTimeout(() => {
@@ -31,7 +32,7 @@ window.stellarVaultV2Lifecycle = (() => {
     };
     const returnFocus = () => {
       if (exited) return;
-      if (filePickerOpen) {
+      if (filePickerOpen || credentialPromptOpen) {
         if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
         pickerReturnTimer = setTimeout(() => {
           pickerReturnTimer = null;
@@ -85,6 +86,7 @@ window.stellarVaultV2Lifecycle = (() => {
       if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
       pickerReturnTimer = null;
       filePickerOpen = false;
+      credentialPromptOpen = false;
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('blur', goAway);
       window.removeEventListener('focus', returnFocus);
@@ -98,7 +100,14 @@ window.stellarVaultV2Lifecycle = (() => {
     if (detachCurrent) detachCurrent();
     detachCurrent = null;
   }
-  return Object.freeze({ attach, detach });
+  function setCredentialPrompt(value) {
+    credentialPromptOpen = Boolean(value);
+    if (!credentialPromptOpen) {
+      // Returning from the operating system passkey sheet is not app abandonment.
+      if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('focus'));
+    }
+  }
+  return Object.freeze({ attach, detach, setCredentialPrompt });
 })();
 
  // Close network settings when clicking outside the popup or pressing Escape.
