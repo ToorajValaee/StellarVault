@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Text.Json
 @using System.Security.Cryptography
+@using StellarVault.Pwa.Services
 @implements IDisposable
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
@@ -113,6 +114,7 @@ else
             using var buffer = new MemoryStream();
             await stream.CopyToAsync(buffer);
             _fileBytes = buffer.ToArray();
+            LedgerFileProtocol.ValidateName(file.Name);
             _fileOriginalName = file.Name;
             _fileContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
             _title = file.Name.Length > 256 ? file.Name[..256] : file.Name;
@@ -184,9 +186,7 @@ else
         if (_kind == "file")
         {
             if (_fileBytes is null) throw new InvalidOperationException("Select a file first.");
-            string payload = "SVFILE1:" + JsonSerializer.Serialize(new LedgerFilePayload(
-                _fileOriginalName, _fileContentType, Convert.ToBase64String(_fileBytes),
-                Convert.ToHexString(SHA256.HashData(_fileBytes))));
+            string payload = LedgerFileProtocol.EncodeSingle(_fileOriginalName, _fileContentType, _fileBytes);
             return new LedgerRecordDraft(_title, payload,
                 string.IsNullOrWhiteSpace(_folder) ? null : _folder,
                 ["file", "svfile-v1"]);
@@ -203,7 +203,6 @@ else
         catch (Exception ex) { _reviewedDraft = null; _estimate = null; _status = "File cannot fit the current Stellar node allocation or cost estimation failed: " + ex.Message; }
         finally { _busy = false; }
     }
-    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64, string Sha256Hex);
     private void ClearFileBytes() {
         if (_fileBytes is not null) CryptographicOperations.ZeroMemory(_fileBytes);
         _fileBytes = null;
