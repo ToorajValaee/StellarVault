@@ -556,6 +556,8 @@
         var approvedCost = _uploadCost;
         _ledgerBusy = true;
         ClearUploadReview();
+        bool stageConfirmed = false;
+        bool fileVerified = false;
         try
         {
             StorageMode.Select(VaultStorageMode.StellarLedger);
@@ -571,6 +573,7 @@
             }
             var published = await UploadCoordinator.PublishNextApprovedAsync(approvedPlan,
                 draft => Task.FromResult(ReferenceEquals(draft, approvedDraft)));
+            stageConfirmed = published;
             var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
             _uploadRemaining = remaining.Count;
             await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
@@ -599,6 +602,8 @@
                 {
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered);
                 }
+                fileVerified = true;
+                _ledgerRecords = snapshot;
                 await UploadCheckpoints.ClearAsync(_rootAccountId);
                 _ledgerRecords = snapshot;
                 CancelUpload();
@@ -607,7 +612,11 @@
         }
         catch
         {
-            _uploadMessage = "Submission failed or confirmation is uncertain. Reconcile and re-approve before retry.";
+            _uploadMessage = fileVerified
+                ? "File verified on Stellar, but checkpoint cleanup failed. Reconcile before selecting another file."
+                : stageConfirmed
+                    ? "Upload stage confirmed on Stellar, but follow-up recovery failed. Reconcile before continuing; do not submit the stage again."
+                    : "Submission failed or confirmation is uncertain. Reconcile and re-approve before retry.";
         }
         finally
         {
