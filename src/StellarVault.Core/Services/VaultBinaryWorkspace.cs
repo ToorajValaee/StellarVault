@@ -103,6 +103,11 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             if (visible is null || visible.ContentType is null ||
                 visible.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
                 throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+            // The pointer may have changed while the catalog was being reloaded.
+            // Do not hand the UI a stale revision for its later delete request.
+            var confirmedVersion = await database.GetVersionAsync(name, key, ct);
+            if (confirmedVersion != version)
+                throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
             return version;
         }, cancellationToken);
 
