@@ -2208,3 +2208,36 @@ html.ios-device.standalone-app .terminal-footer {
 @supports not (backdrop-filter: blur(1px)) {
   .modal-backdrop, .approval-modal-backdrop { background-color: rgba(4, 13, 12, .68); }
 }
+
+/* Overflow safety: cards expand to fit text instead of showing nested scrollbars. */
+.vault-page, .form-page, .record-list, .credential-form,
+.terminal-panel, .record-card, .record-card-body,
+.sv-folder-grid, .sv-folder-tile, .sv-account-info-modal {
+  min-width: 0;
+  max-width: 100%;
+}
+.record-list .record-card { overflow: hidden; }
+.record-list .record-card-body { min-width: 0; overflow: hidden; }
+.record-list .record-card-body strong { overflow-wrap: anywhere; text-overflow: ellipsis; }
+.record-list .record-card-body small { overflow-wrap: anywhere; white-space: normal; }
+.sv-folder-tile { min-width: 0; }
+.sv-folder-tile > button { overflow-wrap: anywhere; white-space: normal; }
+.sv-folder-tile details[open] { min-width: 0; }
+.sv-folder-tile details > a, .sv-folder-tile details > button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.data-field, .field-value-row, .record-notes, .sv-account-address { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.field-value-row { flex-wrap: wrap; }
+.field-value-row code, .secret-value { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.stats-strip { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
+.stats-strip strong, .stats-strip span { max-width: 100%; overflow-wrap: anywhere; text-align: center; }
+.record-modal, .approval-modal, .sv-account-info-modal {
+  max-width: calc(100vw - 1.5rem);
+  overflow-x: clip;
+  scrollbar-width: none;
+}
+.record-modal::-webkit-scrollbar, .approval-modal-scroll::-webkit-scrollbar { display: none; }
+.approval-modal-scroll { overflow-x: hidden; scrollbar-width: none; }
+.sv-network-popover { overflow-x: hidden; }
+@media (max-width: 420px) {
+ .approval-modal-actions { grid-template-columns: minmax(0, 1fr); }
+ .record-list .record-card { grid-template-columns: 2rem minmax(0, 1fr) 1.7rem; }
+}
