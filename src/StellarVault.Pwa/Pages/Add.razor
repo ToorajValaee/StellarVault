@@ -8,6 +8,7 @@
 @implements IDisposable
 @inject IStellarLedgerRecords Ledger
 @inject StellarLedgerUploadCoordinator UploadCoordinator
+@inject IStellarUploadCheckpointStore Checkpoints
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
@@ -99,7 +100,6 @@ else
     private int _fileStep;
     private string? _fileFingerprint;
     private bool _uncertainStage;
-    private sealed record UploadCheckpoint(int Version, string Fingerprint, string[] Ids, int Step);
 
     private StellarLedgerUploadPlan CurrentUploadPlan()
     {
@@ -219,12 +219,13 @@ else
     }
     private async Task SaveCheckpointAsync(string fingerprint) {
         var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
-        await JS.InvokeVoidAsync("stellarVaultUploadCheckpoint.save", account, fingerprint,
-            _filePlan!.Select(x => x.Id).ToArray(), _fileStep);
+        await Checkpoints.SaveAsync(account, new StellarUploadCheckpoint(
+            StellarUploadCheckpoint.CurrentVersion, fingerprint,
+            _filePlan!.Select(x => x.Id).ToArray(), _fileStep));
     }
     private async Task ClearCheckpointAsync() {
         if (Sessions.ActiveAccountId is string account)
-            await JS.InvokeVoidAsync("stellarVaultUploadCheckpoint.clear", account);
+            await Checkpoints.ClearAsync(account);
     }
     private async Task ReviewAsync() {
         if (_busy || !Ledger.IsConnected || (_kind == "file" && _fileBytes is null)) return;
@@ -238,7 +239,7 @@ else
                     Convert.ToHexString(SHA256.HashData(_fileBytes!)))));
                 if (_filePlan is null) {
                     var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
-                    var saved = await JS.InvokeAsync<UploadCheckpoint?>("stellarVaultUploadCheckpoint.load", account);
+                    var saved = await Checkpoints.LoadAsync(account);
                     if (saved is not null && saved.Fingerprint != fingerprint)
                         throw new InvalidOperationException("Another upload checkpoint exists. Select the matching original file and title.");
                     _filePlan = LedgerFileProtocol.BuildUpload(_title, _fileOriginalName, _fileContentType,
