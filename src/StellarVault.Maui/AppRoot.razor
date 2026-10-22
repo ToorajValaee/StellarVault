@@ -284,6 +284,7 @@
             _ledgerMessage = "Record changed since cost review. Review the transaction again.";
             return;
         }
+        var approvedEstimate = _publishEstimate;
         _ledgerBusy = true;
         CancelPublish();
         try
@@ -291,6 +292,9 @@
             StorageMode.Select(VaultStorageMode.StellarLedger);
             if (!await Ledger.HasRegistryAsync())
                 throw new InvalidOperationException("Registry must be initialized before publishing.");
+            var newCost = await Ledger.EstimateAsync(draft);
+            if (newCost != approvedEstimate)
+                throw new InvalidOperationException("Transaction cost changed; review again.");
             var hash = await Ledger.PublishDetailedAsync(draft);
             hash = LedgerMutationResult.RequireConfirmed(hash).TransactionHash;
             _ledgerMessage = "Stellar transaction submitted and confirmed: " + hash;
@@ -536,6 +540,7 @@
             return;
         }
         var approvedDraft = approvedEntry.Draft;
+        var approvedCost = _uploadCost;
         _ledgerBusy = true;
         ClearUploadReview();
         try
@@ -543,6 +548,11 @@
             StorageMode.Select(VaultStorageMode.StellarLedger);
             if (!await Ledger.HasRegistryAsync())
                 throw new InvalidOperationException("Ledger registry not initialized.");
+            // Re-estimate after explicit approval; a changed fee or reserve
+            // invalidates the previous authorization.
+            var currentCost = await Ledger.EstimateAsync(approvedDraft, approvedId);
+            if (currentCost != approvedCost)
+                throw new InvalidOperationException("Upload transaction cost changed; review again.");
             var published = await UploadCoordinator.PublishNextApprovedAsync(approvedPlan,
                 draft => Task.FromResult(ReferenceEquals(draft, approvedDraft)));
             var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
