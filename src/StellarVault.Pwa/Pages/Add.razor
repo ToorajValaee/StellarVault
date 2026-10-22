@@ -257,7 +257,7 @@ else
                 _reviewedRecordId = RecordId;
                 _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId);
             }
-            _status = null;
+            if (_estimate is not null) _status = null;
         }
         catch (Exception ex) {
             _estimate = null;
@@ -297,10 +297,11 @@ else
                 var hash = await Ledger.PublishWithIdAsync(_reviewedRecordId!, _reviewedDraft);
                 _fileStep++;
                 _uncertainStage = false;
-                await SaveCheckpointAsync(_fileFingerprint!);
+                try { await SaveCheckpointAsync(_fileFingerprint!); }
+                catch (Exception) { _uncertainStage = true; }
                 _estimate = null;
                 _reviewedDraft = null;
-                _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash;
+                _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash + (_uncertainStage ? " (checkpoint update failed; ledger recovery required)" : "");
                 if (_fileStep == _filePlan.Count) {
                     await ClearCheckpointAsync();
                     ClearFileBytes();
@@ -341,10 +342,10 @@ else
             _uncertainStage = false;
             return;
         }
-        if (!SameDraft(stage.Draft, new LedgerRecordDraft(
-                recovered.Title, recovered.Content, recovered.FolderId,
-                recovered.Tags, recovered.IsFolder, recovered.UserName,
-                recovered.Url, recovered.Notes)))
+        if (stage.Draft.Title != recovered.Title ||
+            stage.Draft.Content != recovered.Content ||
+            stage.Draft.FolderId != recovered.FolderId ||
+            !(stage.Draft.Tags ?? []).SequenceEqual(recovered.Tags ?? []))
             throw new InvalidDataException("The ledger contains a conflicting file stage. Stop the upload.");
         _fileStep++;
         _uncertainStage = false;
