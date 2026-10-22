@@ -26,17 +26,18 @@ test('remembers only public account and network',()=>{
 });
 test('custom network saves endpoint but no network passphrase or credentials',()=>{
   const {api,data}=create();
-  api.save(account,'custom','https://horizon.example.com/');
+  api.save(account,'custom','https://horizon.example.com/','Custom Stellar Network');
   const raw=[...data.values()][0];
-  assert.deepEqual(Object.keys(JSON.parse(raw)).sort(),['account','horizonUrl','network','version']);
+  assert.deepEqual(Object.keys(JSON.parse(raw)).sort(),['account','horizonUrl','network','networkPassphrase','version']);
   assert.equal(api.load().network,'custom');
   assert.equal(api.load().horizonUrl,'https://horizon.example.com/');
+  assert.equal(api.load().networkPassphrase,'Custom Stellar Network');
 });
 test('custom network refuses untrusted URL forms',()=>{
   const {api,data}=create();
-  assert.throws(()=>api.save(account,'custom','https://user:pass@example.com/'));
-  assert.throws(()=>api.save(account,'custom','http://example.com/'));
-  assert.throws(()=>api.save(account,'custom','https://example.com/path'));
+  assert.throws(()=>api.save(account,'custom','https://user:pass@example.com/','Custom Stellar Network'));
+  assert.throws(()=>api.save(account,'custom','http://example.com/','Custom Stellar Network'));
+  assert.throws(()=>api.save(account,'custom','https://example.com/path','Custom Stellar Network'));
   assert.equal(data.size,0);
 });
 test('invalid or corrupted selection is ignored',()=>{
@@ -50,4 +51,10 @@ test('forget clears remembered account only',()=>{
   api.clear();
   assert.equal(data.size,0);
   assert.equal(api.load(),null);
+});
+
+test('custom network requires a public network identity to support offline reopen',()=>{
+  const {api,data}=create();
+  assert.throws(()=>api.save(account,'custom','https://horizon.example.com/'));
+  assert.equal(data.size,0);
 });
