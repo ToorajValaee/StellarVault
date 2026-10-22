@@ -55,23 +55,11 @@ else
                 <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>COMMIT STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
-                @if (_estimate is not null)
-                {
-                    <div class="terminal-panel">
-                        <h3>REVIEW NETWORK COST</h3>
-                        <div class="stats-strip"><div><span>FEE XLM</span><strong>@_estimate.NetworkFeeXlm</strong></div><div><span>PEAK RESERVE XLM</span><strong>@_estimate.PeakReserveXlm</strong></div><div><span>OPERATIONS</span><strong>@_estimate.Operations</strong></div><div><span>TRANSACTIONS</span><strong>@_estimate.Transactions</strong></div></div>
-                        <p>Fees are spent. Reserve is locked while entries exist. Amounts are estimates.</p>
-                        <button class="pixel-button compact" type="button" @onclick="() => _estimate = null">CANCEL</button>
-                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="CommitAsync">APPROVE AND COMMIT</button>
-                    </div>
-                }
-                else
-                {
-                    <button class="pixel-button primary access-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
-                }
+                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
             </div>
         }
     </section>
+    <LedgerCostApprovalModal Open="@(_estimate is not null)" Estimate="_estimate" Title="APPROVE LEDGER WRITE" Busy="_busy" OnConfirm="CommitAsync" OnCancel="CancelReview" />
 }
 </AdaptiveShell>
 
@@ -131,6 +119,7 @@ else
         x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
         x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
         x.Notes == y.Notes && (x.Tags ?? []).SequenceEqual(y.Tags ?? []);
+    private void CancelReview() { if (!_busy) { _estimate = null; _reviewedDraft = null; } }
     private async Task CommitAsync() {
         if (_busy || _estimate is null || !Ledger.IsConnected || _reviewedDraft is null) { _status = "Review network costs before publishing."; return; }
         if (_reviewedRecordId != RecordId || !SameDraft(_reviewedDraft, Draft())) { _estimate = null; _status = "Record changed since estimation. Review network costs again."; return; }
