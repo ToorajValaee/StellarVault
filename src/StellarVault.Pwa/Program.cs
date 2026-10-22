@@ -11,6 +11,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 
 // New vault architecture only. No legacy HD-account store/session is injected.
 builder.Services.AddScoped<VaultSessionManager>();
+builder.Services.AddScoped<VaultPrivacyGate>();
 builder.Services.AddScoped(_ => new HttpClient());
 // SWallet integration is planned. Never treat an unverified account address as ownership.
 // PWA local-only encrypted storage: G-address is a namespace, NOT an ownership proof.
