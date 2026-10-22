@@ -1,6 +1,7 @@
 name: Fresh v2 PWA and MAUI build
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/maui-shared-app
