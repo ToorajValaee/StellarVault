@@ -96,6 +96,7 @@ else
     private IReadOnlyList<(string Id, LedgerRecordDraft Draft)>? _filePlan;
     private int _fileStep;
     private string? _fileFingerprint;
+    private bool _uncertainStage;
     private byte[]? _fileBytes;
     private string _fileOriginalName = "";
     private string _fileContentType = "application/octet-stream";
@@ -107,6 +108,7 @@ else
         _filePlan = null;
         _fileStep = 0;
         _fileFingerprint = null;
+        _uncertainStage = false;
         ClearFileBytes();
         var file = args.File;
         if (file.Size > MaximumLedgerFileLength)
@@ -217,6 +219,8 @@ else
                 }
                 if (_fileFingerprint != fingerprint)
                     throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
+                if (_uncertainStage)
+                    await ReconcileFileStageAsync();
                 if (_fileStep >= _filePlan.Count)
                     throw new InvalidOperationException("All file stages are already complete.");
                 var next = _filePlan[_fileStep];
@@ -267,6 +271,7 @@ else
             if (_kind == "file") {
                 var hash = await Ledger.PublishWithIdAsync(_reviewedRecordId!, _reviewedDraft);
                 _fileStep++;
+                _uncertainStage = false;
                 _estimate = null;
                 _reviewedDraft = null;
                 _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash;
@@ -288,9 +293,35 @@ else
         }
         catch (Exception ex) {
             _estimate = null;
-            _status = "Ledger submission failed or confirmation is uncertain: " + ex.Message +
-                ". Check the ledger before attempting the same stage again.";
+            if (_kind == "file") {
+                _uncertainStage = true;
+                _status = "Ledger confirmation is uncertain: " + ex.Message +
+                    ". The next review checks the ledger before another transaction is approved.";
+            } else {
+                _status = "Ledger commit failed: " + ex.Message;
+            }
         }
         finally { _busy = false; }
     }
+    private async Task ReconcileFileStageAsync()
+    {
+        if (_filePlan is null || _fileStep >= _filePlan.Count) return;
+        var stage = _filePlan[_fileStep];
+        // A ledger read failing or returning conflicting data must not authorize
+        // another attempt with the same identifier.
+        var recovered = (await Ledger.ReadAsync()).SingleOrDefault(r => r.Id == stage.Id);
+        if (recovered is null) {
+            _uncertainStage = false;
+            return;
+        }
+        if (!SameDraft(stage.Draft, new LedgerRecordDraft(
+                recovered.Title, recovered.Content, recovered.FolderId,
+                recovered.Tags, recovered.IsFolder, recovered.UserName,
+                recovered.Url, recovered.Notes)))
+            throw new InvalidDataException("The ledger contains a conflicting file stage. Stop the upload.");
+        _fileStep++;
+        _uncertainStage = false;
+        _status = "Previously submitted stage confirmed during ledger recovery.";
+    }
+
 }
