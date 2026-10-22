@@ -20,6 +20,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVaultPassphraseCredentialStore>(_ =>
             new FileSystemVaultPassphraseCredentialStore(
                 Path.Combine(FileSystem.AppDataDirectory, "vault-credentials")));
+        builder.Services.AddSingleton<IVaultKeyProtector, NativeVaultKeyProtector>();
         builder.Services.AddSingleton<VaultPassphraseLifecycle>();
         builder.Services.AddSingleton<IVaultAccountAuthorizer, DenyVaultAccountAuthorizer>();
         builder.Services.AddSingleton<IVaultChunkStore>(_ =>
