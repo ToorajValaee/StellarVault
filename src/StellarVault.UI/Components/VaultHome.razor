@@ -149,6 +149,32 @@
     @if (Sessions.IsUnlocked)
     {
         <section class="sv-vault-data" aria-label="Encrypted vault records">
+            <header class="page-command-header">
+                <div>
+                    <div class="panel-kicker">SECURE DATABASE // WORKSPACE</div>
+                    <h2>VAULT WORKSPACE</h2>
+                    <p class="page-subtitle">Choose the record or file operation. Stellar ledger writes are separate from local encrypted drafts.</p>
+                </div>
+            </header>
+            <nav class="network-selector" aria-label="Vault workspace mode">
+                <button class="network-option @(_workspaceMode == "ledger" ? "active" : "")" type="button"
+                        aria-pressed="@(_workspaceMode == "ledger")" @onclick='() => _workspaceMode = "ledger"'>
+                    <span class="network-symbol">S</span><span><strong>STELLAR RECORD</strong><small>ON-CHAIN</small></span>
+                </button>
+                <button class="network-option @(_workspaceMode == "record" ? "active" : "")" type="button"
+                        aria-pressed="@(_workspaceMode == "record")" @onclick='() => _workspaceMode = "record"'>
+                    <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>LOCAL ENCRYPTED</small></span>
+                </button>
+                @if (Platform == "WEB PWA")
+                {
+                    <button class="network-option @(_workspaceMode == "file" ? "active" : "")" type="button"
+                            aria-pressed="@(_workspaceMode == "file")" @onclick='() => _workspaceMode = "file"'>
+                        <span class="network-symbol">F</span><span><strong>ADD FILE</strong><small>LOCAL ENCRYPTED</small></span>
+                    </button>
+                }
+            </nav>
+            @if (_workspaceMode == "ledger")
+            {
             <section class="terminal-panel" aria-label="Stellar ledger records">
                 <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
                 <h2>STELLAR LEDGER</h2>
@@ -189,9 +215,12 @@
                 }
             </section>
 
-            <section class="terminal-panel"><h2>LOCAL-ONLY RECORDS</h2><p class="advanced-help">These records stay in this browser. Use PUBLISH TO STELLAR above for the actual on-chain database.</p></section>
-            <VaultRecordWorkspaceView />
-            @if (string.Equals(Platform, "WEB PWA", StringComparison.OrdinalIgnoreCase))
+            }
+            else if (_workspaceMode == "record")
+            {
+                <VaultRecordWorkspaceView />
+            }
+            else if (_workspaceMode == "file" && Platform == "WEB PWA")
             {
                 <VaultBinaryFilesView />
             }
@@ -201,6 +230,7 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
+    private string _workspaceMode = "ledger";
     private string _mnemonic = string.Empty;
     private bool _ledgerRegistryReady;
     private string _ledgerTitle = string.Empty;
