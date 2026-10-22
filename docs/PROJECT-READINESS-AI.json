@@ -28,7 +28,19 @@
       "Native filesystem encrypted persistence with authorization denied by default",
       "Browser Stellar HD ledger adapter for on-chain records"
     ],
-    "target": "Encrypted Stellar-ledger records and manifests durable across devices; local storage as optional encrypted cache"
+    "target": "Encrypted Stellar-ledger records and manifests durable across devices; local storage as optional encrypted cache",
+    "principles": {
+      "goal": "One vault engine, one shared UI/UX, multiple platform hosts; no independent platform forks of vault semantics.",
+      "business_logic": "Keep mnemonic derivation, vault encryption/decryption, recovery, record/folder/file protocols and ledger semantics in StellarVault.Core or reusable shared services rather than duplicating per host.",
+      "ui_reference": "PWA is the design and interaction baseline. Android, iOS, Windows and macOS use StellarVault.UI Razor components, shared styling, navigation, forms, and approval flows.",
+      "mobile_equivalence": "MAUI Android and iOS should provide the same vault features and recognizable responsive UI/UX as mobile PWA; platform adaptations only when necessary for native usability or security.",
+      "platform_boundaries": "PWA and MAUI hosts provide browser/native signing, secure storage, file picker/export, lifecycle and platform permissions through adapters.",
+      "source_of_truth": "Confirmed encrypted on-chain records/manifests are recoverable from Stellar; device cache must not be required for cross-device restoration and no silent local fallback when a ledger write fails.",
+      "mnemonic_recovery": "On clean device derive account keys from BIP-39 mnemonic using supported derivation scheme and network, discover account/HD registry and encrypted entries, reconstruct vault; request encryption passphrase/recovery key when required by format.",
+      "security": "Do not assume mnemonic alone decrypts a separately passphrase-encrypted data key; document correct required secrets. Do not claim verified until clean-device Testnet evidence.",
+      "testing": "Cross-platform parity requires same Core test vectors, functional flow tests for PWA/mobile, and Testnet recovery without original IndexedDB.",
+      "maintenance": "Favor changes to shared Core and UI; host-only differences should be explicit, isolated and tested."
+    }
   },
   "implementation": {
     "shared_core_ui": "implemented, not comprehensively validated",
@@ -76,5 +88,17 @@
     "src/StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs",
     "src/StellarVault.Pwa/Services/LedgerFileProtocol.cs"
   ],
-  "change_policy": "Keep main unchanged; progress on feature/maui-shared-app. Validate builds and Testnet before declaring ready."
+  "change_policy": "Keep main unchanged; progress on feature/maui-shared-app. Validate builds and Testnet before declaring ready.",
+  "history": [
+    {
+      "date": "2026-10-23",
+      "commit": "3541df295548da1ed2fa7e5ccad471a75b4fb97c",
+      "note": "Browser ledger update/delete now reject missing transaction hash; still unverified."
+    },
+    {
+      "date": "2026-10-23",
+      "commit": "e6e375554788bca98091de45cdfd2e915b2ec0c5",
+      "note": "Multipart checkpoint ID validation tightened; unverified."
+    }
+  ]
 }
