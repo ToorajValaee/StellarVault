@@ -2,6 +2,8 @@
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
+@inject IStellarLedgerRecords Ledger
+@inject VaultStorageModeGate StorageMode
 @implements IDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
@@ -9,6 +11,38 @@
         <p class="eyebrow">DEVELOPMENT BUILD</p>
         <h1 id="native-preview-title">StellarVault access</h1>
         <ManagedVaultSessionStatus />
+        <section aria-label="Stellar ledger recovery" class="terminal-panel">
+            <h2>STELLAR LEDGER // READ-ONLY RECOVERY</h2>
+            @if (!Ledger.IsConnected)
+            {
+                <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
+                <label for="native-ledger-network">Network</label>
+                <select id="native-ledger-network" class="vault-field" @bind="_ledgerNetwork" disabled="@_ledgerBusy">
+                    <option value="testnet">Testnet</option>
+                    <option value="public">Public Network</option>
+                </select>
+                <label for="native-ledger-mnemonic">BIP-39 mnemonic</label>
+                <textarea id="native-ledger-mnemonic" class="vault-field" rows="3"
+                          autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" disabled="@_ledgerBusy"></textarea>
+                <button type="button" class="session-lock" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
+                        @onclick="ConnectLedgerAsync">Connect and read ledger</button>
+            }
+            else
+            {
+                <p>Ledger connected. Recovered records: @_ledgerRecords.Count</p>
+                <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
+                <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
+                @foreach (var item in _ledgerRecords)
+                {
+                    <p>@(item.IsFolder ? "FOLDER" : "RECORD") — @item.Title</p>
+                }
+            }
+            @if (!string.IsNullOrEmpty(_ledgerMessage))
+            {
+                <p role="status" aria-live="polite">@_ledgerMessage</p>
+            }
+            <p class="notice">Read-only native preview: publishing, deletion and registry initialization are unavailable from this screen.</p>
+        </section>
         @if (Sessions.IsUnlocked)
         {
             <VaultRecordWorkspaceView />
@@ -40,6 +74,76 @@
 </AdaptiveShell>
 
 @code {
+    private string _ledgerNetwork = "testnet";
+    private string _ledgerMnemonic = string.Empty;
+    private bool _ledgerBusy;
+    private string? _ledgerMessage;
+    private IReadOnlyList<LedgerRecordItem> _ledgerRecords = [];
+
+    private async Task ConnectLedgerAsync()
+    {
+        if (_ledgerBusy || Ledger.IsConnected) return;
+        _ledgerBusy = true;
+        _ledgerMessage = null;
+        try
+        {
+            var (url, passphrase) = _ledgerNetwork switch
+            {
+                "testnet" => ("https://horizon-testnet.stellar.org", "Test SDF Network ; September 2015"),
+                "public" => ("https://horizon.stellar.org", "Public Global Stellar Network ; September 2015"),
+                _ => throw new InvalidOperationException("Unsupported network.")
+            };
+            await Ledger.ConnectAsync(_ledgerMnemonic, url, passphrase);
+            // A connected transport is not permission to write: remain local.
+            StorageMode.Reset();
+            _ledgerRecords = await Ledger.ReadAsync();
+            _ledgerMessage = "Ledger records recovered (read-only).";
+        }
+        catch
+        {
+            _ledgerRecords = [];
+            _ledgerMessage = "Ledger connection or recovery failed. Check your mnemonic, network and connection.";
+            try { await Ledger.DisconnectAsync(); } catch { /* Do not mask the recovery failure. */ }
+        }
+        finally
+        {
+            _ledgerMnemonic = string.Empty;
+            _ledgerBusy = false;
+        }
+    }
+
+    private async Task RefreshLedgerAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected) return;
+        _ledgerBusy = true;
+        try
+        {
+            _ledgerRecords = await Ledger.ReadAsync();
+            _ledgerMessage = "Ledger records refreshed.";
+        }
+        catch
+        {
+            _ledgerRecords = [];
+            _ledgerMessage = "Ledger recovery failed. No records were displayed.";
+        }
+        finally { _ledgerBusy = false; }
+    }
+
+    private async Task DisconnectLedgerAsync()
+    {
+        if (_ledgerBusy) return;
+        _ledgerBusy = true;
+        try { await Ledger.DisconnectAsync(); }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerMnemonic = string.Empty;
+            _ledgerRecords = [];
+            _ledgerMessage = "Ledger disconnected.";
+            _ledgerBusy = false;
+        }
+    }
+
     private string _accountId = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
