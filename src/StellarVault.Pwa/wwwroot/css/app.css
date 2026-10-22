@@ -2123,3 +2123,21 @@ html.ios-device.standalone-app .terminal-footer {
         transition-duration: .01ms !important;
     }
 }
+
+/* Visible, accessible status for slow browser-side key derivation. */
+.sv-loading-spinner {
+    display: inline-block;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: .65rem;
+    animation: sv-vault-spin .85s linear infinite;
+}
+@keyframes sv-vault-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .sv-loading-spinner { animation: none; border-right-color: currentColor; }
+}
