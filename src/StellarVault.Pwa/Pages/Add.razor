@@ -339,12 +339,20 @@ else
     private async Task VerifyCheckpointAsync() {
         if (_filePlan is null) return;
         var records = await Ledger.ReadAsync();
-        for (int i = 0; i < _fileStep; i++) {
+        for (int i = 0; i < _filePlan.Count; i++) {
             var stage = _filePlan[i];
             var actual = records.SingleOrDefault(x => x.Id == stage.Id);
-            if (actual is null || !MatchesStage(stage.Draft, actual))
-                throw new InvalidDataException("Previously confirmed file part is missing or changed. Resume blocked.");
+            if (i < _fileStep && (actual is null || !MatchesStage(stage.Draft, actual)))
+                throw new InvalidDataException("Previously confirmed file stage differs on ledger.");
+            if (i >= _fileStep) {
+                if (actual is null) break;
+                if (!MatchesStage(stage.Draft, actual))
+                    throw new InvalidDataException("Conflicting file stage on ledger.");
+                _fileStep = i + 1;
+            }
         }
+        await SaveCheckpointAsync(_fileFingerprint!);
+        _uncertainStage = false;
     }
 
     private async Task ReconcileFileStageAsync()
