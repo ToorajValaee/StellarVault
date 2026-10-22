@@ -86,6 +86,8 @@ else
     private string _folder = "";
     private bool _showSecret, _busy;
     private LedgerCostPreview? _estimate;
+    private LedgerRecordDraft? _reviewedDraft;
+    private string? _reviewedRecordId;
     private string ReturnUrl => string.IsNullOrEmpty(_folder) ? "/vault" : "/vault?folder=" + Uri.EscapeDataString(_folder);
     private string? _status;
     private IReadOnlyList<LedgerRecordItem> _folders = [];
@@ -121,12 +123,17 @@ else
     private async Task ReviewAsync() {
         if (_busy || !Ledger.IsConnected) return;
         _busy = true; _status = "CALCULATING LEDGER COST...";
-        try { _estimate = await Ledger.EstimateAsync(Draft(), RecordId); _status = null; }
+        try { _reviewedDraft = Draft(); _reviewedRecordId = RecordId; _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId); _status = null; }
         catch (Exception ex) { _status = "Estimate failed: " + ex.Message; }
         finally { _busy = false; }
     }
+    private static bool SameDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
+        x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
+        x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
+        x.Notes == y.Notes && (x.Tags ?? []).SequenceEqual(y.Tags ?? []);
     private async Task CommitAsync() {
-        if (_busy || _estimate is null || !Ledger.IsConnected) { _status = "Review network costs before publishing."; return; }
+        if (_busy || _estimate is null || !Ledger.IsConnected || _reviewedDraft is null) { _status = "Review network costs before publishing."; return; }
+        if (_reviewedRecordId != RecordId || !SameDraft(_reviewedDraft, Draft())) { _estimate = null; _status = "Record changed since estimation. Review network costs again."; return; }
         _busy = true; _status = "Signing and submitting to the network...";
         try {
             var draft = Draft();
