@@ -300,11 +300,21 @@
             }
             var hash = await Ledger.PublishDetailedAsync(draft);
             hash = LedgerMutationResult.RequireConfirmed(hash).TransactionHash;
-            _ledgerMessage = "Stellar transaction submitted and confirmed: " + hash;
+            _ledgerMessage = "Stellar transaction confirmed: " + hash;
             _publishTitle = string.Empty;
             _publishContent = string.Empty;
-            _ledgerRecords = await Ledger.ReadAsync();
-            ResetSelection();
+            // Once the receipt is confirmed, a subsequent read failure must
+            // not be reported as a failed submission (which invites retries).
+            try
+            {
+                _ledgerRecords = await Ledger.ReadAsync();
+                ResetSelection();
+            }
+            catch
+            {
+                _ledgerMessage = "Transaction confirmed: " + hash +
+                    ". The record list could not refresh; refresh it manually. Do not submit again.";
+            }
         }
         catch
         {
