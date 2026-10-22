@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using CommunityToolkit.Maui;
+using CommunityToolkit.Maui.Storage;
 using StellarVault.Core.Services;
 using StellarVault.Core.Abstractions;
 using StellarVault.Pwa.Services;
@@ -10,8 +12,9 @@ public static class MauiProgram
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
-        builder.UseMauiApp<App>();
+        builder.UseMauiApp<App>().UseMauiCommunityToolkit();
         builder.Services.AddMauiBlazorWebView();
+        builder.Services.AddSingleton<IFileSaver>(FileSaver.Default);
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
         builder.Services.AddSingleton<VaultNetworkSelection>();
