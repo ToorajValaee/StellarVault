@@ -44,6 +44,17 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     }
 
     public Task<bool> HasRegistryAsync() => Task.FromResult(RequireStore().RegistryInitialized);
+
+    public async Task<LedgerFundingStatus> InspectRegistryFundingAsync()
+    {
+        var store = RequireStore();
+        var treasury = await store.InspectRootTreasuryAsync(
+            additionalSponsoredUnits: 1, expectedFeeStroops: store.Settings.BaseFeeStroops);
+        decimal required = (store.Settings.BaseReserveStroops + store.Settings.BaseFeeStroops) / 10_000_000m;
+        return new LedgerFundingStatus(store.RootAccountId, treasury.BalanceXlm,
+            treasury.SpendableXlm, required.ToString("0.0000000",
+                System.Globalization.CultureInfo.InvariantCulture), treasury.CanAffordPlan);
+    }
     public Task InitializeRegistryAsync() => RequireStore().InitializeHdRegistryAsync();
 
     public async Task<IReadOnlyList<LedgerRecordItem>> ReadAsync()
