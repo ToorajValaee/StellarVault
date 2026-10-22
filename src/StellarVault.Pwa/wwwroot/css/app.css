@@ -2153,3 +2153,14 @@ html.ios-device.standalone-app .terminal-footer {
 .sv-record-details { margin-top:.7rem; }
 .sv-record-details > summary { cursor:pointer; padding:.6rem; border-top:1px solid currentColor; }
 .sv-record-details .terminal-panel { margin-top:.5rem; overflow-wrap:anywhere; }
+
+/* Network context lives in the header, separate from vault access steps. */
+.sv-adaptive-header { position:relative; overflow:visible; }
+.sv-network-menu { position:relative; z-index:25; }
+.sv-network-menu > summary { display:flex;align-items:center;gap:.45rem;cursor:pointer;list-style:none;border:1px solid currentColor;border-radius:.35rem;padding:.45rem .65rem;font-size:.78rem;letter-spacing:.04em; }
+.sv-network-menu > summary::-webkit-details-marker { display:none; }
+.sv-network-menu > summary:hover,.sv-network-menu[open] > summary { background:rgba(120,180,180,.12); }
+.sv-network-popover { position:absolute;right:0;top:calc(100% + .55rem);width:min(23rem,calc(100vw - 2rem));padding:1rem;z-index:30;box-shadow:0 12px 32px rgba(0,0,0,.5); }
+.sv-network-choice { display:flex;gap:.35rem;flex-wrap:wrap;margin:.8rem 0; }
+.sv-network-popover .terminal-input { width:100%; }
+@media(max-width:480px){.sv-network-name{font-size:.65rem}.sv-network-popover{right:-4rem}}
