@@ -1,5 +1,6 @@
 // Browser lifecycle bridge for fresh v2. Never persists keys or credentials.
-// JS events notify .NET; pagehide also causes the document to lose its managed session.
+// Switching tabs preserves the in-memory session. Pagehide/freeze still lock it.
+// This trades stronger background isolation for usability on ordinary app switches.
 window.stellarVaultV2Lifecycle = (() => {
   let instance = null;
   function attach(dotnet) {
@@ -12,18 +13,14 @@ window.stellarVaultV2Lifecycle = (() => {
         .catch(() => {})
         .finally(() => { pendingLock = false; });
     };
-    const visibility = () => { if (document.visibilityState === 'hidden') lock(); };
     const pagehide = () => lock();
     const freeze = () => lock();
-    document.addEventListener('visibilitychange', visibility);
     window.addEventListener('pagehide', pagehide);
     document.addEventListener('freeze', freeze);
     instance = () => {
-      document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('pagehide', pagehide);
       document.removeEventListener('freeze', freeze);
     };
-    if (document.visibilityState === 'hidden') lock();
   }
   function detach() {
     if (instance) instance();
