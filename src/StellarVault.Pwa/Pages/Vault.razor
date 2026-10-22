@@ -69,8 +69,9 @@ else
                 @foreach (var item in Filtered)
                 {
                     <button class="record-card" type="button" @onclick="() => OpenRecord(item)">
+                        <span class="record-index">@((Filtered.IndexOf(item) + 1).ToString("D2"))</span>
                         <span class="record-card-body"><strong>@item.Title</strong>
-                        @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags) { <span class="pixel-tag">#@tag</span> }</span> }
+                        @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
                         @if (_includeChildren || !string.IsNullOrWhiteSpace(_search)) { <small>📁 @FolderPath(item.FolderId)</small> }
                         </span><span class="record-chevron">›</span>
                     </button>
