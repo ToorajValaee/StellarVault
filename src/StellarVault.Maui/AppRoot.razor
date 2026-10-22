@@ -403,11 +403,24 @@
             _uploadRemaining = (await UploadCoordinator.ReviewAsync(_uploadPlan)).Count;
             if (_uploadRemaining == 0)
             {
-                // A completed manifest is authoritative; release the stale
-                // checkpoint and plaintext so another file can be selected.
+                // An existing manifest is not sufficient: verify its decoded
+                // payload against the selected original before deleting recovery
+                // metadata. This also covers a lost final transaction response.
+                var snapshot = await Ledger.ReadAsync();
+                var manifest = snapshot.SingleOrDefault(x => x.Id == _uploadPlan.ManifestId)
+                    ?? throw new InvalidDataException("Confirmed file manifest missing.");
+                var recovered = StellarLedgerFileProtocol.DecodeFile(manifest, snapshot);
+                try
+                {
+                    if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                            recovered, _uploadBytes))
+                        throw new InvalidDataException("Recovered file does not match selected content.");
+                }
+                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered); }
                 await UploadCheckpoints.ClearAsync(_rootAccountId);
+                _ledgerRecords = snapshot;
                 CancelUpload();
-                _uploadMessage = "File already fully confirmed on Stellar. Recovery checkpoint cleared.";
+                _uploadMessage = "Recovered file verified on Stellar. Checkpoint cleared.";
             }
             else
                 _uploadMessage = "File staged. Review and approve each remaining transaction.";
