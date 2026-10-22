@@ -68,6 +68,15 @@
             </div>
             @if (Platform == "WEB PWA")
             {
+                @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
+                {
+                    <div class="terminal-alert" role="status">
+                        <strong>RESTORE LOCAL VAULT AFTER REFRESH</strong>
+                        <span>Account @_recentAccount — your encrypted records remain in this browser. Enter the vault passphrase below and choose REOPEN LOCAL VAULT. A mnemonic is still required to reconnect to Stellar.</span>
+                        <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase))" @onclick="ReopenLocalAsync">REOPEN LOCAL VAULT</button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET THIS ACCOUNT</button>
+                    </div>
+                }
                 <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
                 <div class="sv-mnemonic-controls">
                     <label class="terminal-label">WORDS
@@ -270,6 +279,66 @@
 
 @code {
     [Parameter] public string Platform { get; set; } = "WEB";
+    private string? _recentAccount;
+    private string? _recentNetwork;
+
+    private sealed class RecentVault
+    {
+        public string? Account { get; set; }
+        public string? Network { get; set; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Platform != "WEB PWA") return;
+        try
+        {
+            var recent = await JS.InvokeAsync<RecentVault?>("stellarVaultRecentVault.load");
+            if (recent is not null && recent.Network is "testnet" or "public" &&
+                recent.Account is not null && StellarAccountAddress.IsValid(recent.Account))
+            {
+                _recentAccount = recent.Account;
+                _recentNetwork = recent.Network;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (JSException) { /* Remembered selection is optional. */ }
+    }
+
+    private async Task ReopenLocalAsync()
+    {
+        if (_busy || Sessions.IsUnlocked || _recentAccount is null ||
+            _recentNetwork != _network || _network is not ("testnet" or "public") ||
+            string.IsNullOrWhiteSpace(_passphrase)) return;
+        _busy = true;
+        try
+        {
+            NetworkSelection.Select(_network);
+            if (!await Workflow.HasLocalVaultAsync(_recentAccount))
+                throw new InvalidOperationException("Local vault was not found.");
+            await Workflow.UnlockAsync(_recentAccount, _passphrase);
+            StorageMode.Select(VaultStorageMode.LocalEncrypted);
+            _workspaceMode = "record";
+            _message = "Local encrypted vault reopened. Stellar signing requires your recovery phrase.";
+        }
+        catch
+        {
+            _message = "Unable to reopen local vault. Verify your passphrase and browser storage.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task ForgetRecentAsync()
+    {
+        await JS.InvokeVoidAsync("stellarVaultRecentVault.clear");
+        _recentAccount = null;
+        _recentNetwork = null;
+    }
+
     private string _workspaceMode = "ledger";
 
     private void SelectWorkspace(string workspace)
@@ -480,6 +549,16 @@
                 await Workflow.UnlockAsync(account, _passphrase);
             else
                 await Workflow.CreateAsync(account, _passphrase);
+            if (_network is "testnet" or "public")
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network);
+                    _recentAccount = account;
+                    _recentNetwork = _network;
+                }
+                catch (JSException) { /* Local storage selection is optional. */ }
+            }
             await ReportAccessStageAsync("connecting to Stellar ledger");
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
