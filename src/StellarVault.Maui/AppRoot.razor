@@ -4,7 +4,8 @@
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
 @inject VaultStorageModeGate StorageMode
-@implements IDisposable
+@inject VaultNetworkSelection NetworkSelection
+@implements IAsyncDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
     <section class="native-preview" aria-labelledby="native-preview-title">
@@ -94,6 +95,7 @@
                 _ => throw new InvalidOperationException("Unsupported network.")
             };
             await Ledger.ConnectAsync(_ledgerMnemonic, url, passphrase);
+            NetworkSelection.Select(_ledgerNetwork);
             // A connected transport is not permission to write: remain local.
             StorageMode.Reset();
             _ledgerRecords = await Ledger.ReadAsync();
@@ -101,6 +103,7 @@
         }
         catch
         {
+            StorageMode.Reset();
             _ledgerRecords = [];
             _ledgerMessage = "Ledger connection or recovery failed. Check your mnemonic, network and connection.";
             try { await Ledger.DisconnectAsync(); } catch { /* Do not mask the recovery failure. */ }
@@ -190,5 +193,14 @@
         _message = "Vault locked.";
     }
 
-    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
+    public async ValueTask DisposeAsync()
+    {
+        Sessions.StateChanged -= OnSessionChanged;
+        StorageMode.Reset();
+        _ledgerMnemonic = string.Empty;
+        _ledgerRecords = [];
+        // Closing the WebView must release any session keys retained by JS.
+        if (Ledger.IsConnected)
+            await Ledger.DisconnectAsync();
+    }
 }
