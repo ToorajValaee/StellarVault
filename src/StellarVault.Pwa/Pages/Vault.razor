@@ -14,7 +14,7 @@ else if (!Ledger.IsConnected)
 {
     <section class="terminal-panel centered-message"><h1>STELLAR CONNECTION REQUIRED</h1><p>Your local vault is unlocked, but the on-chain session is not connected. Return to the access terminal, lock and retry to see the underlying connection error. A funded root and accessible Horizon endpoint may be required.</p><a class="pixel-button primary" href="/">ACCESS TERMINAL</a></section>
 }
-else if (_registryReady == false)
+else if (_registryReady != true)
 {
     <section class="terminal-panel centered-message"><div class="panel-kicker">FIRST-TIME HD SETUP</div><h1>INITIALIZE ROOT REGISTRY</h1><p>The connected Stellar account has no authenticated HD registry yet. Initialize it before browsing or publishing records. This writes to the selected Stellar network and requires XLM for fees and reserves.</p><label class="terminal-label"><input type="checkbox" @bind="_confirmInitialize" /> I understand this is a real ledger transaction.</label><button class="pixel-button primary" disabled="@(!_confirmInitialize || _busy)" @onclick="InitializeAsync">@(_busy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")</button>@if (!string.IsNullOrEmpty(_error)) { <div class="terminal-alert warning" role="alert">@_error</div> }</section>
 }
