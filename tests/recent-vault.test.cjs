@@ -24,9 +24,19 @@ test('remembers only public account and network',()=>{
   assert.deepEqual(Object.keys(JSON.parse(raw)).sort(),['account','network','version']);
   assert.equal(api.load().account,account);
 });
-test('custom networks cannot be silently restored',()=>{
+test('custom network saves endpoint but no network passphrase or credentials',()=>{
   const {api,data}=create();
-  api.save(account,'custom');
+  api.save(account,'custom','https://horizon.example.com/');
+  const raw=[...data.values()][0];
+  assert.deepEqual(Object.keys(JSON.parse(raw)).sort(),['account','horizonUrl','network','version']);
+  assert.equal(api.load().network,'custom');
+  assert.equal(api.load().horizonUrl,'https://horizon.example.com/');
+});
+test('custom network refuses untrusted URL forms',()=>{
+  const {api,data}=create();
+  assert.throws(()=>api.save(account,'custom','https://user:pass@example.com/'));
+  assert.throws(()=>api.save(account,'custom','http://example.com/'));
+  assert.throws(()=>api.save(account,'custom','https://example.com/path'));
   assert.equal(data.size,0);
 });
 test('invalid or corrupted selection is ignored',()=>{
