@@ -5,6 +5,7 @@
 @inject IStellarLedgerRecords Ledger
 @inject VaultStorageModeGate StorageMode
 @inject VaultNetworkSelection NetworkSelection
+@inject Microsoft.JSInterop.IJSRuntime JS
 @implements IAsyncDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
@@ -17,6 +18,7 @@
             @if (!Ledger.IsConnected)
             {
                 <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
+                <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Check native runtime</button>
                 <label for="native-ledger-network">Network</label>
                 <select id="native-ledger-network" class="vault-field" @bind="_ledgerNetwork" disabled="@_ledgerBusy">
                     <option value="testnet">Testnet</option>
@@ -25,7 +27,7 @@
                 <label for="native-ledger-mnemonic">BIP-39 mnemonic</label>
                 <textarea id="native-ledger-mnemonic" class="vault-field" rows="3"
                           autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" disabled="@_ledgerBusy"></textarea>
-                <button type="button" class="session-lock" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
+                <button type="button" class="session-lock" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
                         @onclick="ConnectLedgerAsync">Connect and read ledger</button>
             }
             else
@@ -75,6 +77,44 @@
 </AdaptiveShell>
 
 @code {
+    private sealed class RuntimeStatus
+    {
+        public bool Ready { get; set; }
+        public bool CryptoReady { get; set; }
+        public bool Bip39Ready { get; set; }
+        public bool HdReady { get; set; }
+        public bool LedgerReady { get; set; }
+        public bool SdkReady { get; set; }
+    }
+
+    private bool? _runtimeReady;
+    private async Task CheckRuntimeAsync()
+    {
+        if (_ledgerBusy) return;
+        _ledgerBusy = true;
+        try
+        {
+            var status = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
+            _runtimeReady = status.Ready;
+            _ledgerMessage = status.Ready
+                ? "Stellar runtime ready. You can connect to your selected network."
+                : "Runtime incomplete: " + string.Join(", ", new[]
+                    {
+                        status.CryptoReady ? null : "WebCrypto",
+                        status.Bip39Ready ? null : "BIP-39",
+                        status.HdReady ? null : "HD keys",
+                        status.LedgerReady ? null : "ledger scripts",
+                        status.SdkReady ? null : "Stellar SDK"
+                    }.Where(x => x is not null));
+        }
+        catch
+        {
+            _runtimeReady = false;
+            _ledgerMessage = "Unable to verify the WebView Stellar runtime. Ledger access is blocked.";
+        }
+        finally { _ledgerBusy = false; }
+    }
+
     private string _ledgerNetwork = "testnet";
     private string _ledgerMnemonic = string.Empty;
     private bool _ledgerBusy;
@@ -83,7 +123,7 @@
 
     private async Task ConnectLedgerAsync()
     {
-        if (_ledgerBusy || Ledger.IsConnected) return;
+        if (_ledgerBusy || Ledger.IsConnected || _runtimeReady != true) return;
         _ledgerBusy = true;
         _ledgerMessage = null;
         try
