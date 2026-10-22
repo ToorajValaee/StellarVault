@@ -32,7 +32,7 @@ else
                     <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
                     <InputFile id="sv-ledger-file" class="sv-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
                 </div>
-                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 4 KiB. Larger-file batching is not yet implemented.</p>
+                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 2 KiB. Larger-file batching is not yet implemented.</p>
                 @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
                 <input id="sv-ledger-file-title" class="terminal-input" maxlength="256" @bind="_title" @bind:event="oninput" disabled="@(_busy || _loading)" />
@@ -90,7 +90,7 @@ else
     private string _title = "", _secret = "", _username = "", _url = "", _notes = "", _tags = "";
     private string _folder = "";
     private bool _showSecret, _busy;
-    private const long MaximumLedgerFileLength = 4096;
+    private const long MaximumLedgerFileLength = 2048;
     private byte[]? _fileBytes;
     private string _fileOriginalName = "";
     private string _fileContentType = "application/octet-stream";
@@ -103,7 +103,7 @@ else
         var file = args.File;
         if (file.Size > MaximumLedgerFileLength)
         {
-            _status = "On-chain upload currently supports up to 4 KiB. No transaction was submitted.";
+            _status = "On-chain upload currently supports up to 2 KiB. No transaction was submitted.";
             return;
         }
         _busy = true;
@@ -200,7 +200,7 @@ else
         if (_busy || !Ledger.IsConnected || (_kind == "file" && _fileBytes is null)) return;
         _busy = true; _status = "CALCULATING LEDGER COST...";
         try { _reviewedDraft = Draft(); _reviewedRecordId = RecordId; _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId); _status = null; }
-        catch (Exception ex) { _status = "Estimate failed: " + ex.Message; }
+        catch (Exception ex) { _reviewedDraft = null; _estimate = null; _status = "File cannot fit the current Stellar node allocation or cost estimation failed: " + ex.Message; }
         finally { _busy = false; }
     }
     private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64, string Sha256Hex);
