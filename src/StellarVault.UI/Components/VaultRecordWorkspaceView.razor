@@ -10,6 +10,7 @@
         </div>
         <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshAsync">REFRESH LIST</button>
     </header>
+    @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> PROCESSING ENCRYPTED RECORD...</div> }
     <div class="terminal-panel credential-form">
         <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
         <label class="terminal-label" for="sv-record-name">TITLE / RECORD NAME *</label>
