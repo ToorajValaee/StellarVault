@@ -299,6 +299,13 @@
             {
                 _recentAccount = recent.Account;
                 _recentNetwork = recent.Network;
+                // The scoped network selection resets to Testnet after a full reload.
+                // Restore the public-only preset before rendering the reopen action.
+                if (!Sessions.IsUnlocked && !_busy)
+                {
+                    NetworkSelection.ChoosePreset(recent.Network);
+                    _network = recent.Network;
+                }
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -323,6 +330,10 @@
         }
         catch
         {
+            // A failed reopen must never leave a stale unlocked session or a
+            // misleading on-chain storage selection.
+            Workflow.Lock();
+            StorageMode.Reset();
             _message = "Unable to reopen local vault. Verify your passphrase and browser storage.";
         }
         finally
