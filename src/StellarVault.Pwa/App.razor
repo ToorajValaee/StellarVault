@@ -5,8 +5,27 @@
 @inject VaultSessionManager Sessions
 @inject IStellarLedgerRecords LedgerRecords
 @inject IJSRuntime JS
+@inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
 @implements IAsyncDisposable
 
+@if (Privacy.IsSuspended)
+{
+    <section class="sv-privacy-screen" role="dialog" aria-modal="true" aria-label="Vault privacy lock">
+        <form class="terminal-panel sv-privacy-panel" @onsubmit="ResumeAsync" @onsubmit:preventDefault="true">
+            <div class="panel-kicker">PRIVACY LOCK // SESSION PAUSED</div>
+            <h1>VAULT HIDDEN</h1>
+            <p>Enter your vault passphrase to continue. No recovery phrase is required.</p>
+            <label class="terminal-label" for="sv-resume-pass">VAULT PASSPHRASE</label>
+            <input id="sv-resume-pass" class="terminal-input" type="password" autocomplete="off" @bind="_resumePassphrase" @bind:event="oninput" disabled="@_resuming" />
+            @if (!string.IsNullOrWhiteSpace(_resumeError)) { <div class="terminal-alert warning" role="alert">@_resumeError</div> }
+            @if (_resuming) { <p role="status"><span class="sv-loading-spinner"></span> UNLOCKING...</p> }
+            <button class="pixel-button primary" type="submit" disabled="@(_resuming || string.IsNullOrWhiteSpace(_resumePassphrase))">UNLOCK VAULT</button>
+            <button class="pixel-button compact" type="button" disabled="@_resuming" @onclick="FullLockAsync">LOCK AND END SESSION</button>
+        </form>
+    </section>
+}
+else
+{
 <Router AppAssembly="@typeof(App).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="@routeData" DefaultLayout="@typeof(StellarVault.Pwa.EmptyLayout)" />
@@ -15,9 +34,29 @@
         <VaultHome Platform="WEB PWA" />
     </NotFound>
 </Router>
+}
 
 @code {
     private DotNetObjectReference<App>? _callback;
+    private string _resumePassphrase = string.Empty;
+    private string? _resumeError;
+    private bool _resuming;
+    protected override void OnInitialized() => Privacy.Changed += RefreshPrivacy;
+    private void RefreshPrivacy() => _ = InvokeAsync(StateHasChanged);
+    private async Task ResumeAsync()
+    {
+        if (_resuming) return;
+        _resuming = true; _resumeError = null;
+        try { await Privacy.ResumeAsync(_resumePassphrase); }
+        catch (Exception) { _resumeError = "Unable to unlock. Check the passphrase and retry."; }
+        finally { _resumePassphrase = string.Empty; _resuming = false; }
+    }
+    private async Task FullLockAsync()
+    {
+        Privacy.Clear();
+        Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -27,14 +66,20 @@
     }
 
     [JSInvokable]
+    public void SuspendForPrivacy() => Privacy.Suspend();
+
+    [JSInvokable]
     public async Task LockForBrowserLifecycle()
     {
+        Privacy.Clear();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
     }
 
     public async ValueTask DisposeAsync()
     {
+        Privacy.Changed -= RefreshPrivacy;
+        Privacy.Clear();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
         try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
