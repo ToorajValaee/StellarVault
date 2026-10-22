@@ -20,9 +20,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
         // App-private filesystem storage is not cryptographically encrypted.
-        builder.Services.AddSingleton<IStellarUploadCheckpointStore>(_ =>
+        builder.Services.AddSingleton<IStellarUploadCheckpointStore>(services =>
             new FileSystemStellarUploadCheckpointStore(
-                Path.Combine(FileSystem.AppDataDirectory, "vault-upload-checkpoints")));
+                Path.Combine(FileSystem.AppDataDirectory, "vault-upload-checkpoints"),
+                services.GetRequiredService<VaultNetworkSelection>()));
         // Persist only public KDF parameters and AES-GCM-wrapped data keys.
         // The native UI remains gated until account ownership verification is available.
         builder.Services.AddSingleton<IVaultPassphraseCredentialStore>(_ =>
