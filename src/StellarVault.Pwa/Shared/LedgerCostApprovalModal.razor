@@ -1,0 +1,43 @@
+@using StellarVault.Core.Services
+@if (Open && Estimate is not null)
+{
+    <div class="approval-modal-backdrop" @onclick="CancelAsync">
+        <section class="approval-modal terminal-panel" role="dialog" aria-modal="true" aria-labelledby="sv-cost-title" @onclick:stopPropagation="true">
+            <header class="modal-header approval-modal-header">
+                <div><div class="panel-kicker">SIGNED LEDGER OPERATION</div><h2 id="sv-cost-title">@Title</h2></div>
+                <button class="icon-button close-button" type="button" aria-label="Cancel approval" disabled="@Busy" @onclick="CancelAsync">×</button>
+            </header>
+            <div class="approval-modal-scroll">
+                <p class="approval-message">Review the estimated transaction fees and reserve before signing.</p>
+                <div class="stats-strip">
+                    <div><span>NETWORK FEE XLM</span><strong>@Estimate.NetworkFeeXlm</strong></div>
+                    <div><span>PEAK RESERVE XLM</span><strong>@Estimate.PeakReserveXlm</strong></div>
+                    <div><span>NET RESERVE CHANGE XLM</span><strong>@Estimate.NetReserveChangeXlm</strong></div>
+                    <div><span>OPERATIONS</span><strong>@Estimate.Operations</strong></div>
+                    <div><span>TRANSACTIONS</span><strong>@Estimate.Transactions</strong></div>
+                </div>
+                @if (Estimate.CreatesChildNode) { <p class="advanced-help">This operation may create an additional Stellar account node.</p> }
+                <div class="terminal-alert @(Danger ? "error" : "warning") approval-warning">
+                    <strong>@(Danger ? "DESTRUCTIVE OPERATION" : "APPROVAL REQUIRED")</strong>
+                    <span>Network fees are spent. Reserve is locked while entries exist; estimates can change before submission.</span>
+                </div>
+            </div>
+            <footer class="approval-modal-actions">
+                <button class="pixel-button @(Danger ? "danger" : "primary")" type="button" disabled="@Busy" @onclick="ConfirmAsync">@(Busy ? "SUBMITTING..." : ActionText)</button>
+                <button class="pixel-button compact" type="button" disabled="@Busy" @onclick="CancelAsync">CANCEL</button>
+            </footer>
+        </section>
+    </div>
+}
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public LedgerCostPreview? Estimate { get; set; }
+    [Parameter] public string Title { get; set; } = "REVIEW LEDGER COST";
+    [Parameter] public string ActionText { get; set; } = "APPROVE AND COMMIT";
+    [Parameter] public bool Danger { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private Task ConfirmAsync() => OnConfirm.InvokeAsync();
+    private Task CancelAsync() => Busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+}
