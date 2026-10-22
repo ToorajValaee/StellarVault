@@ -39,10 +39,14 @@ public static class LedgerFileProtocol
             return [(existingIds is { Length: 1 } ? existingIds[0] : Guid.NewGuid().ToString("N")[..16], new LedgerRecordDraft(
                 title, EncodeSingle(filename, contentType, bytes), folderId, ["file", "svfile-v1"]))];
 
-        string fileId = existingIds is null ? Guid.NewGuid().ToString("N")[..16] : existingIds[^1];
         int partCount = (bytes.Length + MaxChunkBytes - 1) / MaxChunkBytes;
-        if (existingIds is not null && (existingIds.Length != partCount + 1 || existingIds.Distinct().Count() != existingIds.Length || existingIds.Any(id => id.Length != 16 || !id.All(Uri.IsHexDigit))))
+        // Validate the complete checkpoint before reading its manifest ID or allocating
+        // any new IDs. Corrupt or empty ID lists must fail closed during recovery.
+        if (existingIds is not null && (existingIds.Length != partCount + 1 ||
+            existingIds.Any(id => id is null || id.Length != 16 || !id.All(Uri.IsHexDigit)) ||
+            existingIds.Distinct(StringComparer.Ordinal).Count() != existingIds.Length))
             throw new InvalidDataException("Invalid checkpoint identifiers.");
+        string fileId = existingIds is null ? Guid.NewGuid().ToString("N")[..16] : existingIds[^1];
         string[] partIds = existingIds is null ? Enumerable.Range(0, partCount)
             .Select(_ => Guid.NewGuid().ToString("N")[..16]).ToArray() : existingIds[..partCount];
         var result = new List<(string Id, LedgerRecordDraft Draft)>(partCount + 1);
