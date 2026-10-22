@@ -21,6 +21,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.0" />
+    <!-- Reuse the exact C# HD-v2 ledger engine and IStellarLedgerRecords
+         adapter already used by PWA; no forked signing implementation. -->
+    <Compile Include="../StellarVault.Pwa/LegacyLedger/*.cs"
+             Link="SharedStellarLedger/%(Filename)%(Extension)" />
+    <Compile Include="../StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs"
+             Link="SharedStellarLedger/BrowserStellarLedgerRecords.cs" />
     <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
