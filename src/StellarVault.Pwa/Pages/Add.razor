@@ -236,6 +236,7 @@ else
                     _fileFingerprint = fingerprint;
                     _fileStep = saved?.Step ?? 0;
                     _uncertainStage = saved is not null;
+                    if (saved is not null) await VerifyCheckpointAsync();
                     if (saved is null) await SaveCheckpointAsync(fingerprint);
                 }
                 if (_fileFingerprint != fingerprint)
@@ -331,6 +332,21 @@ else
         }
         finally { _busy = false; }
     }
+    private static bool MatchesStage(LedgerRecordDraft d, LedgerRecordItem r) =>
+        d.Title == r.Title && d.Content == r.Content && d.FolderId == r.FolderId &&
+        (d.Tags ?? []).SequenceEqual(r.Tags ?? []);
+
+    private async Task VerifyCheckpointAsync() {
+        if (_filePlan is null) return;
+        var records = await Ledger.ReadAsync();
+        for (int i = 0; i < _fileStep; i++) {
+            var stage = _filePlan[i];
+            var actual = records.SingleOrDefault(x => x.Id == stage.Id);
+            if (actual is null || !MatchesStage(stage.Draft, actual))
+                throw new InvalidDataException("Previously confirmed file part is missing or changed. Resume blocked.");
+        }
+    }
+
     private async Task ReconcileFileStageAsync()
     {
         if (_filePlan is null || _fileStep >= _filePlan.Count) return;
@@ -342,10 +358,7 @@ else
             _uncertainStage = false;
             return;
         }
-        if (stage.Draft.Title != recovered.Title ||
-            stage.Draft.Content != recovered.Content ||
-            stage.Draft.FolderId != recovered.FolderId ||
-            !(stage.Draft.Tags ?? []).SequenceEqual(recovered.Tags ?? []))
+        if (!MatchesStage(stage.Draft, recovered))
             throw new InvalidDataException("The ledger contains a conflicting file stage. Stop the upload.");
         _fileStep++;
         _uncertainStage = false;
