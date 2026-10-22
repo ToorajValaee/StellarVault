@@ -299,7 +299,7 @@ else
                 _fileStep++;
                 _uncertainStage = false;
                 try { await SaveCheckpointAsync(_fileFingerprint!); }
-                catch (Exception) { _uncertainStage = true; }
+                catch (Exception) { _status = "Ledger transaction confirmed but local checkpoint update failed. Resume from the ledger."; }
                 _estimate = null;
                 _reviewedDraft = null;
                 _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash + (_uncertainStage ? " (checkpoint update failed; ledger recovery required)" : "");
