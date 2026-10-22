@@ -19,6 +19,7 @@ builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAutho
 builder.Services.AddScoped<VaultNetworkSelection>();
 builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
 builder.Services.AddScoped<IVaultPassphraseCredentialStore, IndexedDbVaultPassphraseCredentialStore>();
+builder.Services.AddScoped<IVaultKeyProtector, BrowserVaultKeyProtector>();
 builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
 builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
