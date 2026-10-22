@@ -71,6 +71,9 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
                 if (current is null || current.ContentType is null ||
                     current.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
                     throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+                // Revalidate after checking catalog visibility to narrow the stale-read window.
+                if (await database.GetVersionAsync(name, key, ct) != before)
+                    throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
 
                 // The returned copy belongs to BinaryRecord, which clears it on disposal.
                 return new BinaryRecord(name, before, staging.ToArray());
