@@ -31,9 +31,19 @@
   <script>
     // A credential-free preflight. Never derive keys, sign or submit here.
     window.stellarVaultNativeRuntime = Object.freeze({
-      inspect() {
+      async inspect() {
         const sdk = window.StellarSdk;
-        const cryptoReady = Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues);
+        let cryptoReady = false;
+        try {
+          // Exercise the actual crypto implementation without processing user data.
+          const random = new Uint8Array(16);
+          globalThis.crypto.getRandomValues(random);
+          const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(0));
+          cryptoReady = random.some(byte => byte !== 0) && digest.byteLength === 32;
+          random.fill(0);
+        } catch {
+          cryptoReady = false;
+        }
         const bip39Ready = Array.isArray(window.stellarVaultBip39English) &&
           window.stellarVaultBip39English.length === 2048;
         const hdReady = typeof window.stellarVaultHd?.deriveKeypair === 'function';
