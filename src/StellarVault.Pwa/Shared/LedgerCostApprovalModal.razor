@@ -21,6 +21,7 @@
                     <div class="terminal-alert warning"><strong>DELETE RECORD?</strong><span>This removes the active record; encrypted transaction history may remain.</span></div>
                 }
             </div>
+            @if (Busy) { <p role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> SUBMITTING TRANSACTION...</p> }
             <footer class="approval-modal-actions">
                 <button class="pixel-button @(Danger ? "danger" : "primary")" type="button" disabled="@Busy" @onclick="ConfirmAsync">@(Busy ? "SUBMITTING..." : ActionText)</button>
                 <button class="pixel-button compact" type="button" disabled="@Busy" @onclick="CancelAsync">CANCEL</button>
