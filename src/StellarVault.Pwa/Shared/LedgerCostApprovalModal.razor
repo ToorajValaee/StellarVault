@@ -8,19 +8,18 @@
                 <button class="icon-button close-button" type="button" aria-label="Cancel approval" disabled="@Busy" @onclick="CancelAsync">×</button>
             </header>
             <div class="approval-modal-scroll">
-                <p class="approval-message">Review the estimated transaction fees and reserve before signing.</p>
                 <div class="stats-strip">
-                    <div><span>NETWORK FEE XLM</span><strong>@Estimate.NetworkFeeXlm</strong></div>
-                    <div><span>PEAK RESERVE XLM</span><strong>@Estimate.PeakReserveXlm</strong></div>
-                    <div><span>NET RESERVE CHANGE XLM</span><strong>@Estimate.NetReserveChangeXlm</strong></div>
-                    <div><span>OPERATIONS</span><strong>@Estimate.Operations</strong></div>
-                    <div><span>TRANSACTIONS</span><strong>@Estimate.Transactions</strong></div>
+                    <div><span>ESTIMATED NETWORK FEE</span><strong>@Estimate.NetworkFeeXlm XLM</strong></div>
+                    @if (Estimate.PeakReserveXlm > 0)
+                    {
+                        <div><span>ADDITIONAL RESERVE (NOT SPENT)</span><strong>@Estimate.PeakReserveXlm XLM</strong></div>
+                    }
                 </div>
-                @if (Estimate.CreatesChildNode) { <p class="advanced-help">This operation may create an additional Stellar account node.</p> }
-                <div class="terminal-alert @(Danger ? "error" : "warning") approval-warning">
-                    <strong>@(Danger ? "DESTRUCTIVE OPERATION" : "APPROVAL REQUIRED")</strong>
-                    <span>Network fees are spent. Reserve is locked while entries exist; estimates can change before submission.</span>
-                </div>
+                <p class="advanced-help">Only the network fee is spent. Any reserve is held by your Stellar account and may become available when entries are removed.</p>
+                @if (Danger)
+                {
+                    <div class="terminal-alert warning"><strong>DELETE RECORD?</strong><span>This removes the active record; encrypted transaction history may remain.</span></div>
+                }
             </div>
             <footer class="approval-modal-actions">
                 <button class="pixel-button @(Danger ? "danger" : "primary")" type="button" disabled="@Busy" @onclick="ConfirmAsync">@(Busy ? "SUBMITTING..." : ActionText)</button>
