@@ -34,18 +34,23 @@ public sealed class StellarLedgerUploadPlan
         }
 
         var remaining = new List<(string Id, LedgerRecordDraft Draft)>();
+        bool missingEarlierStage = false;
         foreach (var entry in Entries)
         {
             if (!byId.TryGetValue(entry.Id, out var existing))
             {
+                missingEarlierStage = true;
                 remaining.Add(entry);
                 continue;
             }
             if (!Same(existing, entry.Draft))
                 throw new InvalidDataException("Existing ledger record does not match the saved upload plan.");
+            // A later part (especially the manifest) must never be accepted
+            // if an earlier part has not been observed in the ledger snapshot.
+            if (missingEarlierStage)
+                throw new InvalidDataException(
+                    "Upload stages are non-contiguous on Stellar; recovery is blocked.");
         }
-        if (byId.ContainsKey(ManifestId) && remaining.Count > 0)
-            throw new InvalidDataException("File manifest exists before all planned parts are confirmed.");
         return remaining;
     }
 
