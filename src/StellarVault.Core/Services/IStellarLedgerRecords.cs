@@ -11,8 +11,11 @@ public interface IStellarLedgerRecords
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
     Task<string> PublishDetailedAsync(LedgerRecordDraft draft);
+    Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft);
+    Task<LedgerMutationResult> DeleteAsync(string id);
     Task DisconnectAsync();
 }
+public sealed record LedgerMutationResult(string TransactionHash, string? Warning = null);
 public sealed record LedgerRecordItem(string Id, string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
 public sealed record LedgerRecordDraft(string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
 
@@ -27,5 +30,7 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
     public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) => Task.FromException<string>(Unavailable());
+    public Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft) => Task.FromException<LedgerMutationResult>(Unavailable());
+    public Task<LedgerMutationResult> DeleteAsync(string id) => Task.FromException<LedgerMutationResult>(Unavailable());
     public Task DisconnectAsync() => Task.CompletedTask;
 }
