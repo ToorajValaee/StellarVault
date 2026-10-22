@@ -9,3 +9,17 @@
 
 .sv-theme-toggle { flex:0 0 auto; cursor:pointer; display:grid;place-items:center;width:2.15rem;height:2.15rem;border:1px solid var(--border);border-radius:.25rem;background:var(--panel-soft);color:var(--phosphor);font-size:1.15rem; }
 .sv-theme-toggle:hover { border-color:var(--phosphor-strong);color:var(--phosphor-strong); }
+
+/* Prevent a third header action from squeezing the network trigger. */
+.sv-adaptive-header { min-width:0; }
+.sv-adaptive-header .sv-header-actions { flex:0 0 auto; min-width:max-content; gap:.45rem; }
+.sv-adaptive-header .sv-brand { flex:1 1 auto; min-width:0; }
+@media (max-width:520px) {
+ .sv-adaptive-header { gap:.4rem; padding-left:.65rem; padding-right:.65rem; }
+ .sv-adaptive-header .sv-brand small { display:none; }
+ .sv-adaptive-header .sv-mark { display:none; }
+ .sv-adaptive-header .sv-brand strong { font-size:.78rem; letter-spacing:0; }
+ .sv-adaptive-header .sv-platform { display:none; }
+ .sv-adaptive-header .sv-header-actions { gap:.35rem; }
+ .sv-adaptive-header .sv-theme-toggle { width:2rem; height:2rem; }
+}
