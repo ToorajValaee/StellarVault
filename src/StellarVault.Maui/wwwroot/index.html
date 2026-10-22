@@ -28,6 +28,24 @@
   <script src="js/ledger-compat/hd-discovery.js"></script>
   <script src="js/ledger-compat/hd-bootstrap.js"></script>
   <script src="js/ledger-compat/app.js"></script>
+  <script>
+    // A credential-free preflight. Never derive keys, sign or submit here.
+    window.stellarVaultNativeRuntime = Object.freeze({
+      inspect() {
+        const sdk = window.StellarSdk;
+        const cryptoReady = Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues);
+        const bip39Ready = Array.isArray(window.stellarVaultBip39English) &&
+          window.stellarVaultBip39English.length === 2048;
+        const hdReady = typeof window.stellarVaultHd?.deriveKeypair === 'function';
+        const ledgerReady = typeof window.stellarVault?.network?.inspectHorizon === 'function' &&
+          typeof window.stellarVault?.stellar?.openHdSession === 'function' &&
+          typeof window.stellarVault?.stellar?.deleteSession === 'function';
+        const sdkReady = typeof sdk?.Keypair?.fromRawEd25519Seed === 'function';
+        return { ready: cryptoReady && bip39Ready && hdReady && ledgerReady && sdkReady,
+          cryptoReady, bip39Ready, hdReady, ledgerReady, sdkReady };
+      }
+    });
+  </script>
   <script src="_framework/blazor.webview.js"></script>
 </body>
 </html>
