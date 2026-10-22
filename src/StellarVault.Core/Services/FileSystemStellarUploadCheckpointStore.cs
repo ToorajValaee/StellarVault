@@ -13,19 +13,21 @@ namespace StellarVault.Core.Services;
 public sealed class FileSystemStellarUploadCheckpointStore : IStellarUploadCheckpointStore
 {
     private readonly string _directory;
+    private readonly VaultNetworkSelection _network;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public FileSystemStellarUploadCheckpointStore(string directory)
+    public FileSystemStellarUploadCheckpointStore(string directory, VaultNetworkSelection network)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         _directory = Path.GetFullPath(directory);
+        _network = network ?? throw new ArgumentNullException(nameof(network));
         Directory.CreateDirectory(_directory);
     }
 
     private string PathFor(string accountId)
     {
         StellarAccountAddress.Validate(accountId);
-        var digest = SHA256.HashData(Encoding.ASCII.GetBytes(accountId));
+        var digest = SHA256.HashData(Encoding.ASCII.GetBytes(_network.CredentialKey(accountId)));
         return Path.Combine(_directory, Convert.ToHexStringLower(digest) + ".upload");
     }
 
