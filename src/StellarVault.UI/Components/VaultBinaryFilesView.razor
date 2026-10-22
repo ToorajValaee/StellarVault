@@ -15,6 +15,7 @@
         </div>
         <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshFilesAsync">REFRESH FILES</button>
     </header>
+    @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> @_loadingMessage</div> }
     <div class="terminal-panel credential-form">
         <div class="form-section-title"><span>01</span> FILE SELECTION</div>
         <p class="advanced-help">Current browser implementation supports files up to 1 MiB. Larger files and on-chain chunking are still pending.</p>
@@ -88,6 +89,7 @@
     {
         if (_busy) return;
         _busy = true;
+        _loadingMessage = "LOADING ENCRYPTED FILE LIST...";
         try
         {
             var entries = await Records.ListAsync();
@@ -106,6 +108,7 @@
     private string _openName = string.Empty;
     private string? _status;
     private bool _busy;
+    private string _loadingMessage = "PROCESSING ENCRYPTED FILES...";
     private bool _confirmRemoval;
 
     private void SelectFile(InputFileChangeEventArgs args)
@@ -119,6 +122,7 @@
     {
         if (_busy || _file is null) return;
         _busy = true;
+        _loadingMessage = "ENCRYPTING AND SAVING FILE...";
         try
         {
             if (_file.Size > MaximumFileLength) throw new InvalidDataException("File too large.");
@@ -144,6 +148,7 @@
     {
         if (_busy) return;
         _busy = true;
+        _loadingMessage = "DECRYPTING AND DOWNLOADING FILE...";
         try
         {
             using var record = await Files.OpenAsync(_openName);
@@ -174,6 +179,7 @@
     {
         if (_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName)) return;
         _busy = true;
+        _loadingMessage = "REMOVING FILE FROM CATALOG...";
         try
         {
             // A catalog/version lookup is enough for logical removal.
