@@ -45,3 +45,22 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape')
     document.querySelectorAll('details.sv-network-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
+
+window.stellarVaultTheme = (() => {
+  const key = 'stellar-vault-theme';
+  function apply(value) {
+    const next = value === 'amber' ? 'amber' : 'green';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem(key, next); } catch (_) {}
+    return next;
+  }
+  function initialize() {
+    let saved = 'green';
+    try { saved = localStorage.getItem(key) || saved; } catch (_) {}
+    return apply(saved);
+  }
+  function toggle() {
+    return apply(document.documentElement.dataset.theme === 'amber' ? 'green' : 'amber');
+  }
+  return Object.freeze({ initialize, toggle });
+})();
