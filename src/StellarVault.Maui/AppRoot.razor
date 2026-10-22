@@ -26,7 +26,7 @@
                 </select>
                 <label for="native-ledger-mnemonic">BIP-39 mnemonic</label>
                 <textarea id="native-ledger-mnemonic" class="vault-field" rows="3"
-                          autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" disabled="@_ledgerBusy"></textarea>
+                          autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" @bind:event="oninput" disabled="@(_ledgerBusy || _runtimeReady != true)"></textarea>
                 <button type="button" class="session-lock" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
                         @onclick="ConnectLedgerAsync">Connect and read ledger</button>
             }
@@ -106,6 +106,7 @@
         {
             var status = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
             _runtimeReady = status.Ready;
+            if (!status.Ready) _ledgerMnemonic = string.Empty;
             _ledgerMessage = status.Ready
                 ? "Stellar runtime ready. You can connect to your selected network."
                 : "Runtime incomplete: " + string.Join(", ", new[]
@@ -120,6 +121,7 @@
         catch
         {
             _runtimeReady = false;
+            _ledgerMnemonic = string.Empty;
             _ledgerMessage = "Unable to verify the WebView Stellar runtime. Ledger access is blocked.";
         }
         finally { _ledgerBusy = false; }
@@ -144,6 +146,14 @@
                 "public" => ("https://horizon.stellar.org", "Public Global Stellar Network ; September 2015"),
                 _ => throw new InvalidOperationException("Unsupported network.")
             };
+            // The earlier UI preflight may be stale after a WebView reload.
+            // Recheck dependencies immediately before passing any mnemonic to JS.
+            var readiness = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
+            if (!readiness.Ready)
+            {
+                _runtimeReady = false;
+                throw new InvalidOperationException("Stellar runtime is not ready.");
+            }
             await Ledger.ConnectAsync(_ledgerMnemonic, url, passphrase);
             NetworkSelection.Select(_ledgerNetwork);
             // A connected transport is not permission to write: remain local.
