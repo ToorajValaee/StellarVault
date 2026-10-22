@@ -214,8 +214,12 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     public async Task DisconnectAsync()
     {
         var store = _store;
+        if (store is null) return;
+        // Do not report disconnected until JS session deletion completes.
+        // If deletion fails, retaining the reference blocks another ConnectAsync
+        // from opening a second signing session over potentially live keys.
+        await store.DisposeAsync();
         _store = null;
-        if (store is not null) await store.DisposeAsync();
     }
 
     public ValueTask DisposeAsync() => DisposeCoreAsync();
