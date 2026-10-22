@@ -24,6 +24,27 @@
     <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
+  <!-- Package the existing PWA Stellar JavaScript runtime into the MAUI WebView.
+       Link files from their single source to avoid protocol/version drift.
+       This does not enable ledger signing until the host adapter is wired. -->
+  <ItemGroup>
+    <Content Include="../StellarVault.Pwa/wwwroot/js/vendor/stellar-sdk.min.js"
+             Link="wwwroot/js/vendor/stellar-sdk.min.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/bip39-english.js"
+             Link="wwwroot/js/bip39-english.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/hd-keys.js"
+             Link="wwwroot/js/hd-keys.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/vault-v2-mnemonic.js"
+             Link="wwwroot/js/vault-v2-mnemonic.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/vault-v2-network.js"
+             Link="wwwroot/js/vault-v2-network.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/hd-registry.js"
+             Link="wwwroot/js/hd-registry.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/vault-v2-chain.js"
+             Link="wwwroot/js/vault-v2-chain.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../StellarVault.Pwa/wwwroot/js/ledger-compat/*.js"
+             Link="wwwroot/js/ledger-compat/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <MauiIcon Include="Resources/Splash/splash.svg" Color="#07110c" />
     <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#07110c" BaseSize="256,256" />
