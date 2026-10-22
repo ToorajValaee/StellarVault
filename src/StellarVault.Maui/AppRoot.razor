@@ -7,6 +7,8 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject CommunityToolkit.Maui.Storage.IFileSaver FileSaver
+@inject StellarLedgerUploadCoordinator UploadCoordinator
+@inject IStellarUploadCheckpointStore UploadCheckpoints
 @implements IAsyncDisposable
 
 <AdaptiveShell PlatformName="NATIVE PREVIEW" Subtitle="CROSS-PLATFORM VAULT">
@@ -55,6 +57,28 @@
                         <label><input type="checkbox" @bind="_publishApproved" disabled="@_ledgerBusy" /> I approve publishing this encrypted record to @_ledgerNetwork.</label>
                         <button type="button" class="session-lock" disabled="@(_ledgerBusy || !_publishApproved)" @onclick="ConfirmPublishAsync">Approve and submit to Stellar</button>
                         <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
+                    }
+                </section>
+                <section aria-label="Upload Stellar file" class="terminal-panel">
+                    <h3>ON-CHAIN FILE // MULTIPART UPLOAD</h3>
+                    <p class="notice">Each part requires a separate approved Stellar transaction. Keep the original file until all stages are confirmed. Interrupted uploads can resume by selecting the same file.</p>
+                    <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
+                    @if (_uploadPlan is not null)
+                    {
+                        <p>File: @_uploadFileName · @_uploadBytes?.Length bytes · @_uploadPlan.Entries.Count stages</p>
+                        <p>Remaining stages: @_uploadRemaining</p>
+                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReviewUploadStageAsync">Review next transaction</button>
+                        @if (_uploadCost is not null)
+                        {
+                            <p>Next stage: @_uploadStageTitle · Fee: @_uploadCost.NetworkFeeXlm XLM · Peak reserve: @_uploadCost.PeakReserveXlm XLM · Operations: @_uploadCost.Operations</p>
+                            <label><input type="checkbox" @bind="_uploadApproved" disabled="@_ledgerBusy" /> Approve this single Stellar transaction</label>
+                            <button type="button" class="session-lock" disabled="@(_ledgerBusy || !_uploadApproved)" @onclick="PublishUploadStageAsync">Submit approved stage</button>
+                        }
+                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelUpload">Clear file from memory</button>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_uploadMessage))
+                    {
+                        <p role="status">@_uploadMessage</p>
                     }
                 </section>
                 <label for="native-ledger-folder">Folder</label>
@@ -285,6 +309,182 @@
         }
     }
 
+    private byte[]? _uploadBytes;
+    private StellarLedgerUploadPlan? _uploadPlan;
+    private string? _uploadFileName;
+    private string? _uploadFingerprint;
+    private LedgerCostPreview? _uploadCost;
+    private string? _uploadStageId;
+    private string? _uploadStageTitle;
+    private int _uploadRemaining;
+    private bool _uploadApproved;
+    private string? _uploadMessage;
+
+    private void ClearUploadReview()
+    {
+        _uploadCost = null;
+        _uploadStageId = null;
+        _uploadStageTitle = null;
+        _uploadApproved = false;
+    }
+
+    private void CancelUpload()
+    {
+        if (_uploadBytes is not null)
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(_uploadBytes);
+        _uploadBytes = null;
+        _uploadPlan = null;
+        _uploadFileName = null;
+        _uploadFingerprint = null;
+        _uploadRemaining = 0;
+        ClearUploadReview();
+    }
+
+    private async Task ChooseUploadFileAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_rootAccountId)) return;
+        _ledgerBusy = true;
+        CancelUpload();
+        _uploadMessage = null;
+        try
+        {
+            var picked = await Microsoft.Maui.Storage.FilePicker.Default.PickAsync();
+            if (picked is null) return;
+            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            await using var input = await picked.OpenReadAsync();
+            using var buffer = new MemoryStream();
+            var block = new byte[8192];
+            try
+            {
+                int read;
+                while ((read = await input.ReadAsync(block)) > 0)
+                {
+                    if (buffer.Length + read > StellarLedgerFileProtocol.MaxFileBytes)
+                        throw new InvalidDataException("Selected file exceeds the supported upload bound.");
+                    buffer.Write(block, 0, read);
+                }
+            }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(block); }
+
+            _uploadBytes = buffer.ToArray();
+            _uploadFileName = picked.FileName;
+            var fileHash = System.Security.Cryptography.SHA256.HashData(_uploadBytes);
+            var metadata = System.Text.Encoding.UTF8.GetBytes(
+                _ledgerNetwork + "\\0" + _rootAccountId + "\\0" + picked.FileName + "\\0" +
+                Convert.ToHexString(fileHash));
+            _uploadFingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(metadata));
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(fileHash);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(metadata);
+
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            var checkpoint = await UploadCheckpoints.LoadAsync(_rootAccountId);
+            if (checkpoint is not null)
+            {
+                checkpoint.Validate();
+                if (checkpoint.Fingerprint != _uploadFingerprint)
+                    throw new InvalidDataException("Another file upload is pending for this account. Re-select the original file.");
+            }
+            _uploadPlan = new StellarLedgerUploadPlan(picked.FileName, picked.FileName,
+                "application/octet-stream", _uploadBytes, checkpointIds: checkpoint?.Ids);
+            if (checkpoint is null)
+                await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
+                    StellarUploadCheckpoint.CurrentVersion, _uploadFingerprint,
+                    _uploadPlan.Entries.Select(x => x.Id).ToArray(), 0));
+
+            _uploadRemaining = (await UploadCoordinator.ReviewAsync(_uploadPlan)).Count;
+            _uploadMessage = _uploadRemaining == 0
+                ? "All file stages are already present on Stellar. Clear upload to select another file."
+                : "File staged. Review and approve each remaining transaction.";
+        }
+        catch (Exception)
+        {
+            CancelUpload();
+            _uploadMessage = "File staging failed, or saved checkpoint does not match this file. Nothing was submitted.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private async Task ReviewUploadStageAsync()
+    {
+        if (_ledgerBusy || _uploadPlan is null || !Ledger.IsConnected) return;
+        _ledgerBusy = true;
+        ClearUploadReview();
+        try
+        {
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
+            _uploadRemaining = remaining.Count;
+            if (remaining.Count == 0)
+            {
+                _uploadMessage = "File already fully committed on Stellar.";
+                return;
+            }
+            var next = remaining[0];
+            _uploadCost = await Ledger.EstimateAsync(next.Draft, next.Id);
+            _uploadStageId = next.Id;
+            _uploadStageTitle = next.Draft.Title;
+            _uploadMessage = "Review the estimate, then approve exactly one stage.";
+        }
+        catch
+        {
+            ClearUploadReview();
+            _uploadMessage = "Unable to estimate or reconcile file stages. No transaction submitted.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private async Task PublishUploadStageAsync()
+    {
+        if (_ledgerBusy || !_uploadApproved || _uploadCost is null || _uploadPlan is null ||
+            _uploadStageId is null || !Ledger.IsConnected || _rootAccountId is null ||
+            _uploadFingerprint is null) return;
+        _ledgerBusy = true;
+        var approvedId = _uploadStageId;
+        ClearUploadReview();
+        try
+        {
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if (!await Ledger.HasRegistryAsync())
+                throw new InvalidOperationException("Ledger registry not initialized.");
+            var published = await UploadCoordinator.PublishNextApprovedAsync(_uploadPlan,
+                draft => Task.FromResult(_uploadPlan.Entries.Any(x =>
+                    x.Id == approvedId && x.Draft == draft)));
+            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
+            _uploadRemaining = remaining.Count;
+            await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
+                StellarUploadCheckpoint.CurrentVersion, _uploadFingerprint,
+                _uploadPlan.Entries.Select(x => x.Id).ToArray(),
+                _uploadPlan.Entries.Count - remaining.Count));
+            _uploadMessage = _uploadRemaining == 0
+                ? "File manifest confirmed on Stellar. Upload complete."
+                : published ? "Stage confirmed. Review the next transaction."
+                    : "Stage changed during review. Re-approve before proceeding.";
+            if (_uploadRemaining == 0)
+            {
+                await UploadCheckpoints.ClearAsync(_rootAccountId);
+                CancelUpload();
+                _ledgerRecords = await Ledger.ReadAsync();
+            }
+        }
+        catch
+        {
+            _uploadMessage = "Submission failed or confirmation is uncertain. Reconcile and re-approve before retry.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
     private void VerifySelectedFile()
     {
         _verifiedFileMessage = null;
@@ -372,6 +572,7 @@
         _rootAccountId = null;
         _selectedFolderId = string.Empty;
         ResetSelection();
+        CancelUpload();
         CancelPublish();
         _publishTitle = string.Empty;
         _publishContent = string.Empty;
