@@ -20,6 +20,10 @@
             @if (!string.IsNullOrWhiteSpace(_resumeError)) { <div class="terminal-alert warning" role="alert">@_resumeError</div> }
             @if (_resuming) { <p role="status"><span class="sv-loading-spinner"></span> UNLOCKING...</p> }
             <button class="pixel-button primary" type="submit" disabled="@(_resuming || string.IsNullOrWhiteSpace(_resumePassphrase))">UNLOCK VAULT</button>
+            @if (_biometricEnrolled)
+            {
+                <button class="pixel-button compact" type="button" disabled="@_resuming" @onclick="ResumeWithDeviceAsync">UNLOCK WITH DEVICE</button>
+            }
             <button class="pixel-button compact" type="button" disabled="@_resuming" @onclick="FullLockAsync">LOCK AND END SESSION</button>
         </form>
     </section>
@@ -41,8 +45,35 @@ else
     private string _resumePassphrase = string.Empty;
     private string? _resumeError;
     private bool _resuming;
+    private bool _biometricEnrolled;
     protected override void OnInitialized() => Privacy.Changed += RefreshPrivacy;
-    private void RefreshPrivacy() => _ = InvokeAsync(StateHasChanged);
+    private void RefreshPrivacy() => _ = InvokeAsync(async () =>
+    {
+        if (Privacy.IsSuspended)
+        {
+            try { _biometricEnrolled = await JS.InvokeAsync<bool>("stellarVaultBiometric.has", Privacy.SuspendedAccountId); }
+            catch (JSException) { _biometricEnrolled = false; }
+        }
+        else
+        {
+            _biometricEnrolled = false;
+            _resumePassphrase = string.Empty;
+        }
+        StateHasChanged();
+    });
+    private async Task ResumeWithDeviceAsync()
+    {
+        if (_resuming || !Privacy.IsSuspended || Privacy.SuspendedAccountId is null) return;
+        _resuming = true; _resumeError = null;
+        try
+        {
+            var phrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", Privacy.SuspendedAccountId);
+            try { await Privacy.ResumeAsync(phrase); }
+            finally { phrase = string.Empty; }
+        }
+        catch (Exception) { _resumeError = "Device unlock was unavailable or canceled. Use your vault passphrase instead."; }
+        finally { _resuming = false; }
+    }
     private async Task ResumeAsync()
     {
         if (_resuming) return;
