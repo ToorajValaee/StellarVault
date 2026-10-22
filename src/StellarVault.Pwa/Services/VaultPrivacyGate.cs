@@ -11,6 +11,7 @@ public sealed class VaultPrivacyGate(VaultSessionManager sessions, VaultSessionW
     private string? _accountId;
     private bool _suspended;
     public bool IsSuspended => _suspended;
+    public string? SuspendedAccountId => _suspended ? _accountId : null;
     public event Action? Changed;
 
     public void Suspend()
