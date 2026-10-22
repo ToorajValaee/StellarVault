@@ -36,8 +36,9 @@ else
                 <label class="terminal-label" for="sv-folder">FOLDER</label>
                 <select id="sv-folder" class="terminal-input" @bind="_folder">
                     <option value="">Unfiled</option>
-                    @foreach (var folder in _folders) { <option value="@folder.Id">@folder.Title</option> }
+                    @foreach (var folder in AvailableFolders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase)) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
                 </select>
+                <p class="advanced-help">Move to any nested folder, or choose Unfiled for the vault root.</p>
                 @if (_kind != "folder")
                 {
                     <label class="terminal-label">USERNAME / IDENTIFIER</label>
@@ -81,6 +82,30 @@ else
     private string ReturnUrl => string.IsNullOrEmpty(_folder) ? "/vault" : "/vault?folder=" + Uri.EscapeDataString(_folder);
     private string? _status;
     private IReadOnlyList<LedgerRecordItem> _folders = [];
+    private IEnumerable<LedgerRecordItem> AvailableFolders =>
+        _folders.Where(f => !(_editingFolder && (f.Id == RecordId || IsDescendantOf(f.Id, RecordId))));
+    private bool IsDescendantOf(string id, string? ancestorId) {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (visited.Add(id)) {
+            var current = _folders.FirstOrDefault(f => f.Id == id);
+            if (current?.FolderId is null) return false;
+            if (current.FolderId == ancestorId) return true;
+            id = current.FolderId;
+        }
+        return true;
+    }
+    private string FolderPath(string id) {
+        var names = new List<string>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        while (visited.Add(id)) {
+            var folder = _folders.FirstOrDefault(f => f.Id == id);
+            if (folder is null) break;
+            names.Insert(0, folder.Title);
+            if (folder.FolderId is null) break;
+            id = folder.FolderId;
+        }
+        return "MY VAULT / " + string.Join(" / ", names);
+    }
     protected override async Task OnParametersSetAsync() {
         if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
         _loading = true;
