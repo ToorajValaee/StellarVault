@@ -49,7 +49,7 @@ public interface IVaultPassphraseCredentialStore
 
 /// <summary>Passphrase workflow. Returns caller-owned plaintext key bytes, which MUST be
 /// moved into a disposable session or cleared immediately. Account ownership is NOT proven.</summary>
-public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore store)
+public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore store, IVaultKeyProtector protector)
 {
     /// <summary>Read wrapped credential metadata for local-vault discovery.
     /// The caller owns the returned buffer and must clear it.</summary>
@@ -63,7 +63,7 @@ public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore sto
         byte[] dataKey = VaultKeyEnvelope.GenerateDataKey();
         try
         {
-            byte[] wrapped = VaultKeyEnvelope.Wrap(dataKey, wrappingKey, accountId);
+            byte[] wrapped = await protector.WrapAsync(dataKey, wrappingKey, accountId, ct);
             try
             {
                 byte[] record = VaultPassphraseCredentials.Encode(parameters, wrapped);
@@ -91,7 +91,7 @@ public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore sto
             try
             {
                 byte[] wrappingKey = await VaultPassphraseKdf.DeriveAsync(passphrase, accountId, parameters, ct);
-                try { return VaultKeyEnvelope.Unwrap(wrapped, wrappingKey, accountId); }
+                try { return await protector.UnwrapAsync(wrapped, wrappingKey, accountId, ct); }
                 finally { CryptographicOperations.ZeroMemory(wrappingKey); }
             }
             finally { CryptographicOperations.ZeroMemory(wrapped); }
@@ -110,13 +110,13 @@ public sealed class VaultPassphraseLifecycle(IVaultPassphraseCredentialStore sto
             try
             {
                 byte[] oldKey = await VaultPassphraseKdf.DeriveAsync(oldPassphrase, accountId, parameters, ct);
-                try { dataKey = VaultKeyEnvelope.Unwrap(wrapped, oldKey, accountId); }
+                try { dataKey = await protector.UnwrapAsync(wrapped, oldKey, accountId, ct); }
                 finally { CryptographicOperations.ZeroMemory(oldKey); }
                 var nextParameters = VaultKdfParameters.Create();
                 byte[] nextKey = await VaultPassphraseKdf.DeriveAsync(newPassphrase, accountId, nextParameters, ct);
                 try
                 {
-                    byte[] nextWrapped = VaultKeyEnvelope.Wrap(dataKey, nextKey, accountId);
+                    byte[] nextWrapped = await protector.WrapAsync(dataKey, nextKey, accountId, ct);
                     try
                     {
                         byte[] replacement = VaultPassphraseCredentials.Encode(nextParameters, nextWrapped);
