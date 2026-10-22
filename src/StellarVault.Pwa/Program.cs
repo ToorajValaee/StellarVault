@@ -21,6 +21,7 @@ builder.Services.AddScoped<VaultNetworkSelection>();
 builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
+builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IVaultPassphraseCredentialStore, IndexedDbVaultPassphraseCredentialStore>();
 builder.Services.AddScoped<IVaultKeyProtector, BrowserVaultKeyProtector>();
 builder.Services.AddScoped<VaultPassphraseLifecycle>();
