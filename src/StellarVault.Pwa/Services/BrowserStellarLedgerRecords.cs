@@ -55,6 +55,20 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             treasury.SpendableXlm, required.ToString("0.0000000",
                 System.Globalization.CultureInfo.InvariantCulture), treasury.CanAffordPlan);
     }
+    public async Task<LedgerAccountInfo> InspectAccountInfoAsync()
+    {
+        var store = RequireStore();
+        var read = await store.ReadAsync();
+        if (read.Warnings.Count != 0)
+            throw new InvalidDataException("Account chain recovery has warnings: " + string.Join("; ", read.Warnings.Take(3)));
+        var treasury = await store.InspectRootTreasuryAsync();
+        return new LedgerAccountInfo(store.RootAccountId,
+            read.Nodes.LastOrDefault()?.AccountId ?? store.RootAccountId,
+            read.Nodes.Count, read.Records.Count(x => !x.Record.IsFolder),
+            read.Records.Count(x => x.Record.IsFolder),
+            treasury.BalanceXlm, treasury.SpendableXlm, treasury.SponsoredReserveXlm);
+    }
+
     public Task InitializeRegistryAsync() => RequireStore().InitializeHdRegistryAsync();
 
     public async Task<IReadOnlyList<LedgerRecordItem>> ReadAsync()
