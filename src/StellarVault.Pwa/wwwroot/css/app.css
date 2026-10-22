@@ -2283,3 +2283,8 @@ html.ios-device.standalone-app .terminal-footer {
 }
 .sv-file-workspace .sv-file-picker { position:relative; }
 .sv-file-workspace .sv-file-picker-button { cursor:pointer; }
+
+/* First-access-only optional device unlock enrollment. */
+.sv-biometric-choice {display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.65rem .8rem;border:1px dashed var(--border);color:var(--phosphor-strong);font-size:.75rem;cursor:pointer;}
+.sv-biometric-choice input {accent-color:var(--phosphor);width:1.1rem;height:1.1rem;flex:0 0 auto;}
+.sv-privacy-panel .pixel-button {max-width:100%;white-space:normal;overflow-wrap:anywhere;}
