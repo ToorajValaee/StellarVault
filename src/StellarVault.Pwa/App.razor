@@ -15,6 +15,18 @@
 {
     <section class="sv-privacy-screen"><div class="terminal-panel sv-privacy-panel">CHECKING SAVED VAULT…</div></section>
 }
+else if (_startupError is not null)
+{
+    <section class="sv-privacy-screen" role="alert">
+        <div class="terminal-panel sv-privacy-panel">
+            <div class="panel-kicker">SAVED VAULT // STORAGE UNAVAILABLE</div>
+            <h1>VAULT LOCKED</h1>
+            <p>@_startupError</p>
+            <button class="pixel-button primary" type="button" @onclick="RetryRestoreAsync">RETRY SAVED VAULT</button>
+            <button class="pixel-button compact" type="button" @onclick="OpenRecoveryScreen">OPEN MANUAL RECOVERY</button>
+        </div>
+    </section>
+}
 else if (Privacy.IsSuspended || _coldAccount is not null)
 {
     <section class="sv-privacy-screen" role="dialog" aria-modal="true" aria-label="Vault privacy lock">
@@ -49,6 +61,7 @@ else
 
 @code {
     private bool _checkingRecent = true;
+    private string? _startupError;
     private string? _coldAccount;
     private sealed class RecentVault
     {
@@ -92,6 +105,7 @@ else
         catch (Exception)
         {
             _coldAccount = null;
+            _startupError = "Unable to check existing encrypted vault storage. No saved data was erased. Retry before creating another vault.";
         }
         finally
         {
@@ -99,6 +113,21 @@ else
             await InvokeAsync(StateHasChanged);
         }
     }
+    private async Task RetryRestoreAsync()
+    {
+        _startupError = null;
+        _checkingRecent = true;
+        await RestoreRecentAsync();
+    }
+
+    private void OpenRecoveryScreen()
+    {
+        // This bypasses only the automatic lookup screen; it never unlocks.
+        _startupError = null;
+        _coldAccount = null;
+        _biometricEnrolled = false;
+    }
+
     private async Task UnlockColdAsync(string phrase)
     {
         if (_coldAccount is null) return;
