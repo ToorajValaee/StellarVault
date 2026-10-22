@@ -89,6 +89,59 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         return hash;
     }
 
+    public async Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        var snapshot = await RequireStore().ReadAsync();
+        var current = snapshot.Records.SingleOrDefault(x => x.Record.Id == id)
+            ?? throw new InvalidOperationException("Record no longer exists; synchronize first.");
+        if (snapshot.Warnings.Count > 0)
+            throw new InvalidDataException("Ledger recovery contains warnings. Synchronize before editing.");
+        if (current.Record.IsFolder != draft.IsFolder)
+            throw new InvalidOperationException("Cannot change an existing record into a folder or vice versa.");
+        if (string.IsNullOrWhiteSpace(draft.Title) || string.IsNullOrEmpty(draft.Content)
+            || draft.Title.Length > 256 || draft.Tags?.Length > 24 ||
+            draft.Tags?.Any(t => t.Length > 64) == true)
+            throw new ArgumentException("Invalid title, content or tags.");
+        if (draft.FolderId == id) throw new ArgumentException("A folder cannot contain itself.");
+        if (!string.IsNullOrWhiteSpace(draft.FolderId))
+        {
+            var ancestors = new HashSet<string>(StringComparer.Ordinal) { id };
+            var ancestor = draft.FolderId;
+            while (ancestor is not null)
+            {
+                if (!ancestors.Add(ancestor))
+                    throw new InvalidOperationException("Folder move would create a cycle.");
+                ancestor = snapshot.Records.SingleOrDefault(x => x.Record.Id == ancestor && x.Record.IsFolder)?.Record.FolderId
+                    ?? (snapshot.Records.Any(x => x.Record.Id == ancestor && x.Record.IsFolder)
+                        ? null : throw new InvalidOperationException("Target folder does not exist."));
+            }
+        }
+        var updated = new VaultRecord {
+            Id = id, Title = draft.Title.Trim(), Secret = draft.Content,
+            UserName = draft.UserName ?? string.Empty, Url = draft.Url ?? string.Empty,
+            Notes = draft.Notes ?? string.Empty, Tags = draft.Tags ?? [],
+            FolderId = string.IsNullOrWhiteSpace(draft.FolderId) ? null : draft.FolderId,
+            Kind = current.Record.Kind, CreatedUtc = current.Record.CreatedUtc,
+            UpdatedUtc = DateTimeOffset.UtcNow
+        };
+        var result = await RequireStore().UpdateAsync(current, updated);
+        return new LedgerMutationResult(result.TransactionHash, result.Warning);
+    }
+
+    public async Task<LedgerMutationResult> DeleteAsync(string id)
+    {
+        var snapshot = await RequireStore().ReadAsync();
+        if (snapshot.Warnings.Count > 0)
+            throw new InvalidDataException("Ledger recovery contains warnings. Synchronize before deleting.");
+        var current = snapshot.Records.SingleOrDefault(x => x.Record.Id == id)
+            ?? throw new InvalidOperationException("Record no longer exists; synchronize first.");
+        if (current.Record.IsFolder && snapshot.Records.Any(x => x.Record.FolderId == id))
+            throw new InvalidOperationException("Move or delete the folder's contents before deleting the folder.");
+        var result = await RequireStore().DeleteAsync(current);
+        return new LedgerMutationResult(result.TransactionHash, result.Warning);
+    }
+
     public async Task DisconnectAsync()
     {
         var store = _store;
