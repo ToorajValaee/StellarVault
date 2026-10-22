@@ -100,6 +100,45 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         return hash;
     }
 
+    private static VaultRecord ToRecord(LedgerRecordDraft draft, string id, DateTimeOffset created) =>
+        new() {
+            Id = id, Title = draft.Title.Trim(), Secret = draft.Content,
+            FolderId = string.IsNullOrWhiteSpace(draft.FolderId) ? null : draft.FolderId,
+            Tags = draft.Tags ?? [], Kind = draft.IsFolder ? "folder" : "record",
+            UserName = draft.UserName ?? string.Empty, Url = draft.Url ?? string.Empty,
+            Notes = draft.Notes ?? string.Empty, CreatedUtc = created, UpdatedUtc = DateTimeOffset.UtcNow
+        };
+
+    private static LedgerCostPreview Preview(VaultCostEstimate estimate) =>
+        new(estimate.OperationCount, estimate.TransactionCount, estimate.NetworkFeeNative,
+            estimate.PeakReserveIncreaseNative, estimate.NetReserveChangeNative,
+            estimate.CreatesChildNode);
+
+    public async Task<LedgerCostPreview> EstimateAsync(LedgerRecordDraft draft, string? recordId = null)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (string.IsNullOrWhiteSpace(draft.Title) || string.IsNullOrEmpty(draft.Content))
+            throw new ArgumentException("Record title and content are required.");
+        var store = RequireStore();
+        if (recordId is null)
+            return Preview(await store.EstimateAddAsync(ToRecord(draft, Guid.NewGuid().ToString("N")[..16], DateTimeOffset.UtcNow)));
+        var snapshot = await store.ReadAsync();
+        if (snapshot.Warnings.Count != 0) throw new InvalidDataException("Ledger recovery warnings prevent safe estimation.");
+        var location = snapshot.Records.SingleOrDefault(x => x.Record.Id == recordId)
+            ?? throw new InvalidOperationException("Record no longer exists.");
+        return Preview(await store.EstimateUpdateAsync(location, ToRecord(draft, recordId, location.Record.CreatedUtc)));
+    }
+
+    public async Task<LedgerCostPreview> EstimateDeleteAsync(string id)
+    {
+        var store = RequireStore();
+        var snapshot = await store.ReadAsync();
+        if (snapshot.Warnings.Count != 0) throw new InvalidDataException("Ledger recovery warnings prevent safe estimation.");
+        var location = snapshot.Records.SingleOrDefault(x => x.Record.Id == id)
+            ?? throw new InvalidOperationException("Record no longer exists.");
+        return Preview(await store.EstimateDeleteAsync(location));
+    }
+
     public async Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
