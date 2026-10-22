@@ -74,6 +74,11 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
             var manifest = VaultChunkIndex.Open(encrypted, key.Span, context.Span);
             if (manifest.RecordId != recordId || manifest.Generation != pointer.Generation)
                 throw new CryptographicException("Committed manifest identity or generation mismatch.");
+            // A concurrent writer may publish a newer pointer while the manifest
+            // is being loaded. Never return it as the current committed revision.
+            var currentPointer = await index.ReadAsync(recordId, cancellationToken);
+            if (currentPointer != pointer)
+                throw new VaultWriteConflictException(recordId);
             return manifest;
         }
         finally { CryptographicOperations.ZeroMemory(encrypted); }
