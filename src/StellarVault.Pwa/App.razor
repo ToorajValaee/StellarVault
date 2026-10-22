@@ -4,6 +4,7 @@
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
 @inject IStellarLedgerRecords LedgerRecords
+@inject VaultNetworkSelection NetworkSelection
 @inject IJSRuntime JS
 @inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
 @implements IAsyncDisposable
@@ -51,7 +52,7 @@ else
     {
         if (Privacy.IsSuspended)
         {
-            try { _biometricEnrolled = await JS.InvokeAsync<bool>("stellarVaultBiometric.has", Privacy.SuspendedAccountId); }
+            try { _biometricEnrolled = await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(Privacy.SuspendedAccountId)); }
             catch (JSException) { _biometricEnrolled = false; }
         }
         else
@@ -67,7 +68,7 @@ else
         _resuming = true; _resumeError = null;
         try
         {
-            var phrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", Privacy.SuspendedAccountId);
+            var phrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", NetworkSelection.CredentialKey(Privacy.SuspendedAccountId));
             try { await Privacy.ResumeAsync(phrase); }
             finally { phrase = string.Empty; }
         }
