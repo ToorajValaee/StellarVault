@@ -8,6 +8,7 @@ public interface IStellarLedgerRecords
     Task ConnectAsync(string mnemonic, string horizonUrl, string networkPassphrase);
     Task<bool> HasRegistryAsync();
     Task<LedgerFundingStatus> InspectRegistryFundingAsync();
+    Task<LedgerAccountInfo> InspectAccountInfoAsync();
     Task InitializeRegistryAsync();
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
@@ -18,6 +19,7 @@ public interface IStellarLedgerRecords
     Task<LedgerMutationResult> DeleteAsync(string id);
     Task DisconnectAsync();
 }
+public sealed record LedgerAccountInfo(string RootAccountId, string TailAccountId, int TotalAccounts, int Records, int Folders, string BalanceNative, string SpendableNative, string SponsoredReserveNative);
 public sealed record LedgerCostPreview(int Operations, int Transactions, decimal NetworkFeeXlm, decimal PeakReserveXlm, decimal NetReserveChangeXlm, bool CreatesChildNode);
 public sealed record LedgerFundingStatus(string RootAccountId, string BalanceXlm, string SpendableXlm, string RequiredAdditionalXlm, bool CanInitialize);
 public sealed record LedgerMutationResult(string TransactionHash, string? Warning = null);
@@ -32,6 +34,7 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     public Task ConnectAsync(string mnemonic, string horizonUrl, string networkPassphrase) => Task.FromException(Unavailable());
     public Task<bool> HasRegistryAsync() => Task.FromException<bool>(Unavailable());
     public Task<LedgerFundingStatus> InspectRegistryFundingAsync() => Task.FromException<LedgerFundingStatus>(Unavailable());
+    public Task<LedgerAccountInfo> InspectAccountInfoAsync() => Task.FromException<LedgerAccountInfo>(Unavailable());
     public Task InitializeRegistryAsync() => Task.FromException(Unavailable());
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
