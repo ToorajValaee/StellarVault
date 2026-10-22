@@ -80,6 +80,14 @@
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <p class="advanced-help">Your recovery phrase selects its vault automatically. Your separate encryption passphrase protects the vault data stored in this browser.</p>
+                @if (_busy)
+                {
+                    <div class="terminal-alert" role="status" aria-live="polite" aria-busy="true">
+                        <span class="sv-loading-spinner" aria-hidden="true"></span>
+                        <strong>PROCESSING // @_accessStage.ToUpperInvariant()</strong>
+                        <span>Cryptographic operations may take time on this device. Do not close the tab.</span>
+                    </div>
+                }
                 <div class="sv-access-actions">
                     @if (Sessions.IsUnlocked)
                     {
@@ -87,9 +95,9 @@
                     }
                     else
                     {
-                        <button class="pixel-button primary" type="button"
+                        <button class="pixel-button primary" type="submit"
                                 disabled="@(_busy || string.IsNullOrWhiteSpace(_mnemonic) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
-                                @onclick="AccessVaultAsync">ACCESS VAULT</button>
+                                >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
                     }
                 </div>
                 <div class="terminal-alert warning" role="status">
@@ -301,6 +309,9 @@
         }
         NetworkSelection.Select(_network);
         _busy = true;
+        _accessStage = "starting";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
         _message = null;
         _networkStatus = null;
         _childAccounts = null;
@@ -308,18 +319,18 @@
         {
             // The mnemonic identifies the namespace; never persist it or derive
             // a second, different account identity for an existing local vault.
-            _accessStage = "deriving account";
+            await ReportAccessStageAsync("deriving account");
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
-            _accessStage = "checking local credentials";
+            await ReportAccessStageAsync("checking local credentials");
             bool exists = await Workflow.HasLocalVaultAsync(account);
-            _accessStage = exists ? "unlocking encrypted credentials" : "creating encrypted credentials";
+            await ReportAccessStageAsync(exists ? "unlocking encrypted credentials" : "creating encrypted credentials");
             if (exists)
                 await Workflow.UnlockAsync(account, _passphrase);
             else
                 await Workflow.CreateAsync(account, _passphrase);
-            _accessStage = "opened";
+            await ReportAccessStageAsync("connecting to Stellar ledger");
             _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
@@ -379,7 +390,7 @@
         {
             _message = "Vault access is not authorized in this environment.";
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or InvalidDataException or OperationCanceledException)
+        catch (Exception ex)
         {
             _message = $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
         }
@@ -389,6 +400,13 @@
             _passphrase = string.Empty;
             _busy = false;
         }
+    }
+
+    private async Task ReportAccessStageAsync(string stage)
+    {
+        _accessStage = stage;
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
     }
 
     private async Task LockAsync()
