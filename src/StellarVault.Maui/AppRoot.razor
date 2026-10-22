@@ -370,9 +370,8 @@
                 System.Security.Cryptography.CryptographicOperations.ZeroMemory(block);
                 // MemoryStream.ToArray creates a separate copy. Clear its
                 // backing buffer on success and on interrupted reads.
-                if (buffer.TryGetBuffer(out var owned) && owned.Array is not null)
-                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(
-                        owned.Array.AsSpan());
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    buffer.GetBuffer().AsSpan());
             }
             _uploadFileName = picked.FileName;
             var fileHash = System.Security.Cryptography.SHA256.HashData(_uploadBytes);
