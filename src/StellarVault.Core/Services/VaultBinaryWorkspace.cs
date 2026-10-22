@@ -9,7 +9,7 @@ namespace StellarVault.Core.Services;
 /// chunk store. Reads stage the entire decrypted record privately before exposing
 /// any bytes to a caller; callers must dispose the returned BinaryRecord.
 /// </summary>
-public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
+public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStorageModeGate storageMode)
 {
     public Task<VaultRecordPointer> SaveAsync(
         string name,
@@ -27,6 +27,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
 
         return sessions.ExecuteAsync(async (database, key, ct) =>
         {
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             // Do not overwrite a visible text record by uploading a file with
             // the same catalog name. Existing binary files require an explicit
             // version for replacement; the initial UI uses create-only writes.
@@ -35,6 +36,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             if (existing is not null && (existing.ContentType is null ||
                 existing.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("This name belongs to a text record.");
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             return await database.PutIndexedAsync(
                 name, expectedVersion, plaintext, key, contentType, ct);
         }, cancellationToken);
@@ -48,6 +50,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
     public Task<BinaryRecord?> OpenAsync(string name, CancellationToken cancellationToken = default) =>
         sessions.ExecuteAsync<BinaryRecord?>(async (database, key, ct) =>
         {
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             var entries = await database.Catalog.ListAsync(key, ct);
             var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (metadata is null) return null;
@@ -92,6 +95,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
         CancellationToken cancellationToken = default) =>
         sessions.ExecuteAsync<VaultRecordPointer?>(async (database, key, ct) =>
         {
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             var entries = await database.Catalog.ListAsync(key, ct);
             var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (entry is null) return null;
@@ -122,6 +126,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
         ArgumentNullException.ThrowIfNull(expectedVersion);
         return sessions.ExecuteAsync(async (database, key, ct) =>
         {
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             var entries = await database.Catalog.ListAsync(key, ct);
             var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (entry is null || entry.ContentType is null ||
@@ -130,6 +135,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions)
             var current = await database.GetVersionAsync(name, key, ct);
             if (current != expectedVersion)
                 throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
             await database.Catalog.TombstoneAsync(name, key, ct);
             return true;
         }, cancellationToken);
