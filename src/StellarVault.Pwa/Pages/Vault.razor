@@ -42,24 +42,32 @@ else
                 }
             </nav>
             <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>INCLUDE RECORDS FROM SUBFOLDERS</span></label>
+            <div class="sv-folder-grid">
             @foreach (var item in Folders.Where(f => f.FolderId == _folder))
             {
-                <button class="pixel-button compact" style="margin:.3rem" @onclick="() => _folder = item.Id">📁 @item.Title</button>
-                <a class="pixel-button compact" href="@($"/edit/{item.Id}")">EDIT</a>
-                <button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button>
+                <div class="sv-folder-tile">
+                    <button class="pixel-button compact" @onclick="() => OpenFolder(item.Id)">📁 @item.Title</button>
+                    <details><summary>⋯</summary>
+                        <a class="pixel-button compact" href="@($"/edit/{item.Id}")">RENAME / MOVE</a>
+                        <button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button>
+                    </details>
+                </div>
             }
+            </div>
             <div class="sv-access-actions">
                 <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
                 <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">+ NEW FOLDER</a>
                 <a class="pixel-button compact" href="/add?kind=file">+ ADD FILE</a>
             </div>
         </section>
+        @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
         @if (_deleteCandidate is not null)
         {
             <section class="terminal-panel" role="alertdialog" aria-label="Confirm ledger deletion">
                 <h2>CONFIRM PERMANENT REMOVAL</h2>
                 <p>Delete @_deleteCandidate.Title from the active Stellar ledger? Historical transactions remain on the network.</p>
-                <div class="sv-access-actions"><button class="pixel-button compact" @onclick="() => _deleteCandidate = null">CANCEL</button><button class="pixel-button primary" disabled="@_busy" @onclick="DeleteSelectedAsync">CONFIRM DELETE</button></div>
+                @if (_deleteEstimate is not null) { <div class="stats-strip"><div><span>ESTIMATED FEE XLM</span><strong>@_deleteEstimate.NetworkFeeXlm</strong></div><div><span>RESERVE CHANGE XLM</span><strong>@_deleteEstimate.NetReserveChangeXlm</strong></div></div> }
+                <div class="sv-access-actions"><button class="pixel-button compact" @onclick="() => _deleteCandidate = null">CANCEL</button><button class="pixel-button primary" disabled="@(_busy || _deleteEstimate is null)" @onclick="DeleteSelectedAsync">CONFIRM DELETE</button></div>
             </section>
         }
         <section class="record-list">
@@ -71,10 +79,17 @@ else
                 {
                     <article class="record-card" style="display:block">
                         <strong>@item.Title</strong>
-                        <p class="advanced-help">@item.UserName @item.Url</p>
+                        @if (_includeChildren || !string.IsNullOrWhiteSpace(_search)) { <p class="advanced-help">📁 @FolderPath(item.FolderId)</p> }
                         @if (item.Tags is { Length: > 0 }) { <div class="tag-row">@foreach (var tag in item.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
-                        <div class="sv-access-actions"><a class="pixel-button compact" href="@($"/edit/{item.Id}")">EDIT</a><button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button></div>
-                        <details><summary>VIEW DECRYPTED RECORD</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">@item.Content</p>@if (!string.IsNullOrEmpty(item.Notes)) { <p>@item.Notes</p> }</details>
+                        <details class="sv-record-details">
+                            <summary>VIEW RECORD DETAILS ›</summary>
+                            <div class="terminal-panel"><p><strong>USERNAME:</strong> @item.UserName</p><p><strong>URL:</strong> @item.Url</p>
+                                <p><strong>SECRET:</strong> @(_revealedIds.Contains(item.Id) ? item.Content : "••••••••")</p>
+                                <button class="pixel-button compact" @onclick="() => ToggleReveal(item.Id)">@(_revealedIds.Contains(item.Id) ? "HIDE SECRET" : "SHOW SECRET")</button>
+                                @if (!string.IsNullOrEmpty(item.Notes)) { <p style="white-space:pre-wrap">@item.Notes</p> }
+                                <div class="sv-access-actions"><a class="pixel-button compact" href="@($"/edit/{item.Id}")">EDIT</a><button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button></div>
+                            </div>
+                        </details>
                     </article>
                 }
             }
