@@ -94,7 +94,11 @@ public sealed class StellarLedgerUploadCoordinator(
         // Recheck immediately after approval: network state may have changed.
         remaining = await ReviewAsync(plan);
         if (remaining.Count == 0) return false;
-        next = remaining[0];
+        // Approval applies only to the exact record just reviewed. If a second
+        // client committed it meanwhile, do not publish the next part without
+        // separately obtaining approval for that part.
+        if (remaining[0].Id != next.Id)
+            return false;
         mode.Require(VaultStorageMode.StellarLedger);
         var receipt = await ledger.PublishWithIdAsync(next.Id, next.Draft);
         mode.Require(VaultStorageMode.StellarLedger);
