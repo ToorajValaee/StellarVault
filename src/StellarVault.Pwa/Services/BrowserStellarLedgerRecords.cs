@@ -53,19 +53,33 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             throw new InvalidDataException("Ledger record recovery reported errors: " +
                 string.Join("; ", read.Warnings.Take(3)));
         return read.Records.Select(r =>
-            new LedgerRecordItem(r.Record.Id, r.Record.Title, r.Record.Secret)).ToArray();
+            new LedgerRecordItem(r.Record.Id, r.Record.Title, r.Record.Secret, r.Record.FolderId,
+                r.Record.Tags, r.Record.IsFolder, r.Record.UserName, r.Record.Url, r.Record.Notes)).ToArray();
     }
 
-    public async Task<string> PublishAsync(string title, string content)
+    public Task<string> PublishAsync(string title, string content) =>
+        PublishDetailedAsync(new LedgerRecordDraft(title, content));
+
+    public async Task<string> PublishDetailedAsync(LedgerRecordDraft draft)
     {
-        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrEmpty(content))
+        ArgumentNullException.ThrowIfNull(draft);
+        if (string.IsNullOrWhiteSpace(draft.Title) || string.IsNullOrEmpty(draft.Content))
             throw new ArgumentException("Record title and contents are required.");
+        if (draft.Title.Length > 256 || draft.Tags?.Length > 24 ||
+            draft.Tags?.Any(t => t.Length > 64) == true)
+            throw new ArgumentException("Record title or tags exceed the supported limits.");
         var now = DateTimeOffset.UtcNow;
         var record = new VaultRecord
         {
             Id = Guid.NewGuid().ToString("N")[..16],
-            Title = title,
-            Secret = content,
+            Title = draft.Title.Trim(),
+            Secret = draft.Content,
+            FolderId = draft.FolderId,
+            Tags = draft.Tags ?? [],
+            Kind = draft.IsFolder ? "folder" : "record",
+            UserName = draft.UserName ?? string.Empty,
+            Url = draft.Url ?? string.Empty,
+            Notes = draft.Notes ?? string.Empty,
             CreatedUtc = now,
             UpdatedUtc = now
         };
