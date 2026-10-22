@@ -6,6 +6,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
 @inject IJSRuntime JS
+@inject NavigationManager Navigation
 @inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
 @implements IDisposable
 
@@ -400,6 +401,8 @@
                 _childAccounts = null;
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
+            if (Sessions.IsUnlocked && Platform == "WEB PWA")
+                Navigation.NavigateTo("/vault");
         }
         catch (JSException ex)
         {
