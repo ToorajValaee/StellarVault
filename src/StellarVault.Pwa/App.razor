@@ -19,7 +19,7 @@ else if (Privacy.IsSuspended || _coldAccount is not null)
 {
     <section class="sv-privacy-screen" role="dialog" aria-modal="true" aria-label="Vault privacy lock">
         <form class="terminal-panel sv-privacy-panel" @onsubmit="ResumeAsync" @onsubmit:preventDefault="true">
-            <div class="panel-kicker">@(_coldAccount is not null ? "PRIVACY LOCK // VAULT CLOSED" : "PRIVACY LOCK // SESSION PAUSED")</div>
+            <div class="panel-kicker">PRIVACY LOCK // SESSION PAUSED</div>
             <h1>VAULT HIDDEN</h1>
             <p>@(_coldAccount is not null ? "Reopen your saved local vault using its passphrase or device unlock. Stellar signing still requires your mnemonic." : "Enter your vault passphrase to continue. No recovery phrase is required.")</p>
             <label class="terminal-label" for="sv-resume-pass">VAULT PASSPHRASE</label>
