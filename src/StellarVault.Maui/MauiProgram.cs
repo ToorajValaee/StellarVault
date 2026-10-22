@@ -16,6 +16,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<VaultNetworkSelection>();
         builder.Services.AddSingleton<IStellarLedgerRecords, UnavailableStellarLedgerRecords>();
         builder.Services.AddSingleton<VaultStorageModeGate>();
+        builder.Services.AddSingleton<VaultLedgerRecordWorkspace>();
         // Persist only public KDF parameters and AES-GCM-wrapped data keys.
         // The native UI remains gated until account ownership verification is available.
         builder.Services.AddSingleton<IVaultPassphraseCredentialStore>(_ =>
