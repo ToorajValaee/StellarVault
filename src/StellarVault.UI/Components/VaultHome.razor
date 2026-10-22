@@ -293,6 +293,7 @@
         public string? Account { get; set; }
         public string? Network { get; set; }
         public string? HorizonUrl { get; set; }
+        public string? NetworkPassphrase { get; set; }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -316,8 +317,14 @@
                     // endpoint before deriving the scoped credential lookup key.
                     if (string.IsNullOrWhiteSpace(recent.HorizonUrl)) return;
                     _customHorizon = recent.HorizonUrl;
-                    var detected = await JS.InvokeAsync<string>(
-                        "stellarVaultV2Network.probeCustom", recent.HorizonUrl);
+                    // Local encrypted credentials are scoped to the chain's
+                    // public passphrase, not to Horizon availability.
+                    // Legacy remembered entries without the passphrase can
+                    // still fall back to a live discovery.
+                    var detected = !string.IsNullOrWhiteSpace(recent.NetworkPassphrase)
+                        ? recent.NetworkPassphrase
+                        : await JS.InvokeAsync<string>(
+                            "stellarVaultV2Network.probeCustom", recent.HorizonUrl);
                     NetworkSelection.ConfigureCustom(detected);
                     NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
                     _customPassphrase = detected;
@@ -330,7 +337,7 @@
                     _network = recent.Network;
                 }
                 _recentHasDeviceUnlock = await JS.InvokeAsync<bool>(
-                    "stellarVaultBiometric.has", recent.Account);
+                    "stellarVaultBiometric.has", NetworkSelection.CredentialKey(recent.Account));
             }
             await InvokeAsync(StateHasChanged);
         }
@@ -347,7 +354,7 @@
         _busy = true;
         try
         {
-            _passphrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", _recentAccount);
+            _passphrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", NetworkSelection.CredentialKey(_recentAccount));
         }
         catch
         {
@@ -432,7 +439,7 @@
         _accessStage = "registering device unlock";
         try
         {
-            await JS.InvokeVoidAsync("stellarVaultBiometric.enroll", _pendingBiometricAccount, _pendingBiometricPassphrase);
+            await JS.InvokeVoidAsync("stellarVaultBiometric.enroll", NetworkSelection.CredentialKey(_pendingBiometricAccount), _pendingBiometricPassphrase);
             _message = "Device unlock enabled. Your vault passphrase remains available as a fallback.";
             FinishBiometricEnrollment();
         }
@@ -614,7 +621,8 @@
                 try
                 {
                     await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network,
-                        _network == "custom" ? _detectedHorizon : null);
+                        _network == "custom" ? _detectedHorizon : null,
+                        _network == "custom" ? _customPassphrase : null);
                     _recentAccount = account;
                     _recentNetwork = _network;
                     _recentHorizonUrl = _network == "custom" ? _detectedHorizon : null;
