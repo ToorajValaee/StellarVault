@@ -41,6 +41,22 @@
                 <p>Folders: @_ledgerRecords.Count(x => x.IsFolder) | Records: @_ledgerRecords.Count(x => !x.IsFolder)</p>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
+                <section aria-label="Publish Stellar record" class="terminal-panel">
+                    <h3>ON-CHAIN RECORD // TRANSACTION APPROVAL</h3>
+                    <p class="notice">Publishing submits a paid Stellar transaction. Review the estimate before authorizing. This does not save to local storage.</p>
+                    <label for="native-publish-title">Record title</label>
+                    <input id="native-publish-title" class="vault-field" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
+                    <label for="native-publish-content">Record content</label>
+                    <textarea id="native-publish-content" class="vault-field" @bind="_publishContent" @bind:event="oninput" disabled="@_ledgerBusy" rows="3"></textarea>
+                    <button type="button" class="session-lock" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_publishTitle) || string.IsNullOrWhiteSpace(_publishContent))" @onclick="EstimatePublishAsync">Review transaction cost</button>
+                    @if (_publishEstimate is not null)
+                    {
+                        <p>Estimated operations: @_publishEstimate.Operations; transactions: @_publishEstimate.Transactions; fee: @_publishEstimate.NetworkFeeXlm XLM; peak reserve: @_publishEstimate.PeakReserveXlm XLM.</p>
+                        <label><input type="checkbox" @bind="_publishApproved" disabled="@_ledgerBusy" /> I approve publishing this encrypted record to @_ledgerNetwork.</label>
+                        <button type="button" class="session-lock" disabled="@(_ledgerBusy || !_publishApproved)" @onclick="ConfirmPublishAsync">Approve and submit to Stellar</button>
+                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
+                    }
+                </section>
                 <label for="native-ledger-folder">Folder</label>
                 <select id="native-ledger-folder" class="vault-field" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
                     <option value="">Root</option>
@@ -188,6 +204,87 @@
     private bool _revealSecret;
     private string? _verifiedFileMessage;
 
+    private string _publishTitle = string.Empty;
+    private string _publishContent = string.Empty;
+    private LedgerCostPreview? _publishEstimate;
+    private bool _publishApproved;
+    private string? _publishFingerprint;
+
+    private static string PublishFingerprint(string title, string content, string network) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(network + "\\0" + title + "\\0" + content)));
+
+    private void CancelPublish()
+    {
+        _publishEstimate = null;
+        _publishApproved = false;
+        _publishFingerprint = null;
+    }
+
+    private async Task EstimatePublishAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_publishTitle) ||
+            string.IsNullOrWhiteSpace(_publishContent)) return;
+        _ledgerBusy = true;
+        CancelPublish();
+        try
+        {
+            // This gate remains local until a real user-approved publish.
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
+            _publishEstimate = await Ledger.EstimateAsync(draft);
+            _publishFingerprint = PublishFingerprint(draft.Title, draft.Content, _ledgerNetwork);
+            _ledgerMessage = "Review the estimated fee and reserve before approving.";
+        }
+        catch
+        {
+            CancelPublish();
+            _ledgerMessage = "Transaction estimate failed. Nothing was submitted.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private async Task ConfirmPublishAsync()
+    {
+        if (_ledgerBusy || !_publishApproved || _publishEstimate is null ||
+            _publishFingerprint is null || !Ledger.IsConnected) return;
+        var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
+        if (_publishFingerprint != PublishFingerprint(draft.Title, draft.Content, _ledgerNetwork))
+        {
+            CancelPublish();
+            _ledgerMessage = "Record changed since cost review. Review the transaction again.";
+            return;
+        }
+        _ledgerBusy = true;
+        CancelPublish();
+        try
+        {
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if (!await Ledger.HasRegistryAsync())
+                throw new InvalidOperationException("Registry must be initialized before publishing.");
+            var hash = await Ledger.PublishDetailedAsync(draft);
+            hash = LedgerMutationResult.RequireConfirmed(hash).TransactionHash;
+            _ledgerMessage = "Stellar transaction submitted and confirmed: " + hash;
+            _publishTitle = string.Empty;
+            _publishContent = string.Empty;
+            _ledgerRecords = await Ledger.ReadAsync();
+            ResetSelection();
+        }
+        catch
+        {
+            _ledgerMessage = "Publishing failed or confirmation is uncertain. Refresh the ledger before retrying to avoid duplicates.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
     private void VerifySelectedFile()
     {
         _verifiedFileMessage = null;
@@ -275,6 +372,9 @@
         _rootAccountId = null;
         _selectedFolderId = string.Empty;
         ResetSelection();
+        CancelPublish();
+        _publishTitle = string.Empty;
+        _publishContent = string.Empty;
     }
 
     private async Task ConnectLedgerAsync()
