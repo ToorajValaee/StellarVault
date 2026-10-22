@@ -68,7 +68,7 @@
                         <p>File: @_uploadFileName · @_uploadBytes?.Length bytes · @_uploadPlan.Entries.Count stages</p>
                         <p>Remaining stages: @_uploadRemaining</p>
                         <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReconcileUploadAsync">Recheck on-chain progress</button>
-                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReviewUploadStageAsync">Review next transaction</button>
+                        <button type="button" class="session-lock" disabled="@(_ledgerBusy || _uploadNeedsReconciliation)" @onclick="ReviewUploadStageAsync">Review next transaction</button>
                         @if (_uploadCost is not null)
                         {
                             <p>Next stage: @_uploadStageTitle · Fee: @_uploadCost.NetworkFeeXlm XLM · Peak reserve: @_uploadCost.PeakReserveXlm XLM · Operations: @_uploadCost.Operations</p>
@@ -337,6 +337,7 @@
     private string? _uploadStageTitle;
     private int _uploadRemaining;
     private bool _uploadApproved;
+    private bool _uploadNeedsReconciliation;
     private string? _uploadMessage;
 
     private void ClearUploadReview()
@@ -357,6 +358,7 @@
         _uploadFileName = null;
         _uploadFingerprint = null;
         _uploadRemaining = 0;
+        _uploadNeedsReconciliation = false;
         ClearUploadReview();
     }
 
@@ -489,6 +491,7 @@
                 await UploadCheckpoints.SaveAsync(_rootAccountId,
                     new StellarUploadCheckpoint(StellarUploadCheckpoint.CurrentVersion,
                         _uploadFingerprint, _uploadPlan.Entries.Select(x => x.Id).ToArray(), done));
+                _uploadNeedsReconciliation = false;
                 _uploadMessage = $"Ledger reports {done} completed stages and {remaining.Count} remaining. Review before continuing.";
             }
         }
@@ -505,7 +508,7 @@
 
     private async Task ReviewUploadStageAsync()
     {
-        if (_ledgerBusy || _uploadPlan is null || !Ledger.IsConnected) return;
+        if (_ledgerBusy || _uploadNeedsReconciliation || _uploadPlan is null || !Ledger.IsConnected) return;
         _ledgerBusy = true;
         ClearUploadReview();
         try
@@ -580,6 +583,7 @@
                 StellarUploadCheckpoint.CurrentVersion, _uploadFingerprint,
                 _uploadPlan.Entries.Select(x => x.Id).ToArray(),
                 _uploadPlan.Entries.Count - remaining.Count));
+            _uploadNeedsReconciliation = false;
             _uploadMessage = _uploadRemaining == 0
                 ? "File manifest confirmed on Stellar. Upload complete."
                 : published ? "Stage confirmed. Review the next transaction."
@@ -605,13 +609,13 @@
                 fileVerified = true;
                 _ledgerRecords = snapshot;
                 await UploadCheckpoints.ClearAsync(_rootAccountId);
-                _ledgerRecords = snapshot;
                 CancelUpload();
                 _uploadMessage = "File recovered and verified from Stellar. Upload complete.";
             }
         }
         catch
         {
+            _uploadNeedsReconciliation = true;
             _uploadMessage = fileVerified
                 ? "File verified on Stellar, but checkpoint cleanup failed. Reconcile before selecting another file."
                 : stageConfirmed
