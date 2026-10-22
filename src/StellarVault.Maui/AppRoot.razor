@@ -315,6 +315,7 @@
     private string? _uploadFingerprint;
     private LedgerCostPreview? _uploadCost;
     private string? _uploadStageId;
+    private string? _reviewedUploadFingerprint;
     private string? _uploadStageTitle;
     private int _uploadRemaining;
     private bool _uploadApproved;
@@ -324,6 +325,7 @@
     {
         _uploadCost = null;
         _uploadStageId = null;
+        _reviewedUploadFingerprint = null;
         _uploadStageTitle = null;
         _uploadApproved = false;
     }
@@ -439,6 +441,7 @@
             var next = remaining[0];
             _uploadCost = await Ledger.EstimateAsync(next.Draft, next.Id);
             _uploadStageId = next.Id;
+            _reviewedUploadFingerprint = _uploadFingerprint;
             _uploadStageTitle = next.Draft.Title;
             _uploadMessage = "Review the estimate, then approve exactly one stage.";
         }
@@ -457,7 +460,8 @@
     private async Task PublishUploadStageAsync()
     {
         if (_ledgerBusy || !_uploadApproved || _uploadCost is null || _uploadPlan is null ||
-            _uploadStageId is null || !Ledger.IsConnected || _rootAccountId is null ||
+            _uploadStageId is null || _reviewedUploadFingerprint != _uploadFingerprint ||
+            !Ledger.IsConnected || _rootAccountId is null ||
             _uploadFingerprint is null) return;
         _ledgerBusy = true;
         var approvedId = _uploadStageId;
