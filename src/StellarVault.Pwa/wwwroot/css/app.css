@@ -2141,3 +2141,15 @@ html.ios-device.standalone-app .terminal-footer {
 @media (prefers-reduced-motion: reduce) {
     .sv-loading-spinner { animation: none; border-right-color: currentColor; }
 }
+
+/* Folder controls are grouped per folder, not repeated as free-floating actions. */
+.sv-folder-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(14rem,1fr)); gap:.7rem; margin:.8rem 0 1.1rem; }
+.sv-folder-tile { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.6rem; border:1px solid var(--phosphor-dim, currentColor); border-radius:.3rem; min-width:0; }
+.sv-folder-tile > button { min-width:0; overflow-wrap:anywhere; flex:1; text-align:left; }
+.sv-folder-tile details { position:relative; flex:0 0 auto; }
+.sv-folder-tile summary { cursor:pointer; padding:.45rem .7rem; list-style:none; border:1px solid currentColor; border-radius:.2rem; }
+.sv-folder-tile details[open] { z-index:2; }
+.sv-folder-tile details > a, .sv-folder-tile details > button { display:block; margin:.35rem 0; }
+.sv-record-details { margin-top:.7rem; }
+.sv-record-details > summary { cursor:pointer; padding:.6rem; border-top:1px solid currentColor; }
+.sv-record-details .terminal-panel { margin-top:.5rem; overflow-wrap:anywhere; }
