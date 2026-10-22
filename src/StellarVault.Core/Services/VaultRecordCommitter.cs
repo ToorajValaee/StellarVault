@@ -89,12 +89,22 @@ public sealed class VaultRecordCommitter(IVaultChunkStore objects, IVaultRecordI
         // This coordinator cannot authenticate a manifest without a key. The caller must
         // authenticate and bind record ID/generation before invoking CommitAsync.
         long generation = expected is null ? 0 : checked(expected.Generation + 1);
-        using var stream = new MemoryStream(authenticatedManifest.ToArray(), writable: false);
-        string contentId = await objects.PutAsync(stream, cancellationToken);
-        var next = new VaultRecordPointer(contentId, generation);
-        if (!await index.CompareExchangeAsync(recordId, expected, next, cancellationToken))
-            throw new VaultWriteConflictException(recordId);
-        return next;
+        // PutAsync needs a stream-backed copy. Erase that temporary ciphertext
+        // buffer on every path, including cancellation and compare-exchange failure.
+        byte[] temporaryManifest = authenticatedManifest.ToArray();
+        try
+        {
+            using var stream = new MemoryStream(temporaryManifest, writable: false);
+            string contentId = await objects.PutAsync(stream, cancellationToken);
+            var next = new VaultRecordPointer(contentId, generation);
+            if (!await index.CompareExchangeAsync(recordId, expected, next, cancellationToken))
+                throw new VaultWriteConflictException(recordId);
+            return next;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(temporaryManifest);
+        }
     }
 
     public async Task<byte[]> ReadManifestAsync(Guid recordId, CancellationToken cancellationToken = default)
