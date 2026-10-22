@@ -34,3 +34,14 @@ window.stellarVaultV2Lifecycle = (() => {
   }
   return Object.freeze({ attach, detach });
 })();
+
+ // Close network settings when clicking outside the popup or pressing Escape.
+document.addEventListener('pointerdown', event => {
+  document.querySelectorAll('details.sv-network-menu[open]').forEach(menu => {
+    if (!menu.contains(event.target)) menu.removeAttribute('open');
+  });
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape')
+    document.querySelectorAll('details.sv-network-menu[open]').forEach(menu => menu.removeAttribute('open'));
+});
