@@ -195,7 +195,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             UpdatedUtc = DateTimeOffset.UtcNow
         };
         var result = await RequireStore().UpdateAsync(current, updated);
-        return RequireConfirmedMutation(result.TransactionHash, result.Warning);
+        return LedgerMutationResult.RequireConfirmed(result.TransactionHash, result.Warning);
     }
 
     public async Task<LedgerMutationResult> DeleteAsync(string id)
@@ -208,17 +208,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (current.Record.IsFolder && snapshot.Records.Any(x => x.Record.FolderId == id))
             throw new InvalidOperationException("Move or delete the folder's contents before deleting the folder.");
         var result = await RequireStore().DeleteAsync(current);
-        return RequireConfirmedMutation(result.TransactionHash, result.Warning);
-    }
-
-    // Never surface an empty transaction receipt as a completed ledger mutation.
-    // Callers must reconcile ledger state before retrying an ambiguous submission.
-    private static LedgerMutationResult RequireConfirmedMutation(string? transactionHash, string? warning)
-    {
-        if (string.IsNullOrWhiteSpace(transactionHash))
-            throw new InvalidOperationException(
-                "Stellar mutation returned no transaction hash. Reconcile ledger state before retrying.");
-        return new LedgerMutationResult(transactionHash, warning);
+        return LedgerMutationResult.RequireConfirmed(result.TransactionHash, result.Warning);
     }
 
     public async Task DisconnectAsync()
