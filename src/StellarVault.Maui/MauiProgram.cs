@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using StellarVault.Core.Services;
 using StellarVault.Core.Abstractions;
+using StellarVault.Pwa.Services;
 
 namespace StellarVault.Maui;
 
@@ -14,10 +15,13 @@ public static class MauiProgram
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
         builder.Services.AddSingleton<VaultNetworkSelection>();
-        builder.Services.AddSingleton<IStellarLedgerRecords, UnavailableStellarLedgerRecords>();
-        builder.Services.AddSingleton<VaultStorageModeGate>();
-        builder.Services.AddSingleton<VaultLedgerRecordWorkspace>();
-        builder.Services.AddSingleton<StellarLedgerUploadCoordinator>();
+        // BlazorWebView provides IJSRuntime within its component scope. Keep
+        // the signing session, gate and upload services in that same scope.
+        // Never retain a WebView JS runtime in an app-wide singleton.
+        builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
+        builder.Services.AddScoped<VaultStorageModeGate>();
+        builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
+        builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
         // App-private filesystem storage is not cryptographically encrypted.
         builder.Services.AddSingleton<IStellarUploadCheckpointStore>(services =>
