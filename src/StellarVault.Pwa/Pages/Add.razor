@@ -150,7 +150,7 @@ else
         return "MY VAULT / " + string.Join(" / ", names);
     }
     protected override async Task OnParametersSetAsync() {
-        if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+        if (!Sessions.IsUnlocked || !Ledger.IsConnected || _kind == "file") return;
         _loading = true;
         try {
             var all = await Ledger.ReadAsync();
@@ -215,6 +215,7 @@ else
                 var hash = await Ledger.PublishDetailedAsync(draft);
                 _status = (_kind == "file" ? "FILE PUBLISHED ON STELLAR. TX: " : "COMMITTED TX: ") + hash;
             }
+            if (_fileBytes is not null) { System.Security.Cryptography.CryptographicOperations.ZeroMemory(_fileBytes); _fileBytes = null; }
             Nav.NavigateTo(ReturnUrl);
         } catch (Exception ex) { _status = "Ledger commit failed: " + ex.Message; }
         finally { _busy = false; }
