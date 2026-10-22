@@ -9,6 +9,7 @@
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="WRITE OPERATION">
 @if (!Sessions.IsUnlocked)
@@ -97,6 +98,7 @@ else
     private int _fileStep;
     private string? _fileFingerprint;
     private bool _uncertainStage;
+    private sealed record UploadCheckpoint(int Version, string Fingerprint, string[] Ids, int Step);
     private byte[]? _fileBytes;
     private string _fileOriginalName = "";
     private string _fileContentType = "application/octet-stream";
@@ -204,6 +206,15 @@ else
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return new LedgerRecordDraft(_title, _kind == "folder" ? "folder" : _secret,
             string.IsNullOrWhiteSpace(_folder) ? null : _folder, tags, _kind == "folder", _username, _url, _notes);
+    }
+    private async Task SaveCheckpointAsync(string fingerprint) {
+        var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
+        await JS.InvokeVoidAsync("stellarVaultUploadCheckpoint.save", account, fingerprint,
+            _filePlan!.Select(x => x.Id).ToArray(), _fileStep);
+    }
+    private async Task ClearCheckpointAsync() {
+        if (Sessions.ActiveAccountId is string account)
+            await JS.InvokeVoidAsync("stellarVaultUploadCheckpoint.clear", account);
     }
     private async Task ReviewAsync() {
         if (_busy || !Ledger.IsConnected || (_kind == "file" && _fileBytes is null)) return;
