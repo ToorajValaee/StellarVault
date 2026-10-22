@@ -37,13 +37,13 @@ else
             }
             else
             {
-                <p class="advanced-help">Initialization creates a real ManageData ledger entry and consumes an XLM fee and reserve. No transaction is submitted without your approval.</p>
+                <p class="advanced-help">Initialization creates a real ManageData ledger entry and consumes an NATIVE fee and reserve. No transaction is submitted without your approval.</p>
                 @if (_funding is not null)
                 {
                     <div class="stats-strip">
-                        <div><span>TOTAL XLM</span><strong>@_funding.BalanceXlm</strong></div>
-                        <div><span>SPENDABLE XLM</span><strong>@_funding.SpendableXlm</strong></div>
-                        <div><span>REQUIRED SPENDABLE XLM</span><strong>@_funding.RequiredAdditionalXlm</strong></div>
+                        <div><span>TOTAL NATIVE</span><strong>@_funding.BalanceXlm</strong></div>
+                        <div><span>SPENDABLE NATIVE</span><strong>@_funding.SpendableXlm</strong></div>
+                        <div><span>REQUIRED SPENDABLE NATIVE</span><strong>@_funding.RequiredAdditionalXlm</strong></div>
                     </div>
                     <p class="advanced-help">ROOT PUBLIC ADDRESS: @_funding.RootAccountId</p>
                     @if (!_funding.CanInitialize)
