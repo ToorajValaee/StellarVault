@@ -38,7 +38,7 @@ jobs:
             pwa-build.log
           if-no-files-found: ignore
       - name: Run browser checkpoint and native asset regression tests
-        run: node --test tests/upload-checkpoint.test.cjs tests/maui-ledger-assets.test.cjs
+        run: node --test tests/upload-checkpoint.test.cjs tests/maui-ledger-assets.test.cjs tests/recent-vault.test.cjs
       - name: Run .NET 10 authenticated encryption tests
         run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
 
