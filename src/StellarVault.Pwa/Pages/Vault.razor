@@ -107,15 +107,27 @@ else
 
 
     private bool _busy;
+    private string _busyMessage = "SYNCING STELLAR LEDGER...";
+    private LedgerCostPreview? _deleteEstimate;
+    private readonly HashSet<string> _revealedIds = new(StringComparer.Ordinal);
+    private void ToggleReveal(string id) { if (!_revealedIds.Add(id)) _revealedIds.Remove(id); }
+    private void OpenFolder(string id) { _folder = id; _revealedIds.Clear(); }
     private LedgerRecordItem? _deleteCandidate;
-    private void SelectDelete(LedgerRecordItem item) => _deleteCandidate = item;
+    private async Task SelectDelete(LedgerRecordItem item) {
+        if (_busy) return;
+        _deleteCandidate = item; _deleteEstimate = null;
+        _busy = true; _busyMessage = "ESTIMATING DELETE COST...";
+        try { _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id); }
+        catch (Exception ex) { _error = "Delete estimate failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
     private async Task DeleteSelectedAsync() {
         if (_busy || _deleteCandidate is null) return;
-        _busy = true;
+        _busy = true; _busyMessage = "DELETING FROM STELLAR...";
         var id = _deleteCandidate.Id;
         try {
             var result = await Ledger.DeleteAsync(id);
-            _deleteCandidate = null;
+            _deleteCandidate = null; _deleteEstimate = null;
             _records = await Ledger.ReadAsync();
             _error = "Deletion committed: " + result.TransactionHash + (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
         } catch (Exception ex) { _error = "Deletion failed or refresh unavailable: " + ex.Message; }
@@ -150,13 +162,26 @@ else
                         if (included.Contains(f.FolderId) && included.Add(f.Id)) changed = true;
                 } while (changed);
             }
-            return Records.Where(r => included.Contains(r.FolderId) &&
+            return Records.Where(r => (!string.IsNullOrWhiteSpace(_search) || included.Contains(r.FolderId)) &&
                 (string.IsNullOrWhiteSpace(_search) ||
-                new[] { r.Title, r.UserName, r.Url, r.Notes, r.Tags is null ? "" : string.Join(" ",r.Tags), FolderName(r.FolderId) }
+                new[] { r.Title, r.UserName, r.Url, r.Notes, r.Tags is null ? "" : string.Join(" ",r.Tags), FolderPath(r.FolderId) }
                 .Any(x => x?.Contains(_search, StringComparison.OrdinalIgnoreCase) == true))).ToList();
         }
     }
     private string FolderName(string? id) => Folders.FirstOrDefault(f => f.Id == id)?.Title ?? "";
+    private string FolderPath(string? id) {
+        var names = new List<string>(); var visited = new HashSet<string>();
+        while (id is not null && visited.Add(id)) {
+            var folder = Folders.FirstOrDefault(f => f.Id == id);
+            if (folder is null) { names.Insert(0, "[missing folder]"); break; }
+            names.Insert(0, folder.Title); id = folder.FolderId;
+        }
+        return names.Count == 0 ? "MY VAULT" : "MY VAULT / " + string.Join(" / ", names);
+    }
+    [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
+    protected override void OnParametersSet() {
+        if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
+    }
     protected override async Task OnInitializedAsync() {
         if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
         try {
@@ -167,7 +192,7 @@ else
     }
     private async Task RefreshAsync() {
         if (_busy) return;
-        _busy = true; _error = null;
+        _busy = true; _busyMessage = "SYNCING STELLAR LEDGER..."; _error = null; _revealedIds.Clear();
         try { _records = await Ledger.ReadAsync(); }
         catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
         finally { _busy = false; }
