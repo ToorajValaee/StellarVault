@@ -5,6 +5,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
 @inject IJSRuntime JS
+@inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
 @implements IDisposable
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
@@ -311,7 +312,7 @@
         _busy = true;
         _accessStage = "starting";
         await InvokeAsync(StateHasChanged);
-        await Task.Yield();
+        await Task.Delay(50);
         _message = null;
         _networkStatus = null;
         _childAccounts = null;
@@ -369,16 +370,19 @@
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
         }
-        catch (JSException)
+        catch (JSException ex)
         {
+            Logger.LogError("Vault access JavaScript failure at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
             _message = $"Vault access failed during {_accessStage} (browser interop). Check the recovery phrase and browser console.";
         }
-        catch (System.Security.Cryptography.CryptographicException)
+        catch (System.Security.Cryptography.CryptographicException ex)
         {
+            Logger.LogError("Vault cryptographic error at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
             _message = "Vault could not be unlocked. Check your encryption passphrase.";
         }
         catch (ArgumentException ex)
         {
+            Logger.LogError("Vault argument error at stage {Stage}: {ExceptionType}, parameter {Parameter}", _accessStage, ex.GetType().Name, ex.ParamName);
             _message = ex.ParamName switch
             {
                 "accountId" or "address" => "The derived Stellar address failed validation.",
@@ -386,12 +390,14 @@
                 _ => "Vault input was rejected. Check the recovery phrase and passphrase."
             };
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            Logger.LogError("Vault authorization error at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
             _message = "Vault access is not authorized in this environment.";
         }
         catch (Exception ex)
         {
+            Logger.LogError("Vault unexpected error at stage {Stage}: {ExceptionType}; HResult {Code}", _accessStage, ex.GetType().FullName, ex.HResult);
             _message = $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
         }
         finally
@@ -406,7 +412,7 @@
     {
         _accessStage = stage;
         await InvokeAsync(StateHasChanged);
-        await Task.Yield();
+        await Task.Delay(50);
     }
 
     private async Task LockAsync()
