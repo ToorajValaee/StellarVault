@@ -14,18 +14,13 @@ else
 {
     <section class="form-page">
         <header class="page-command-header">
-            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">Encrypted Stellar ledger operation. Network fees and account reserves apply.</p></div>
+            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">@(_kind == "file" ? "Select a file and protect it in your encrypted vault." : "Encrypted Stellar ledger operation. Network fees and account reserves apply.")</p></div>
             <a class="pixel-button compact" href="@ReturnUrl">← CANCEL</a>
         </header>
         @if (_loading) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> LOADING RECORD AND FOLDERS...</div> }
         @if (_kind == "file")
         {
-            <section class="terminal-panel">
-                <h2>ENCRYPTED FILE UPLOAD</h2>
-                <p class="advanced-help">Files are currently encrypted in this browser only. The Stellar ledger binary chunk adapter is not yet connected.</p>
-                <VaultBinaryFilesView />
-                <a class="pixel-button compact" href="/vault">BACK TO VAULT</a>
-            </section>
+            <VaultBinaryFilesView />
         }
         else
         {
