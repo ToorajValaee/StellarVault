@@ -1,0 +1,116 @@
+@page "/vault"
+@using StellarVault.Core.Services
+@inject IStellarLedgerRecords Ledger
+@inject VaultSessionManager Sessions
+@inject VaultSessionWorkflow Workflow
+@inject NavigationManager Nav
+
+<AdaptiveShell PlatformName="WEB PWA" Subtitle="ENCRYPTED STELLAR DATABASE">
+@if (!Sessions.IsUnlocked)
+{
+    <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
+}
+else
+{
+    <section class="vault-page">
+        <header class="page-command-header">
+            <div><div class="panel-kicker">DATABASE BROWSER // STELLAR LEDGER</div><h1>VAULT RECORDS</h1><p class="page-subtitle">Search encrypted metadata recovered from the connected Stellar network.</p></div>
+            <div class="sv-access-actions"><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@_busy">↻ SYNC</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
+        </header>
+        <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "OFFLINE")</strong></div></div>
+        <label class="search-console"><span class="search-prefix">FIND&gt;</span><input @bind="_search" @bind:event="oninput" placeholder="title, username, URL, tag, folder..." autocomplete="off"/></label>
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
+        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
+            <strong>FOLDERS</strong>
+            <nav style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0">
+                <button class="pixel-button compact" @onclick='() => _folder = null'>MY VAULT</button>
+                @foreach (var crumb in Breadcrumbs)
+                {
+                    <span>/</span><button class="pixel-button compact" @onclick="() => _folder = crumb.Id">@crumb.Title</button>
+                }
+            </nav>
+            <label class="terminal-label"><input type="checkbox" @bind="_includeChildren"/> INCLUDE SUBFOLDERS</label>
+            @foreach (var item in Folders.Where(f => f.FolderId == _folder))
+            {
+                <button class="pixel-button compact" style="margin:.3rem" @onclick="() => _folder = item.Id">📁 @item.Title</button>
+            }
+            <div class="sv-access-actions">
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">+ NEW FOLDER</a>
+                <a class="pixel-button compact" href="/add?kind=file">+ ADD FILE</a>
+            </div>
+        </section>
+        <section class="record-list">
+            @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
+            else if (Filtered.Count == 0) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
+            else
+            {
+                @foreach (var item in Filtered)
+                {
+                    <article class="record-card" style="display:block">
+                        <strong>@item.Title</strong>
+                        <p class="advanced-help">@item.UserName @item.Url</p>
+                        @if (item.Tags is { Length: > 0 }) { <div class="tag-row">@foreach (var tag in item.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
+                        <details><summary>VIEW DECRYPTED RECORD</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">@item.Content</p>@if (!string.IsNullOrEmpty(item.Notes)) { <p>@item.Notes</p> }</details>
+                    </article>
+                }
+            }
+        </section>
+    </section>
+}
+</AdaptiveShell>
+
+@code {
+    private IReadOnlyList<LedgerRecordItem> _records = [];
+    private string _search = "";
+    private string? _folder;
+    private bool _includeChildren;
+    private bool _busy;
+    private string? _error;
+    private List<LedgerRecordItem> Folders => _records.Where(r => r.IsFolder).ToList();
+    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder).ToList();
+    private IEnumerable<LedgerRecordItem> Breadcrumbs
+    {
+        get {
+            var result = new List<LedgerRecordItem>();
+            var visited = new HashSet<string>();
+            var id = _folder;
+            while (id is not null && visited.Add(id)) {
+                var item = Folders.FirstOrDefault(f => f.Id == id);
+                if (item is null) break;
+                result.Insert(0, item);
+                id = item.FolderId;
+            }
+            return result;
+        }
+    }
+    private List<LedgerRecordItem> Filtered {
+        get {
+            var included = new HashSet<string?> { _folder };
+            if (_includeChildren) {
+                bool changed;
+                do {
+                    changed = false;
+                    foreach (var f in Folders)
+                        if (included.Contains(f.FolderId) && included.Add(f.Id)) changed = true;
+                } while (changed);
+            }
+            return Records.Where(r => included.Contains(r.FolderId) &&
+                (string.IsNullOrWhiteSpace(_search) ||
+                new[] { r.Title, r.UserName, r.Url, r.Notes, r.Tags is null ? "" : string.Join(" ",r.Tags), FolderName(r.FolderId) }
+                .Any(x => x?.Contains(_search, StringComparison.OrdinalIgnoreCase) == true))).ToList();
+        }
+    }
+    private string FolderName(string? id) => Folders.FirstOrDefault(f => f.Id == id)?.Title ?? "";
+    protected override async Task OnInitializedAsync() { if (Sessions.IsUnlocked) await RefreshAsync(); }
+    private async Task RefreshAsync() {
+        if (_busy) return;
+        _busy = true; _error = null;
+        try { _records = await Ledger.ReadAsync(); }
+        catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task LockAsync() {
+        Workflow.Lock(); await Ledger.DisconnectAsync(); Nav.NavigateTo("/");
+    }
+}
