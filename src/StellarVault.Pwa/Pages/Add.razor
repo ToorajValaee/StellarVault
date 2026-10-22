@@ -1,6 +1,8 @@
 @page "/add"
 @page "/edit/{RecordId}"
 @using StellarVault.Core.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
@@ -14,13 +16,25 @@ else
 {
     <section class="form-page">
         <header class="page-command-header">
-            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">@(_kind == "file" ? "Select a file and protect it in your encrypted vault." : "Encrypted Stellar ledger operation. Network fees and account reserves apply.")</p></div>
+            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">@(_kind == "file" ? "Publish an encrypted file to the Stellar ledger with fee approval." : "Encrypted Stellar ledger operation. Network fees and account reserves apply.")</p></div>
             <a class="pixel-button compact" href="@ReturnUrl">← CANCEL</a>
         </header>
         @if (_loading) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> LOADING RECORD AND FOLDERS...</div> }
         @if (_kind == "file")
         {
-            <VaultBinaryFilesView />
+            <div class="terminal-panel credential-form">
+                <div class="form-section-title"><span>01</span> FILE SELECTION</div>
+                <label class="terminal-label" for="sv-ledger-file">FILE *</label>
+                <InputFile id="sv-ledger-file" class="terminal-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
+                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 4 KiB. Larger-file batching is not yet implemented.</p>
+                @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
+                <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
+                <input id="sv-ledger-file-title" class="terminal-input" maxlength="256" @bind="_title" @bind:event="oninput" disabled="@(_busy || _loading)" />
+                <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
+                @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div> }
+                @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
+                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="ReviewAsync">REVIEW FILE COST AND APPROVE</button>
+            </div>
         }
         else
         {
@@ -70,6 +84,40 @@ else
     private string _title = "", _secret = "", _username = "", _url = "", _notes = "", _tags = "";
     private string _folder = "";
     private bool _showSecret, _busy;
+    private const long MaximumLedgerFileLength = 4096;
+    private byte[]? _fileBytes;
+    private string _fileOriginalName = "";
+    private string _fileContentType = "application/octet-stream";
+    private async Task SelectLedgerFileAsync(InputFileChangeEventArgs args)
+    {
+        _status = null;
+        _estimate = null;
+        _reviewedDraft = null;
+        _fileBytes = null;
+        var file = args.File;
+        if (file.Size > MaximumLedgerFileLength)
+        {
+            _status = "On-chain upload currently supports up to 4 KiB. No transaction was submitted.";
+            return;
+        }
+        _busy = true;
+        try
+        {
+            await using var stream = file.OpenReadStream(MaximumLedgerFileLength);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _fileBytes = buffer.ToArray();
+            _fileOriginalName = file.Name;
+            _fileContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+            _title = file.Name.Length > 256 ? file.Name[..256] : file.Name;
+        }
+        catch (Exception ex)
+        {
+            _fileBytes = null;
+            _status = "Unable to read file: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
     private bool _loading;
     private LedgerCostPreview? _estimate;
     private LedgerRecordDraft? _reviewedDraft;
@@ -127,18 +175,28 @@ else
         finally { _loading = false; }
     }
     private LedgerRecordDraft Draft() {
+        if (_kind == "file")
+        {
+            if (_fileBytes is null) throw new InvalidOperationException("Select a file first.");
+            string payload = "SVFILE1:" + JsonSerializer.Serialize(new LedgerFilePayload(
+                _fileOriginalName, _fileContentType, Convert.ToBase64String(_fileBytes)));
+            return new LedgerRecordDraft(_title, payload,
+                string.IsNullOrWhiteSpace(_folder) ? null : _folder,
+                ["file", "svfile-v1"]);
+        }
         var tags = _tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return new LedgerRecordDraft(_title, _kind == "folder" ? "folder" : _secret,
             string.IsNullOrWhiteSpace(_folder) ? null : _folder, tags, _kind == "folder", _username, _url, _notes);
     }
     private async Task ReviewAsync() {
-        if (_busy || !Ledger.IsConnected) return;
+        if (_busy || !Ledger.IsConnected || (_kind == "file" && _fileBytes is null)) return;
         _busy = true; _status = "CALCULATING LEDGER COST...";
         try { _reviewedDraft = Draft(); _reviewedRecordId = RecordId; _estimate = await Ledger.EstimateAsync(_reviewedDraft, RecordId); _status = null; }
         catch (Exception ex) { _status = "Estimate failed: " + ex.Message; }
         finally { _busy = false; }
     }
+    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64);
     private static bool SameDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
         x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
         x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
@@ -155,7 +213,7 @@ else
                 _status = "UPDATED TX: " + result.TransactionHash + " " + result.Warning;
             } else {
                 var hash = await Ledger.PublishDetailedAsync(draft);
-                _status = "COMMITTED TX: " + hash;
+                _status = (_kind == "file" ? "FILE PUBLISHED ON STELLAR. TX: " : "COMMITTED TX: ") + hash;
             }
             Nav.NavigateTo(ReturnUrl);
         } catch (Exception ex) { _status = "Ledger commit failed: " + ex.Message; }
