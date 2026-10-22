@@ -1,7 +1,7 @@
 // Browser lifecycle bridge for fresh v2. Never persists keys or credentials.
 // Switching tabs preserves the in-memory session. Pagehide still locks it.
 // This trades stronger background isolation for usability on ordinary app switches.
-// Five-second inactivity and focus-loss privacy guard. The privacy lock only
+// Five-second focus-loss privacy guard. Remaining in the tab never locks. The privacy lock only
 // clears the active local key; resuming asks for the vault passphrase.
 window.stellarVaultV2Lifecycle = (() => {
   const timeoutMs = 5000;
@@ -11,9 +11,7 @@ window.stellarVaultV2Lifecycle = (() => {
 
   function attach(dotnet) {
     detach();
-    let idleTimer = null;
     let awayTimer = null;
-    let lastActivity = Date.now();
     let awaySince = null;
     let exited = false;
 
@@ -21,27 +19,11 @@ window.stellarVaultV2Lifecycle = (() => {
       if (exited || filePickerOpen) return;
       Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     };
-    const clearIdle = () => { if (idleTimer !== null) clearTimeout(idleTimer); idleTimer = null; };
     const clearAway = () => { if (awayTimer !== null) clearTimeout(awayTimer); awayTimer = null; };
 
-    const startIdle = () => {
-      clearIdle();
-      if (filePickerOpen || awaySince !== null || exited) return;
-      const remaining = Math.max(0, timeoutMs - (Date.now() - lastActivity));
-      idleTimer = setTimeout(() => {
-        if (Date.now() - lastActivity >= timeoutMs) suspend();
-        else startIdle();
-      }, remaining);
-    };
-    const active = () => {
-      if (exited || filePickerOpen || awaySince !== null) return;
-      lastActivity = Date.now();
-      startIdle();
-    };
     const goAway = () => {
       if (filePickerOpen || exited || awaySince !== null) return;
       awaySince = Date.now();
-      clearIdle();
       clearAway();
       awayTimer = setTimeout(() => {
         if (awaySince !== null && Date.now() - awaySince >= timeoutMs) suspend();
@@ -56,16 +38,12 @@ window.stellarVaultV2Lifecycle = (() => {
           filePickerOpen = false;
           awaySince = null;
           clearAway();
-          lastActivity = Date.now();
-          startIdle();
         }, 750);
         return;
       }
       if (awaySince !== null && Date.now() - awaySince >= timeoutMs) suspend();
       awaySince = null;
       clearAway();
-      lastActivity = Date.now();
-      startIdle();
     };
     const visibility = () => {
       if (document.visibilityState === 'hidden') goAway();
@@ -78,7 +56,6 @@ window.stellarVaultV2Lifecycle = (() => {
       if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
       pickerReturnTimer = null;
       awaySince = null;
-      clearIdle();
       clearAway();
     };
     const pickerDone = event => {
@@ -88,12 +65,9 @@ window.stellarVaultV2Lifecycle = (() => {
       pickerReturnTimer = null;
       filePickerOpen = false;
       awaySince = null;
-      lastActivity = Date.now();
-      startIdle();
     };
     const pagehide = () => {
       exited = true;
-      clearIdle();
       clearAway();
       Promise.resolve(dotnet.invokeMethodAsync('LockForBrowserLifecycle')).catch(() => {});
     };
@@ -102,17 +76,11 @@ window.stellarVaultV2Lifecycle = (() => {
     window.addEventListener('blur', goAway);
     window.addEventListener('focus', returnFocus);
     window.addEventListener('pagehide', pagehide);
-    document.addEventListener('pointerdown', active, true);
-    document.addEventListener('keydown', active, true);
-    document.addEventListener('input', active, true);
-    document.addEventListener('scroll', active, true);
     document.addEventListener('click', pickerStart, true);
     document.addEventListener('change', pickerDone, true);
-    startIdle();
 
     detachCurrent = () => {
       exited = true;
-      clearIdle();
       clearAway();
       if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
       pickerReturnTimer = null;
@@ -121,10 +89,6 @@ window.stellarVaultV2Lifecycle = (() => {
       window.removeEventListener('blur', goAway);
       window.removeEventListener('focus', returnFocus);
       window.removeEventListener('pagehide', pagehide);
-      document.removeEventListener('pointerdown', active, true);
-      document.removeEventListener('keydown', active, true);
-      document.removeEventListener('input', active, true);
-      document.removeEventListener('scroll', active, true);
       document.removeEventListener('click', pickerStart, true);
       document.removeEventListener('change', pickerDone, true);
     };
