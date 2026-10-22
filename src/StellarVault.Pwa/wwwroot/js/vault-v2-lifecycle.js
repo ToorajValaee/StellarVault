@@ -3,6 +3,31 @@
 // This trades stronger background isolation for usability on ordinary app switches.
 window.stellarVaultV2Lifecycle = (() => {
   let instance = null;
+  // Native file pickers temporarily take browser focus. Suppress the privacy
+  // lock only for that browser-owned picker, not for arbitrary app switches.
+  let filePickerOpen = false;
+  let pickerReturnTimer = null;
+  const resetFilePicker = () => {
+    if (pickerReturnTimer) clearTimeout(pickerReturnTimer);
+    pickerReturnTimer = null;
+    filePickerOpen = false;
+  };
+  const onFileInputClick = (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === 'file') {
+      if (pickerReturnTimer) clearTimeout(pickerReturnTimer);
+      filePickerOpen = true;
+    }
+  };
+  const onFileInputChange = (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === 'file')
+      resetFilePicker();
+  };
+  const onPickerReturn = () => {
+    if (filePickerOpen) {
+      if (pickerReturnTimer) clearTimeout(pickerReturnTimer);
+      pickerReturnTimer = setTimeout(resetFilePicker, 750);
+    }
+  };
   function attach(dotnet) {
     detach();
     let pendingLock = false;
@@ -14,17 +39,24 @@ window.stellarVaultV2Lifecycle = (() => {
         .finally(() => { pendingLock = false; });
     };
     const visibility = () => {
-      if (document.visibilityState === 'hidden')
+      if (!filePickerOpen && document.visibilityState === 'hidden')
         Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     };
-    const blur = () => Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
+    const blur = () => filePickerOpen ? undefined : Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
     const pagehide = () => lock();
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('blur', blur);
+    document.addEventListener('click', onFileInputClick, true);
+    document.addEventListener('change', onFileInputChange, true);
+    window.addEventListener('focus', onPickerReturn);
     window.addEventListener('pagehide', pagehide);
     instance = () => {
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('blur', blur);
+      document.removeEventListener('click', onFileInputClick, true);
+      document.removeEventListener('change', onFileInputChange, true);
+      window.removeEventListener('focus', onPickerReturn);
+      resetFilePicker();
       window.removeEventListener('pagehide', pagehide);
     };
   }
