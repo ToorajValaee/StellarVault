@@ -84,8 +84,14 @@ public sealed class FileSystemStellarUploadCheckpointStore : IStellarUploadCheck
                     {
                         if (old.Length > 16 * 1024)
                             throw new InvalidDataException("Existing upload checkpoint exceeds size limit.");
-                        (JsonSerializer.Deserialize<StellarUploadCheckpoint>(old)
-                            ?? throw new InvalidDataException("Existing upload checkpoint is empty.")).Validate();
+                        var previous = JsonSerializer.Deserialize<StellarUploadCheckpoint>(old)
+                            ?? throw new InvalidDataException("Existing upload checkpoint is empty.");
+                        previous.Validate();
+                        if (previous.Fingerprint != checkpoint.Fingerprint ||
+                            !previous.Ids.SequenceEqual(checkpoint.Ids, StringComparer.Ordinal) ||
+                            checkpoint.Step < previous.Step)
+                            throw new InvalidDataException(
+                                "Checkpoint identity or confirmed progress differs; reconcile before retry.");
                     }
                     catch (JsonException ex)
                     {
