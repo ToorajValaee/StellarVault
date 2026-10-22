@@ -1,0 +1,80 @@
+{
+  "schema": "stellarvault.project-readiness.v1",
+  "observed_at": "2026-10-23",
+  "repository": "ToorajValaee/StellarVault",
+  "branch": "feature/maui-shared-app",
+  "observed_head": "9b3486e2369490a21c26026611e67b5ae549ea95",
+  "production_approved": false,
+  "interpretation": "Static source and CI review; estimates are subjective and not verified completeness",
+  "maturity_estimates_percent": {
+    "overall": 55,
+    "pwa": 65,
+    "android": 45,
+    "ios": 40,
+    "windows": 45,
+    "mac_catalyst": 40,
+    "landing_website": 80
+  },
+  "architecture": {
+    "framework": ".NET 10",
+    "projects": [
+      "StellarVault.Core",
+      "StellarVault.UI",
+      "StellarVault.Pwa",
+      "StellarVault.Maui"
+    ],
+    "current_paths": [
+      "PWA local encrypted vault backed by IndexedDB",
+      "Native filesystem encrypted persistence with authorization denied by default",
+      "Browser Stellar HD ledger adapter for on-chain records"
+    ],
+    "target": "Encrypted Stellar-ledger records and manifests durable across devices; local storage as optional encrypted cache"
+  },
+  "implementation": {
+    "shared_core_ui": "implemented, not comprehensively validated",
+    "pwa_host": "implemented, unverified",
+    "native_hosts": "scaffolded; native wallet signing, file integration, signing and device tests pending",
+    "managed_aes_gcm": "implemented using Bouncy Castle for browser compatibility; verify vectors",
+    "file_upload": "multi-record protocol, recovery checkpoint safeguards and 16 KiB support reported implemented; Testnet unverified",
+    "on_chain": "BrowserStellarLedgerRecords supports connect, read and publish, but shared application integration incomplete",
+    "auth": "PWA local-only namespace; native DenyVaultAccountAuthorizer and UnavailableStellarLedgerRecords",
+    "ci": "latest workflow run 39857649422 failed without usable step logs; compilation status undetermined"
+  },
+  "release_blockers": [
+    "End-to-end cryptographic/functional verification",
+    "Authenticated wallet ownership for intended operating mode",
+    "Unified ledger-backed durable storage with no silent local fallback",
+    "Cross-device read/write/delete and interrupted transaction recovery",
+    "Upload checkpoint integrity and encrypted persistence",
+    "Native secure adapters, file import/export and signing",
+    "PWA HTTPS, CSP, offline upgrades, data backup/eviction checks",
+    "Release builds and reproducible CI",
+    "Independent security review"
+  ],
+  "next_milestone": "On disposable Stellar Testnet account publish encrypted record and multipart file, then recover both from ledger on a clean browser/device without relying on IndexedDB",
+  "priority": [
+    "Finish shared ledger integration and authentication",
+    "Verify resumable file writes and manifest finality",
+    "Complete native adapters",
+    "Run cross-device Testnet and failure-injection tests",
+    "Security review, packaging and release gates"
+  ],
+  "estimates_weeks_indicative": {
+    "pwa_testnet_beta": "3-6",
+    "pwa_production_candidate": "6-12+",
+    "android_after_shared": "2-4",
+    "ios_after_shared": "3-6",
+    "desktop_after_shared": "2-5"
+  },
+  "source_paths": [
+    "README.md",
+    "docs/PWA-RELEASE-GATES.md",
+    "docs/ONCHAIN-INTEGRATION-GATE.md",
+    "docs/PWA-LOCAL-VAULT-PREVIEW.md",
+    "src/StellarVault.Pwa/Program.cs",
+    "src/StellarVault.Maui/MauiProgram.cs",
+    "src/StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs",
+    "src/StellarVault.Pwa/Services/LedgerFileProtocol.cs"
+  ],
+  "change_policy": "Keep main unchanged; progress on feature/maui-shared-app. Validate builds and Testnet before declaring ready."
+}
