@@ -10,7 +10,7 @@ window.stellarVaultUploadCheckpoint = (() => {
   function load(account) {
     try {
       const value = localStorage.getItem(key(account));
-      if (!value) return null;
+      if (value === null) return null;
       const state = JSON.parse(value);
       if (state?.version !== 1 || !Array.isArray(state.ids) ||
           !Number.isInteger(state.step) || state.step < 0 || state.step > state.ids.length ||
@@ -18,7 +18,7 @@ window.stellarVaultUploadCheckpoint = (() => {
           state.ids.some(id => typeof id !== 'string' || !/^[a-f0-9]{16}$/.test(id)))
         throw new Error('Invalid upload checkpoint.');
       return state;
-    } catch { return null; }
+    } catch (error) { throw new Error('Invalid upload checkpoint; publishing is blocked until recovery.', {cause:error}); }
   }
   function save(account, fingerprint, ids, step) {
     if (!/^[A-F0-9]{64}$/.test(fingerprint) || !Array.isArray(ids) ||
