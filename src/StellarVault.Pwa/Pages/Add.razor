@@ -3,6 +3,8 @@
 @using StellarVault.Core.Services
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Text.Json
+@using System.Security.Cryptography
+@implements IDisposable
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
@@ -25,7 +27,11 @@ else
             <div class="terminal-panel credential-form">
                 <div class="form-section-title"><span>01</span> FILE SELECTION</div>
                 <label class="terminal-label" for="sv-ledger-file">FILE *</label>
-                <InputFile id="sv-ledger-file" class="terminal-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
+                <div class="sv-file-picker">
+                    <label class="pixel-button compact sv-file-picker-button" for="sv-ledger-file">+ CHOOSE FILE</label>
+                    <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
+                    <InputFile id="sv-ledger-file" class="sv-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
+                </div>
                 <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 4 KiB. Larger-file batching is not yet implemented.</p>
                 @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
@@ -93,7 +99,7 @@ else
         _status = null;
         _estimate = null;
         _reviewedDraft = null;
-        _fileBytes = null;
+        ClearFileBytes();
         var file = args.File;
         if (file.Size > MaximumLedgerFileLength)
         {
@@ -113,7 +119,7 @@ else
         }
         catch (Exception ex)
         {
-            _fileBytes = null;
+            ClearFileBytes();
             _status = "Unable to read file: " + ex.Message;
         }
         finally { _busy = false; }
@@ -179,7 +185,8 @@ else
         {
             if (_fileBytes is null) throw new InvalidOperationException("Select a file first.");
             string payload = "SVFILE1:" + JsonSerializer.Serialize(new LedgerFilePayload(
-                _fileOriginalName, _fileContentType, Convert.ToBase64String(_fileBytes)));
+                _fileOriginalName, _fileContentType, Convert.ToBase64String(_fileBytes),
+                Convert.ToHexString(SHA256.HashData(_fileBytes))));
             return new LedgerRecordDraft(_title, payload,
                 string.IsNullOrWhiteSpace(_folder) ? null : _folder,
                 ["file", "svfile-v1"]);
@@ -196,7 +203,12 @@ else
         catch (Exception ex) { _status = "Estimate failed: " + ex.Message; }
         finally { _busy = false; }
     }
-    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64);
+    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64, string Sha256Hex);
+    private void ClearFileBytes() {
+        if (_fileBytes is not null) CryptographicOperations.ZeroMemory(_fileBytes);
+        _fileBytes = null;
+    }
+    public void Dispose() => ClearFileBytes();
     private static bool SameDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
         x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
         x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
@@ -215,7 +227,7 @@ else
                 var hash = await Ledger.PublishDetailedAsync(draft);
                 _status = (_kind == "file" ? "FILE PUBLISHED ON STELLAR. TX: " : "COMMITTED TX: ") + hash;
             }
-            if (_fileBytes is not null) { System.Security.Cryptography.CryptographicOperations.ZeroMemory(_fileBytes); _fileBytes = null; }
+            ClearFileBytes();
             Nav.NavigateTo(ReturnUrl);
         } catch (Exception ex) { _status = "Ledger commit failed: " + ex.Message; }
         finally { _busy = false; }
