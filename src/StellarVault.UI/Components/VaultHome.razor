@@ -344,7 +344,7 @@
     private void SelectNetwork(string value)
     {
         if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public" && value != "custom")) return;
-        if (value != "custom") NetworkSelection.Select(value);
+        NetworkSelection.ChoosePreset(value);
         _network = value;
         _networkStatus = null;
         _childAccounts = null;
@@ -363,6 +363,7 @@
         {
             _customPassphrase = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon);
             NetworkSelection.ConfigureCustom(_customPassphrase);
+            NetworkSelection.CustomHorizonUrl = _customHorizon.Trim();
             _detectedHorizon = _customHorizon.Trim();
             _networkStatus = "Private network detected.";
         }
@@ -514,7 +515,15 @@
         _message = "Vault locked.";
     }
 
-    protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        _network = NetworkSelection.SelectedPreset;
+        _customHorizon = NetworkSelection.CustomHorizonUrl;
+        _customPassphrase = NetworkSelection.CustomPassphrase;
+        if (_network == "custom" && !string.IsNullOrWhiteSpace(_customPassphrase))
+            _detectedHorizon = _customHorizon;
+    }
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
     public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
 }
