@@ -1,6 +1,7 @@
 @page "/vault"
 @using StellarVault.Core.Services
 @using System.Text.Json
+@using System.Security.Cryptography
 @using Microsoft.JSInterop
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
@@ -93,7 +94,7 @@ else
                 <div class="data-field"><span class="field-label">FOLDER PATH</span><div class="field-value-row"><code>@FolderPath(_selected.FolderId)</code></div></div>
                 @if (IsLedgerFile(_selected))
                 {
-                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button></div>
+                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
                 }
                 else
                 {
@@ -163,7 +164,7 @@ else
 
 
     [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
-    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64);
+    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64, string? Sha256Hex = null);
     private static bool IsLedgerFile(LedgerRecordItem item) =>
         item.Content.StartsWith("SVFILE1:", StringComparison.Ordinal) &&
         item.Tags?.Contains("svfile-v1", StringComparer.Ordinal) == true;
@@ -178,16 +179,21 @@ else
             try
             {
                 if (bytes.Length > 4096) throw new InvalidDataException("File payload exceeds supported limit.");
+                if (payload.Sha256Hex is not null &&
+                    !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), payload.Sha256Hex, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Downloaded file checksum mismatch.");
                 await JS.InvokeVoidAsync("stellarVaultV2Download.save", payload.FileName, bytes);
+                _fileDownloadStatus = "File authenticated and downloaded.";
             }
             finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
         }
-        catch (Exception ex) { _error = "Encrypted file download failed: " + ex.Message; }
+        catch (Exception ex) { _fileDownloadStatus = "Encrypted file download failed: " + ex.Message; }
     }
+    private string? _fileDownloadStatus;
     private LedgerRecordItem? _selected;
     private bool _revealed;
-    private void OpenRecord(LedgerRecordItem item) { _selected = item; _revealed = false; }
-    private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; }
+    private void OpenRecord(LedgerRecordItem item) { _selected = item; _revealed = false; _fileDownloadStatus = null; }
+    private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
     private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
     private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
     private bool _showAccountInfo, _infoLoading;
