@@ -1,0 +1,120 @@
+@page "/initialize"
+@using StellarVault.Core.Services
+@inject IStellarLedgerRecords Ledger
+@inject VaultSessionManager Sessions
+@inject NavigationManager Nav
+
+<AdaptiveShell PlatformName="WEB PWA" Subtitle="FIRST-TIME HD SETUP">
+@if (!Sessions.IsUnlocked)
+{
+    <section class="terminal-panel centered-message">
+        <h1>DATABASE LOCKED</h1>
+        <a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a>
+    </section>
+}
+else if (!Ledger.IsConnected)
+{
+    <section class="terminal-panel centered-message">
+        <h1>STELLAR CONNECTION REQUIRED</h1>
+        <p>The local vault is open, but there is no connected Stellar ledger session. Return to access terminal to review the connection error.</p>
+        <a class="pixel-button primary" href="/">ACCESS TERMINAL</a>
+    </section>
+}
+else
+{
+    <section class="form-page">
+        <header class="page-command-header">
+            <div><div class="panel-kicker">FIRST-TIME HD SETUP // STEP 02</div><h1>INITIALIZE ROOT REGISTRY</h1>
+                <p class="page-subtitle">Authenticate the encrypted account chain on the selected Stellar network.</p>
+            </div>
+        </header>
+        <div class="terminal-panel credential-form">
+            @if (_checking) { <p role="status">CHECKING ROOT REGISTRY AND FUNDING...</p> }
+            else if (_ready)
+            {
+                <div class="terminal-alert success" role="status"><strong>REGISTRY READY</strong><span>Authenticated registry detected. Continue to your vault.</span></div>
+                <button class="pixel-button primary" @onclick='() => Nav.NavigateTo("/vault")'>OPEN VAULT →</button>
+            }
+            else
+            {
+                <p class="advanced-help">Initialization creates a real ManageData ledger entry and consumes an XLM fee and reserve. No transaction is submitted without your approval.</p>
+                @if (_funding is not null)
+                {
+                    <div class="stats-strip">
+                        <div><span>TOTAL XLM</span><strong>@_funding.BalanceXlm</strong></div>
+                        <div><span>SPENDABLE XLM</span><strong>@_funding.SpendableXlm</strong></div>
+                        <div><span>REQUIRED SPENDABLE XLM</span><strong>@_funding.RequiredAdditionalXlm</strong></div>
+                    </div>
+                    <p class="advanced-help">ROOT PUBLIC ADDRESS: @_funding.RootAccountId</p>
+                    @if (!_funding.CanInitialize)
+                    {
+                        <div class="terminal-alert warning">Fund the root account on the selected Stellar network, then refresh its balance.</div>
+                    }
+                }
+                <button class="pixel-button compact" disabled="@_busy" @onclick="RefreshFundingAsync">↻ REFRESH BALANCE</button>
+                <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0">
+                    <input type="checkbox" @bind="_confirmed" />
+                    <span>I understand this will submit a real ledger transaction.</span>
+                </label>
+                <button class="pixel-button primary" disabled="@(!_confirmed || _busy || _funding?.CanInitialize != true)"
+                        @onclick="InitializeAsync">@(_busy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")</button>
+            }
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="terminal-alert warning" role="alert"><strong>SETUP STATUS</strong><span>@_error</span></div>
+            }
+        </div>
+    </section>
+}
+</AdaptiveShell>
+
+@code {
+    private LedgerFundingStatus? _funding;
+    private bool _confirmed, _busy, _checking = true, _ready;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+            _ready = await Ledger.HasRegistryAsync();
+            if (!_ready) _funding = await Ledger.InspectRegistryFundingAsync();
+        }
+        catch (Exception ex) { _error = "Registry inspection failed: " + ex.Message; }
+        finally { _checking = false; }
+    }
+
+    private async Task RefreshFundingAsync()
+    {
+        if (_busy || !Ledger.IsConnected) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            _ready = await Ledger.HasRegistryAsync();
+            if (!_ready) _funding = await Ledger.InspectRegistryFundingAsync();
+        }
+        catch (Exception ex) { _error = "Treasury inspection failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task InitializeAsync()
+    {
+        if (_busy || !_confirmed || _funding?.CanInitialize != true || !Ledger.IsConnected) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            // Never blindly retry after ambiguous submission. The connected
+            // ledger store verifies registry state on initialization.
+            if (!await Ledger.HasRegistryAsync())
+                await Ledger.InitializeRegistryAsync();
+            _ready = await Ledger.HasRegistryAsync();
+            if (!_ready) throw new InvalidOperationException("Registry not visible after transaction.");
+            // Keep success visible; the user continues to /vault without re-unlocking.
+        }
+        catch (Exception ex) { _error = "Registry initialization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+}
