@@ -6,3 +6,6 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 
 .sv-header-actions {display:flex;align-items:center;gap:.7rem;min-width:0}
+
+.sv-theme-toggle { flex:0 0 auto; cursor:pointer; display:grid;place-items:center;width:2.15rem;height:2.15rem;border:1px solid var(--border);border-radius:.25rem;background:var(--panel-soft);color:var(--phosphor);font-size:1.15rem; }
+.sv-theme-toggle:hover { border-color:var(--phosphor-strong);color:var(--phosphor-strong); }
