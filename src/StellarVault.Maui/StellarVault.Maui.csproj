@@ -19,7 +19,7 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19041.0</SupportedOSPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
     <PackageReference Include="CommunityToolkit.Maui" Version="14.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.0" />
     <!-- Reuse the exact C# HD-v2 ledger engine and IStellarLedgerRecords
