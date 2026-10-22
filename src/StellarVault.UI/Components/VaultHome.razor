@@ -406,7 +406,7 @@
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
             if (Sessions.IsUnlocked && Platform == "WEB PWA" && LedgerRecords.IsConnected)
-                Navigation.NavigateTo("/vault");
+                Navigation.NavigateTo(_ledgerRegistryReady ? "/vault" : "/initialize");
             else if (Sessions.IsUnlocked && Platform == "WEB PWA")
                 _message = "Local vault unlocked, but Stellar ledger setup failed. See the on-chain connection error below; LOCK VAULT to retry.";
         }
@@ -434,6 +434,10 @@
         {
             Logger.LogError("Vault authorization error at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
             _message = "Vault access is not authorized in this environment.";
+        }
+        catch (OperationCanceledException)
+        {
+            _message = "Vault unlock was interrupted because the session was locked (for example when the browser tab became hidden). Keep this tab visible and retry.";
         }
         catch (Exception ex)
         {
