@@ -4,7 +4,7 @@
             <span class="sv-mark" aria-hidden="true">SV</span>
             <span><strong>STELLARVAULT</strong><small>@Subtitle</small></span>
         </div>
-        <span class="sv-platform">@PlatformName</span>
+        <div class="sv-header-actions">@HeaderActions<span class="sv-platform">@PlatformName</span></div>
     </header>
     <main class="sv-adaptive-main" id="main-content">
         @ChildContent
@@ -15,4 +15,5 @@
     [Parameter] public string PlatformName { get; set; } = "WEB";
     [Parameter] public string Subtitle { get; set; } = "ENCRYPTED VAULT";
     [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
 }
