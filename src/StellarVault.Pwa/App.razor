@@ -2,40 +2,43 @@
 @using StellarVault.Core.Services
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
+@inject IStellarLedgerRecords LedgerRecords
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<VaultHome Platform="WEB PWA" />
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(StellarVault.Pwa.EmptyLayout)" />
+    </Found>
+    <NotFound>
+        <VaultHome Platform="WEB PWA" />
+    </NotFound>
+</Router>
 
 @code {
     private DotNetObjectReference<App>? _callback;
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         _callback = DotNetObjectReference.Create(this);
-        try
-        {
-            await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback);
-        }
-        catch (JSException)
-        {
-            // Browser privacy restrictions or an outdated cached script may
-            // disable this optional lifecycle hook. Fail closed: do not keep
-            // a vault session alive without the background-lock mechanism.
-            Sessions.Lock();
-        }
+        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback); }
+        catch (JSException) { Sessions.Lock(); await LedgerRecords.DisconnectAsync(); }
     }
 
     [JSInvokable]
-    public void LockForBrowserLifecycle() => Sessions.Lock();
+    public async Task LockForBrowserLifecycle()
+    {
+        Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
+    }
 
     public async ValueTask DisposeAsync()
     {
         Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
         try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
+        catch (JSException) { }
         catch (JSDisconnectedException) { }
-        catch (JSException) { /* The page is already locking and disposing. */ }
         _callback?.Dispose();
     }
 }
