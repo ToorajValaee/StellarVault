@@ -12,10 +12,13 @@ public interface IStellarLedgerRecords
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
     Task<string> PublishDetailedAsync(LedgerRecordDraft draft);
+    Task<LedgerCostPreview> EstimateAsync(LedgerRecordDraft draft, string? recordId = null);
+    Task<LedgerCostPreview> EstimateDeleteAsync(string id);
     Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft);
     Task<LedgerMutationResult> DeleteAsync(string id);
     Task DisconnectAsync();
 }
+public sealed record LedgerCostPreview(int Operations, int Transactions, decimal NetworkFeeXlm, decimal PeakReserveXlm, decimal NetReserveChangeXlm, bool CreatesChildNode);
 public sealed record LedgerFundingStatus(string RootAccountId, string BalanceXlm, string SpendableXlm, string RequiredAdditionalXlm, bool CanInitialize);
 public sealed record LedgerMutationResult(string TransactionHash, string? Warning = null);
 public sealed record LedgerRecordItem(string Id, string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
@@ -33,6 +36,8 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
     public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) => Task.FromException<string>(Unavailable());
+    public Task<LedgerCostPreview> EstimateAsync(LedgerRecordDraft draft, string? recordId = null) => Task.FromException<LedgerCostPreview>(Unavailable());
+    public Task<LedgerCostPreview> EstimateDeleteAsync(string id) => Task.FromException<LedgerCostPreview>(Unavailable());
     public Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft) => Task.FromException<LedgerMutationResult>(Unavailable());
     public Task<LedgerMutationResult> DeleteAsync(string id) => Task.FromException<LedgerMutationResult>(Unavailable());
     public Task DisconnectAsync() => Task.CompletedTask;
