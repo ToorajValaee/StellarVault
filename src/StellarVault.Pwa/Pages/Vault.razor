@@ -2,6 +2,7 @@
 @using StellarVault.Core.Services
 @using System.Text.Json
 @using System.Security.Cryptography
+@using StellarVault.Pwa.Services
 @using Microsoft.JSInterop
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
@@ -164,30 +165,31 @@ else
 
 
     [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
-    private sealed record LedgerFilePayload(string FileName, string ContentType, string DataBase64, string? Sha256Hex = null);
-    private static bool IsLedgerFile(LedgerRecordItem item) =>
-        item.Content.StartsWith("SVFILE1:", StringComparison.Ordinal) &&
-        item.Tags?.Contains("svfile-v1", StringComparer.Ordinal) == true;
+    private static bool IsLedgerFile(LedgerRecordItem item) => LedgerFileProtocol.IsFile(item);
     private async Task DownloadLedgerFileAsync()
     {
         if (_selected is null || !IsLedgerFile(_selected)) return;
+        _fileDownloadStatus = "RECOVERING ENCRYPTED FILE FROM STELLAR...";
         try
         {
-            var payload = JsonSerializer.Deserialize<LedgerFilePayload>(_selected.Content["SVFILE1:".Length..])
-                ?? throw new InvalidDataException("Missing file metadata.");
-            var bytes = Convert.FromBase64String(payload.DataBase64);
+            // Re-read the full authenticated ledger snapshot rather than trusting
+            // an old in-memory list that may omit parts from a recent publication.
+            var all = await Ledger.ReadAsync();
+            var current = all.SingleOrDefault(r => r.Id == _selected.Id)
+                ?? throw new InvalidDataException("File manifest is no longer available.");
+            var bytes = LedgerFileProtocol.DecodeFile(current, all);
             try
             {
-                if (bytes.Length > 4096) throw new InvalidDataException("File payload exceeds supported limit.");
-                if (payload.Sha256Hex is not null &&
-                    !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), payload.Sha256Hex, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("Downloaded file checksum mismatch.");
-                await JS.InvokeVoidAsync("stellarVaultV2Download.save", payload.FileName, bytes);
-                _fileDownloadStatus = "File authenticated and downloaded.";
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                    LedgerFileProtocol.FileName(current), bytes);
+                _fileDownloadStatus = "File verified and downloaded.";
             }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
         }
-        catch (Exception ex) { _fileDownloadStatus = "Encrypted file download failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.Message;
+        }
     }
     private string? _fileDownloadStatus;
     private LedgerRecordItem? _selected;
@@ -239,7 +241,7 @@ else
     }
     private string? _error;
     private List<LedgerRecordItem> Folders => _records.Where(r => r.IsFolder).ToList();
-    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder).ToList();
+    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder && !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)).ToList();
     private IEnumerable<LedgerRecordItem> Breadcrumbs
     {
         get {
