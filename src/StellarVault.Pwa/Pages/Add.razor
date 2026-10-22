@@ -244,6 +244,7 @@ else
                     await ReconcileFileStageAsync();
                 if (_fileStep >= _filePlan.Count) {
                     _status = "All file stages are confirmed on Stellar.";
+                    await ClearCheckpointAsync();
                     ClearFileBytes();
                     return;
                 }
@@ -296,10 +297,12 @@ else
                 var hash = await Ledger.PublishWithIdAsync(_reviewedRecordId!, _reviewedDraft);
                 _fileStep++;
                 _uncertainStage = false;
+                await SaveCheckpointAsync(_fileFingerprint!);
                 _estimate = null;
                 _reviewedDraft = null;
                 _status = "CONFIRMED STAGE " + _fileStep + "/" + _filePlan!.Count + ". TX: " + hash;
                 if (_fileStep == _filePlan.Count) {
+                    await ClearCheckpointAsync();
                     ClearFileBytes();
                     Nav.NavigateTo(ReturnUrl);
                 }
@@ -345,6 +348,7 @@ else
             throw new InvalidDataException("The ledger contains a conflicting file stage. Stop the upload.");
         _fileStep++;
         _uncertainStage = false;
+        await SaveCheckpointAsync(_fileFingerprint!);
         _status = "Previously submitted stage confirmed during ledger recovery.";
     }
 
