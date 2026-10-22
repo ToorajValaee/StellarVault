@@ -29,7 +29,7 @@ else
             </div>
         </header>
         <div class="terminal-panel credential-form">
-            @if (_checking) { <p role="status">CHECKING ROOT REGISTRY AND FUNDING...</p> }
+            @if (_checking) { <p role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> CHECKING ROOT REGISTRY AND FUNDING...</p> }
             else if (_ready)
             {
                 <div class="terminal-alert success" role="status"><strong>REGISTRY READY</strong><span>Authenticated registry detected. Continue to your vault.</span></div>
@@ -37,7 +37,7 @@ else
             }
             else
             {
-                <p class="advanced-help">Initialization creates a real ManageData ledger entry and consumes an NATIVE fee and reserve. No transaction is submitted without your approval.</p>
+                <p class="advanced-help">Initialization creates a real ManageData ledger entry and consumes a NATIVE fee and reserve. No transaction is submitted without your approval.</p>
                 @if (_funding is not null)
                 {
                     <div class="stats-strip">
@@ -59,6 +59,7 @@ else
                 <button class="pixel-button primary" disabled="@(!_confirmed || _busy || _funding?.CanInitialize != true)"
                         @onclick="InitializeAsync">@(_busy ? "INITIALIZING..." : "INITIALIZE AUTHENTICATED REGISTRY")</button>
             }
+            @if (_busy) { <p role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> @_loadingMessage</p> }
             @if (!string.IsNullOrEmpty(_error))
             {
                 <div class="terminal-alert warning" role="alert"><strong>SETUP STATUS</strong><span>@_error</span></div>
@@ -72,6 +73,7 @@ else
     private LedgerFundingStatus? _funding;
     private bool _confirmed, _busy, _checking = true, _ready;
     private string? _error;
+    private string _loadingMessage = "PROCESSING...";
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,6 +91,7 @@ else
     {
         if (_busy || !Ledger.IsConnected) return;
         _busy = true;
+        _loadingMessage = "REFRESHING NATIVE BALANCE...";
         _error = null;
         try
         {
@@ -103,6 +106,7 @@ else
     {
         if (_busy || !_confirmed || _funding?.CanInitialize != true || !Ledger.IsConnected) return;
         _busy = true;
+        _loadingMessage = "INITIALIZING STELLAR REGISTRY...";
         _error = null;
         try
         {
