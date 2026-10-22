@@ -487,8 +487,6 @@
             {
                 bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network, _customHorizon, _customPassphrase);
                 _networkStatus = found ? "Root account found on the selected network." : "Root account not found on selected network. Local vault remains accessible.";
-                if (found && Sessions.IsUnlocked)
-                    _childAccounts = await JS.InvokeAsync<string[]>("stellarVaultV2Chain.discover", _mnemonic, _network, 16, _customHorizon, _customPassphrase);
             }
             catch (JSException)
             {
