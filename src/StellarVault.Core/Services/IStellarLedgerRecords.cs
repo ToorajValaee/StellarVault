@@ -7,6 +7,7 @@ public interface IStellarLedgerRecords
     bool IsConnected { get; }
     Task ConnectAsync(string mnemonic, string horizonUrl, string networkPassphrase);
     Task<bool> HasRegistryAsync();
+    Task<LedgerFundingStatus> InspectRegistryFundingAsync();
     Task InitializeRegistryAsync();
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync();
     Task<string> PublishAsync(string title, string content);
@@ -15,6 +16,7 @@ public interface IStellarLedgerRecords
     Task<LedgerMutationResult> DeleteAsync(string id);
     Task DisconnectAsync();
 }
+public sealed record LedgerFundingStatus(string RootAccountId, string BalanceXlm, string SpendableXlm, string RequiredAdditionalXlm, bool CanInitialize);
 public sealed record LedgerMutationResult(string TransactionHash, string? Warning = null);
 public sealed record LedgerRecordItem(string Id, string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
 public sealed record LedgerRecordDraft(string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
@@ -26,6 +28,7 @@ public sealed class UnavailableStellarLedgerRecords : IStellarLedgerRecords
     private static Exception Unavailable() => new NotSupportedException("Stellar ledger transport is not configured on this platform.");
     public Task ConnectAsync(string mnemonic, string horizonUrl, string networkPassphrase) => Task.FromException(Unavailable());
     public Task<bool> HasRegistryAsync() => Task.FromException<bool>(Unavailable());
+    public Task<LedgerFundingStatus> InspectRegistryFundingAsync() => Task.FromException<LedgerFundingStatus>(Unavailable());
     public Task InitializeRegistryAsync() => Task.FromException(Unavailable());
     public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() => Task.FromException<IReadOnlyList<LedgerRecordItem>>(Unavailable());
     public Task<string> PublishAsync(string title, string content) => Task.FromException<string>(Unavailable());
