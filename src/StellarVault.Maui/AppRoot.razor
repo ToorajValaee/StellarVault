@@ -392,9 +392,16 @@
                     _uploadPlan.Entries.Select(x => x.Id).ToArray(), 0));
 
             _uploadRemaining = (await UploadCoordinator.ReviewAsync(_uploadPlan)).Count;
-            _uploadMessage = _uploadRemaining == 0
-                ? "All file stages are already present on Stellar. Clear upload to select another file."
-                : "File staged. Review and approve each remaining transaction.";
+            if (_uploadRemaining == 0)
+            {
+                // A completed manifest is authoritative; release the stale
+                // checkpoint and plaintext so another file can be selected.
+                await UploadCheckpoints.ClearAsync(_rootAccountId);
+                CancelUpload();
+                _uploadMessage = "File already fully confirmed on Stellar. Recovery checkpoint cleared.";
+            }
+            else
+                _uploadMessage = "File staged. Review and approve each remaining transaction.";
         }
         catch (Exception)
         {
