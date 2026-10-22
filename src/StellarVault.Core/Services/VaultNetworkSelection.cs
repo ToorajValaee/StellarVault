@@ -9,6 +9,15 @@ public sealed class VaultNetworkSelection
 {
     public string Network { get; private set; } = "testnet";
     public string? CustomPassphrase { get; private set; }
+    public string SelectedPreset { get; private set; } = "testnet";
+    public string CustomHorizonUrl { get; set; } = string.Empty;
+    public void ChoosePreset(string preset)
+    {
+        if (preset is not ("testnet" or "public" or "custom"))
+            throw new ArgumentException("Unsupported Stellar network.", nameof(preset));
+        SelectedPreset = preset;
+        if (preset != "custom") Select(preset);
+    }
 
     public void Select(string network)
     {
@@ -17,6 +26,7 @@ public sealed class VaultNetworkSelection
         if (network == "custom" && string.IsNullOrWhiteSpace(CustomPassphrase))
             throw new InvalidOperationException("Detect the custom network before opening the vault.");
         Network = network;
+        SelectedPreset = network;
     }
 
     public void ConfigureCustom(string passphrase)
@@ -25,6 +35,7 @@ public sealed class VaultNetworkSelection
             throw new ArgumentException("Invalid custom network passphrase.", nameof(passphrase));
         CustomPassphrase = passphrase;
         Network = "custom";
+        SelectedPreset = "custom";
     }
 
     public void ResetCustom()
