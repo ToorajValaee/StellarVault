@@ -1,0 +1,15 @@
+<div class="terminal-alert warning" role="note">
+    <strong>STORAGE AND SIGNING ARE SEPARATE</strong>
+    @if (Native)
+    {
+        <span>A BIP-39 recovery phrase authorizes the Stellar ledger session. Native local-vault passphrase access is not yet enabled; connecting to Stellar does not unlock local encrypted records.</span>
+    }
+    else
+    {
+        <span>The mnemonic establishes your Stellar identity; the separate vault passphrase protects local encrypted records. Local saves are not automatically published to Stellar.</span>
+    }
+</div>
+
+@code {
+    [Parameter] public bool Native { get; set; }
+}
