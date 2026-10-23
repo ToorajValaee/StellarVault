@@ -55,7 +55,7 @@
         var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (words.Length > 1)
         {
-            if (index == 0 && words.Length is 12 or 15 or 18 or 21 or 24) _wordCount = words.Length;
+            if (index == 0 && words.Length is (12 or 15 or 18 or 21 or 24)) _wordCount = words.Length;
             for (var i = 0; i < words.Length && index + i < _words.Length; i++) _words[index + i] = words[i];
         }
         else _words[index] = value.Trim();
