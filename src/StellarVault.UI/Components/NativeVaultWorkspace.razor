@@ -64,7 +64,7 @@
                     <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_publishTitle) || string.IsNullOrWhiteSpace(_publishContent))" @onclick="EstimatePublishAsync">Review transaction cost</button>
                     @if (_publishEstimate is not null)
                     {
-                        <p>Estimated operations: @_publishEstimate.Operations; transactions: @_publishEstimate.Transactions; fee: @_publishEstimate.NetworkFeeXlm XLM; peak reserve: @_publishEstimate.PeakReserveXlm XLM.</p>
+                        <VaultTransactionCostReview Cost="_publishEstimate" Network="@_ledgerNetwork" Title="PUBLISH RECORD" />
                         <label><input type="checkbox" @bind="_publishApproved" disabled="@_ledgerBusy" /> I approve publishing this encrypted record to @_ledgerNetwork.</label>
                         <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !_publishApproved)" @onclick="ConfirmPublishAsync">Approve and submit to Stellar</button>
                         <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
@@ -85,7 +85,7 @@
                         <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _uploadNeedsReconciliation)" @onclick="ReviewUploadStageAsync">Review next transaction</button>
                         @if (_uploadCost is not null)
                         {
-                            <p>Next stage: @_uploadStageTitle · Fee: @_uploadCost.NetworkFeeXlm XLM · Peak reserve: @_uploadCost.PeakReserveXlm XLM · Operations: @_uploadCost.Operations</p>
+                            <VaultTransactionCostReview Cost="_uploadCost" Network="@_ledgerNetwork" Title="UPLOAD FILE STAGE" Stage="@_uploadStageTitle" />
                             <label><input type="checkbox" @bind="_uploadApproved" disabled="@_ledgerBusy" /> Approve this single Stellar transaction</label>
                             <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !_uploadApproved)" @onclick="PublishUploadStageAsync">Submit approved stage</button>
                         }
