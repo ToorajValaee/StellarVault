@@ -157,29 +157,24 @@
             }
             <p class="advanced-help">Local encrypted records and Stellar ledger writes are separate storage destinations. Publishing requires explicit transaction approval.</p>
         </section>
-        @if (Sessions.IsUnlocked)
-        {
-            <VaultRecordWorkspaceView />
-        }
-        @if (Sessions.IsUnlocked)
-        {
-            <p>Active account: @Sessions.ActiveAccountId</p>
-            <button type="button" class="pixel-button compact" @onclick="LockVault">Lock vault</button>
-        }
-        else
-        {
-            <label for="vault-account">Stellar account (public G-address)</label>
-            <input id="vault-account" class="terminal-input" autocomplete="off" spellcheck="false"
-                   @bind="_accountId" disabled="@_busy" maxlength="56" />
-            <label for="vault-passphrase">Vault passphrase</label>
-            <input id="vault-passphrase" class="terminal-input" type="password"
-                   autocomplete="off" @bind="_passphrase" disabled="@_busy" />
-            <div class="vault-actions">
-                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="CreateVault">Create vault</button>
-                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="UnlockVault">Unlock vault</button>
-            </div>
-            <p class="notice">Authorization is not configured: these actions currently fail closed and will not create or unlock credentials.</p>
-        }
+        <section class="terminal-panel" aria-label="Local encrypted vault status">
+            <div class="panel-kicker">LOCAL STORAGE // SESSION SECURITY</div>
+            <h3>LOCAL ENCRYPTED VAULT</h3>
+            @if (Sessions.IsUnlocked)
+            {
+                <p class="advanced-help">Local session unlocked for account <code>@Sessions.ActiveAccountId</code>.</p>
+                <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
+                <VaultRecordWorkspaceView />
+            }
+            else
+            {
+                <div class="terminal-alert warning" role="status">
+                    <strong>LOCAL VAULT LOCKED ON NATIVE</strong>
+                    <span>Account ownership authorization is not yet available in the native app. Local vault creation and passphrase unlock are intentionally disabled. You can still connect to Stellar above to recover and manage supported on-chain data.</span>
+                </div>
+            }
+            <p class="advanced-help">The Stellar mnemonic signs ledger operations. The separate local vault encryption passphrase does not replace signing authorization.</p>
+        </section>
         @if (!string.IsNullOrEmpty(_message))
         {
             <p role="status" aria-live="polite">@_message</p>
