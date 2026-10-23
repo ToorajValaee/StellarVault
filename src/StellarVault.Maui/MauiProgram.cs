@@ -15,6 +15,7 @@ public static class MauiProgram
         builder.UseMauiApp<App>().UseMauiCommunityToolkit();
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddSingleton<IFileSaver>(FileSaver.Default);
+        builder.Services.AddTransient<IVaultNativeFileAccess, MauiVaultNativeFileAccess>();
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
         builder.Services.AddSingleton<VaultNetworkSelection>();
