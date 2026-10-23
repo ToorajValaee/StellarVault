@@ -82,7 +82,7 @@
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
-                <p class="advanced-help">Your recovery phrase selects its vault automatically. Your separate encryption passphrase protects the vault data stored in this browser.</p>
+                <VaultStorageSecurityNotice />
                 @if (!Sessions.IsUnlocked)
                 {
                     <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
