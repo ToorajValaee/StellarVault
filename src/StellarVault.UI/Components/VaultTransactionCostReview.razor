@@ -1,0 +1,24 @@
+@using StellarVault.Core.Services
+<section class="terminal-panel" aria-label="Stellar transaction estimate">
+    <div class="panel-kicker">STELLAR TRANSACTION // COST REVIEW</div>
+    <h4>@Title</h4>
+    @if (!string.IsNullOrWhiteSpace(Stage))
+    {
+        <p class="advanced-help">@Stage</p>
+    }
+    <div class="commit-preview">
+        <span>NETWORK</span><strong>@Network.ToUpperInvariant()</strong>
+        <span>OPERATIONS</span><strong>@Cost.Operations</strong>
+        <span>TRANSACTIONS</span><strong>@Cost.Transactions</strong>
+        <span>NETWORK FEE</span><strong>@Cost.NetworkFeeXlm XLM</strong>
+        <span>PEAK RESERVE</span><strong>@Cost.PeakReserveXlm XLM</strong>
+    </div>
+    <p class="advanced-help">The estimate is not a final confirmation. Fees are checked again before the transaction is sent. Approval applies only to this operation.</p>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LedgerCostPreview Cost { get; set; } = default!;
+    [Parameter] public string Network { get; set; } = "testnet";
+    [Parameter] public string Title { get; set; } = "REVIEW COST";
+    [Parameter] public string? Stage { get; set; }
+}
