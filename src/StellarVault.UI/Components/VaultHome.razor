@@ -43,6 +43,12 @@
         }
     </HeaderActions>
     <ChildContent>
+    @if (Platform != "WEB PWA")
+    {
+        <NativeVaultWorkspace />
+    }
+    else
+    {
     <div class="access-grid">
         <section class="hero-terminal terminal-panel" aria-label="StellarVault overview">
             <div class="panel-kicker">SECURE DATA LINK // ACCOUNT VAULT</div>
@@ -277,6 +283,7 @@
                 <VaultBinaryFilesView />
             }
         </section>
+    }
     }
     </ChildContent>
 </AdaptiveShell>
