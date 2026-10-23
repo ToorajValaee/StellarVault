@@ -78,32 +78,7 @@
                     </div>
                 }
                 <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
-                <div class="sv-mnemonic-controls">
-                    <label class="terminal-label">WORDS
-                        <select class="terminal-input" @bind="_mnemonicWordCount" disabled="@(_busy || Sessions.IsUnlocked)">
-                            @foreach (var count in new[] { 12, 15, 18, 21, 24 })
-                            {
-                                <option value="@count">@count</option>
-                            }
-                        </select>
-                    </label>
-                    <button class="pixel-button compact" type="button" @onclick="() => _showMnemonic = !_showMnemonic">@(_showMnemonic ? "HIDE WORDS" : "SHOW WORDS")</button>
-                </div>
-                <div class="sv-mnemonic-grid">
-                    @for (var i = 0; i < _mnemonicWordCount; i++)
-                    {
-                        var index = i;
-                        <label class="terminal-label">
-                            <span>WORD @(index + 1)</span>
-                            <input class="terminal-input" type="@(_showMnemonic ? "text" : "password")"
-                                   value="@_mnemonicWords[index]"
-                                   @oninput="e => UpdateMnemonicWord(index, e.Value?.ToString() ?? string.Empty)"
-                                   autocomplete="off" autocapitalize="none" spellcheck="false"
-                                   disabled="@(_busy || Sessions.IsUnlocked)" placeholder="••••••" />
-                        </label>
-                    }
-                </div>
-                <p class="advanced-help">Each word is masked. You can also paste a complete 12–24 word phrase into the first slot.</p>
+                <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
@@ -142,7 +117,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit"
-                                disabled="@(_busy || _mnemonicWords.Take(_mnemonicWordCount).Any(x => string.IsNullOrWhiteSpace(x)) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
+                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
                                 >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
                     }
                 </div>
@@ -590,7 +565,7 @@
             return;
         }
         NetworkSelection.Select(_network);
-        _mnemonic = AssembleMnemonic();
+        _mnemonic = _mnemonic.Trim();
         _busy = true;
         _accessStage = "starting";
         await InvokeAsync(StateHasChanged);
