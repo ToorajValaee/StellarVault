@@ -14,7 +14,6 @@
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
     <HeaderActions>
-        @if (Platform == "WEB PWA")
         {
             <details class="sv-network-menu">
                 <summary title="Select Stellar network" aria-label="Select Stellar network">
@@ -23,15 +22,15 @@
                 <div class="sv-network-popover terminal-panel">
                     <div class="panel-kicker">ACTIVE STELLAR NETWORK</div>
                     <div class="sv-network-choice">
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("testnet")'>TESTNET @(_network == "testnet" ? "✓" : "")</button>
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("public")'>PUBLIC @(_network == "public" ? "✓" : "")</button>
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked)" @onclick='() => SelectNetwork("custom")'>CUSTOM @(_network == "custom" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("testnet")'>TESTNET @(_network == "testnet" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("public")'>PUBLIC @(_network == "public" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("custom")'>CUSTOM @(_network == "custom" ? "✓" : "")</button>
                     </div>
                     @if (_network == "custom")
                     {
                         <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
-                        <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url" @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" placeholder="https://horizon.example.com/" />
-                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
+                        <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url" @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" placeholder="https://horizon.example.com/" />
+                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
                         @if (!string.IsNullOrEmpty(_customPassphrase))
                         {
                             <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
@@ -551,7 +550,7 @@
     private string[]? _childAccounts;
     private void SelectNetwork(string value)
     {
-        if (_busy || Sessions.IsUnlocked || (value != "testnet" && value != "public" && value != "custom")) return;
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || (value != "testnet" && value != "public" && value != "custom")) return;
         NetworkSelection.ChoosePreset(value);
         _network = value;
         _networkStatus = null;
@@ -561,7 +560,7 @@
 
     private async Task DetectCustomAsync()
     {
-        if (_busy || Sessions.IsUnlocked || _network != "custom") return;
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || _network != "custom") return;
         _busy = true;
         _message = null;
         _customPassphrase = null;
