@@ -173,7 +173,7 @@
                     <span>Account ownership authorization is not yet available in the native app. Local vault creation and passphrase unlock are intentionally disabled. You can still connect to Stellar above to recover and manage supported on-chain data.</span>
                 </div>
             }
-            <p class="advanced-help">The Stellar mnemonic signs ledger operations. The separate local vault encryption passphrase does not replace signing authorization.</p>
+            <VaultStorageSecurityNotice Native="true" />
         </section>
         @if (!string.IsNullOrEmpty(_message))
         {
