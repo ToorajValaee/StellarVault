@@ -14,7 +14,6 @@
 
 <AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
     <HeaderActions>
-        {
             <details class="sv-network-menu">
                 <summary title="Select Stellar network" aria-label="Select Stellar network">
                     <span aria-hidden="true">◎</span> <span class="sv-network-name">@_network.ToUpperInvariant()</span>
@@ -39,7 +38,6 @@
                     <p class="advanced-help">Choose the network before unlocking. To switch accounts or networks, end the current session.</p>
                 </div>
             </details>
-        }
     </HeaderActions>
     <ChildContent>
     @if (Platform != "WEB PWA")
