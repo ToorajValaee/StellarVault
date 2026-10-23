@@ -14,15 +14,14 @@
 
     <section class="native-preview sv-vault-data" aria-labelledby="native-preview-title">
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
-            <h2>STELLAR LEDGER // READ-ONLY RECOVERY</h2>
+            <div class="panel-heading"><div><div class="panel-kicker">SECURE ACCESS // STELLAR IDENTITY</div><h2>OPEN YOUR VAULT</h2></div><span class="step-led">01</span></div>
             @if (!Ledger.IsConnected)
             {
                 <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
                 <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Check native runtime</button>
                 <p class="advanced-help">Selected network: @NetworkSelection.SelectedPreset.ToUpperInvariant(). Use the network selector in the application header to change networks before connecting.</p>
                 <label class="terminal-label" for="native-ledger-mnemonic">BIP-39 RECOVERY WORDS</label>
-                <textarea id="native-ledger-mnemonic" class="terminal-input terminal-textarea" rows="3"
-                          autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" @bind:event="oninput" disabled="@(_ledgerBusy || _runtimeReady != true)"></textarea>
+                <VaultMnemonicInput @bind-Value="_ledgerMnemonic" Disabled="@(_ledgerBusy || _runtimeReady != true)" />
                 <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
                         @onclick="ConnectLedgerAsync">Connect and read ledger</button>
             }
