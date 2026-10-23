@@ -19,11 +19,7 @@
             {
                 <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
                 <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Check native runtime</button>
-                <label for="native-ledger-network">Network</label>
-                <select id="native-ledger-network" class="terminal-input" @bind="_ledgerNetwork" disabled="@_ledgerBusy">
-                    <option value="testnet">Testnet</option>
-                    <option value="public">Public Network</option>
-                </select>
+                <p class="advanced-help">Selected network: @NetworkSelection.SelectedPreset.ToUpperInvariant(). Use the network selector in the application header to change networks before connecting.</p>
                 <label for="native-ledger-mnemonic">BIP-39 mnemonic</label>
                 <textarea id="native-ledger-mnemonic" class="vault-field" rows="3"
                           autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" @bind:event="oninput" disabled="@(_ledgerBusy || _runtimeReady != true)"></textarea>
@@ -215,7 +211,7 @@
         finally { _ledgerBusy = false; }
     }
 
-    private string _ledgerNetwork = "testnet";
+    private string _ledgerNetwork => NetworkSelection.SelectedPreset;
     private string _ledgerMnemonic = string.Empty;
     private bool _ledgerBusy;
     private string? _ledgerMessage;
@@ -730,7 +726,10 @@
             {
                 "testnet" => ("https://horizon-testnet.stellar.org", "Test SDF Network ; September 2015"),
                 "public" => ("https://horizon.stellar.org", "Public Global Stellar Network ; September 2015"),
-                _ => throw new InvalidOperationException("Unsupported network.")
+                "custom" when !string.IsNullOrWhiteSpace(NetworkSelection.CustomHorizonUrl) &&
+                              !string.IsNullOrWhiteSpace(NetworkSelection.CustomPassphrase) =>
+                    (NetworkSelection.CustomHorizonUrl, NetworkSelection.CustomPassphrase),
+                _ => throw new InvalidOperationException("Select and detect a supported network.")
             };
             // The earlier UI preflight may be stale after a WebView reload.
             // Recheck dependencies immediately before passing any mnemonic to JS.
