@@ -36,7 +36,26 @@
                 <p>Folders: @_ledgerRecords.Count(x => x.IsFolder) | Records: @_ledgerRecords.Count(x => !x.IsFolder)</p>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
                 <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
-                <section aria-label="Publish Stellar record" class="terminal-panel">
+                <nav class="network-selector" aria-label="Native Stellar workspace">
+                    <button type="button" class="network-option @(_nativeMode == "browse" ? "active" : "")"
+                            aria-pressed="@(_nativeMode == "browse")" disabled="@_ledgerBusy"
+                            @onclick='() => SetNativeMode("browse")'>
+                        <span class="network-symbol">S</span><span><strong>STELLAR STORAGE</strong><small>EXPLORE</small></span>
+                    </button>
+                    <button type="button" class="network-option @(_nativeMode == "record" ? "active" : "")"
+                            aria-pressed="@(_nativeMode == "record")" disabled="@_ledgerBusy"
+                            @onclick='() => SetNativeMode("record")'>
+                        <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>ON-CHAIN</small></span>
+                    </button>
+                    <button type="button" class="network-option @(_nativeMode == "file" ? "active" : "")"
+                            aria-pressed="@(_nativeMode == "file")" disabled="@_ledgerBusy"
+                            @onclick='() => SetNativeMode("file")'>
+                        <span class="network-symbol">F</span><span><strong>ADD FILE</strong><small>ON-CHAIN</small></span>
+                    </button>
+                </nav>
+                @if (_nativeMode == "record")
+                {
+                                <section aria-label="Publish Stellar record" class="terminal-panel">
                     <h3>ON-CHAIN RECORD // TRANSACTION APPROVAL</h3>
                     <p class="notice">Publishing submits a paid Stellar transaction. Review the estimate before authorizing. This does not save to local storage.</p>
                     <label for="native-publish-title">Record title</label>
@@ -52,7 +71,10 @@
                         <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
                     }
                 </section>
-                <section aria-label="Upload Stellar file" class="terminal-panel">
+                }
+                @if (_nativeMode == "file")
+                {
+                                <section aria-label="Upload Stellar file" class="terminal-panel">
                     <h3>ON-CHAIN FILE // MULTIPART UPLOAD</h3>
                     <p class="notice">Each part requires a separate approved Stellar transaction. Keep the original file until all stages are confirmed. Interrupted uploads can resume by selecting the same file.</p>
                     <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
@@ -75,7 +97,12 @@
                         <p role="status">@_uploadMessage</p>
                     }
                 </section>
-                <label for="native-ledger-folder">Folder</label>
+                }
+                @if (_nativeMode == "browse")
+                {
+                    <div class="panel-kicker">STORED RECORDS // STELLAR LEDGER</div>
+                    <h3>RECORD AND FILE DIRECTORY</h3>
+                                <label for="native-ledger-folder">Folder</label>
                 <select id="native-ledger-folder" class="vault-field" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
                     <option value="">Root</option>
                     @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder))
@@ -123,12 +150,13 @@
                         }
                     </section>
                 }
+                }
             }
             @if (!string.IsNullOrEmpty(_ledgerMessage))
             {
                 <p role="status" aria-live="polite">@_ledgerMessage</p>
             }
-            <p class="notice">Read-only native preview: publishing, deletion and registry initialization are unavailable from this screen.</p>
+            <p class="advanced-help">Local encrypted records and Stellar ledger writes are separate storage destinations. Publishing requires explicit transaction approval.</p>
         </section>
         @if (Sessions.IsUnlocked)
         {
@@ -161,6 +189,14 @@
 
 
 @code {
+    private string _nativeMode = "browse";
+
+    private void SetNativeMode(string mode)
+    {
+        if (_ledgerBusy || mode is not ("browse" or "record" or "file")) return;
+        _nativeMode = mode;
+    }
+
     private sealed class RuntimeStatus
     {
         public bool Ready { get; set; }
