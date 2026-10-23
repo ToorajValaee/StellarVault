@@ -20,10 +20,10 @@
                 <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
                 <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Check native runtime</button>
                 <p class="advanced-help">Selected network: @NetworkSelection.SelectedPreset.ToUpperInvariant(). Use the network selector in the application header to change networks before connecting.</p>
-                <label for="native-ledger-mnemonic">BIP-39 mnemonic</label>
-                <textarea id="native-ledger-mnemonic" class="vault-field" rows="3"
+                <label class="terminal-label" for="native-ledger-mnemonic">BIP-39 RECOVERY WORDS</label>
+                <textarea id="native-ledger-mnemonic" class="terminal-input terminal-textarea" rows="3"
                           autocomplete="off" spellcheck="false" @bind="_ledgerMnemonic" @bind:event="oninput" disabled="@(_ledgerBusy || _runtimeReady != true)"></textarea>
-                <button type="button" class="session-lock" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
+                <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
                         @onclick="ConnectLedgerAsync">Connect and read ledger</button>
             }
             else
@@ -34,8 +34,8 @@
                     <p>Root account: <code>@_rootAccountId</code></p>
                 }
                 <p>Folders: @_ledgerRecords.Count(x => x.IsFolder) | Records: @_ledgerRecords.Count(x => !x.IsFolder)</p>
-                <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
-                <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
+                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
+                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
                 <nav class="network-selector" aria-label="Native Stellar workspace">
                     <button type="button" class="network-option @(_nativeMode == "browse" ? "active" : "")"
                             aria-pressed="@(_nativeMode == "browse")" disabled="@_ledgerBusy"
@@ -58,17 +58,17 @@
                                 <section aria-label="Publish Stellar record" class="terminal-panel">
                     <h3>ON-CHAIN RECORD // TRANSACTION APPROVAL</h3>
                     <p class="notice">Publishing submits a paid Stellar transaction. Review the estimate before authorizing. This does not save to local storage.</p>
-                    <label for="native-publish-title">Record title</label>
-                    <input id="native-publish-title" class="vault-field" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
-                    <label for="native-publish-content">Record content</label>
-                    <textarea id="native-publish-content" class="vault-field" @bind="_publishContent" @bind:event="oninput" disabled="@_ledgerBusy" rows="3"></textarea>
-                    <button type="button" class="session-lock" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_publishTitle) || string.IsNullOrWhiteSpace(_publishContent))" @onclick="EstimatePublishAsync">Review transaction cost</button>
+                    <label class="terminal-label" for="native-publish-title">RECORD TITLE</label>
+                    <input id="native-publish-title" class="terminal-input" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
+                    <label class="terminal-label" for="native-publish-content">RECORD CONTENT</label>
+                    <textarea id="native-publish-content" class="terminal-input" @bind="_publishContent" @bind:event="oninput" disabled="@_ledgerBusy" rows="3"></textarea>
+                    <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_publishTitle) || string.IsNullOrWhiteSpace(_publishContent))" @onclick="EstimatePublishAsync">Review transaction cost</button>
                     @if (_publishEstimate is not null)
                     {
                         <p>Estimated operations: @_publishEstimate.Operations; transactions: @_publishEstimate.Transactions; fee: @_publishEstimate.NetworkFeeXlm XLM; peak reserve: @_publishEstimate.PeakReserveXlm XLM.</p>
                         <label><input type="checkbox" @bind="_publishApproved" disabled="@_ledgerBusy" /> I approve publishing this encrypted record to @_ledgerNetwork.</label>
-                        <button type="button" class="session-lock" disabled="@(_ledgerBusy || !_publishApproved)" @onclick="ConfirmPublishAsync">Approve and submit to Stellar</button>
-                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !_publishApproved)" @onclick="ConfirmPublishAsync">Approve and submit to Stellar</button>
+                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelPublish">Cancel</button>
                     }
                 </section>
                 }
@@ -77,20 +77,20 @@
                                 <section aria-label="Upload Stellar file" class="terminal-panel">
                     <h3>ON-CHAIN FILE // MULTIPART UPLOAD</h3>
                     <p class="notice">Each part requires a separate approved Stellar transaction. Keep the original file until all stages are confirmed. Interrupted uploads can resume by selecting the same file.</p>
-                    <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
+                    <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
                     @if (_uploadPlan is not null)
                     {
                         <p>File: @_uploadFileName · @_uploadBytes?.Length bytes · @_uploadPlan.Entries.Count stages</p>
                         <p>Remaining stages: @_uploadRemaining</p>
-                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ReconcileUploadAsync">Recheck on-chain progress</button>
-                        <button type="button" class="session-lock" disabled="@(_ledgerBusy || _uploadNeedsReconciliation)" @onclick="ReviewUploadStageAsync">Review next transaction</button>
+                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ReconcileUploadAsync">Recheck on-chain progress</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _uploadNeedsReconciliation)" @onclick="ReviewUploadStageAsync">Review next transaction</button>
                         @if (_uploadCost is not null)
                         {
                             <p>Next stage: @_uploadStageTitle · Fee: @_uploadCost.NetworkFeeXlm XLM · Peak reserve: @_uploadCost.PeakReserveXlm XLM · Operations: @_uploadCost.Operations</p>
                             <label><input type="checkbox" @bind="_uploadApproved" disabled="@_ledgerBusy" /> Approve this single Stellar transaction</label>
-                            <button type="button" class="session-lock" disabled="@(_ledgerBusy || !_uploadApproved)" @onclick="PublishUploadStageAsync">Submit approved stage</button>
+                            <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !_uploadApproved)" @onclick="PublishUploadStageAsync">Submit approved stage</button>
                         }
-                        <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="CancelUpload">Clear file from memory</button>
+                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelUpload">Clear file from memory</button>
                     }
                     @if (!string.IsNullOrWhiteSpace(_uploadMessage))
                     {
@@ -102,8 +102,8 @@
                 {
                     <div class="panel-kicker">STORED RECORDS // STELLAR LEDGER</div>
                     <h3>RECORD AND FILE DIRECTORY</h3>
-                                <label for="native-ledger-folder">Folder</label>
-                <select id="native-ledger-folder" class="vault-field" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
+                    <label class="terminal-label" for="native-ledger-folder">FOLDER</label>
+                <select id="native-ledger-folder" class="terminal-input" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
                     <option value="">Root</option>
                     @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder))
                     {
@@ -112,7 +112,7 @@
                 </select>
                 @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId && !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)))
                 {
-                    <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="() => SelectRecord(item.Id)">
+                    <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="() => SelectRecord(item.Id)">
                         @(item.IsFolder ? "Open folder: " : StellarLedgerFileProtocol.IsFile(item) ? "View file: " : "View record: ") @item.Title
                     </button>
                 }
@@ -130,8 +130,8 @@
                         }
                         @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
                         {
-                            <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
-                            <button type="button" class="session-lock" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
+                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
+                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
                             <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
                             @if (!string.IsNullOrEmpty(_verifiedFileMessage))
                             {
@@ -140,7 +140,7 @@
                         }
                         else
                         {
-                        <button type="button" class="session-lock" @onclick="ToggleSecret">
+                        <button type="button" class="pixel-button compact" @onclick="ToggleSecret">
                             @(_revealSecret ? "Hide secret" : "Reveal secret")
                         </button>
                         @if (_revealSecret)
@@ -165,19 +165,19 @@
         @if (Sessions.IsUnlocked)
         {
             <p>Active account: @Sessions.ActiveAccountId</p>
-            <button type="button" class="session-lock" @onclick="LockVault">Lock vault</button>
+            <button type="button" class="pixel-button compact" @onclick="LockVault">Lock vault</button>
         }
         else
         {
             <label for="vault-account">Stellar account (public G-address)</label>
-            <input id="vault-account" class="vault-field" autocomplete="off" spellcheck="false"
+            <input id="vault-account" class="terminal-input" autocomplete="off" spellcheck="false"
                    @bind="_accountId" disabled="@_busy" maxlength="56" />
             <label for="vault-passphrase">Vault passphrase</label>
-            <input id="vault-passphrase" class="vault-field" type="password"
+            <input id="vault-passphrase" class="terminal-input" type="password"
                    autocomplete="off" @bind="_passphrase" disabled="@_busy" />
             <div class="vault-actions">
-                <button type="button" class="session-lock" disabled="@_busy" @onclick="CreateVault">Create vault</button>
-                <button type="button" class="session-lock" disabled="@_busy" @onclick="UnlockVault">Unlock vault</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="CreateVault">Create vault</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="UnlockVault">Unlock vault</button>
             </div>
             <p class="notice">Authorization is not configured: these actions currently fail closed and will not create or unlock credentials.</p>
         }
