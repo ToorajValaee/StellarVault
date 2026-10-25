@@ -11,6 +11,11 @@
 </head>
 <body style="margin:0;background:#07110c">
   <div id="app">Initializing StellarVault…</div>
+  <div id="blazor-error-ui" hidden role="alert" style="position:fixed;inset:auto 1rem 1rem;z-index:9999;padding:1rem;background:#311e19;color:#fff;border:1px solid #ffb38a">
+    StellarVault could not start its native interface. Check the device debug log and restart the application.
+    <a href="." style="color:#fff">RELOAD</a>
+    <button type="button" class="dismiss" aria-label="Dismiss error">×</button>
+  </div>
   <!-- Shared PWA Stellar ledger runtime. Signing remains disabled in MAUI until
        a verified .NET adapter and native session lifecycle are implemented. -->
   <script src="js/vendor/stellar-sdk.min.js"></script>
@@ -54,6 +59,20 @@
         const sdkReady = typeof sdk?.Keypair?.fromRawEd25519Seed === 'function';
         return { ready: cryptoReady && bip39Ready && hdReady && ledgerReady && sdkReady,
           cryptoReady, bip39Ready, hdReady, ledgerReady, sdkReady };
+      }
+    });
+  </script>
+  <script>
+    // Do not display JS exception messages: third-party scripts could include user data.
+    // Surface a non-secret startup failure instead of leaving an endless loading label.
+    window.addEventListener('error', () => {
+      if (document.querySelector('#app')?.textContent?.includes('Initializing StellarVault')) {
+        document.getElementById('blazor-error-ui').hidden = false;
+      }
+    });
+    window.addEventListener('unhandledrejection', () => {
+      if (document.querySelector('#app')?.textContent?.includes('Initializing StellarVault')) {
+        document.getElementById('blazor-error-ui').hidden = false;
       }
     });
   </script>
