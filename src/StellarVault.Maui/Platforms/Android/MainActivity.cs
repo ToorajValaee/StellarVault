@@ -3,7 +3,7 @@ using Android.Content.PM;
 
 namespace StellarVault.Maui;
 
-[Activity(Theme = "@android:style/Theme.Material.Light.NoActionBar", MainLauncher = true,
+[Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true,
     ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation |
                            ConfigChanges.UiMode | ConfigChanges.ScreenLayout |
                            ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
