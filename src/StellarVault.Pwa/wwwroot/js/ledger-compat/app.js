@@ -650,6 +650,9 @@ window.stellarVault = (() => {
 // then upgrade its INSTALL button to the native prompt as soon as Chrome makes
 // it available. iOS keeps the manual Home Screen instructions.
 (() => {
+    // This script is also loaded by the MAUI BlazorWebView. Native apps are
+    // already installed; Chromium user-agent checks alone are insufficient.
+    if (document.documentElement.dataset.stellarVaultHost === 'native') return;
     let deferredInstallPrompt = window.__stellarVaultInstallPrompt ?? null;
     let manualStepsVisible = false;
     let dismissedForPage = false;
