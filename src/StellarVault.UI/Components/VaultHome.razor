@@ -179,7 +179,7 @@
             }
         </form>
     </div>
-    @if (Sessions.IsUnlocked)
+    @if (Sessions.IsUnlocked && Platform != "WEB PWA")
     {
         <section class="sv-vault-data" aria-label="Encrypted vault records">
             <header class="page-command-header">
