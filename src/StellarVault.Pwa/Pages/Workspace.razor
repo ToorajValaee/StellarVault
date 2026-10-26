@@ -1,70 +1,10 @@
 @page "/workspace"
-@using StellarVault.Core.Services
-@inject VaultSessionManager Sessions
-@inject VaultSessionWorkflow Workflow
-@inject IStellarLedgerRecords Ledger
 @inject NavigationManager Navigation
 
-<AdaptiveShell PlatformName="WEB PWA" Subtitle="LOCAL ENCRYPTED STORAGE">
-    <ChildContent>
-        @if (!Sessions.IsUnlocked)
-        {
-            <section class="terminal-panel centered-message">
-                <h1>LOCAL VAULT LOCKED</h1>
-                <p>Unlock your saved local vault to access encrypted records and files.</p>
-                <a class="pixel-button primary" href="/">UNLOCK VAULT</a>
-            </section>
-        }
-        else
-        {
-            <section class="sv-vault-data" aria-label="Local encrypted vault workspace">
-                <header class="page-command-header">
-                    <div>
-                        <div class="panel-kicker">LOCAL ENCRYPTED STORAGE // ACCOUNT VAULT</div>
-                        <h1>YOUR VAULT</h1>
-                        <p class="page-subtitle">Encrypted records and files stored on this device. Internet access is not required for local operations.</p>
-                    </div>
-                    <div class="sv-access-actions">
-                        @if (Ledger.IsConnected)
-                        {
-                            <a class="pixel-button compact" href="/vault">STELLAR LEDGER</a>
-                        }
-                        <button class="pixel-button compact" type="button" @onclick="LockAsync">LOCK VAULT</button>
-                    </div>
-                </header>
-                <nav class="network-selector" aria-label="Local vault workspace mode">
-                    <button type="button" class="network-option @(_mode == "record" ? "active" : "")" aria-pressed="@(_mode == "record")" @onclick='() => _mode = "record"'>
-                        <span class="network-symbol">R</span><span><strong>RECORDS</strong><small>LOCAL ENCRYPTED</small></span>
-                    </button>
-                    <button type="button" class="network-option @(_mode == "file" ? "active" : "")" aria-pressed="@(_mode == "file")" @onclick='() => _mode = "file"'>
-                        <span class="network-symbol">F</span><span><strong>FILES</strong><small>LOCAL ENCRYPTED</small></span>
-                    </button>
-                </nav>
-                @if (_mode == "record")
-                {
-                    <VaultRecordWorkspaceView />
-                }
-                else
-                {
-                    <VaultBinaryFilesView />
-                }
-                @if (!Ledger.IsConnected)
-                {
-                    <p class="advanced-help" role="status">Stellar ledger is not connected. Your local encrypted vault remains available offline; on-chain synchronization requires a separate online session.</p>
-                }
-            </section>
-        }
-    </ChildContent>
-</AdaptiveShell>
-
 @code {
-    private string _mode = "record";
-
-    private async Task LockAsync()
+    protected override void OnInitialized()
     {
-        Workflow.Lock();
-        try { await Ledger.DisconnectAsync(); }
-        catch { /* Local lock must work even when the network is unavailable. */ }
-        Navigation.NavigateTo("/");
+        // Preserve old bookmarks without maintaining a second vault interface.
+        Navigation.NavigateTo("/vault", replace: true);
     }
 }
