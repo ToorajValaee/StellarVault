@@ -135,7 +135,7 @@ else
         await Workflow.UnlockAsync(_coldAccount, phrase);
         StorageMode.Select(VaultStorageMode.LocalEncrypted);
         _coldAccount = null;
-        Navigation.NavigateTo("/workspace");
+        Navigation.NavigateTo("/vault");
     }
     private DotNetObjectReference<App>? _callback;
     private string _resumePassphrase = string.Empty;
