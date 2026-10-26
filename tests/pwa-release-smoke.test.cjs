@@ -75,3 +75,18 @@ test('public Stellar network access requires explicit acknowledgement', () => {
   assert.ok(component.includes('_network == "public" && !_confirmMainnetAccess'));
   assert.ok(component.includes('_confirmMainnetAccess = false;'));
 });
+
+test('local vault has its own offline-capable route', () => {
+  const pages = path.join(root, '..', 'Pages');
+  const local = fs.readFileSync(path.join(pages, 'Workspace.razor'), 'utf8');
+  const index = fs.readFileSync(path.join(pages, 'Index.razor'), 'utf8');
+  const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.ok(local.includes('@page "/workspace"'));
+  assert.ok(local.includes('<VaultRecordWorkspaceView />'));
+  assert.ok(local.includes('<VaultBinaryFilesView />'));
+  assert.ok(!local.includes('Ledger.ReadAsync('));
+  assert.ok(index.includes('Sessions.IsUnlocked'));
+  assert.ok(app.includes('Navigation.NavigateTo("/workspace")'));
+  assert.ok(access.includes('const string destination = "/workspace"'));
+});
