@@ -2288,3 +2288,17 @@ html.ios-device.standalone-app .terminal-footer {
 .sv-biometric-choice {display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.65rem .8rem;border:1px dashed var(--border);color:var(--phosphor-strong);font-size:.75rem;cursor:pointer;}
 .sv-biometric-choice input {accent-color:var(--phosphor);width:1.1rem;height:1.1rem;flex:0 0 auto;}
 .sv-privacy-panel .pixel-button {max-width:100%;white-space:normal;overflow-wrap:anywhere;}
+
+/* Ledger upload: only the themed label is visible; keep the native input operable for keyboard and assistive technology. */
+.sv-file-picker input[type="file"].sv-ledger-file-native-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+}
+.sv-file-picker:focus-within .sv-file-picker-button { outline: 2px solid var(--phosphor); outline-offset: 3px; }
