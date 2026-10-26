@@ -6,6 +6,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
 @inject VaultStorageModeGate StorageMode
+@inject VaultDeviceRetentionGate Retention
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
@@ -74,10 +75,17 @@
                 }
                 <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
                 <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
+                <div class="terminal-label">DEVICE STORAGE POLICY</div>
+                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> ON-CHAIN ONLY — No saved vault credentials, local records or offline drafts</label>
+                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> ENCRYPTED LOCAL STORAGE — Save encrypted local vault data on this device</label>
+                @if (_enableLocalStorage)
+                {
                 <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <VaultStorageSecurityNotice />
+                <p class="advanced-help">Local encrypted storage is an opt-in feature. It currently does not cache the mnemonic or support offline-to-ledger synchronization; those capabilities are under development.</p>
+                }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
                     <div class="terminal-alert warning" role="alert">
@@ -88,7 +96,7 @@
                         </label>
                     </div>
                 }
-                @if (!Sessions.IsUnlocked)
+                @if (!Sessions.IsUnlocked && _enableLocalStorage)
                 {
                     <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
                         OFFER DEVICE UNLOCK AFTER ACCESS (OPTIONAL)
@@ -407,6 +415,7 @@
         }
         _workspaceMode = workspace;
     }
+    private bool _enableLocalStorage;
     private bool _requestBiometricEnrollment;
     private bool _confirmMainnetAccess;
     private string? _pendingBiometricAccount;
@@ -595,28 +604,28 @@
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
-            await ReportAccessStageAsync("checking local credentials");
-            bool exists = await Workflow.HasLocalVaultAsync(account);
-            await ReportAccessStageAsync(exists ? "unlocking encrypted credentials" : "creating encrypted credentials");
-            if (exists)
-                await Workflow.UnlockAsync(account, _passphrase);
-            else
-                await Workflow.CreateAsync(account, _passphrase);
-            if (_network is "testnet" or "public" or "custom")
+            Retention.Select(_enableLocalStorage
+                ? VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync
+                : VaultDeviceRetentionPolicy.OnChainOnly);
+            bool exists = false;
+            if (_enableLocalStorage)
             {
+                Retention.RequireLocalPersistence();
+                await ReportAccessStageAsync("checking local credentials");
+                exists = await Workflow.HasLocalVaultAsync(account);
+                await ReportAccessStageAsync(exists ? "unlocking encrypted credentials" : "creating encrypted credentials");
+                if (exists) await Workflow.UnlockAsync(account, _passphrase);
+                else await Workflow.CreateAsync(account, _passphrase);
                 try
                 {
                     await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network,
                         _network == "custom" ? _detectedHorizon : null,
                         _network == "custom" ? _customPassphrase : null);
-                    _recentAccount = account;
-                    _recentNetwork = _network;
-                    _recentHorizonUrl = _network == "custom" ? _detectedHorizon : null;
                 }
-                catch (JSException) { /* Local storage selection is optional. */ }
+                catch (JSException) { /* Recent-account hint is optional. */ }
             }
             await ReportAccessStageAsync("connecting to Stellar ledger");
-            _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
+            _message = !_enableLocalStorage ? "Opening on-chain-only vault." : exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
                 await LedgerRecords.DisconnectAsync();
@@ -633,7 +642,7 @@
                     _ => _customPassphrase ?? throw new InvalidOperationException("Custom network not detected.")
                 };
                 await LedgerRecords.ConnectAsync(_mnemonic, horizonUrl, networkPassphrase);
-                if (_workspaceMode == "ledger")
+                if (!_enableLocalStorage || _workspaceMode == "ledger")
                     StorageMode.Select(VaultStorageMode.StellarLedger);
                 _ledgerRegistryReady = await LedgerRecords.HasRegistryAsync();
                 if (_ledgerRegistryReady) _ledgerItems = await LedgerWorkspace.ListAsync();
@@ -643,6 +652,7 @@
             {
                 StorageMode.Reset();
                 _ledgerMessage = "On-chain connection failed: " + ex.Message;
+                if (!_enableLocalStorage) throw new InvalidOperationException("On-chain-only access requires a working Stellar connection.", ex);
             }
             try
             {
@@ -654,12 +664,12 @@
                 _childAccounts = null;
                 _networkStatus = "Network discovery unavailable; local vault remains accessible.";
             }
-            if (Sessions.IsUnlocked && Platform == "WEB PWA")
+            if ((Sessions.IsUnlocked || (!_enableLocalStorage && LedgerRecords.IsConnected)) && Platform == "WEB PWA")
             {
                 // Local storage is usable even if Horizon is offline or the
                 // Stellar registry is unavailable. Ledger work has its own route.
                 const string destination = "/vault";
-                if (_requestBiometricEnrollment)
+                if (_enableLocalStorage && _requestBiometricEnrollment)
                 {
                     _pendingBiometricAccount = account;
                     _pendingBiometricPassphrase = _passphrase;
