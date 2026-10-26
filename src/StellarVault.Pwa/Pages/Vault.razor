@@ -16,7 +16,12 @@
 }
 else if (!Ledger.IsConnected)
 {
-    <section class="terminal-panel centered-message"><h1>STELLAR CONNECTION REQUIRED</h1><p>Your local vault is unlocked, but the on-chain session is not connected. Return to the access terminal, lock and retry to see the underlying connection error. A funded root and accessible Horizon endpoint may be required.</p><a class="pixel-button primary" href="/">ACCESS TERMINAL</a></section>
+    <section class="terminal-panel centered-message">
+        <h1>STELLAR SESSION DISCONNECTED</h1>
+        <p>Your local vault is unlocked, but the Stellar signing session is not connected. This is expected after reopening with only your vault passphrase: Stellar signing requires your recovery phrase again. If you are offline, connect to the internet before reconnecting.</p>
+        <button class="pixel-button primary" type="button" @onclick="ReconnectAsync">RECONNECT WITH RECOVERY PHRASE</button>
+        <p class="advanced-help">This closes the in-memory local vault session; your encrypted records and files are not deleted. You can then access the account again using the same recovery phrase and vault passphrase.</p>
+    </section>
 }
 else if (_registryReady != true)
 {
@@ -302,6 +307,15 @@ else
         try { _records = await Ledger.ReadAsync(); }
         catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
         finally { _busy = false; }
+    }
+    private async Task ReconnectAsync()
+    {
+        // The access screen cannot accept a new mnemonic while the local session
+        // remains unlocked. End the session, never clear IndexedDB.
+        Workflow.Lock();
+        try { await Ledger.DisconnectAsync(); }
+        catch { /* Disconnect must not prevent opening the access screen. */ }
+        Nav.NavigateTo("/", replace: true);
     }
     private async Task LockAsync() {
         Workflow.Lock(); await Ledger.DisconnectAsync(); Nav.NavigateTo("/");
