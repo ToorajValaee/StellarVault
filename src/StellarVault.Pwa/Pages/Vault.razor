@@ -16,19 +16,7 @@
 }
 else if (!Ledger.IsConnected)
 {
-    <section class="vault-page" aria-label="Offline local vault">
-        <header class="page-command-header">
-            <div><div class="panel-kicker">LOCAL STORAGE // OFFLINE</div><h1>YOUR VAULT</h1><p class="page-subtitle">Stellar is unavailable. Your local encrypted records and files remain accessible.</p></div>
-            <button class="pixel-button compact" type="button" @onclick="LockAsync">LOCK</button>
-        </header>
-        <nav class="network-selector" aria-label="Local vault sections">
-            <button type="button" class="network-option @(_offlineMode == "record" ? "active" : "")" @onclick='() => _offlineMode = "record"'>RECORDS</button>
-            <button type="button" class="network-option @(_offlineMode == "file" ? "active" : "")" @onclick='() => _offlineMode = "file"'>FILES</button>
-        </nav>
-        @if (_offlineMode == "record") { <VaultRecordWorkspaceView /> }
-        else { <VaultBinaryFilesView /> }
-        <p class="advanced-help" role="status">On-chain synchronization needs an internet connection and a new signing session. Local data is unaffected.</p>
-    </section>
+    <section class="terminal-panel centered-message"><h1>STELLAR CONNECTION REQUIRED</h1><p>Your local vault is unlocked, but the on-chain session is not connected. Return to the access terminal, lock and retry to see the underlying connection error. A funded root and accessible Horizon endpoint may be required.</p><a class="pixel-button primary" href="/">ACCESS TERMINAL</a></section>
 }
 else if (_registryReady != true)
 {
@@ -169,7 +157,6 @@ else
 </AdaptiveShell>
 
 @code {
-    private string _offlineMode = "record";
     private IReadOnlyList<LedgerRecordItem> _records = [];
     private string _search = "";
     private string? _folder;
@@ -313,7 +300,7 @@ else
         if (_busy) return;
         _busy = true; _busyMessage = "SYNCING STELLAR LEDGER..."; _error = null; _revealedIds.Clear();
         try { _records = await Ledger.ReadAsync(); }
-        catch (Exception) { _error = "Stellar ledger synchronization is unavailable. Check your internet connection and try again. Local encrypted records remain available in LOCAL VAULT."; }
+        catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
         finally { _busy = false; }
     }
     private async Task LockAsync() {
