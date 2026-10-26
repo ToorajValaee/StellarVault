@@ -43,10 +43,25 @@ async function onFetch(event) {
     if (requestUrl.origin !== self.location.origin)
         return fetch(event.request);
 
+    // Navigation requests should see a newly deployed version when online,
+    // but remain launchable offline. Do not cache responses from navigation:
+    // only the integrity-verified release manifest may populate the cache.
     const cache = await caches.open(cacheName);
-    const isNavigation = event.request.mode === 'navigate';
-    const cacheKey = isNavigation ? 'index.html' : event.request;
-    const cachedResponse = await cache.match(cacheKey);
+    if (event.request.mode === 'navigate') {
+        try {
+            const response = await fetch(event.request);
+            if (response.ok) return response;
+            if (response.status !== 404) return response;
+            // Static hosts commonly return 404 for client-side routes.
+            const fallback = await cache.match('index.html');
+            return fallback || response;
+        } catch (error) {
+            const fallback = await cache.match('index.html');
+            if (fallback) return fallback;
+            throw error;
+        }
+    }
 
+    const cachedResponse = await cache.match(event.request);
     return cachedResponse || fetch(event.request);
 }
