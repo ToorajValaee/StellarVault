@@ -148,3 +148,12 @@ test('explicit-lock policy keeps session while switching tabs and requires mnemo
   assert.ok(access.includes('SAVED VAULT FOUND'));
   assert.ok(!access.includes('REOPEN LOCAL VAULT</button>'));
 });
+
+test('device retention requires explicit opt-in and defaults to on-chain-only', () => {
+  const core = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultStorageModeGate.cs'), 'utf8');
+  assert.ok(core.includes('OnChainOnly = 0'));
+  assert.ok(core.includes('EncryptedLocalWithManualSync = 1'));
+  assert.ok(core.includes('Policy { get; private set; } = VaultDeviceRetentionPolicy.OnChainOnly'));
+  assert.ok(core.includes('RequireLocalPersistence()'));
+  assert.ok(core.includes('Local persistence requires explicit device-storage consent.'));
+});
