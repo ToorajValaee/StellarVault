@@ -51,3 +51,13 @@ test('IndexedDB errors propagate for every encrypted storage operation', () => {
     assert.ok(code.includes(error), error + ' must propagate');
   }
 });
+
+test('offline navigation falls back to verified release shell', () => {
+  const worker = fs.readFileSync(path.join(root, 'service-worker.published.js'), 'utf8');
+  const navigation = worker.indexOf("event.request.mode === 'navigate'");
+  assert.ok(navigation >= 0);
+  const branch = worker.slice(navigation);
+  assert.ok(branch.includes('await fetch(event.request)'));
+  assert.ok(branch.includes("await cache.match('index.html')"));
+  assert.ok(branch.indexOf('await fetch(event.request)') < branch.indexOf("await cache.match('index.html')"));
+});
