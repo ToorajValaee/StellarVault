@@ -67,14 +67,9 @@
                 @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
                     <div class="terminal-alert" role="status">
-                        <strong>RESTORE LOCAL VAULT AFTER REFRESH</strong>
-                        <span>Account @_recentAccount — your encrypted records remain in this browser. Enter the vault passphrase below and choose REOPEN LOCAL VAULT. A mnemonic is still required to reconnect to Stellar.</span>
-                        <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase))" @onclick="ReopenLocalAsync">REOPEN LOCAL VAULT</button>
-                        @if (_recentHasDeviceUnlock)
-                        {
-                            <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ReopenWithDeviceAsync">UNLOCK WITH DEVICE</button>
-                        }
-                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET THIS ACCOUNT</button>
+                        <strong>SAVED VAULT FOUND</strong>
+                        <span>Your encrypted local data is still stored in this browser for account @_recentAccount. After reopening the app, enter your recovery words and vault passphrase to restore full access and Stellar signing.</span>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET SAVED ACCOUNT SHORTCUT</button>
                     </div>
                 }
                 <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
