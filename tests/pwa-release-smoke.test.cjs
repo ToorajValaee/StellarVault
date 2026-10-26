@@ -30,3 +30,24 @@ test('IndexedDB reads wait for transaction completion', () => {
   assert.ok(method.includes('tx.onabort = () => reject('));
   assert.ok(!method.includes('request.onsuccess = () => resolve('));
 });
+
+test('IndexedDB errors propagate for every encrypted storage operation', () => {
+  const code = fs.readFileSync(path.join(root, 'js/vault-v2-indexeddb.js'), 'utf8');
+  for (const [begin, end] of [
+    ['async function read(store, key)', 'async function putImmutable('],
+    ['async function putImmutable(', 'function equal('],
+    ['async function compareExchange(', 'async function removeObject('],
+    ['async function removeObject(', 'return Object.freeze(']
+  ]) {
+    const start = code.indexOf(begin);
+    const stop = code.indexOf(end, start + begin.length);
+    assert.ok(start >= 0 && stop > start, begin + ' must be present');
+    const body = code.slice(start, stop);
+    assert.ok(body.includes('tx.oncomplete'), begin + ' must await commit');
+    assert.ok(body.includes('tx.onabort'), begin + ' must reject abort');
+  }
+  for (const error of ['IndexedDB read failed', 'IndexedDB immutable write aborted',
+    'IndexedDB pointer read failed', 'IndexedDB delete failed']) {
+    assert.ok(code.includes(error), error + ' must propagate');
+  }
+});
