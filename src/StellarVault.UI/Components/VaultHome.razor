@@ -574,7 +574,7 @@
 
     private async Task AccessVaultAsync()
     {
-        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
+        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected) return;
         if (_network == "public" && !_confirmMainnetAccess)
         {
             _message = "Confirm the Stellar mainnet warning before accessing a public-network vault.";
@@ -652,7 +652,11 @@
             {
                 StorageMode.Reset();
                 _ledgerMessage = "On-chain connection failed: " + ex.Message;
-                if (!_enableLocalStorage) throw new InvalidOperationException("On-chain-only access requires a working Stellar connection.", ex);
+                if (!_enableLocalStorage)
+                {
+                    await LedgerRecords.DisconnectAsync();
+                    throw new InvalidOperationException("On-chain-only access requires a working Stellar connection: " + ex.Message, ex);
+                }
             }
             try
             {
