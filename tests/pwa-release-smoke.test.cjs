@@ -61,3 +61,10 @@ test('offline navigation falls back to verified release shell', () => {
   assert.ok(branch.includes("await cache.match('index.html')"));
   assert.ok(branch.indexOf('await fetch(event.request)') < branch.indexOf("await cache.match('index.html')"));
 });
+
+test('offline bundle does not require debug symbols', () => {
+  const worker = fs.readFileSync(path.join(root, 'service-worker.published.js'), 'utf8');
+  const include = worker.split('const offlineAssetsInclude = ')[1]?.split(';')[0];
+  assert.ok(include, 'precache allowlist must be present');
+  assert.ok(!include.includes('pdb'), 'PDB symbols must not be mandatory offline assets');
+});
