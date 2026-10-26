@@ -48,9 +48,9 @@ window.stellarVaultV2Db = (() => {
       // A request succeeding does not mean the transaction committed.
       // Report data only after the complete readonly transaction finishes.
       tx.oncomplete = () => resolve(result);
-      tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
+      request.onerror = () => reject(request.error || new Error('IndexedDB read failed'));
+      tx.onabort = () => reject(tx.error || request.error || new Error('IndexedDB read aborted'));
       tx.onerror = () => {};
-
     });
   }
   async function putImmutable(store, key, value) {
@@ -67,7 +67,7 @@ window.stellarVaultV2Db = (() => {
         }
       };
       tx.oncomplete = () => resolve(inserted);
-      tx.onabort = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || request.error || new Error('IndexedDB immutable write aborted'));
       tx.onerror = () => {};
     });
   }
@@ -94,17 +94,21 @@ window.stellarVaultV2Db = (() => {
         objectStore.put(next, key);
         changed = true;
       };
+      request.onerror = () => reject(request.error || new Error('IndexedDB pointer read failed'));
       tx.oncomplete = () => resolve(changed);
-      tx.onabort = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || request.error || new Error('IndexedDB compare-exchange aborted'));
+      tx.onerror = () => {};
     });
   }
   async function removeObject(key) {
     const db = await open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('objects', 'readwrite');
-      tx.objectStore('objects').delete(key);
+      const request = tx.objectStore('objects').delete(key);
+      request.onerror = () => reject(request.error || new Error('IndexedDB delete failed'));
       tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || request.error || new Error('IndexedDB delete aborted'));
+      tx.onerror = () => {};
     });
   }
   return Object.freeze({
