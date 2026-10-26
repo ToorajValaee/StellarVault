@@ -129,9 +129,20 @@ else
         StorageMode.Select(VaultStorageMode.LocalEncrypted);
         // Local data is usable without Horizon, while restored signing credentials
         // enable online sync when network access is available.
-        string mnemonic = await JS.InvokeAsync<string>(
-            "stellarVaultRecentVault.unlockEncryptedSeed",
-            _coldAccount, NetworkSelection.SelectedPreset, phrase);
+        string mnemonic;
+        try
+        {
+            mnemonic = await JS.InvokeAsync<string>(
+                "stellarVaultRecentVault.unlockEncryptedSeed",
+                _coldAccount, NetworkSelection.SelectedPreset, phrase);
+        }
+        catch
+        {
+            Workflow.Lock();
+            Retention.Reset();
+            StorageMode.Reset();
+            throw;
+        }
         try
         {
             var horizon = NetworkSelection.SelectedPreset switch
