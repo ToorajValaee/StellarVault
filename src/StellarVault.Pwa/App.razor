@@ -7,6 +7,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultSessionWorkflow Workflow
 @inject VaultStorageModeGate StorageMode
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
 @implements IAsyncDisposable
@@ -134,6 +135,7 @@ else
         await Workflow.UnlockAsync(_coldAccount, phrase);
         StorageMode.Select(VaultStorageMode.LocalEncrypted);
         _coldAccount = null;
+        Navigation.NavigateTo("/workspace");
     }
     private DotNetObjectReference<App>? _callback;
     private string _resumePassphrase = string.Empty;
