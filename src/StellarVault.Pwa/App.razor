@@ -7,6 +7,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultSessionWorkflow Workflow
 @inject VaultStorageModeGate StorageMode
+@inject VaultDeviceRetentionGate Retention
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
@@ -91,7 +92,8 @@ else
             // A fresh page load no longer auto-opens the passphrase-only
             // privacy screen. Require the normal mnemonic + vault passphrase
             // for a complete Stellar signing session after browser restart.
-            _coldAccount = null;
+            if (await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasEncryptedSeed", recent.Account, recent.Network))
+                _coldAccount = recent.Account;
         }
         catch (Exception)
         {
@@ -123,7 +125,39 @@ else
     {
         if (_coldAccount is null) return;
         await Workflow.UnlockAsync(_coldAccount, phrase);
+        Retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
         StorageMode.Select(VaultStorageMode.LocalEncrypted);
+        // Local data is usable without Horizon, while restored signing credentials
+        // enable online sync when network access is available.
+        string mnemonic = await JS.InvokeAsync<string>(
+            "stellarVaultRecentVault.unlockEncryptedSeed",
+            _coldAccount, NetworkSelection.SelectedPreset, phrase);
+        try
+        {
+            var horizon = NetworkSelection.SelectedPreset switch
+            {
+                "testnet" => "https://horizon-testnet.stellar.org",
+                "public" => "https://horizon.stellar.org",
+                _ => NetworkSelection.CustomHorizonUrl
+            };
+            var networkPassphrase = NetworkSelection.SelectedPreset switch
+            {
+                "testnet" => "Test SDF Network ; September 2015",
+                "public" => "Public Global Stellar Network ; September 2015",
+                _ => NetworkSelection.CustomPassphrase ?? throw new InvalidOperationException("Custom network not configured.")
+            };
+            try
+            {
+                await LedgerRecords.ConnectAsync(mnemonic, horizon, networkPassphrase);
+                StorageMode.Select(VaultStorageMode.StellarLedger);
+            }
+            catch
+            {
+                // Browser may be offline. Local vault remains unlocked.
+                // An explicit online reconnect flow is still required.
+            }
+        }
+        finally { mnemonic = string.Empty; }
         _coldAccount = null;
         Navigation.NavigateTo("/vault");
     }
