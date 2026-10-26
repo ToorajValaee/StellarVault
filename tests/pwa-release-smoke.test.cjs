@@ -86,8 +86,8 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
   assert.ok(vault.includes('search-console'));
   assert.ok(vault.includes('Ledger.ReadAsync()'));
   assert.ok(!vault.includes('Offline local vault'));
-  assert.ok(!vault.includes('<VaultRecordWorkspaceView />'));
-  assert.ok(!vault.includes('<VaultBinaryFilesView />'));
+  assert.ok(vault.includes('<VaultRecordWorkspaceView />'));
+  assert.ok(vault.includes('<VaultBinaryFilesView />'));
   assert.ok(app.includes('Navigation.NavigateTo("/vault")'));
 });
 
@@ -109,4 +109,13 @@ test('disconnected ledger reconnect ends local session before returning to acces
   assert.ok(reconnect.includes('Workflow.Lock()'));
   assert.ok(reconnect.includes('Ledger.DisconnectAsync()'));
   assert.ok(reconnect.includes('Nav.NavigateTo("/", replace: true)'));
+});
+
+test('saved local unlock navigates to the vault and disconnected state remains usable', () => {
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const reopening = access.slice(access.indexOf('private async Task ReopenLocalAsync()'), access.indexOf('private async Task ForgetRecentAsync()'));
+  assert.ok(reopening.includes('Navigation.NavigateTo("/vault")'));
+  assert.ok(vault.includes('STELLAR SIGNING IS DISCONNECTED'));
+  assert.ok(vault.includes('CONNECT STELLAR'));
 });
