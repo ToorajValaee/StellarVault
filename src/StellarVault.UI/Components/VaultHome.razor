@@ -364,7 +364,9 @@
             await Workflow.UnlockAsync(_recentAccount, _passphrase);
             StorageMode.Select(VaultStorageMode.LocalEncrypted);
             _workspaceMode = "record";
-            _message = "Local encrypted vault reopened. Stellar signing requires your recovery phrase.";
+            // Local reopening succeeds without Stellar signing; route out of the
+            // access form regardless of connectivity.
+            Navigation.NavigateTo("/vault");
         }
         catch
         {
