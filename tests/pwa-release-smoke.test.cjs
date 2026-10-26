@@ -19,3 +19,14 @@ test('published service worker caches before activation', () => {
   const worker = fs.readFileSync(path.join(root, 'service-worker.published.js'), 'utf8');
   assert.ok(worker.indexOf('await cache.addAll(assetsRequests)') < worker.indexOf('await self.skipWaiting()'));
 });
+
+test('IndexedDB reads wait for transaction completion', () => {
+  const code = fs.readFileSync(path.join(root, 'js/vault-v2-indexeddb.js'), 'utf8');
+  const start = code.indexOf('async function read(store, key)');
+  const end = code.indexOf('async function putImmutable(', start);
+  assert.ok(start >= 0 && end > start);
+  const method = code.slice(start, end);
+  assert.ok(method.includes('tx.oncomplete = () => resolve(result)'));
+  assert.ok(method.includes('tx.onabort = () => reject('));
+  assert.ok(!method.includes('request.onsuccess = () => resolve('));
+});
