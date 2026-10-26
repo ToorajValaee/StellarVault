@@ -1,9 +1,10 @@
 @page "/"
 @using StellarVault.Core.Services
 @inject VaultSessionManager Sessions
+@inject IStellarLedgerRecords Ledger
 @inject NavigationManager Navigation
 
-@if (!Sessions.IsUnlocked)
+@if (!(Sessions.IsUnlocked || Ledger.IsConnected))
 {
     <VaultHome Platform="WEB PWA" />
 }
@@ -11,7 +12,7 @@
 @code {
     protected override void OnParametersSet()
     {
-        if (Sessions.IsUnlocked)
+        if (Sessions.IsUnlocked || Ledger.IsConnected)
             Navigation.NavigateTo("/vault", replace: true);
     }
 }
