@@ -3,110 +3,13 @@
 // This trades stronger background isolation for usability on ordinary app switches.
 // Five-second focus-loss privacy guard. Remaining in the tab never locks. The privacy lock only
 // clears the active local key; resuming asks for the vault passphrase.
+// Explicit-lock policy: neither focus changes nor pagehide request a vault lock.
+// A full reload naturally destroys the in-memory WASM session and signer.
+// No key material is persisted by this lifecycle bridge.
 window.stellarVaultV2Lifecycle = (() => {
-  const timeoutMs = 5000;
-  let detachCurrent = null;
-  let filePickerOpen = false;
-  let credentialPromptOpen = false;
-  let pickerReturnTimer = null;
-
-  function attach(dotnet) {
-    detach();
-    let awayTimer = null;
-    let awaySince = null;
-    let exited = false;
-
-    const suspend = () => {
-      if (exited || filePickerOpen || credentialPromptOpen) return;
-      Promise.resolve(dotnet.invokeMethodAsync('SuspendForPrivacy')).catch(() => {});
-    };
-    const clearAway = () => { if (awayTimer !== null) clearTimeout(awayTimer); awayTimer = null; };
-
-    const goAway = () => {
-      if (filePickerOpen || credentialPromptOpen || exited || awaySince !== null) return;
-      awaySince = Date.now();
-      clearAway();
-      awayTimer = setTimeout(() => {
-        if (awaySince !== null && Date.now() - awaySince >= timeoutMs) suspend();
-      }, timeoutMs);
-    };
-    const returnFocus = () => {
-      if (exited) return;
-      if (filePickerOpen || credentialPromptOpen) {
-        if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
-        pickerReturnTimer = setTimeout(() => {
-          pickerReturnTimer = null;
-          filePickerOpen = false;
-          awaySince = null;
-          clearAway();
-        }, 750);
-        return;
-      }
-      if (awaySince !== null && Date.now() - awaySince >= timeoutMs) suspend();
-      awaySince = null;
-      clearAway();
-    };
-    const visibility = () => {
-      if (document.visibilityState === 'hidden') goAway();
-      else returnFocus();
-    };
-    const pickerStart = event => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement) || target.type !== 'file') return;
-      filePickerOpen = true;
-      if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
-      pickerReturnTimer = null;
-      awaySince = null;
-      clearAway();
-    };
-    const pickerDone = event => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement) || target.type !== 'file') return;
-      if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
-      pickerReturnTimer = null;
-      filePickerOpen = false;
-      awaySince = null;
-    };
-    const pagehide = () => {
-      exited = true;
-      clearAway();
-      Promise.resolve(dotnet.invokeMethodAsync('LockForBrowserLifecycle')).catch(() => {});
-    };
-
-    document.addEventListener('visibilitychange', visibility);
-    window.addEventListener('blur', goAway);
-    window.addEventListener('focus', returnFocus);
-    window.addEventListener('pagehide', pagehide);
-    document.addEventListener('click', pickerStart, true);
-    document.addEventListener('change', pickerDone, true);
-
-    detachCurrent = () => {
-      exited = true;
-      clearAway();
-      if (pickerReturnTimer !== null) clearTimeout(pickerReturnTimer);
-      pickerReturnTimer = null;
-      filePickerOpen = false;
-      credentialPromptOpen = false;
-      document.removeEventListener('visibilitychange', visibility);
-      window.removeEventListener('blur', goAway);
-      window.removeEventListener('focus', returnFocus);
-      window.removeEventListener('pagehide', pagehide);
-      document.removeEventListener('click', pickerStart, true);
-      document.removeEventListener('change', pickerDone, true);
-    };
-  }
-
-  function detach() {
-    if (detachCurrent) detachCurrent();
-    detachCurrent = null;
-  }
-  function setCredentialPrompt(value) {
-    credentialPromptOpen = Boolean(value);
-    if (!credentialPromptOpen) {
-      // Returning from the operating system passkey sheet is not app abandonment.
-      if (typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('focus'));
-    }
-  }
+  function attach(_dotnet) {}
+  function detach() {}
+  function setCredentialPrompt(_value) {}
   return Object.freeze({ attach, detach, setCredentialPrompt });
 })();
 
