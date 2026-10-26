@@ -1,2 +1,12 @@
 @page "/"
-<VaultHome Platform="WEB PWA" />
+@using StellarVault.Core.Services
+@inject VaultSessionManager Sessions
+
+@if (Sessions.IsUnlocked)
+{
+    <Workspace />
+}
+else
+{
+    <VaultHome Platform="WEB PWA" />
+}
