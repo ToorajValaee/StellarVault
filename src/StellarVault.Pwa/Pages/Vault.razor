@@ -70,6 +70,7 @@ else
         @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
         <section class="record-list">
             @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
+            else if (!Ledger.IsConnected) { <div class="terminal-panel empty-state"><h2>ON-CHAIN RECORDS NOT LOADED</h2><p>Reconnect to Stellar to recover your ledger records. This is not an empty vault.</p></div> }
             else if (Filtered.Count == 0) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
             else
             {
