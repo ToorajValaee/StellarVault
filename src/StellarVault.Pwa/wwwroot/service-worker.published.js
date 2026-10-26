@@ -10,14 +10,21 @@ self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
 self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
 
 async function onInstall() {
-    self.skipWaiting();
     const assetsRequests = self.assetsManifest.assets
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
         .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)))
         .map(asset => new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));
 
     const cache = await caches.open(cacheName);
-    await cache.addAll(assetsRequests);
+    // Activate only after the entire new offline bundle is present.
+    // A partial precache must not replace a previously working release.
+    try {
+        await cache.addAll(assetsRequests);
+        await self.skipWaiting();
+    } catch (error) {
+        await caches.delete(cacheName);
+        throw error;
+    }
 }
 
 async function onActivate() {
