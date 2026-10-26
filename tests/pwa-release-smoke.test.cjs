@@ -116,7 +116,7 @@ test('saved local unlock navigates to the vault and disconnected state remains u
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const reopening = access.slice(access.indexOf('private async Task ReopenLocalAsync()'), access.indexOf('private async Task ForgetRecentAsync()'));
   assert.ok(reopening.includes('Navigation.NavigateTo("/vault")'));
-  assert.ok(vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
+  assert.ok(vault.includes('STELLAR SIGNING SESSION NOT RESTORED'));
   assert.ok(vault.includes('CONNECT STELLAR'));
 });
 
@@ -128,4 +128,11 @@ test('offline vault keeps the normal ledger browser layout instead of an alterna
  assert.ok(vault.includes('record-list'));
  assert.ok(vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
  assert.ok(!vault.includes('else if (!Ledger.IsConnected)'));
+});
+
+test('refresh without signing credentials is not mislabeled as offline', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.ok(vault.includes('NOT SIGNED IN'));
+  assert.ok(vault.includes('browser refresh ends the in-memory Stellar signing session'));
+  assert.ok(!vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
 });
