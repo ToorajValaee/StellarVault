@@ -29,6 +29,30 @@ jobs:
         run: |
           set -o pipefail
           dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release --no-restore --verbosity normal 2>&1 | tee pwa-build.log
+      - name: Publish deployable PWA
+        run: dotnet publish src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release --no-restore --output ./artifacts/pwa
+      - name: Validate published PWA assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=artifacts/pwa/wwwroot
+          test -s "$root/index.html"
+          test -s "$root/_framework/blazor.webassembly.js"
+          test -s "$root/service-worker.js"
+          test -s "$root/service-worker-assets.js"
+          test -s "$root/manifest.webmanifest"
+          test -s "$root/css/app.css"
+          test -s "$root/js/vault-v2-keywrap.js"
+          test -s "$root/js/vault-v2-indexeddb.js"
+          test -s "$root/js/ledger-compat/app.js"
+          grep -q 'blazor.webassembly.js' "$root/index.html"
+          grep -q 'service-worker-assets.js' "$root/service-worker.js"
+      - name: Package verified PWA
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellarvault-pwa-release
+          path: artifacts/pwa/wwwroot/
+          if-no-files-found: error
       - name: Upload browser and shared build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
