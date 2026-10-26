@@ -122,8 +122,8 @@
                     }
                 </div>
                 <div class="terminal-alert warning" role="status">
-                    <strong>LOCAL ENCRYPTED VAULT PREVIEW</strong>
-                    <span>The account is derived privately from your mnemonic. Existing encrypted credentials are detected automatically; otherwise a new local vault is initialized. Records and files are saved only in this browser, NOT on the Stellar ledger. Read-only child discovery runs for funded roots. On-chain publishing, cross-device recovery, and encrypted backup are not yet connected. Use only test credentials.</span>
+                    <strong>EARLY ACCESS // VERIFY BEFORE USING REAL SECRETS</strong>
+                    <span>Local records and files are encrypted and stored in this browser, not automatically published or backed up. Stellar ledger storage is a separate workflow with transaction fees and explicit approvals. Cross-device local-vault synchronization is not available. This build is not yet production-security audited: use test accounts and noncritical information only.</span>
                 </div>
             }
             else
@@ -201,7 +201,7 @@
             <section class="terminal-panel" aria-label="Stellar ledger records">
                 <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
                 <h2>STELLAR LEDGER</h2>
-                <p class="advanced-help">These records are written to Stellar ManageData entries. This is separate from browser-only records. Transactions cost NATIVE and require a funded root and initialized HD registry.</p>
+                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions cost XLM and require a funded root account and initialized HD registry.</p>
                 @if (LedgerRecords.IsConnected)
                 {
                     <p class="advanced-help" role="status">Signed ledger session connected.</p>
