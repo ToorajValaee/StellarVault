@@ -5,7 +5,7 @@
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="FIRST-TIME HD SETUP">
-@if (!Sessions.IsUnlocked)
+@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
     <section class="terminal-panel centered-message">
         <h1>DATABASE LOCKED</h1>
@@ -79,7 +79,7 @@ else
     {
         try
         {
-            if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+            if (!Ledger.IsConnected) return;
             _ready = await Ledger.HasRegistryAsync();
             if (!_ready) _funding = await Ledger.InspectRegistryFundingAsync();
         }
