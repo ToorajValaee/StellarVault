@@ -10,7 +10,7 @@
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="ENCRYPTED STELLAR DATABASE">
-@if (!Sessions.IsUnlocked)
+@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
     <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
 }
@@ -293,7 +293,7 @@ else
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
     }
     protected override async Task OnInitializedAsync() {
-        if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+        if (!Ledger.IsConnected) return;
         try {
             _registryReady = await Ledger.HasRegistryAsync();
             if (_registryReady == true) await RefreshAsync();
