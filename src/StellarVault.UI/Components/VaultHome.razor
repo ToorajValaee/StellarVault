@@ -84,7 +84,7 @@
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <VaultStorageSecurityNotice />
-                <p class="advanced-help">Local encrypted storage is an opt-in feature. It currently does not cache the mnemonic or support offline-to-ledger synchronization; those capabilities are under development.</p>
+                <p class="advanced-help">Local encrypted storage is an opt-in feature. The recovery phrase is encrypted on this device using your separate passphrase. Offline drafts and manual ledger synchronization are not yet available.</p>
                 }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
@@ -623,6 +623,11 @@
                         _network == "custom" ? _customPassphrase : null);
                 }
                 catch (JSException) { /* Recent-account hint is optional. */ }
+                // Device-storage consent includes encrypted recovery material.
+                // Failure is explicit; never claim future offline signing access.
+                await ReportAccessStageAsync("encrypting on-device recovery credentials");
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.saveEncryptedSeed",
+                    account, _network, _mnemonic, _passphrase);
             }
             await ReportAccessStageAsync("connecting to Stellar ledger");
             _message = !_enableLocalStorage ? "Opening on-chain-only vault." : exists ? "Vault opened." : "Your local encrypted vault is ready.";
