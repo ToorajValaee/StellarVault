@@ -76,17 +76,17 @@ test('public Stellar network access requires explicit acknowledgement', () => {
   assert.ok(component.includes('_confirmMainnetAccess = false;'));
 });
 
-test('local vault has its own offline-capable route', () => {
+test('vault remains canonical after local unlock, with offline fallback', () => {
   const pages = path.join(root, '..', 'Pages');
-  const local = fs.readFileSync(path.join(pages, 'Workspace.razor'), 'utf8');
-  const index = fs.readFileSync(path.join(pages, 'Index.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(pages, 'Vault.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
-  assert.ok(local.includes('@page "/workspace"'));
-  assert.ok(local.includes('<VaultRecordWorkspaceView />'));
-  assert.ok(local.includes('<VaultBinaryFilesView />'));
-  assert.ok(!local.includes('Ledger.ReadAsync('));
-  assert.ok(index.includes('Sessions.IsUnlocked'));
-  assert.ok(app.includes('Navigation.NavigateTo("/workspace")'));
-  assert.ok(access.includes('const string destination = "/workspace"'));
+  const legacy = fs.readFileSync(path.join(pages, 'Workspace.razor'), 'utf8');
+  assert.ok(vault.includes('@page "/vault"'));
+  assert.ok(vault.includes('else if (!Ledger.IsConnected)'));
+  assert.ok(vault.includes('<VaultRecordWorkspaceView />'));
+  assert.ok(vault.includes('<VaultBinaryFilesView />'));
+  assert.ok(app.includes('Navigation.NavigateTo("/vault")'));
+  assert.ok(access.includes('const string destination = "/vault"'));
+  assert.ok(legacy.includes('Navigation.NavigateTo("/vault", replace: true)'));
 });
