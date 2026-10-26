@@ -170,3 +170,13 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   assert.ok(vault.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
   assert.ok(add.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
 });
+
+test('on-chain-only file review never requires a local vault checkpoint', () => {
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
+  assert.ok(add.includes('if (Retention.AllowsLocalPersistence)\n                    {'));
+  assert.ok(add.includes('saved = await Checkpoints.LoadAsync(account)'));
+  assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
+  assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
+});
