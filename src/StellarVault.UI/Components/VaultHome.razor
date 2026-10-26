@@ -83,6 +83,16 @@
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <VaultStorageSecurityNotice />
+                @if (_network == "public" && !Sessions.IsUnlocked)
+                {
+                    <div class="terminal-alert warning" role="alert">
+                        <strong>MAINNET // REAL ASSETS AND NETWORK FEES</strong>
+                        <span>You selected Stellar PUBLIC. Any approved on-chain operation may spend real XLM. Local encrypted records remain browser-only unless you explicitly publish them.</span>
+                        <label class="sv-biometric-choice"><input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_busy" />
+                            I UNDERSTAND THIS IS STELLAR MAINNET
+                        </label>
+                    </div>
+                }
                 @if (!Sessions.IsUnlocked)
                 {
                     <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
@@ -117,7 +127,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit"
-                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
+                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "public" && !_confirmMainnetAccess) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
                                 >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
                     }
                 </div>
@@ -401,6 +411,7 @@
         _workspaceMode = workspace;
     }
     private bool _requestBiometricEnrollment;
+    private bool _confirmMainnetAccess;
     private string? _pendingBiometricAccount;
     private string? _pendingBiometricPassphrase;
     private string? _postAccessUrl;
@@ -526,6 +537,7 @@
         if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || (value != "testnet" && value != "public" && value != "custom")) return;
         NetworkSelection.ChoosePreset(value);
         _network = value;
+        _confirmMainnetAccess = false;
         _networkStatus = null;
         _childAccounts = null;
         _message = null;
@@ -557,6 +569,11 @@
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
+        if (_network == "public" && !_confirmMainnetAccess)
+        {
+            _message = "Confirm the Stellar mainnet warning before accessing a public-network vault.";
+            return;
+        }
         if (_network == "custom" && (string.IsNullOrWhiteSpace(_customPassphrase) ||
             NetworkSelection.CustomPassphrase != _customPassphrase ||
             !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
