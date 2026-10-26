@@ -38,6 +38,56 @@ window.stellarVaultRecentVault = (() => {
     localStorage.setItem(key, JSON.stringify({ version: 3, account, network, horizonUrl: url,
       networkPassphrase: network === 'custom' ? networkPassphrase : null }));
   }
+  // Optional opt-in encrypted signing recovery. Never persist plaintext mnemonic.
+  // PBKDF2-SHA256 is supported by WebCrypto across browser hosts; parameters
+  // are versioned for future migration to a memory-hard platform KDF.
+  const seedKey = 'stellar-vault-v2-encrypted-seed';
+  const utf8 = new TextEncoder();
+  const decode = new TextDecoder();
+  const b64 = bytes => btoa(String.fromCharCode(...bytes));
+  const un64 = str => Uint8Array.from(atob(str), c => c.charCodeAt(0));
+  async function seedCipherKey(passphrase, salt) {
+    if (!crypto?.subtle || !globalThis.isSecureContext) throw new Error('Secure browser context required for encrypted seed storage.');
+    const base = await crypto.subtle.importKey('raw', utf8.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 600000 },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function saveEncryptedSeed(account, network, mnemonic, passphrase) {
+    if (!valid(account) || !['testnet', 'public', 'custom'].includes(network) ||
+        typeof mnemonic !== 'string' || !mnemonic.trim() || !passphrase)
+      throw new Error('Missing encrypted credential inputs.');
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const keyMaterial = await seedCipherKey(passphrase, salt);
+    const aad = utf8.encode('StellarVault-v2-seed:' + account + ':' + network);
+    const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: aad }, keyMaterial, utf8.encode(mnemonic)));
+    // Only ciphertext is persisted. A failed encryption never overwrites an older record.
+    localStorage.setItem(seedKey, JSON.stringify({
+      version: 1, account, network, kdf: 'PBKDF2-SHA256', iterations: 600000,
+      salt: b64(salt), iv: b64(iv), ciphertext: b64(encrypted)
+    }));
+  }
+  function hasEncryptedSeed(account, network) {
+    try { const item = JSON.parse(localStorage.getItem(seedKey)); return item?.version === 1 && item.account === account && item.network === network; }
+    catch { return false; }
+  }
+  async function unlockEncryptedSeed(account, network, passphrase) {
+    if (!passphrase || !hasEncryptedSeed(account, network)) throw new Error('No encrypted signing credentials for this account.');
+    const item = JSON.parse(localStorage.getItem(seedKey));
+    if (item.kdf !== 'PBKDF2-SHA256' || item.iterations !== 600000)
+      throw new Error('Unsupported encrypted credential format.');
+    const salt = un64(item.salt), iv = un64(item.iv), ciphertext = un64(item.ciphertext);
+    if (salt.length !== 16 || iv.length !== 12 || ciphertext.length > 2048)
+      throw new Error('Invalid encrypted credential envelope.');
+    const keyMaterial = await seedCipherKey(passphrase, salt);
+    const raw = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv, additionalData: utf8.encode('StellarVault-v2-seed:' + account + ':' + network) },
+      keyMaterial, ciphertext);
+    return decode.decode(raw);
+  }
+  function clearEncryptedSeed() { localStorage.removeItem(seedKey); }
   function clear() { localStorage.removeItem(key); }
-  return Object.freeze({ load, save, clear });
+  return Object.freeze({ load, save, clear, saveEncryptedSeed, hasEncryptedSeed, unlockEncryptedSeed, clearEncryptedSeed });
 })();
