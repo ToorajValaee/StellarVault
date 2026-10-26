@@ -1,0 +1,28 @@
+# StellarVault storage and sync contract (new architecture)
+
+## Choice shown before vault access
+
+**On-chain only (default):** mnemonic-derived session in memory, no application-owned persistent mnemonic, local vault data, offline drafts, or credential envelope. Record/file/folder writes require online Stellar and explicit transaction approval. No device passphrase or device-unlock enrollment. Browser caching of application code is independent of user data; browser/network caches cannot be claimed to contain no metadata without verification.
+
+**Encrypted on-device vault (opt-in):** user explicitly authorizes persisted encrypted mnemonic/key material and encrypted records/files/folders. Require a separate strong encryption passphrase or an appropriately reviewed OS-backed credential policy. The user must be able to inspect, lock, revoke and erase device data. Offline writes are **pending local drafts**, never represented as on-chain commits.
+
+## Sync safety invariants
+
+1. An explicit user action queues and synchronizes offline records/files/folders; no silent automatic paid transaction.
+2. Every draft carries a stable idempotency identifier and account/network scope; prevent cross-network replay.
+3. An attempted ledger submission is **uncertain** until verified by transaction hash/account sequence and remote state. Do not resubmit automatically on timeout.
+4. Sync preserves dependency order: folders, records, chunk manifests, chunks, pointer updates; no partial file may appear as complete.
+5. Conflicts require surfaced version/ETag or hash comparison and deliberate resolution; never blindly overwrite remote ciphertext.
+6. Persist sync queue metadata encrypted and atomically along with drafts; distinguish queued, preparing, submitted, confirmed, failed and uncertain.
+7. Sync previews fees, reserves and number of transactions before any approval; allow cancellation before submission.
+8. Explicitly disclose that unsynchronized browser/device data can be destroyed by storage clearing, app removal, quota eviction or device failure.
+9. The default on-chain-only mode must not instantiate or write persistent vault credentials as a side effect of login.
+10. A device wipe must remove the encrypted vault and queue; deletion of local data never means deletion from Stellar.
+
+## Cross-platform
+
+Keep the consent gate, encrypted draft model, sync state machine and conflict semantics in StellarVault.Core. Adapt durable encrypted storage per host (IndexedDB PWA, platform secure storage + private database on native). Provide identical source-of-truth and conflict semantics. Backing up an encrypted seed to local storage is an explicit custody decision, not implicit consent.
+
+## Delivery status
+
+The consent gate has been introduced in core. **Neither mode is yet completely enforced by the current PWA**, whose access workflow still unconditionally uses local passphrase credentials. Do not release either selectable mode until access, all storage services, sync and deletion follow these invariants.
