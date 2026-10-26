@@ -2,7 +2,7 @@ self.importScripts('./service-worker-assets.js');
 
 const cachePrefix = 'stellar-vault-cache-';
 const cacheName = `${cachePrefix}${self.assetsManifest.version}`;
-const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm$/, /\.html$/, /\.js$/, /\.json$/, /\.css$/, /\.png$/, /\.svg$/, /\.webmanifest$/];
+const offlineAssetsInclude = [/\.dll$/, /\.wasm$/, /\.html$/, /\.js$/, /\.json$/, /\.css$/, /\.png$/, /\.svg$/, /\.webmanifest$/];
 const offlineAssetsExclude = [/^service-worker\.js$/];
 
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
