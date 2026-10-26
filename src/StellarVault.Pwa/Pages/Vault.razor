@@ -29,12 +29,12 @@ else
             <div><div class="panel-kicker">DATABASE BROWSER // STELLAR LEDGER</div><h1>VAULT RECORDS</h1><p class="page-subtitle">Search encrypted metadata recovered from the connected Stellar network.</p></div>
             <div class="sv-access-actions">@if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }<button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ SYNC</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
         </header>
-        <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "OFFLINE")</strong></div></div>
+        <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
         @if (!Ledger.IsConnected)
         {
             <div class="terminal-alert warning" role="status">
-                <strong>STELLAR DATA UNAVAILABLE OFFLINE</strong>
-                <span>The original vault browser is shown, but on-chain records cannot be retrieved without reconnecting with your recovery phrase. The empty on-chain list is not evidence that records were erased. Local encrypted records and files remain stored in this browser.</span>
+                <strong>STELLAR SIGNING SESSION NOT RESTORED</strong>
+                <span>A browser refresh ends the in-memory Stellar signing session, even if your internet connection is working. Your local vault is unlocked, but on-chain records require reconnecting with your recovery phrase. No records have been erased.</span>
             </div>
         }
         <label class="search-console"><span class="search-prefix">FIND&gt;</span><input @bind="_search" @bind:event="oninput" placeholder="title, username, URL, tag, folder..." autocomplete="off"/></label>
@@ -70,7 +70,7 @@ else
         @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
         <section class="record-list">
             @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
-            else if (!Ledger.IsConnected) { <div class="terminal-panel empty-state"><h2>ON-CHAIN RECORDS NOT LOADED</h2><p>Reconnect to Stellar to recover your ledger records. This is not an empty vault.</p></div> }
+            else if (!Ledger.IsConnected) { <div class="terminal-panel empty-state"><h2>ON-CHAIN RECORDS NOT LOADED</h2><p>Reconnect with your recovery phrase to load on-chain records. This does not indicate an internet outage or an empty vault.</p></div> }
             else if (Filtered.Count == 0) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
             else
             {
