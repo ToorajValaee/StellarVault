@@ -36,8 +36,21 @@ window.stellarVaultV2Db = (() => {
     return new Promise((resolve, reject) => {
       const tx = db.transaction(store, 'readonly');
       const request = tx.objectStore(store).get(key);
-      request.onsuccess = () => resolve(request.result == null ? null : bytes(request.result));
-      request.onerror = () => reject(request.error);
+      let result;
+      request.onsuccess = () => {
+        try {
+          result = request.result == null ? null : bytes(request.result);
+        } catch (error) {
+          tx.abort();
+          reject(error);
+        }
+      };
+      // A request succeeding does not mean the transaction committed.
+      // Report data only after the complete readonly transaction finishes.
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
+      tx.onerror = () => {};
+
     });
   }
   async function putImmutable(store, key, value) {
