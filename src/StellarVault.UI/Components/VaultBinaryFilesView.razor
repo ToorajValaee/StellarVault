@@ -1,0 +1,187 @@
+@using Microsoft.Extensions.Logging
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using StellarVault.Core.Services
+@inject VaultBinaryWorkspace Files
+@inject VaultRecordWorkspace Records
+@inject IJSRuntime JS
+@inject Microsoft.Extensions.Logging.ILogger<VaultBinaryFilesView> Logger
+@implements IDisposable
+
+<section class="sv-file-workspace" aria-label="Encrypted file records">
+    @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> @_loadingMessage</div> }
+    <div class="terminal-panel credential-form">
+        <div class="form-section-title"><span>01</span> FILE DETAILS</div>
+        <label class="terminal-label">SELECT FILE *</label>
+        <div class="sv-file-picker">
+            <label class="pixel-button compact sv-file-picker-button" for="sv-file-select">+ CHOOSE FILE</label>
+            <span class="sv-file-picked-name">@(_file is null ? "NO FILE SELECTED" : _file.Name)</span>
+            <InputFile id="sv-file-select" class="sv-file-native-input" OnChange="SelectFile" disabled="@_busy" />
+        </div>
+        @if (_file is not null) { <p class="advanced-help">FILE SIZE: @(_file.Size.ToString("N0")) BYTES</p> }
+        <p class="advanced-help">Files are currently stored encrypted in this browser. Maximum file size: 1 MiB.</p>
+        <label class="terminal-label" for="sv-file-record-name">FILE RECORD NAME *</label>
+        <input id="sv-file-record-name" class="terminal-input" maxlength="512" @bind="_name"
+               @bind:event="oninput" disabled="@_busy" placeholder="Encrypted file name" />
+
+        <button class="pixel-button primary" type="button"
+                disabled="@(_busy || _file is null || string.IsNullOrWhiteSpace(_name))"
+                @onclick="UploadAsync">@(_busy ? "PROCESSING..." : "SAVE ENCRYPTED FILE")</button>
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div>
+        }
+    </div>
+
+</section>
+
+@code {
+    private const long MaximumFileLength = 1024 * 1024;
+    private IBrowserFile? _file;
+    private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _files;
+
+    // The Add File form only selects and saves a new encrypted file.
+
+    private void SelectStoredFile(string name)
+    {
+        _openName = name;
+        _confirmRemoval = false;
+    }
+
+    private async Task RefreshFilesAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _loadingMessage = "LOADING ENCRYPTED FILE LIST...";
+        try
+        {
+            var entries = await Records.ListAsync();
+            _files = entries.Where(e => e.ContentType is not null &&
+                !e.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.Name, StringComparer.Ordinal).ToArray();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or
+                                    System.Security.Cryptography.CryptographicException or JSException or OperationCanceledException)
+        {
+            _status = "Unable to load encrypted file names. Reopen the vault and try again.";
+        }
+        finally { _busy = false; }
+    }
+    private string _name = string.Empty;
+    private string _openName = string.Empty;
+    private string? _status;
+    private bool _busy;
+    private string _loadingMessage = "PROCESSING ENCRYPTED FILES...";
+    private bool _confirmRemoval;
+
+    private void SelectFile(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            _file = args.File;
+            _name = _file.Name;
+            _status = _file.Size > MaximumFileLength ? "File exceeds the current 1 MiB upload limit." : null;
+        }
+        catch (Exception ex)
+        {
+            _file = null;
+            _status = "Unable to select file: " + ex.Message;
+        }
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_busy || _file is null) return;
+        _busy = true;
+        _loadingMessage = "ENCRYPTING AND SAVING FILE...";
+        try
+        {
+            if (_file.Size > MaximumFileLength) throw new InvalidDataException("File too large.");
+            // Use create-only semantics; existing record updates require explicit version handling.
+            await using var input = _file.OpenReadStream(MaximumFileLength);
+            await Files.SaveAsync(_name, input,
+                string.IsNullOrWhiteSpace(_file.ContentType) ? "application/octet-stream" : _file.ContentType);
+            _openName = _name;
+            _status = "Encrypted file saved.";
+            // The listing is refreshed after _busy has been cleared in finally.
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "File could not be saved. Verify name, size and session state.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected encrypted file save failure");
+            _status = "File save failed unexpectedly. No successful save was confirmed; inspect the application logs before retrying.";
+        }
+        finally { _busy = false; }
+
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _loadingMessage = "DECRYPTING AND DOWNLOADING FILE...";
+        try
+        {
+            using var record = await Files.OpenAsync(_openName);
+            if (record is null) { _status = "File record not found."; return; }
+            if (record.Content.Length > MaximumFileLength)
+                throw new InvalidDataException("File exceeds current download limit.");
+            byte[] temporaryDownload = record.Content.ToArray();
+            try
+            {
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, temporaryDownload);
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(temporaryDownload);
+            }
+            _status = "Decrypted file downloaded.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "File could not be downloaded or authenticated.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_busy || !_confirmRemoval || string.IsNullOrWhiteSpace(_openName)) return;
+        _busy = true;
+        _loadingMessage = "REMOVING FILE FROM CATALOG...";
+        try
+        {
+            // A catalog/version lookup is enough for logical removal.
+            // Do not decrypt and allocate an entire file just to remove its listing.
+            var version = await Files.GetFileVersionAsync(_openName);
+            if (version is null)
+            {
+                _status = "File not found in the active catalog.";
+                return;
+            }
+            await Files.DeleteAsync(_openName, version);
+            _status = "File removed from the catalog. Historical ciphertext may remain in storage.";
+            _openName = string.Empty;
+            _confirmRemoval = false;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
+                                    or IOException or System.Security.Cryptography.CryptographicException
+                                    or JSException or OperationCanceledException)
+        {
+            _status = "Removal failed or the file changed. Refresh the list and retry.";
+            _confirmRemoval = false;
+        }
+        finally { _busy = false; }
+        if (_status?.StartsWith("File removed from the catalog.", StringComparison.Ordinal) == true)
+            await RefreshFilesAsync();
+    }
+
+    public void Dispose() => _file = null;
+}

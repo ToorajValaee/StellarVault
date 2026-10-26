@@ -1,0 +1,737 @@
+@using Microsoft.Extensions.Logging
+@using StellarVault.Core.Services
+@using Microsoft.JSInterop
+@inject VaultSessionManager Sessions
+@inject VaultSessionWorkflow Workflow
+@inject VaultNetworkSelection NetworkSelection
+@inject IStellarLedgerRecords LedgerRecords
+@inject VaultStorageModeGate StorageMode
+@inject VaultLedgerRecordWorkspace LedgerWorkspace
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
+@implements IDisposable
+
+<AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
+    <HeaderActions>
+            <details class="sv-network-menu">
+                <summary title="Select Stellar network" aria-label="Select Stellar network">
+                    <span aria-hidden="true">◎</span> <span class="sv-network-name">@_network.ToUpperInvariant()</span>
+                </summary>
+                <div class="sv-network-popover terminal-panel">
+                    <div class="panel-kicker">ACTIVE STELLAR NETWORK</div>
+                    <div class="sv-network-choice">
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("testnet")'>TESTNET @(_network == "testnet" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("public")'>PUBLIC @(_network == "public" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("custom")'>CUSTOM @(_network == "custom" ? "✓" : "")</button>
+                    </div>
+                    @if (_network == "custom")
+                    {
+                        <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
+                        <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url" @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" placeholder="https://horizon.example.com/" />
+                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
+                        @if (!string.IsNullOrEmpty(_customPassphrase))
+                        {
+                            <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
+                        }
+                    }
+                    <p class="advanced-help">Choose the network before unlocking. To switch accounts or networks, end the current session.</p>
+                </div>
+            </details>
+    </HeaderActions>
+    <ChildContent>
+    @if (Platform != "WEB PWA")
+    {
+        <div class="access-grid">
+            <VaultOverview />
+            <section class="access-form terminal-panel" aria-label="Native vault access and ledger workspace">
+                <NativeVaultWorkspace />
+            </section>
+        </div>
+    }
+    else
+    {
+    <div class="access-grid">
+        <VaultOverview />
+
+        <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
+            <div class="panel-heading">
+                <div>
+                    <div class="panel-kicker">SECURE ACCESS</div>
+                    <h2>OPEN YOUR VAULT</h2>
+                </div>
+                <span class="step-led">01</span>
+            </div>
+            @if (Platform == "WEB PWA")
+            {
+                @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
+                {
+                    <div class="terminal-alert" role="status">
+                        <strong>RESTORE LOCAL VAULT AFTER REFRESH</strong>
+                        <span>Account @_recentAccount — your encrypted records remain in this browser. Enter the vault passphrase below and choose REOPEN LOCAL VAULT. A mnemonic is still required to reconnect to Stellar.</span>
+                        <button class="pixel-button compact" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase))" @onclick="ReopenLocalAsync">REOPEN LOCAL VAULT</button>
+                        @if (_recentHasDeviceUnlock)
+                        {
+                            <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ReopenWithDeviceAsync">UNLOCK WITH DEVICE</button>
+                        }
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET THIS ACCOUNT</button>
+                    </div>
+                }
+                <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
+                <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
+                <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
+                <input id="sv-passphrase" class="terminal-input" type="password"
+                       autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
+                <VaultStorageSecurityNotice />
+                @if (!Sessions.IsUnlocked)
+                {
+                    <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
+                        OFFER DEVICE UNLOCK AFTER ACCESS (OPTIONAL)
+                    </label>
+                    <p class="advanced-help">Use a passkey protected by your device's biometrics or PIN for future privacy unlocks on this device. Enrollment happens only here, after your passphrase is verified.</p>
+                }
+                @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
+                {
+                    <div class="terminal-alert" role="status">
+                        <strong>ENABLE DEVICE UNLOCK?</strong>
+                        <span>A supported passkey is needed. Otherwise, you can continue using your vault passphrase.</span>
+                    </div>
+                    <div class="sv-access-actions">
+                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="EnrollBiometricAsync">ENABLE DEVICE UNLOCK</button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="SkipBiometricEnrollment">NOT NOW</button>
+                    </div>
+                }
+                @if (_busy)
+                {
+                    <div class="terminal-alert" role="status" aria-live="polite" aria-busy="true">
+                        <span class="sv-loading-spinner" aria-hidden="true"></span>
+                        <strong>PROCESSING // @_accessStage.ToUpperInvariant()</strong>
+                        <span>Cryptographic operations may take time on this device. Do not close the tab.</span>
+                    </div>
+                }
+                <div class="sv-access-actions">
+                    @if (Sessions.IsUnlocked)
+                    {
+                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
+                    }
+                    else
+                    {
+                        <button class="pixel-button primary" type="submit"
+                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
+                                >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
+                    }
+                </div>
+                <div class="terminal-alert warning" role="status">
+                    <strong>EARLY ACCESS // VERIFY BEFORE USING REAL SECRETS</strong>
+                    <span>Local records and files are encrypted and stored in this browser, not automatically published or backed up. Stellar ledger storage is a separate workflow with transaction fees and explicit approvals. Cross-device local-vault synchronization is not available. This build is not yet production-security audited: use test accounts and noncritical information only.</span>
+                </div>
+            }
+            else
+            {
+                <div class="terminal-alert warning" role="status">
+                    <strong>NATIVE ACCESS COMING LATER</strong>
+                    <span>The shared native UI awaits secure mnemonic handling and SWallet integration.</span>
+                </div>
+            }
+            @if (_childAccounts is not null)
+            {
+                <section class="terminal-panel" aria-label="Discovered Stellar child accounts">
+                    <h3>DISCOVERED ACCOUNT CHAIN</h3>
+                    <p class="advanced-help">Authenticated registry-aware SEP-5 scan with 16-index recovery lookahead (maximum 256 indices).</p>
+                    @if (_childAccounts.Length == 0)
+                    {
+                        <p>No funded child accounts were found in this scan.</p>
+                    }
+                    else
+                    {
+                        <ul>
+                            @foreach (var child in _childAccounts)
+                            {
+                                <li>@child</li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+            @if (Sessions.IsUnlocked && !LedgerRecords.IsConnected && !string.IsNullOrWhiteSpace(_ledgerMessage))
+            {
+                <div class="terminal-alert warning" role="alert"><strong>STELLAR CONNECTION FAILED</strong><span>@_ledgerMessage</span></div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_networkStatus))
+            {
+                <p class="advanced-help" role="status">@_networkStatus</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_message))
+            {
+                <div class="terminal-alert warning" role="status">
+                    <strong>VAULT STATUS</strong><span>@_message</span>
+                </div>
+            }
+        </form>
+    </div>
+    @if (Sessions.IsUnlocked)
+    {
+        <section class="sv-vault-data" aria-label="Encrypted vault records">
+            <header class="page-command-header">
+                <div>
+                    <div class="panel-kicker">SECURE DATABASE // WORKSPACE</div>
+                    <h2>VAULT WORKSPACE</h2>
+                    <p class="page-subtitle">Choose the record or file operation. Stellar ledger writes are separate from local encrypted drafts.</p>
+                </div>
+            </header>
+            <nav class="network-selector" aria-label="Vault workspace mode">
+                <button class="network-option @(_workspaceMode == "ledger" ? "active" : "")" type="button"
+                        aria-pressed="@(_workspaceMode == "ledger")" @onclick='() => SelectWorkspace("ledger")'>
+                    <span class="network-symbol">S</span><span><strong>STELLAR RECORD</strong><small>ON-CHAIN</small></span>
+                </button>
+                <button class="network-option @(_workspaceMode == "record" ? "active" : "")" type="button"
+                        aria-pressed="@(_workspaceMode == "record")" @onclick='() => SelectWorkspace("record")'>
+                    <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>LOCAL ENCRYPTED</small></span>
+                </button>
+                @if (Platform == "WEB PWA")
+                {
+                    <button class="network-option @(_workspaceMode == "file" ? "active" : "")" type="button"
+                            aria-pressed="@(_workspaceMode == "file")" @onclick='() => SelectWorkspace("file")'>
+                        <span class="network-symbol">F</span><span><strong>ADD FILE</strong><small>LOCAL ENCRYPTED</small></span>
+                    </button>
+                }
+            </nav>
+            @if (_workspaceMode == "ledger")
+            {
+            <section class="terminal-panel" aria-label="Stellar ledger records">
+                <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
+                <h2>STELLAR LEDGER</h2>
+                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions cost XLM and require a funded root account and initialized HD registry.</p>
+                @if (LedgerRecords.IsConnected)
+                {
+                    <p class="advanced-help" role="status">Signed ledger session connected.</p>
+                    @if (!_ledgerRegistryReady)
+                    {
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="InitializeLedgerAsync">INITIALIZE ACCOUNT REGISTRY</button>
+                    }
+                    else
+                    {
+                        <label class="terminal-label" for="sv-ledger-title">RECORD TITLE</label>
+                        <input id="sv-ledger-title" class="terminal-input" @bind="_ledgerTitle" @bind:event="oninput" disabled="@_busy" />
+                        <label class="terminal-label" for="sv-ledger-content">RECORD CONTENT</label>
+                        <textarea id="sv-ledger-content" class="terminal-input" rows="3" @bind="_ledgerContent" @bind:event="oninput" disabled="@_busy"></textarea>
+                        <button class="pixel-button primary" type="button" disabled="@(_busy || string.IsNullOrWhiteSpace(_ledgerTitle) || string.IsNullOrWhiteSpace(_ledgerContent))" @onclick="PublishLedgerAsync">PUBLISH TO STELLAR</button>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshLedgerAsync">READ FROM STELLAR</button>
+                        @if (_ledgerItems is not null)
+                        {
+                            <ul>
+                                @foreach (var item in _ledgerItems)
+                                {
+                                    <li><strong>@item.Title</strong> — @item.Content</li>
+                                }
+                            </ul>
+                        }
+                    }
+                }
+                else
+                {
+                    <p class="advanced-help">Ledger connection is unavailable. Local records are not automatically published.</p>
+                }
+                @if (!string.IsNullOrEmpty(_ledgerMessage))
+                {
+                    <p role="status" class="advanced-help">@_ledgerMessage</p>
+                }
+            </section>
+
+            }
+            else if (_workspaceMode == "record")
+            {
+                <VaultRecordWorkspaceView />
+            }
+            else if (_workspaceMode == "file" && Platform == "WEB PWA")
+            {
+                <VaultBinaryFilesView />
+            }
+        </section>
+    }
+    }
+    </ChildContent>
+</AdaptiveShell>
+
+@code {
+    [Parameter] public string Platform { get; set; } = "WEB";
+    private string? _recentAccount;
+    private string? _recentNetwork;
+    private string? _recentHorizonUrl;
+    private bool _recentHasDeviceUnlock;
+
+    private sealed class RecentVault
+    {
+        public string? Account { get; set; }
+        public string? Network { get; set; }
+        public string? HorizonUrl { get; set; }
+        public string? NetworkPassphrase { get; set; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Platform != "WEB PWA") return;
+        try
+        {
+            var recent = await JS.InvokeAsync<RecentVault?>("stellarVaultRecentVault.load");
+            if (recent is null || recent.Account is null ||
+                !StellarAccountAddress.IsValid(recent.Account) ||
+                recent.Network is not ("testnet" or "public" or "custom")) return;
+
+            _recentAccount = recent.Account;
+            _recentNetwork = recent.Network;
+            _recentHorizonUrl = recent.HorizonUrl;
+            if (!Sessions.IsUnlocked && !_busy)
+            {
+                if (recent.Network == "custom")
+                {
+                    // Never trust a stale custom-network identity. Re-query the
+                    // endpoint before deriving the scoped credential lookup key.
+                    if (string.IsNullOrWhiteSpace(recent.HorizonUrl)) return;
+                    _customHorizon = recent.HorizonUrl;
+                    // Local encrypted credentials are scoped to the chain's
+                    // public passphrase, not to Horizon availability.
+                    // Legacy remembered entries without the passphrase can
+                    // still fall back to a live discovery.
+                    var detected = !string.IsNullOrWhiteSpace(recent.NetworkPassphrase)
+                        ? recent.NetworkPassphrase
+                        : await JS.InvokeAsync<string>(
+                            "stellarVaultV2Network.probeCustom", recent.HorizonUrl);
+                    NetworkSelection.ConfigureCustom(detected);
+                    NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
+                    _customPassphrase = detected;
+                    _detectedHorizon = recent.HorizonUrl;
+                    _network = "custom";
+                }
+                else
+                {
+                    NetworkSelection.ChoosePreset(recent.Network);
+                    _network = recent.Network;
+                }
+                _recentHasDeviceUnlock = await JS.InvokeAsync<bool>(
+                    "stellarVaultBiometric.has", NetworkSelection.CredentialKey(recent.Account));
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            _message = "Saved custom network could not be verified. Check the Horizon endpoint and detect the network again.";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ReopenWithDeviceAsync()
+    {
+        if (_busy || !_recentHasDeviceUnlock || _recentAccount is null) return;
+        _busy = true;
+        try
+        {
+            _passphrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", NetworkSelection.CredentialKey(_recentAccount));
+        }
+        catch
+        {
+            _message = "Device unlock failed or was canceled. Use your vault passphrase.";
+            _passphrase = string.Empty;
+        }
+        finally { _busy = false; }
+        if (!string.IsNullOrWhiteSpace(_passphrase)) await ReopenLocalAsync();
+    }
+
+    private async Task ReopenLocalAsync()
+    {
+        if (_busy || Sessions.IsUnlocked || _recentAccount is null ||
+            _recentNetwork != _network || string.IsNullOrWhiteSpace(_passphrase) ||
+            (_network == "custom" &&
+             (string.IsNullOrWhiteSpace(_customPassphrase) ||
+              _detectedHorizon != _recentHorizonUrl ||
+              NetworkSelection.CustomPassphrase != _customPassphrase))) return;
+        _busy = true;
+        try
+        {
+            NetworkSelection.Select(_network);
+            if (!await Workflow.HasLocalVaultAsync(_recentAccount))
+                throw new InvalidOperationException("Local vault was not found.");
+            await Workflow.UnlockAsync(_recentAccount, _passphrase);
+            StorageMode.Select(VaultStorageMode.LocalEncrypted);
+            _workspaceMode = "record";
+            _message = "Local encrypted vault reopened. Stellar signing requires your recovery phrase.";
+        }
+        catch
+        {
+            Workflow.Lock();
+            StorageMode.Reset();
+            _message = "Unable to reopen local vault. Verify your passphrase and browser storage.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task ForgetRecentAsync()
+    {
+        await JS.InvokeVoidAsync("stellarVaultRecentVault.clear");
+        _recentAccount = null;
+        _recentNetwork = null;
+        _recentHorizonUrl = null;
+        _recentHasDeviceUnlock = false;
+    }
+
+    private string _workspaceMode = "ledger";
+
+    private void SelectWorkspace(string workspace)
+    {
+        if (_busy) return;
+        if (workspace is not ("ledger" or "record" or "file"))
+            throw new ArgumentOutOfRangeException(nameof(workspace));
+        if (workspace == "ledger")
+        {
+            // The connection panel remains accessible before ledger authorization.
+            // Never label the selected persistence mode as on-chain without a transport.
+            if (LedgerRecords.IsConnected)
+                StorageMode.Select(VaultStorageMode.StellarLedger);
+            else
+                StorageMode.Reset();
+        }
+        else
+        {
+            StorageMode.Select(VaultStorageMode.LocalEncrypted);
+        }
+        _workspaceMode = workspace;
+    }
+    private bool _requestBiometricEnrollment;
+    private string? _pendingBiometricAccount;
+    private string? _pendingBiometricPassphrase;
+    private string? _postAccessUrl;
+    private async Task EnrollBiometricAsync()
+    {
+        if (_busy || _pendingBiometricAccount is null || _pendingBiometricPassphrase is null) return;
+        _busy = true;
+        _accessStage = "registering device unlock";
+        try
+        {
+            await JS.InvokeVoidAsync("stellarVaultBiometric.enroll", NetworkSelection.CredentialKey(_pendingBiometricAccount), _pendingBiometricPassphrase);
+            _message = "Device unlock enabled. Your vault passphrase remains available as a fallback.";
+            FinishBiometricEnrollment();
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or OperationCanceledException)
+        {
+            _message = "Device unlock could not be enabled. Your vault passphrase still works. " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+    private void SkipBiometricEnrollment() => FinishBiometricEnrollment();
+    private void FinishBiometricEnrollment()
+    {
+        _pendingBiometricAccount = null;
+        _pendingBiometricPassphrase = null;
+        _requestBiometricEnrollment = false;
+        var destination = _postAccessUrl;
+        _postAccessUrl = null;
+        if (destination is not null) Navigation.NavigateTo(destination);
+    }
+    private string _mnemonic = string.Empty;
+    private readonly string[] _mnemonicWords = new string[24];
+    private int _mnemonicWordCount = 12;
+    private bool _showMnemonic;
+    private void UpdateMnemonicWord(int index, string value)
+    {
+        var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length > 1)
+        {
+            if (index == 0 && new[] { 12, 15, 18, 21, 24 }.Contains(words.Length))
+                _mnemonicWordCount = words.Length;
+            for (var i = 0; i < words.Length && index + i < _mnemonicWords.Length; i++)
+                _mnemonicWords[index + i] = words[i];
+        }
+        else
+            _mnemonicWords[index] = value.Trim();
+    }
+    private string AssembleMnemonic() =>
+        string.Join(' ', _mnemonicWords.Take(_mnemonicWordCount).Select(x => x?.Trim() ?? ""));
+    private void ClearMnemonic()
+    {
+        Array.Clear(_mnemonicWords);
+        _mnemonic = string.Empty;
+        _showMnemonic = false;
+    }
+    private bool _ledgerRegistryReady;
+    private string _ledgerTitle = string.Empty;
+    private string _ledgerContent = string.Empty;
+    private string? _ledgerMessage;
+    private IReadOnlyList<LedgerRecordItem>? _ledgerItems;
+
+    private async Task InitializeLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            await LedgerRecords.InitializeRegistryAsync();
+            _ledgerRegistryReady = true;
+            _ledgerMessage = "Ledger registry initialized. You can now publish encrypted records.";
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger initialization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            string hash = await LedgerWorkspace.PublishAsync(new LedgerRecordDraft(_ledgerTitle, _ledgerContent));
+            _ledgerContent = string.Empty;
+            _ledgerMessage = "Stellar transaction confirmed: " + hash;
+            try
+            {
+                _ledgerItems = await LedgerWorkspace.ListAsync();
+            }
+            catch (Exception ex)
+            {
+                _ledgerItems = null;
+                _ledgerMessage = "Stellar transaction confirmed: " + hash +
+                    ". The subsequent refresh failed: " + ex.Message +
+                    ". Do not publish again before checking the ledger.";
+            }
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger publishing failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task RefreshLedgerAsync()
+    {
+        _busy = true;
+        try
+        {
+            _ledgerItems = await LedgerWorkspace.ListAsync();
+            _ledgerMessage = "Ledger records loaded from Horizon.";
+        }
+        catch (Exception ex) { _ledgerMessage = "Ledger read failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private string _passphrase = string.Empty;
+    private string? _message;
+    private bool _busy;
+    private string _accessStage = "starting";
+    private string _network = "testnet";
+    private string _customHorizon = string.Empty;
+    private string? _customPassphrase;
+    private string? _detectedHorizon;
+    private string? _networkStatus;
+    private string[]? _childAccounts;
+    private void SelectNetwork(string value)
+    {
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || (value != "testnet" && value != "public" && value != "custom")) return;
+        NetworkSelection.ChoosePreset(value);
+        _network = value;
+        _networkStatus = null;
+        _childAccounts = null;
+        _message = null;
+    }
+
+    private async Task DetectCustomAsync()
+    {
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || _network != "custom") return;
+        _busy = true;
+        _message = null;
+        _customPassphrase = null;
+        _detectedHorizon = null;
+        NetworkSelection.ResetCustom();
+        try
+        {
+            _customPassphrase = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon);
+            NetworkSelection.ConfigureCustom(_customPassphrase);
+            NetworkSelection.CustomHorizonUrl = _customHorizon.Trim();
+            _detectedHorizon = _customHorizon.Trim();
+            _networkStatus = "Private network detected.";
+        }
+        catch (JSException)
+        {
+            _message = "Private network detection failed. Check Horizon URL, HTTPS and browser CORS permissions.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task AccessVaultAsync()
+    {
+        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked) return;
+        if (_network == "custom" && (string.IsNullOrWhiteSpace(_customPassphrase) ||
+            NetworkSelection.CustomPassphrase != _customPassphrase ||
+            !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
+        {
+            _message = "Detect the custom network before accessing the vault.";
+            return;
+        }
+        NetworkSelection.Select(_network);
+        _mnemonic = _mnemonic.Trim();
+        _busy = true;
+        _accessStage = "starting";
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(50);
+        _message = null;
+        _networkStatus = null;
+        _childAccounts = null;
+        try
+        {
+            // The mnemonic identifies the namespace; never persist it or derive
+            // a second, different account identity for an existing local vault.
+            await ReportAccessStageAsync("deriving account");
+            var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
+            if (!StellarAccountAddress.IsValid(account))
+                throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
+            await ReportAccessStageAsync("checking local credentials");
+            bool exists = await Workflow.HasLocalVaultAsync(account);
+            await ReportAccessStageAsync(exists ? "unlocking encrypted credentials" : "creating encrypted credentials");
+            if (exists)
+                await Workflow.UnlockAsync(account, _passphrase);
+            else
+                await Workflow.CreateAsync(account, _passphrase);
+            if (_network is "testnet" or "public" or "custom")
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("stellarVaultRecentVault.save", account, _network,
+                        _network == "custom" ? _detectedHorizon : null,
+                        _network == "custom" ? _customPassphrase : null);
+                    _recentAccount = account;
+                    _recentNetwork = _network;
+                    _recentHorizonUrl = _network == "custom" ? _detectedHorizon : null;
+                }
+                catch (JSException) { /* Local storage selection is optional. */ }
+            }
+            await ReportAccessStageAsync("connecting to Stellar ledger");
+            _message = exists ? "Vault opened." : "Your local encrypted vault is ready.";
+            try
+            {
+                await LedgerRecords.DisconnectAsync();
+                var horizonUrl = _network switch
+                {
+                    "testnet" => "https://horizon-testnet.stellar.org",
+                    "public" => "https://horizon.stellar.org",
+                    _ => _customHorizon
+                };
+                var networkPassphrase = _network switch
+                {
+                    "testnet" => "Test SDF Network ; September 2015",
+                    "public" => "Public Global Stellar Network ; September 2015",
+                    _ => _customPassphrase ?? throw new InvalidOperationException("Custom network not detected.")
+                };
+                await LedgerRecords.ConnectAsync(_mnemonic, horizonUrl, networkPassphrase);
+                if (_workspaceMode == "ledger")
+                    StorageMode.Select(VaultStorageMode.StellarLedger);
+                _ledgerRegistryReady = await LedgerRecords.HasRegistryAsync();
+                if (_ledgerRegistryReady) _ledgerItems = await LedgerWorkspace.ListAsync();
+                _ledgerMessage = "On-chain vault connected.";
+            }
+            catch (Exception ex)
+            {
+                StorageMode.Reset();
+                _ledgerMessage = "On-chain connection failed: " + ex.Message;
+            }
+            try
+            {
+                bool found = await JS.InvokeAsync<bool>("stellarVaultV2Network.inspectAccount", account, _network, _customHorizon, _customPassphrase);
+                _networkStatus = found ? "Root account found on the selected network." : "Root account not found on selected network. Local vault remains accessible.";
+            }
+            catch (JSException)
+            {
+                _childAccounts = null;
+                _networkStatus = "Network discovery unavailable; local vault remains accessible.";
+            }
+            if (Sessions.IsUnlocked && Platform == "WEB PWA" && LedgerRecords.IsConnected)
+            {
+                var destination = _ledgerRegistryReady ? "/vault" : "/initialize";
+                if (_requestBiometricEnrollment)
+                {
+                    _pendingBiometricAccount = account;
+                    _pendingBiometricPassphrase = _passphrase;
+                    _postAccessUrl = destination;
+                    _message = "Vault opened. Choose whether to register device unlock.";
+                }
+                else Navigation.NavigateTo(destination);
+            }
+            else if (Sessions.IsUnlocked && Platform == "WEB PWA")
+                _message = "Local vault unlocked, but Stellar ledger setup failed. See the on-chain connection error below; LOCK VAULT to retry.";
+        }
+        catch (JSException ex)
+        {
+            Logger.LogError("Vault access JavaScript failure at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
+            _message = $"Vault access failed during {_accessStage} (browser interop). Check the recovery phrase and browser console.";
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            Logger.LogError("Vault cryptographic error at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
+            _message = "Vault could not be unlocked. Check your encryption passphrase.";
+        }
+        catch (ArgumentException ex)
+        {
+            Logger.LogError("Vault argument error at stage {Stage}: {ExceptionType}, parameter {Parameter}", _accessStage, ex.GetType().Name, ex.ParamName);
+            _message = ex.ParamName switch
+            {
+                "accountId" or "address" => "The derived Stellar address failed validation.",
+                "passphrase" => "Enter a nonempty vault encryption passphrase.",
+                _ => "Vault input was rejected. Check the recovery phrase and passphrase."
+            };
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Logger.LogError("Vault authorization error at stage {Stage}: {ExceptionType}", _accessStage, ex.GetType().Name);
+            _message = "Vault access is not authorized in this environment.";
+        }
+        catch (OperationCanceledException)
+        {
+            _message = "Vault unlock was interrupted because the session was locked (for example when the browser tab became hidden). Keep this tab visible and retry.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Vault unexpected error at stage {Stage}: {ExceptionType}; HResult {Code}", _accessStage, ex.GetType().FullName, ex.HResult);
+            _message = $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
+        }
+        finally
+        {
+            ClearMnemonic();
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task ReportAccessStageAsync(string stage)
+    {
+        _accessStage = stage;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(50);
+    }
+
+    private async Task LockAsync()
+    {
+        if (_busy) return;
+        Workflow.Lock();
+        StorageMode.Reset();
+        await LedgerRecords.DisconnectAsync();
+        _ledgerItems = null;
+        _ledgerRegistryReady = false;
+        _ledgerMessage = null;
+        ClearMnemonic();
+        _pendingBiometricAccount = null;
+        _pendingBiometricPassphrase = null;
+        _postAccessUrl = null;
+        _passphrase = string.Empty;
+        _childAccounts = null;
+        _networkStatus = null;
+        _message = "Vault locked.";
+    }
+
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        _network = NetworkSelection.SelectedPreset;
+        _customHorizon = NetworkSelection.CustomHorizonUrl;
+        _customPassphrase = NetworkSelection.CustomPassphrase;
+        if (_network == "custom" && !string.IsNullOrWhiteSpace(_customPassphrase))
+            _detectedHorizon = _customHorizon;
+    }
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
+}

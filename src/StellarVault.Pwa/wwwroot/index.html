@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07110c" />
+    <meta name="description" content="StellarVault is an encrypted personal vault for private records and files, with optional account-linked Stellar ledger storage." />
+    <meta name="author" content="Tooraj Valaee" />
+    <meta name="application-name" content="StellarVault" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Stellar Vault" />
+    <meta name="format-detection" content="telephone=no" />
+    <base href="/" />
+
+    <!-- Apply platform classes before the stylesheet is evaluated. This keeps
+         the installed iOS header below the status/navigation safe area from the
+         very first paint, rather than waiting for app.js to load. -->
+    <script>
+        (() => {
+            const ua = navigator.userAgent || '';
+            const ios =
+                /iphone|ipad|ipod/i.test(ua) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const android = /android/i.test(ua);
+            const standalone =
+                window.matchMedia('(display-mode: standalone)').matches ||
+                navigator.standalone === true;
+
+            document.documentElement.classList.toggle('ios-device', ios);
+            document.documentElement.classList.toggle('android-device', android);
+            document.documentElement.classList.toggle('standalone-app', standalone);
+        })();
+    </script>
+
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="StellarVault.Pwa.styles.css" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <title>StellarVault — Your Encrypted Records, Files &amp; Stellar Storage</title>
+
+    <!-- Capture Chromium's one-shot install event before Blazor or the large
+         Stellar SDK bundle starts loading. This is especially important on
+         slower Android devices. -->
+    <script>
+        (() => {
+            window.__stellarVaultInstallPrompt = null;
+            window.__stellarVaultInstallEventSeen = false;
+
+            window.addEventListener('beforeinstallprompt', event => {
+                event.preventDefault();
+                window.__stellarVaultInstallPrompt = event;
+                window.__stellarVaultInstallEventSeen = true;
+                window.dispatchEvent(new CustomEvent('stellarvault:install-ready'));
+            }, { capture: true });
+
+            window.addEventListener('appinstalled', () => {
+                window.__stellarVaultInstallPrompt = null;
+                window.dispatchEvent(new CustomEvent('stellarvault:installed'));
+            });
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker
+                    .register('service-worker.js', { updateViaCache: 'none' })
+                    .catch(error => console.error('Service worker registration failed:', error));
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div id="app">
+        <div class="boot-screen">
+            <div class="boot-logo">SV</div>
+            <div class="boot-line">INITIALIZING WEBASSEMBLY TERMINAL<span>_</span></div>
+            <div class="boot-progress"><i></i></div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        TERMINAL FAILURE. <a href="." class="reload">RELOAD</a>
+        <a class="dismiss">×</a>
+    </div>
+
+    <script src="js/vendor/stellar-sdk.min.js"></script>
+    <script src="js/bip39-english.js"></script>
+    <script src="js/hd-keys.js"></script>
+    <script src="js/vault-v2-mnemonic.js"></script>
+    <script src="js/vault-v2-network.js"></script>
+    <script src="js/hd-registry.js"></script>
+    <script src="js/vault-v2-chain.js"></script>
+    <!-- Original HD-v2 ledger protocol and locally signed transaction transport.
+         These are distinct from the local IndexedDB workspace until migration. -->
+    <script src="js/ledger-compat/hd-encryption.js"></script>
+    <script src="js/ledger-compat/hd-allocation-preflight.js"></script>
+    <script src="js/ledger-compat/hd-allocator.js"></script>
+    <script src="js/ledger-compat/hd-sponsorship.js"></script>
+    <script src="js/ledger-compat/hd-treasury.js"></script>
+    <script src="js/ledger-compat/hd-fee-bump.js"></script>
+    <script src="js/ledger-compat/hd-discovery.js"></script>
+    <script src="js/ledger-compat/hd-bootstrap.js"></script>
+    <script src="js/ledger-compat/app.js"></script>
+    <script src="js/vault-v2-keywrap.js"></script>
+    <script src="js/vault-v2-indexeddb.js"></script>
+    <script src="js/vault-v2-lifecycle.js"></script>
+    <script src="js/vault-v2-recent-vault.js"></script>
+    <script src="js/vault-v2-biometric.js"></script>
+    <script src="js/vault-v2-download.js"></script>
+    <script src="js/vault-v2-upload-checkpoint.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

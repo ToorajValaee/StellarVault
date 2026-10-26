@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-stellar-vault-host="native">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07110c">
+  <title>StellarVault — Encrypted Account Database</title>
+  <base href="/">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="StellarVault.Maui.styles.css">
+</head>
+<body style="margin:0;background:#07110c">
+  <div id="app">Initializing StellarVault…</div>
+  <div id="blazor-error-ui" hidden role="alert" style="position:fixed;inset:auto 1rem 1rem;z-index:9999;padding:1rem;background:#311e19;color:#fff;border:1px solid #ffb38a">
+    StellarVault could not start its native interface. Check the device debug log and restart the application.
+    <a href="." style="color:#fff">RELOAD</a>
+    <button type="button" class="dismiss" aria-label="Dismiss error">×</button>
+  </div>
+  <!-- Shared PWA Stellar ledger runtime. Signing remains disabled in MAUI until
+       a verified .NET adapter and native session lifecycle are implemented. -->
+  <script src="js/vendor/stellar-sdk.min.js"></script>
+  <script src="js/bip39-english.js"></script>
+  <script src="js/hd-keys.js"></script>
+  <script src="js/vault-v2-mnemonic.js"></script>
+  <script src="js/vault-v2-network.js"></script>
+  <script src="js/hd-registry.js"></script>
+  <script src="js/vault-v2-chain.js"></script>
+  <script src="js/ledger-compat/hd-encryption.js"></script>
+  <script src="js/ledger-compat/hd-allocation-preflight.js"></script>
+  <script src="js/ledger-compat/hd-allocator.js"></script>
+  <script src="js/ledger-compat/hd-sponsorship.js"></script>
+  <script src="js/ledger-compat/hd-treasury.js"></script>
+  <script src="js/ledger-compat/hd-fee-bump.js"></script>
+  <script src="js/ledger-compat/hd-discovery.js"></script>
+  <script src="js/ledger-compat/hd-bootstrap.js"></script>
+  <script src="js/ledger-compat/app.js"></script>
+  <script>
+    // A credential-free preflight. Never derive keys, sign or submit here.
+    window.stellarVaultNativeRuntime = Object.freeze({
+      async inspect() {
+        const sdk = window.StellarSdk;
+        let cryptoReady = false;
+        try {
+          // Exercise the actual crypto implementation without processing user data.
+          const random = new Uint8Array(16);
+          globalThis.crypto.getRandomValues(random);
+          const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(0));
+          cryptoReady = random.some(byte => byte !== 0) && digest.byteLength === 32;
+          random.fill(0);
+        } catch {
+          cryptoReady = false;
+        }
+        const bip39Ready = Array.isArray(window.stellarVaultBip39English) &&
+          window.stellarVaultBip39English.length === 2048;
+        const hdReady = typeof window.stellarVaultHd?.deriveKeypair === 'function';
+        const ledgerReady = typeof window.stellarVault?.network?.inspectHorizon === 'function' &&
+          typeof window.stellarVault?.stellar?.openHdSession === 'function' &&
+          typeof window.stellarVault?.stellar?.deleteSession === 'function';
+        const sdkReady = typeof sdk?.Keypair?.fromRawEd25519Seed === 'function';
+        return { ready: cryptoReady && bip39Ready && hdReady && ledgerReady && sdkReady,
+          cryptoReady, bip39Ready, hdReady, ledgerReady, sdkReady };
+      }
+    });
+  </script>
+  <script>
+    // Do not display JS exception messages: third-party scripts could include user data.
+    // Surface a non-secret startup failure instead of leaving an endless loading label.
+    window.addEventListener('error', () => {
+      if (document.querySelector('#app')?.textContent?.includes('Initializing StellarVault')) {
+        document.getElementById('blazor-error-ui').hidden = false;
+      }
+    });
+    window.addEventListener('unhandledrejection', () => {
+      if (document.querySelector('#app')?.textContent?.includes('Initializing StellarVault')) {
+        document.getElementById('blazor-error-ui').hidden = false;
+      }
+    });
+  </script>
+  <script src="_framework/blazor.webview.js"></script>
+</body>
+</html>

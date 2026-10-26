@@ -1,0 +1,141 @@
+@using StellarVault.Core.Services
+@inject VaultRecordWorkspace Workspace
+
+<section class="form-page" aria-label="Encrypted text records">
+    <header class="page-command-header">
+        <div>
+            <div class="panel-kicker">WRITE OPERATION // LOCAL ENCRYPTED RECORD</div>
+            <h2>ADD RECORD</h2>
+            <p class="page-subtitle">Original terminal-style record editor. This local workspace does not publish to Stellar.</p>
+        </div>
+        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshAsync">REFRESH LIST</button>
+    </header>
+    @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> PROCESSING ENCRYPTED RECORD...</div> }
+    <div class="terminal-panel credential-form">
+        <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
+        <label class="terminal-label" for="sv-record-name">TITLE / RECORD NAME *</label>
+        <input id="sv-record-name" class="terminal-input" maxlength="512" @bind="_name"
+               @bind:event="oninput" disabled="@_busy" autocomplete="off" placeholder="Record name" />
+        <div class="form-section-title"><span>02</span> ENCRYPTED CONTENT</div>
+        <label class="terminal-label" for="sv-record-content">RECORD DATA *</label>
+        <textarea id="sv-record-content" class="terminal-input terminal-textarea" rows="8"
+                  @bind="_text" @bind:event="oninput" disabled="@_busy"
+                  placeholder="Enter information to encrypt"></textarea>
+        <div class="commit-preview">
+            <span>MODE</span><strong>LOCAL ENCRYPTED DATABASE</strong>
+            <span>STORAGE</span><strong>BROWSER INDEXEDDB — NOT LEDGER</strong>
+        </div>
+        <div class="sv-access-actions">
+            <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="NewRecord">NEW</button>
+            <button class="pixel-button primary" type="button"
+                    disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" @onclick="SaveAsync">
+                @(_busy ? "PROCESSING..." : "SAVE ENCRYPTED RECORD")
+            </button>
+            <button class="pixel-button compact" type="button"
+                    disabled="@(_busy || _version is null)" @onclick="DeleteAsync">REMOVE FROM CATALOG</button>
+        </div>
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="terminal-alert" role="status"><strong>RECORD STATUS</strong><span>@_message</span></div>
+        }
+    </div>
+    <section class="terminal-panel">
+        <div class="panel-kicker">STORED RECORDS</div>
+        <h3>RECORD DIRECTORY</h3>
+        @if (_items is null)
+        {
+            <p class="advanced-help">Directory unavailable. Use Refresh List.</p>
+        }
+        else if (!_items.Any(item => item.ContentType is null || item.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+        {
+            <p class="advanced-help">No encrypted text records yet.</p>
+        }
+        else
+        {
+            <ul class="sv-record-directory">
+                @foreach (var item in _items.Where(item => item.ContentType is null || item.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <li><button class="pixel-button compact" type="button" disabled="@_busy"
+                                @onclick="() => OpenAsync(item.Name)">@item.Name</button></li>
+                }
+            </ul>
+        }
+    </section>
+</section>
+
+@code {
+    private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _items;
+    private string _name = string.Empty;
+    private string? _loadedName;
+    private string _text = string.Empty;
+    private StellarVault.Core.Abstractions.VaultRecordPointer? _version;
+    private bool _busy;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (_busy) return;
+        _busy = true;
+        _message = null;
+        try { await action(); }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or InvalidDataException
+                                   or System.Security.Cryptography.CryptographicException or IOException
+                                   or Microsoft.JSInterop.JSException or OperationCanceledException)
+        {
+            _message = "Operation failed or record changed. Refresh and retry.";
+        }
+        finally { _busy = false; }
+    }
+
+    private Task RefreshAsync() => RunAsync(async () => _items = await Workspace.ListAsync());
+
+    private Task OpenAsync(string name) => RunAsync(async () =>
+    {
+        var record = await Workspace.ReadTextAsync(name);
+        if (record is null) { _message = "Record not found."; return; }
+        _name = record.Name;
+        _loadedName = record.Name;
+        _text = record.Text;
+        _version = record.Version;
+    });
+
+    private void NewRecord()
+    {
+        _name = string.Empty;
+        _loadedName = null;
+        _text = string.Empty;
+        _version = null;
+        _message = null;
+    }
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        // A version belongs to exactly one opaque, name-derived record ID.
+        // Editing the name while retaining that version must never create a
+        // mismatched compare-and-swap or overwrite an unrelated record.
+        if (_version is not null && !string.Equals(_loadedName, _name, StringComparison.Ordinal))
+        {
+            _message = "Record names cannot be changed while editing. Choose New to create another record.";
+            return;
+        }
+        _version = await Workspace.SaveTextAsync(_name, _text, _version);
+        _loadedName = _name;
+        _items = await Workspace.ListAsync();
+        _message = "Encrypted record saved.";
+    });
+
+    private Task DeleteAsync() => RunAsync(async () =>
+    {
+        if (_version is null || !string.Equals(_loadedName, _name, StringComparison.Ordinal))
+        {
+            _message = "Reopen the original record before removing it.";
+            return;
+        }
+        await Workspace.DeleteAsync(_name, _version);
+        NewRecord();
+        _items = await Workspace.ListAsync();
+        _message = "Record hidden from catalog; ciphertext may remain in history.";
+    });
+}

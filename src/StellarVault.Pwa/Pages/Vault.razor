@@ -1,0 +1,309 @@
+@page "/vault"
+@using StellarVault.Core.Services
+@using System.Text.Json
+@using System.Security.Cryptography
+@using StellarVault.Pwa.Services
+@using Microsoft.JSInterop
+@inject IStellarLedgerRecords Ledger
+@inject VaultSessionManager Sessions
+@inject VaultSessionWorkflow Workflow
+@inject NavigationManager Nav
+
+<AdaptiveShell PlatformName="WEB PWA" Subtitle="ENCRYPTED STELLAR DATABASE">
+@if (!Sessions.IsUnlocked)
+{
+    <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
+}
+else if (!Ledger.IsConnected)
+{
+    <section class="terminal-panel centered-message"><h1>STELLAR CONNECTION REQUIRED</h1><p>Your local vault is unlocked, but the on-chain session is not connected. Return to the access terminal, lock and retry to see the underlying connection error. A funded root and accessible Horizon endpoint may be required.</p><a class="pixel-button primary" href="/">ACCESS TERMINAL</a></section>
+}
+else if (_registryReady != true)
+{
+    <section class="terminal-panel centered-message">
+        <h1>REGISTRY SETUP REQUIRED</h1>
+        <p>Complete one-time initialization before using the on-chain database.</p>
+        <a class="pixel-button primary" href="/initialize">CONTINUE SETUP</a>
+    </section>
+}
+else
+{
+    <section class="vault-page">
+        <header class="page-command-header">
+            <div><div class="panel-kicker">DATABASE BROWSER // STELLAR LEDGER</div><h1>VAULT RECORDS</h1><p class="page-subtitle">Search encrypted metadata recovered from the connected Stellar network.</p></div>
+            <div class="sv-access-actions"><button class="pixel-button compact" type="button" disabled="@_infoLoading" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@_busy">↻ SYNC</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
+        </header>
+        <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "OFFLINE")</strong></div></div>
+        <label class="search-console"><span class="search-prefix">FIND&gt;</span><input @bind="_search" @bind:event="oninput" placeholder="title, username, URL, tag, folder..." autocomplete="off"/></label>
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
+        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
+            <strong>FOLDERS</strong>
+            <nav style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0">
+                <button class="pixel-button compact" @onclick='() => _folder = null'>MY VAULT</button>
+                @foreach (var crumb in Breadcrumbs)
+                {
+                    <span>/</span><button class="pixel-button compact" @onclick="() => _folder = crumb.Id">@crumb.Title</button>
+                }
+            </nav>
+            <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>INCLUDE RECORDS FROM SUBFOLDERS</span></label>
+            <div class="sv-folder-grid">
+            @foreach (var item in Folders.Where(f => f.FolderId == _folder))
+            {
+                <div class="sv-folder-tile">
+                    <button class="pixel-button compact" @onclick="() => OpenFolder(item.Id)">📁 @item.Title</button>
+                    <details><summary>⋯</summary>
+                        <a class="pixel-button compact" href="@($"/edit/{item.Id}")">RENAME / MOVE</a>
+                        <button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button>
+                    </details>
+                </div>
+            }
+            </div>
+            <div class="sv-access-actions">
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">+ NEW FOLDER</a>
+                <a class="pixel-button compact" href="/add?kind=file">+ ADD FILE</a>
+            </div>
+        </section>
+        @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
+        <section class="record-list">
+            @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
+            else if (Filtered.Count == 0) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
+            else
+            {
+                @foreach (var item in Filtered)
+                {
+                    <button class="record-card" type="button" @onclick="() => OpenRecord(item)">
+                        <span class="record-index">@((Filtered.IndexOf(item) + 1).ToString("D2"))</span>
+                        <span class="record-card-body"><strong>@item.Title</strong>
+                        @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
+                        @if (_includeChildren || !string.IsNullOrWhiteSpace(_search)) { <small>📁 @FolderPath(item.FolderId)</small> }
+                        </span><span class="record-chevron">›</span>
+                    </button>
+                }
+            }
+        </section>
+    </section>
+    @if (_selected is not null)
+    {
+        <div class="modal-backdrop" @onclick="CloseRecord">
+            <section class="record-modal terminal-panel" role="dialog" aria-modal="true"
+                     aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
+                <header class="modal-header">
+                    <div><div class="panel-kicker">RECORD // @_selected.Id</div><h2 id="sv-record-title">@_selected.Title</h2></div>
+                    <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
+                </header>
+                <div class="data-field"><span class="field-label">FOLDER PATH</span><div class="field-value-row"><code>@FolderPath(_selected.FolderId)</code></div></div>
+                @if (IsLedgerFile(_selected))
+                {
+                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
+                }
+                else
+                {
+                <div class="data-field"><span class="field-label">USERNAME / IDENTIFIER</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
+                <div class="data-field secret-field"><span class="field-label">SECRET</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
+                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">URL</span><div class="field-value-row"><code>@_selected.Url</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>COPY</button></div></div> }
+                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">NOTES</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
+                @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
+                }
+                <div class="modal-action-row record-actions">
+                    @if (!IsLedgerFile(_selected)) { <a class="pixel-button primary" href="@($"/edit/{_selected.Id}")">EDIT RECORD</a> }
+                    <button class="pixel-button danger" @onclick="() => SelectDelete(_selected)">DELETE</button>
+                </div>
+            </section>
+        </div>
+    }
+    @if (_showAccountInfo)
+    {
+        <div class="modal-backdrop" @onclick="CloseAccountInfo">
+            <section class="record-modal terminal-panel sv-account-info-modal" role="dialog" aria-modal="true" aria-labelledby="sv-account-info-title" @onclick:stopPropagation="true">
+                <header class="modal-header">
+                    <div><div class="panel-kicker">STELLAR VAULT // ACCOUNT INFORMATION</div><h2 id="sv-account-info-title">ACCOUNT CHAIN</h2></div>
+                    <button type="button" class="icon-button close-button" aria-label="Close account information" @onclick="CloseAccountInfo">×</button>
+                </header>
+                @if (_infoLoading)
+                {
+                    <p role="status"><span class="sv-loading-spinner" aria-hidden="true"></span> LOADING ACCOUNT INFORMATION...</p>
+                }
+                else if (_accountInfo is not null)
+                {
+                    <div class="stats-strip">
+                        <div><span>USED ACCOUNTS</span><strong>@_accountInfo.TotalAccounts</strong></div>
+                        <div><span>RECORDS</span><strong>@_accountInfo.Records</strong></div>
+                        <div><span>FOLDERS</span><strong>@_accountInfo.Folders</strong></div>
+                    </div>
+                    <div class="data-field"><span class="field-label">ROOT ACCOUNT // INDEX 0</span><code class="sv-account-address">@_accountInfo.RootAccountId</code></div>
+                    <div class="data-field"><span class="field-label">TAIL ACCOUNT // LAST ACTIVE NODE</span><code class="sv-account-address">@_accountInfo.TailAccountId</code></div>
+                    <div class="stats-strip">
+                        <div><span>ROOT BALANCE (NATIVE)</span><strong>@_accountInfo.BalanceNative</strong></div>
+                        <div><span>SPENDABLE (NATIVE)</span><strong>@_accountInfo.SpendableNative</strong></div>
+                        <div><span>SPONSORED RESERVE (NATIVE)</span><strong>@_accountInfo.SponsoredReserveNative</strong></div>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_infoError))
+                {
+                    <div class="terminal-alert warning" role="alert">@_infoError</div>
+                }
+                <div class="modal-action-row">
+                    <button class="pixel-button compact" type="button" disabled="@_infoLoading" @onclick="OpenAccountInfoAsync">REFRESH</button>
+                    <button class="pixel-button compact" type="button" @onclick="CloseAccountInfo">CLOSE</button>
+                </div>
+            </section>
+        </div>
+    }
+    <LedgerCostApprovalModal Open="@(_deleteCandidate is not null)" Estimate="_deleteEstimate"
+                             Title="APPROVE RECORD DELETION" ActionText="APPROVE DELETE"
+                             Danger="true" Busy="_busy" OnConfirm="DeleteSelectedAsync" OnCancel="CancelDelete" />
+}
+</AdaptiveShell>
+
+@code {
+    private IReadOnlyList<LedgerRecordItem> _records = [];
+    private string _search = "";
+    private string? _folder;
+    private bool _includeChildren;
+    private bool? _registryReady;
+
+
+    [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
+    private static bool IsLedgerFile(LedgerRecordItem item) => LedgerFileProtocol.IsFile(item);
+    private async Task DownloadLedgerFileAsync()
+    {
+        if (_selected is null || !IsLedgerFile(_selected)) return;
+        _fileDownloadStatus = "RECOVERING ENCRYPTED FILE FROM STELLAR...";
+        try
+        {
+            // Re-read the full authenticated ledger snapshot rather than trusting
+            // an old in-memory list that may omit parts from a recent publication.
+            var all = await Ledger.ReadAsync();
+            var current = all.SingleOrDefault(r => r.Id == _selected.Id)
+                ?? throw new InvalidDataException("File manifest is no longer available.");
+            var bytes = LedgerFileProtocol.DecodeFile(current, all);
+            try
+            {
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                    LedgerFileProtocol.FileName(current), bytes);
+                _fileDownloadStatus = "File verified and downloaded.";
+            }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }
+        catch (Exception ex)
+        {
+            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.Message;
+        }
+    }
+    private string? _fileDownloadStatus;
+    private LedgerRecordItem? _selected;
+    private bool _revealed;
+    private void OpenRecord(LedgerRecordItem item) { _selected = item; _revealed = false; _fileDownloadStatus = null; }
+    private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
+    private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
+    private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
+    private bool _showAccountInfo, _infoLoading;
+    private LedgerAccountInfo? _accountInfo;
+    private string? _infoError;
+    private void CloseAccountInfo() { if (!_infoLoading) _showAccountInfo = false; }
+    private async Task OpenAccountInfoAsync()
+    {
+        if (_infoLoading || !Ledger.IsConnected) return;
+        _showAccountInfo = true;
+        _infoLoading = true;
+        _infoError = null;
+        try { _accountInfo = await Ledger.InspectAccountInfoAsync(); }
+        catch (Exception ex) { _infoError = "Unable to retrieve account information: " + ex.Message; }
+        finally { _infoLoading = false; }
+    }
+    private bool _busy;
+    private string _busyMessage = "SYNCING STELLAR LEDGER...";
+    private LedgerCostPreview? _deleteEstimate;
+    private readonly HashSet<string> _revealedIds = new(StringComparer.Ordinal);
+    private void ToggleReveal(string id) { if (!_revealedIds.Add(id)) _revealedIds.Remove(id); }
+    private void OpenFolder(string id) { _folder = id; _revealedIds.Clear(); }
+    private LedgerRecordItem? _deleteCandidate;
+    private async Task SelectDelete(LedgerRecordItem item) {
+        if (_busy) return;
+        _deleteCandidate = item; _deleteEstimate = null;
+        _busy = true; _busyMessage = "ESTIMATING DELETE COST...";
+        try { _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id); }
+        catch (Exception ex) { _error = "Delete estimate failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task DeleteSelectedAsync() {
+        if (_busy || _deleteCandidate is null) return;
+        _busy = true; _busyMessage = "DELETING FROM STELLAR...";
+        var id = _deleteCandidate.Id;
+        try {
+            var result = await Ledger.DeleteAsync(id);
+            _deleteCandidate = null; _deleteEstimate = null; _selected = null; _revealed = false;
+            _records = await Ledger.ReadAsync();
+            _error = "Deletion committed: " + result.TransactionHash + (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
+        } catch (Exception ex) { _error = "Deletion failed or refresh unavailable: " + ex.Message; }
+        finally { _busy = false; }
+    }
+    private string? _error;
+    private List<LedgerRecordItem> Folders => _records.Where(r => r.IsFolder).ToList();
+    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder && !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)).ToList();
+    private IEnumerable<LedgerRecordItem> Breadcrumbs
+    {
+        get {
+            var result = new List<LedgerRecordItem>();
+            var visited = new HashSet<string>();
+            var id = _folder;
+            while (id is not null && visited.Add(id)) {
+                var item = Folders.FirstOrDefault(f => f.Id == id);
+                if (item is null) break;
+                result.Insert(0, item);
+                id = item.FolderId;
+            }
+            return result;
+        }
+    }
+    private List<LedgerRecordItem> Filtered {
+        get {
+            var included = new HashSet<string?> { _folder };
+            if (_includeChildren) {
+                bool changed;
+                do {
+                    changed = false;
+                    foreach (var f in Folders)
+                        if (included.Contains(f.FolderId) && included.Add(f.Id)) changed = true;
+                } while (changed);
+            }
+            return Records.Where(r => (!string.IsNullOrWhiteSpace(_search) || included.Contains(r.FolderId)) &&
+                (string.IsNullOrWhiteSpace(_search) ||
+                new[] { r.Title, r.UserName, r.Url, r.Notes, r.Tags is null ? "" : string.Join(" ",r.Tags), FolderPath(r.FolderId) }
+                .Any(x => x?.Contains(_search, StringComparison.OrdinalIgnoreCase) == true))).ToList();
+        }
+    }
+    private string FolderName(string? id) => Folders.FirstOrDefault(f => f.Id == id)?.Title ?? "";
+    private string FolderPath(string? id) {
+        var names = new List<string>(); var visited = new HashSet<string>();
+        while (id is not null && visited.Add(id)) {
+            var folder = Folders.FirstOrDefault(f => f.Id == id);
+            if (folder is null) { names.Insert(0, "[missing folder]"); break; }
+            names.Insert(0, folder.Title); id = folder.FolderId;
+        }
+        return names.Count == 0 ? "MY VAULT" : "MY VAULT / " + string.Join(" / ", names);
+    }
+    [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
+    protected override void OnParametersSet() {
+        if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
+    }
+    protected override async Task OnInitializedAsync() {
+        if (!Sessions.IsUnlocked || !Ledger.IsConnected) return;
+        try {
+            _registryReady = await Ledger.HasRegistryAsync();
+            if (_registryReady == true) await RefreshAsync();
+            else Nav.NavigateTo("/initialize", replace: true);
+        } catch (Exception ex) { _error = "Ledger setup check failed: " + ex.Message; }
+    }
+    private async Task RefreshAsync() {
+        if (_busy) return;
+        _busy = true; _busyMessage = "SYNCING STELLAR LEDGER..."; _error = null; _revealedIds.Clear();
+        try { _records = await Ledger.ReadAsync(); }
+        catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
+        finally { _busy = false; }
+    }
+    private async Task LockAsync() {
+        Workflow.Lock(); await Ledger.DisconnectAsync(); Nav.NavigateTo("/");
+    }
+}

@@ -1,0 +1,10 @@
+{
+  "solution": {
+    "path": "StellarVault.sln",
+    "projects": [
+      "src\\StellarVault.Core\\StellarVault.Core.csproj",
+      "src\\StellarVault.UI\\StellarVault.UI.csproj",
+      "src\\StellarVault.Pwa\\StellarVault.Pwa.csproj"
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+# SVAULT
+
+> SVAULT is an encrypted credential vault created by Badje. It encrypts credential records locally in the browser and uses the Stellar network for signed, traceable ledger operations.
+
+## Primary pages
+- Product overview: https://svault.ir/
+- Web application: https://app.svault.ir/
+- Privacy Policy: https://svault.ir/privacy.html
+- Terms of Use: https://svault.ir/terms.html
+- Creator: https://badje.ir/
+
+## Key facts
+- SVAULT is a Badje product; it is not a product of the Stellar Development Foundation.
+- SVAULT uses Stellar accounts, signed transactions, fees and ledgers.
+- The application supports Testnet, Public and configured Custom Stellar networks.
+- Record content is encrypted locally with AES-256-GCM before ledger preparation.
+- The database secret is used in the active browser session and is not intended to be stored as application data.
+- A dedicated approval screen shows estimated fees and ledger changes before signing and submission.
+- Public Stellar transactions and metadata may be visible and effectively permanent.
+- Users must protect their database secret, device, browser environment, backups and signing keys.
+
+## Language availability
+- The public presentation website is currently available in English only.
+
+## Contact
+- Project contact: Tooraj Valaee
+- Email: tooraj.valaee@live.com
+- Investment, partnership, security review and voluntary project-support inquiries are welcome.

@@ -1,0 +1,10 @@
+.sv-file-workspace {display:grid;gap:1rem;min-width:0;width:100%;}
+.sv-file-workspace .credential-form {min-width:0;width:100%;}
+.sv-file-picker {display:flex;align-items:center;flex-wrap:wrap;gap:.85rem;min-width:0;padding:.7rem;border:1px dashed var(--border);background:var(--panel-soft);}
+.sv-file-picker-button {display:inline-flex;align-items:center;cursor:pointer;white-space:nowrap;flex:0 0 auto;}
+.sv-file-picked-name {min-width:0;flex:1 1 12rem;overflow-wrap:anywhere;color:var(--phosphor-strong);font-size:.8rem;}
+.sv-file-native-input {position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);}
+.sv-file-native-input:focus-visible + .sv-file-picked-name {outline:2px solid var(--accent);}
+.sv-file-workspace .terminal-panel {padding:1rem;}
+.sv-file-workspace .sv-record-directory {overflow-wrap:anywhere;}
+.sv-file-workspace .sv-record-directory button {max-width:100%;white-space:normal;overflow-wrap:anywhere;}

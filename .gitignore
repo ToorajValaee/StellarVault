@@ -1,7 +1,9 @@
-﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
-################################################################################
-
-/.vs
-/bin/Debug/net8.0
-/obj
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+*.cache
+artifacts/
+TestResults/
+.DS_Store

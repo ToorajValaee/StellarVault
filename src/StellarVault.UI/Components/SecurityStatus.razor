@@ -1,0 +1,9 @@
+<aside role="status" aria-live="polite">
+    <strong>@Heading</strong>
+    <p>@Message</p>
+</aside>
+
+@code {
+    [Parameter] public string Heading { get; set; } = "SECURITY STATUS";
+    [Parameter] public string Message { get; set; } = string.Empty;
+}

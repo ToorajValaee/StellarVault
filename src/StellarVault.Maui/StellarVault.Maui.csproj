@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <!-- Unpackaged Windows preview: no generated AppxManifest is required. -->
+    <WindowsPackageType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">None</WindowsPackageType>
+    <RootNamespace>StellarVault.Maui</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationTitle>StellarVault</ApplicationTitle>
+    <ApplicationId>ir.svault.app</ApplicationId>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">14.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">14.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19041.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.30" />
+    <PackageReference Include="CommunityToolkit.Maui" Version="14.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.0" />
+    <!-- Reuse the exact C# HD-v2 ledger engine and IStellarLedgerRecords
+         adapter already used by PWA; no forked signing implementation. -->
+    <Compile Include="../StellarVault.Pwa/LegacyLedger/*.cs"
+             Link="SharedStellarLedger/%(Filename)%(Extension)" />
+    <Compile Include="../StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs"
+             Link="SharedStellarLedger/BrowserStellarLedgerRecords.cs" />
+    <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
+    <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- One visual design system for PWA and native BlazorWebView. -->
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/css/app.css"
+               LogicalName="wwwroot/css/app.css" />
+  </ItemGroup>
+  <!-- External linked files must be MAUI assets with wwwroot logical names,
+       not ordinary Content items, for BlazorWebView static-file resolution. -->
+  <ItemGroup>
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vendor/stellar-sdk.min.js"
+               LogicalName="wwwroot/js/vendor/stellar-sdk.min.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/bip39-english.js"
+               LogicalName="wwwroot/js/bip39-english.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/hd-keys.js"
+               LogicalName="wwwroot/js/hd-keys.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-v2-mnemonic.js"
+               LogicalName="wwwroot/js/vault-v2-mnemonic.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-v2-network.js"
+               LogicalName="wwwroot/js/vault-v2-network.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/hd-registry.js"
+               LogicalName="wwwroot/js/hd-registry.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-v2-chain.js"
+               LogicalName="wwwroot/js/vault-v2-chain.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/ledger-compat/*.js"
+               LogicalName="wwwroot/js/ledger-compat/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <MauiIcon Include="Resources/Splash/splash.svg" Color="#07110c" />
+    <MauiSplashScreen Include="Resources/Splash/splash.svg" Color="#07110c" BaseSize="256,256" />
+    <MauiAsset Include="Resources/Raw/**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,31 +1,38 @@
-# Stellar Vault PWA v1.3.5
+# StellarVault
 
-This build restores the Android installation panel from the earlier PWA version while keeping the later Android scrolling and iOS viewport fixes.
+A fresh .NET 10, Stellar-account-centered encrypted vault/database. The native **.NET MAUI Blazor Hybrid** app and **Blazor WebAssembly PWA** share the same Core and Razor UI. **No legacy HD registry, v1 record migration, or mnemonic-based account allocation is supported.**
 
-## Android installation behavior
+## Repository structure
 
-- On Android Chrome, an **INSTALL ON ANDROID** panel appears shortly after page load, unless the app is already running in standalone mode.
-- When Chrome has emitted `beforeinstallprompt`, the **INSTALL** button opens Chrome's native installation dialog directly.
-- If Chrome has not emitted the event yet, the panel remains visible. Tapping **INSTALL** reveals the Chrome menu installation path instead of silently doing nothing.
-- When the event arrives later, the same button automatically becomes a native install action.
-- iPhone and iPad retain the Safari **Share → Add to Home Screen** instructions.
+```text
+StellarVault.sln
+src/
+  StellarVault.Core/       Encrypted database, records, account authorization contracts
+  StellarVault.UI/         Shared Razor components
+  StellarVault.Maui/       Android, iOS, Windows, Mac Catalyst native host
+  StellarVault.Pwa/        Browser/WebAssembly host, IndexedDB, PWA assets
+tests/
+  StellarVault.Core.CryptoTests/
+docs/
+  architecture/
+website/                  Independent landing site
+.github/workflows/        Cross-platform CI
+Dockerfile                .NET 10 browser build and Nginx hosting
+```
 
-## Important browser limitation
+## Run the browser preview
 
-A web page cannot create Chrome's native PWA install event. The app can retain the event and invoke it from the button only after Chrome decides the site is installable.
+```bash
+dotnet restore src/StellarVault.Pwa/StellarVault.Pwa.csproj
+dotnet run --project src/StellarVault.Pwa/StellarVault.Pwa.csproj
+```
 
-## Deployment refresh
+## Native development
 
-After deploying:
+Open `StellarVault.sln` and select `StellarVault.Maui` as the startup project. Install .NET 10 MAUI workload and the target platform toolchain. Build a target framework explicitly, for example `dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net10.0-android`.
 
-1. Remove any older installed copy from Android.
-2. In Chrome, clear the site's stored data.
-3. Reopen the HTTPS URL directly in Chrome.
-4. Reload once after the new service worker takes control.
+## Security and release readiness
 
+**Not yet production-ready.** Stellar wallet challenge signing currently fails closed; Create/Unlock are not available for a normal user. Encryption, record storage, and file UIs require complete build and end-to-end validation. GitHub-hosted CI runners have also failed to start in recent runs. Do not use this preview with valuable secrets.
 
-## v1.3.6 — iOS safe-area regression fix
-
-This release is based on v1.3.5 and preserves all earlier features and fixes, including Android scrolling, Android install UI, edit/delete, cost approval modals, custom network discovery, contact information, PWA support, and viewport stabilization.
-
-The iOS platform and standalone classes are now applied in `index.html` before the CSS file loads. A final iOS-only CSS override restores the top safe-area inset for the sticky header, preventing the installed app from rendering beneath the iPhone status/navigation area on first paint. Android layout rules are unchanged.
+The landing site in `website/` is independently maintained.

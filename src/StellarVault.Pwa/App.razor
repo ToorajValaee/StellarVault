@@ -1,0 +1,220 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using StellarVault.UI.Components
+@using StellarVault.Core.Services
+@using Microsoft.JSInterop
+@inject VaultSessionManager Sessions
+@inject IStellarLedgerRecords LedgerRecords
+@inject VaultNetworkSelection NetworkSelection
+@inject VaultSessionWorkflow Workflow
+@inject VaultStorageModeGate StorageMode
+@inject IJSRuntime JS
+@inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
+@implements IAsyncDisposable
+
+@if (_checkingRecent)
+{
+    <section class="sv-privacy-screen"><div class="terminal-panel sv-privacy-panel">CHECKING SAVED VAULT…</div></section>
+}
+else if (_startupError is not null)
+{
+    <section class="sv-privacy-screen" role="alert">
+        <div class="terminal-panel sv-privacy-panel">
+            <div class="panel-kicker">SAVED VAULT // STORAGE UNAVAILABLE</div>
+            <h1>VAULT LOCKED</h1>
+            <p>@_startupError</p>
+            <button class="pixel-button primary" type="button" @onclick="RetryRestoreAsync">RETRY SAVED VAULT</button>
+            <button class="pixel-button compact" type="button" @onclick="OpenRecoveryScreen">OPEN MANUAL RECOVERY</button>
+        </div>
+    </section>
+}
+else if (Privacy.IsSuspended || _coldAccount is not null)
+{
+    <section class="sv-privacy-screen" role="dialog" aria-modal="true" aria-label="Vault privacy lock">
+        <form class="terminal-panel sv-privacy-panel" @onsubmit="ResumeAsync" @onsubmit:preventDefault="true">
+            <div class="panel-kicker">PRIVACY LOCK // SESSION PAUSED</div>
+            <h1>VAULT HIDDEN</h1>
+            <p>@(_coldAccount is not null ? "Reopen your saved local vault using its passphrase or device unlock. Stellar signing still requires your mnemonic." : "Enter your vault passphrase to continue. No recovery phrase is required.")</p>
+            <label class="terminal-label" for="sv-resume-pass">VAULT PASSPHRASE</label>
+            <input id="sv-resume-pass" class="terminal-input" type="password" autocomplete="off" @bind="_resumePassphrase" @bind:event="oninput" disabled="@_resuming" />
+            @if (!string.IsNullOrWhiteSpace(_resumeError)) { <div class="terminal-alert warning" role="alert">@_resumeError</div> }
+            @if (_resuming) { <p role="status"><span class="sv-loading-spinner"></span> UNLOCKING...</p> }
+            <button class="pixel-button primary" type="submit" disabled="@(_resuming || string.IsNullOrWhiteSpace(_resumePassphrase))">UNLOCK VAULT</button>
+            @if (_biometricEnrolled)
+            {
+                <button class="pixel-button compact" type="button" disabled="@_resuming" @onclick="ResumeWithDeviceAsync">UNLOCK WITH DEVICE</button>
+            }
+            <button class="pixel-button compact" type="button" disabled="@_resuming" @onclick="FullLockAsync">LOCK AND END SESSION</button>
+        </form>
+    </section>
+}
+else
+{
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(StellarVault.Pwa.EmptyLayout)" />
+    </Found>
+    <NotFound>
+        <VaultHome Platform="WEB PWA" />
+    </NotFound>
+</Router>
+}
+
+@code {
+    private bool _checkingRecent = true;
+    private string? _startupError;
+    private string? _coldAccount;
+    private sealed class RecentVault
+    {
+        public string? Account { get; set; }
+        public string? Network { get; set; }
+        public string? HorizonUrl { get; set; }
+        public string? NetworkPassphrase { get; set; }
+    }
+    private async Task RestoreRecentAsync()
+    {
+        try
+        {
+            var recent = await JS.InvokeAsync<RecentVault?>("stellarVaultRecentVault.load");
+            if (recent?.Account is null || !StellarAccountAddress.IsValid(recent.Account)) return;
+            if (recent.Network is "testnet" or "public")
+                NetworkSelection.ChoosePreset(recent.Network);
+            else if (recent.Network == "custom" &&
+                     !string.IsNullOrWhiteSpace(recent.NetworkPassphrase) &&
+                     !string.IsNullOrWhiteSpace(recent.HorizonUrl))
+            {
+                NetworkSelection.ConfigureCustom(recent.NetworkPassphrase);
+                NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
+            }
+            else return;
+            if (!await Workflow.HasLocalVaultAsync(recent.Account)) return;
+            // The encrypted credential, not optional passkey metadata, decides
+            // whether a saved vault is eligible for cold-start unlock.
+            _coldAccount = recent.Account;
+            try
+            {
+                _biometricEnrolled = await JS.InvokeAsync<bool>(
+                    "stellarVaultBiometric.has", NetworkSelection.CredentialKey(recent.Account));
+            }
+            catch (JSException)
+            {
+                // Passkey APIs or storage can be unavailable; password unlock
+                // must still be offered for an existing encrypted local vault.
+                _biometricEnrolled = false;
+            }
+        }
+        catch (Exception)
+        {
+            _coldAccount = null;
+            _startupError = "Unable to check existing encrypted vault storage. No saved data was erased. Retry before creating another vault.";
+        }
+        finally
+        {
+            _checkingRecent = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+    private async Task RetryRestoreAsync()
+    {
+        _startupError = null;
+        _checkingRecent = true;
+        await RestoreRecentAsync();
+    }
+
+    private void OpenRecoveryScreen()
+    {
+        // This bypasses only the automatic lookup screen; it never unlocks.
+        _startupError = null;
+        _coldAccount = null;
+        _biometricEnrolled = false;
+    }
+
+    private async Task UnlockColdAsync(string phrase)
+    {
+        if (_coldAccount is null) return;
+        await Workflow.UnlockAsync(_coldAccount, phrase);
+        StorageMode.Select(VaultStorageMode.LocalEncrypted);
+        _coldAccount = null;
+    }
+    private DotNetObjectReference<App>? _callback;
+    private string _resumePassphrase = string.Empty;
+    private string? _resumeError;
+    private bool _resuming;
+    private bool _biometricEnrolled;
+    protected override void OnInitialized() => Privacy.Changed += RefreshPrivacy;
+    private void RefreshPrivacy() => _ = InvokeAsync(async () =>
+    {
+        if (Privacy.IsSuspended)
+        {
+            try { _biometricEnrolled = Privacy.SuspendedAccountId is { } accountId &&
+                await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(accountId)); }
+            catch (JSException) { _biometricEnrolled = false; }
+        }
+        else
+        {
+            _biometricEnrolled = false;
+            _resumePassphrase = string.Empty;
+        }
+        StateHasChanged();
+    });
+    private async Task ResumeWithDeviceAsync()
+    {
+        if (_resuming || (_coldAccount is null && (!Privacy.IsSuspended || Privacy.SuspendedAccountId is null))) return;
+        _resuming = true; _resumeError = null;
+        try
+        {
+            var account = _coldAccount ?? Privacy.SuspendedAccountId!;
+            var phrase = await JS.InvokeAsync<string>("stellarVaultBiometric.unlock", NetworkSelection.CredentialKey(account));
+            try { if (_coldAccount is not null) await UnlockColdAsync(phrase); else await Privacy.ResumeAsync(phrase); }
+            finally { phrase = string.Empty; }
+        }
+        catch (Exception) { _resumeError = "Device unlock was unavailable or canceled. Use your vault passphrase instead."; }
+        finally { _resuming = false; }
+    }
+    private async Task ResumeAsync()
+    {
+        if (_resuming) return;
+        _resuming = true; _resumeError = null;
+        try { if (_coldAccount is not null) await UnlockColdAsync(_resumePassphrase); else await Privacy.ResumeAsync(_resumePassphrase); }
+        catch (Exception) { _resumeError = "Unable to unlock. Check the passphrase and retry."; }
+        finally { _resumePassphrase = string.Empty; _resuming = false; }
+    }
+    private async Task FullLockAsync()
+    {
+        Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
+        Privacy.Clear();
+        _coldAccount = null;
+        _biometricEnrolled = false;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await RestoreRecentAsync();
+        _callback = DotNetObjectReference.Create(this);
+        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.attach", _callback); }
+        catch (JSException) { Sessions.Lock(); await LedgerRecords.DisconnectAsync(); }
+    }
+
+    [JSInvokable]
+    public void SuspendForPrivacy() => Privacy.Suspend();
+
+    [JSInvokable]
+    public async Task LockForBrowserLifecycle()
+    {
+        Privacy.Clear();
+        Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Privacy.Changed -= RefreshPrivacy;
+        Privacy.Clear();
+        Sessions.Lock();
+        await LedgerRecords.DisconnectAsync();
+        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
+        catch (JSException) { }
+        catch (JSDisconnectedException) { }
+        _callback?.Dispose();
+    }
+}

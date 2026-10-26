@@ -1,0 +1,13 @@
+.native-preview{max-width:48rem;display:grid;gap:1rem;padding:clamp(1.1rem,4vw,2rem);border:1px solid #365e44;background:#0c1a11}
+.native-preview h1{font-size:clamp(1.7rem,5vw,3rem);line-height:1.15;margin:0}
+.native-preview p{margin:0;line-height:1.65}
+.eyebrow{font-size:.75rem;letter-spacing:.15em;color:#a3dcb0}
+.notice{border-left:3px solid #d7b96e;padding:.85rem 1rem;background:#252517;color:#f4e9c6}
+
+.session-lock{justify-self:start;padding:.75rem 1.1rem;border:1px solid #8ebf9b;border-radius:.35rem;background:#183424;color:#ecfff0;font:inherit;font-weight:600;cursor:pointer}
+.session-lock:focus-visible{outline:3px solid #d7b96e;outline-offset:3px}
+
+.vault-field{box-sizing:border-box;width:100%;min-height:2.75rem;padding:.65rem .75rem;border:1px solid #6a9877;border-radius:.35rem;background:#07110c;color:#ecfff0;font:inherit}
+.vault-field:focus-visible{outline:3px solid #d7b96e;outline-offset:2px}
+.vault-actions{display:flex;gap:.75rem;flex-wrap:wrap}
+.session-lock:disabled{opacity:.55;cursor:not-allowed}

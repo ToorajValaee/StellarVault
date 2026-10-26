@@ -1,0 +1,39 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Core", "src\StellarVault.Core\StellarVault.Core.csproj", "{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.UI", "src\StellarVault.UI\StellarVault.UI.csproj", "{856C74B3-CC15-4843-8AAF-9E23973B20A4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Maui", "src\StellarVault.Maui\StellarVault.Maui.csproj", "{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Pwa", "src\StellarVault.Pwa\StellarVault.Pwa.csproj", "{A053EEA5-7811-94A8-B754-6E4C70930EF3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

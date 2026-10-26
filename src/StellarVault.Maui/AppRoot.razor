@@ -1,0 +1,15 @@
+@using Microsoft.AspNetCore.Components.Web
+@using StellarVault.UI.Components
+
+<ErrorBoundary>
+    <ChildContent>
+        <VaultHome Platform="NATIVE APP" />
+    </ChildContent>
+    <ErrorContent>
+        <section class="terminal-panel" role="alert">
+            <h2>STELLARVAULT COULD NOT LOAD</h2>
+            <p>The native interface encountered an error. No ledger transaction was submitted by this screen.</p>
+            <p>Restart the application and inspect the Android/Windows debug output if the issue persists.</p>
+        </section>
+    </ErrorContent>
+</ErrorBoundary>
