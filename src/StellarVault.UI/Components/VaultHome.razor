@@ -130,7 +130,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit"
-                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || string.IsNullOrWhiteSpace(_passphrase) || (_network == "public" && !_confirmMainnetAccess) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
+                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase)) || (_network == "public" && !_confirmMainnetAccess) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
                                 >@(_busy ? "PROCESSING..." : "ACCESS VAULT")</button>
                     }
                 </div>
