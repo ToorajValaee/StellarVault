@@ -88,20 +88,10 @@ else
             }
             else return;
             if (!await Workflow.HasLocalVaultAsync(recent.Account)) return;
-            // The encrypted credential, not optional passkey metadata, decides
-            // whether a saved vault is eligible for cold-start unlock.
-            _coldAccount = recent.Account;
-            try
-            {
-                _biometricEnrolled = await JS.InvokeAsync<bool>(
-                    "stellarVaultBiometric.has", NetworkSelection.CredentialKey(recent.Account));
-            }
-            catch (JSException)
-            {
-                // Passkey APIs or storage can be unavailable; password unlock
-                // must still be offered for an existing encrypted local vault.
-                _biometricEnrolled = false;
-            }
+            // A fresh page load no longer auto-opens the passphrase-only
+            // privacy screen. Require the normal mnemonic + vault passphrase
+            // for a complete Stellar signing session after browser restart.
+            _coldAccount = null;
         }
         catch (Exception)
         {
