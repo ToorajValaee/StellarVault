@@ -16,11 +16,42 @@
 }
 else if (!Ledger.IsConnected)
 {
-    <section class="terminal-panel centered-message">
-        <h1>STELLAR SESSION DISCONNECTED</h1>
-        <p>Your local vault is unlocked, but the Stellar signing session is not connected. This is expected after reopening with only your vault passphrase: Stellar signing requires your recovery phrase again. If you are offline, connect to the internet before reconnecting.</p>
-        <button class="pixel-button primary" type="button" @onclick="ReconnectAsync">RECONNECT WITH RECOVERY PHRASE</button>
-        <p class="advanced-help">This closes the in-memory local vault session; your encrypted records and files are not deleted. You can then access the account again using the same recovery phrase and vault passphrase.</p>
+    <section class="vault-page" aria-label="Unlocked encrypted vault">
+        <header class="page-command-header">
+            <div>
+                <div class="panel-kicker">VAULT RECORDS // LOCAL STORAGE</div>
+                <h1>VAULT RECORDS</h1>
+                <p class="page-subtitle">Your local encrypted data is available. Stellar on-chain records require reconnection.</p>
+            </div>
+            <div class="sv-access-actions">
+                <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button>
+                <button class="pixel-button compact" type="button" @onclick="LockAsync">LOCK</button>
+            </div>
+        </header>
+        <div class="stats-strip">
+            <div><span>STORAGE</span><strong>LOCAL</strong></div>
+            <div><span>STELLAR</span><strong>DISCONNECTED</strong></div>
+        </div>
+        <div class="terminal-alert warning" role="status">
+            <strong>STELLAR SIGNING IS DISCONNECTED</strong>
+            <span>Local records and files remain accessible after passphrase-only unlock, including offline. To recover on-chain records, select CONNECT STELLAR and enter your recovery phrase again. Existing local data will not be deleted.</span>
+        </div>
+        <nav class="network-selector" aria-label="Encrypted vault data">
+            <button type="button" class="network-option @(_localSection == "record" ? "active" : "")" aria-pressed="@(_localSection == "record")" @onclick='() => _localSection = "record"'>
+                <span class="network-symbol">R</span><span><strong>RECORDS</strong><small>LOCAL ENCRYPTED</small></span>
+            </button>
+            <button type="button" class="network-option @(_localSection == "file" ? "active" : "")" aria-pressed="@(_localSection == "file")" @onclick='() => _localSection = "file"'>
+                <span class="network-symbol">F</span><span><strong>FILES</strong><small>LOCAL ENCRYPTED</small></span>
+            </button>
+        </nav>
+        @if (_localSection == "record")
+        {
+            <VaultRecordWorkspaceView />
+        }
+        else
+        {
+            <VaultBinaryFilesView />
+        }
     </section>
 }
 else if (_registryReady != true)
@@ -162,6 +193,7 @@ else
 </AdaptiveShell>
 
 @code {
+    private string _localSection = "record";
     private IReadOnlyList<LedgerRecordItem> _records = [];
     private string _search = "";
     private string? _folder;
