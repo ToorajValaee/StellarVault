@@ -1,15 +1,21 @@
 @using StellarVault.Core.Services
 
-<section class="hero-terminal terminal-panel" aria-label="StellarVault overview">
-            <div class="panel-kicker">SECURE DATA LINK // ACCOUNT VAULT</div>
-            <h1>OPEN STELLAR<br />CHAIN DATABASE<span class="blink-cursor">_</span></h1>
-            <p class="hero-copy">
-                An encrypted database for your Stellar account. Keep private records and files
-                in your private Stellar vault.
-            </p>
-            <div class="boot-log" aria-label="Vault capabilities">
-                <span><b>[OK]</b> AES-256-GCM ENCRYPTED RECORDS</span>
-                <span><b>[OK]</b> ACCOUNT-SCOPED PRIVATE STORAGE</span>
-            </div>
-            <ManagedVaultSessionStatus />
-        </section>
+<section class="hero-terminal terminal-panel" aria-label="StellarVault product overview">
+    <div class="panel-kicker">PRIVATE DATA // STELLAR IDENTITY</div>
+    <h1>YOUR DATA.<br />YOUR VAULT<span class="blink-cursor">_</span></h1>
+    <p class="hero-copy">
+        Secure notes and files in an encrypted, account-scoped vault.
+        Keep local encrypted records on this device, and use supported Stellar
+        ledger operations when you explicitly choose to publish on-chain.
+    </p>
+    <div class="boot-log" aria-label="Vault storage options">
+        <span><b>[LOCAL]</b> ENCRYPTED RECORDS AND FILES ON THIS DEVICE</span>
+        <span><b>[STELLAR]</b> SEPARATE ACCOUNT-LINKED LEDGER STORAGE</span>
+        <span><b>[CONTROL]</b> EXPLICIT APPROVAL FOR ON-CHAIN WRITES</span>
+    </div>
+    <p class="advanced-help">
+        Local data does not automatically sync across devices.
+        Stellar transactions may require network fees and reserves.
+    </p>
+    <ManagedVaultSessionStatus />
+</section>
