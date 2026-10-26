@@ -126,7 +126,7 @@ test('offline vault keeps the normal ledger browser layout instead of an alterna
  assert.ok(vault.includes('search-console'));
  assert.ok(vault.includes('sv-folder-grid'));
  assert.ok(vault.includes('record-list'));
- assert.ok(vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
+ assert.ok(vault.includes('STELLAR SIGNING SESSION NOT RESTORED'));
  assert.ok(!vault.includes('else if (!Ledger.IsConnected)'));
 });
 
@@ -135,4 +135,16 @@ test('refresh without signing credentials is not mislabeled as offline', () => {
   assert.ok(vault.includes('NOT SIGNED IN'));
   assert.ok(vault.includes('browser refresh ends the in-memory Stellar signing session'));
   assert.ok(!vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
+});
+
+test('explicit-lock policy keeps session while switching tabs and requires mnemonic on reload', () => {
+  const lifecycle = fs.readFileSync(path.join(root, 'js', 'vault-v2-lifecycle.js'), 'utf8');
+  const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.ok(!lifecycle.includes("addEventListener('visibilitychange'"));
+  assert.ok(!lifecycle.includes("addEventListener('pagehide'"));
+  assert.ok(!lifecycle.includes("invokeMethodAsync('SuspendForPrivacy'"));
+  assert.ok(app.includes('_coldAccount = null;'));
+  assert.ok(access.includes('SAVED VAULT FOUND'));
+  assert.ok(!access.includes('REOPEN LOCAL VAULT</button>'));
 });
