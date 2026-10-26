@@ -14,7 +14,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="WRITE OPERATION">
-@if (!Sessions.IsUnlocked)
+@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
     <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
 }
@@ -179,7 +179,7 @@ else
         return "MY VAULT / " + string.Join(" / ", names);
     }
     protected override async Task OnParametersSetAsync() {
-        if (!Sessions.IsUnlocked || !Ledger.IsConnected || _kind == "file") return;
+        if (!Ledger.IsConnected || _kind == "file") return;
         _loading = true;
         try {
             var all = await Ledger.ReadAsync();
