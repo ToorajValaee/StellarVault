@@ -98,3 +98,15 @@ test('unlocked PWA session redirects from access to canonical vault without dupl
   assert.ok(index.includes('if (!Sessions.IsUnlocked)'));
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
 });
+
+test('disconnected ledger reconnect ends local session before returning to access', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.ok(vault.includes('@onclick="ReconnectAsync"'));
+  const start = vault.indexOf('private async Task ReconnectAsync()');
+  const end = vault.indexOf('private async Task LockAsync()', start);
+  assert.ok(start > 0 && end > start);
+  const reconnect = vault.slice(start, end);
+  assert.ok(reconnect.includes('Workflow.Lock()'));
+  assert.ok(reconnect.includes('Ledger.DisconnectAsync()'));
+  assert.ok(reconnect.includes('Nav.NavigateTo("/", replace: true)'));
+});
