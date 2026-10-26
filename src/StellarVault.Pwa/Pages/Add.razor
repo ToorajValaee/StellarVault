@@ -10,6 +10,7 @@
 @inject StellarLedgerUploadCoordinator UploadCoordinator
 @inject IStellarUploadCheckpointStore Checkpoints
 @inject VaultSessionManager Sessions
+@inject VaultDeviceRetentionGate Retention
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 
@@ -34,7 +35,7 @@ else
                 <div class="sv-file-picker">
                     <label class="pixel-button compact sv-file-picker-button" for="sv-ledger-file">+ CHOOSE FILE</label>
                     <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
-                    <InputFile id="sv-ledger-file" class="sv-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
+                    <InputFile id="sv-ledger-file" class="sv-file-native-input sv-ledger-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
                 </div>
                 <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 16 KiB. Each encrypted part requires a separate fee approval; the manifest is committed last.</p>
                 @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
@@ -227,12 +228,14 @@ else
             Convert.ToHexString(SHA256.HashData(_fileBytes)))));
     }
     private async Task SaveCheckpointAsync(string fingerprint) {
+        if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan, never persisted.
         var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
         await Checkpoints.SaveAsync(account, new StellarUploadCheckpoint(
             StellarUploadCheckpoint.CurrentVersion, fingerprint,
             _filePlan!.Select(x => x.Id).ToArray(), _fileStep));
     }
     private async Task ClearCheckpointAsync() {
+        if (!Retention.AllowsLocalPersistence) return;
         if (Sessions.ActiveAccountId is string account)
             await Checkpoints.ClearAsync(account);
     }
@@ -244,8 +247,12 @@ else
             if (_kind == "file") {
                 var fingerprint = CurrentFileFingerprint();
                 if (_filePlan is null) {
-                    var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active vault.");
-                    var saved = await Checkpoints.LoadAsync(account);
+                    StellarUploadCheckpoint? saved = null;
+                    if (Retention.AllowsLocalPersistence)
+                    {
+                        var account = Sessions.ActiveAccountId ?? throw new InvalidOperationException("No active local vault.");
+                        saved = await Checkpoints.LoadAsync(account);
+                    }
                     if (saved is not null && saved.Fingerprint != fingerprint)
                         throw new InvalidOperationException("Another upload checkpoint exists. Select the matching original file and title.");
                     _filePlan = LedgerFileProtocol.BuildUpload(_title, _fileOriginalName, _fileContentType,
@@ -253,7 +260,7 @@ else
                     _fileFingerprint = fingerprint;
                     _fileStep = saved?.Step ?? 0;
                     _uncertainStage = saved is not null;
-                    if (saved is null) await SaveCheckpointAsync(fingerprint);
+                    if (saved is null && Retention.AllowsLocalPersistence) await SaveCheckpointAsync(fingerprint);
                 }
                 if (_fileFingerprint != fingerprint)
                     throw new InvalidOperationException("The file or title changed. Restart the upload with a new file.");
