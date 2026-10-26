@@ -68,3 +68,10 @@ test('offline bundle does not require debug symbols', () => {
   assert.ok(include, 'precache allowlist must be present');
   assert.ok(!include.includes('pdb'), 'PDB symbols must not be mandatory offline assets');
 });
+
+test('public Stellar network access requires explicit acknowledgement', () => {
+  const component = fs.readFileSync(path.join(root, '..', 'Components', '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.ok(component.includes('MAINNET // REAL ASSETS AND NETWORK FEES'));
+  assert.ok(component.includes('_network == "public" && !_confirmMainnetAccess'));
+  assert.ok(component.includes('_confirmMainnetAccess = false;'));
+});
