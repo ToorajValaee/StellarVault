@@ -180,3 +180,21 @@ test('on-chain-only file review never requires a local vault checkpoint', () => 
   assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
 });
+
+test('opt-in encrypted seed remains separate from on-chain-only login', () => {
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
+  const recent = fs.readFileSync(path.join(root, 'js', 'vault-v2-recent-vault.js'), 'utf8');
+  const begin = access.indexOf('if (_enableLocalStorage)\n            {');
+  const end = access.indexOf('await ReportAccessStageAsync("connecting to Stellar ledger")', begin);
+  assert.ok(begin > 0 && end > begin);
+  const optIn = access.slice(begin, end);
+  assert.ok(optIn.includes('Workflow.CreateAsync'));
+  assert.ok(optIn.includes('stellarVaultRecentVault.saveEncryptedSeed'));
+  assert.ok(!access.slice(end, end + 500).includes('saveEncryptedSeed'));
+  assert.ok(recent.includes("additionalData: aad"));
+  assert.ok(recent.includes("iterations: 600000"));
+  assert.ok(recent.includes("crypto.subtle.decrypt"));
+  assert.ok(app.includes('stellarVaultRecentVault.unlockEncryptedSeed'));
+  assert.ok(app.includes('Workflow.Lock();\n            Retention.Reset();'));
+});
