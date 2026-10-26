@@ -90,3 +90,11 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
   assert.ok(!vault.includes('<VaultBinaryFilesView />'));
   assert.ok(app.includes('Navigation.NavigateTo("/vault")'));
 });
+
+test('unlocked PWA session redirects from access to canonical vault without duplicate workspace', () => {
+  const index = fs.readFileSync(path.join(root, '..', 'Pages', 'Index.razor'), 'utf8');
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.ok(index.includes('Navigation.NavigateTo("/vault", replace: true)'));
+  assert.ok(index.includes('if (!Sessions.IsUnlocked)'));
+  assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
+});
