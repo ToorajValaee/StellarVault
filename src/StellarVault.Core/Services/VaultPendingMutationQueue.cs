@@ -82,6 +82,9 @@ public sealed class DenyVaultLedgerMutationVerifier : IVaultLedgerMutationVerifi
         string transactionHash, CancellationToken ct = default) => Task.FromResult(false);
 }
 
+public sealed record VaultSyncPreflightResult(string MutationId, string LedgerRecordId,
+    string DraftSha256, string Explanation);
+
 public sealed record VaultReconciliationResult(string MutationId, VaultSyncState State,
     bool Confirmed, string Explanation);
 
@@ -180,6 +183,36 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (!await store.TryReplaceAsync(item, next, ct))
             throw new InvalidOperationException("Queued draft changed during approval; review again.");
         return next;
+    }
+
+    /// <summary>Read-only last-mile eligibility guard. Requires a current ledger
+    /// record-ID inventory supplied by the caller and never mutates queue state.</summary>
+    public async Task<VaultSyncPreflightResult> PreflightCreateAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, string networkId,
+        IReadOnlyCollection<string> remoteRecordIds, DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(remoteRecordIds);
+        var item = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
+            ?? throw new KeyNotFoundException("Quoted mutation not found.");
+        RequireScope(item, accountId, networkId);
+        VaultSyncApprovalGuard.RequireFresh(quote, item, accountId, networkId,
+            now, TimeSpan.FromMinutes(5));
+        var review = await PrepareReviewAsync(accountId, networkId, ct);
+        if (!review.Ready.Any(x => x.Id == item.Id) || review.NeedsReconciliation != 0 ||
+            review.Conflicts != 0)
+            throw new InvalidOperationException("Queue is not clear for publication.");
+        if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Unsupported creation ID or mutation type.");
+        if (remoteRecordIds.Contains(item.EntityId, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Target ledger record ID already exists.");
+        var all = await ScopedEntriesAsync(accountId, networkId, ct);
+        if (all.Any(x => x.Id != item.Id && x.EntityId.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Another local mutation shares this record ID.");
+        return new VaultSyncPreflightResult(item.Id, item.EntityId, quote.DraftSha256,
+            "Read-only preflight passed. This is not permission to broadcast.");
     }
 
     /// <summary>Conservatively recover interrupted attempts: never automatically resubmit
