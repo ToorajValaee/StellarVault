@@ -451,10 +451,19 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (previous.TransactionHash is not null &&
             !string.Equals(previous.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Reconciliation hash differs from the original submitted transaction.");
-        if (!await verifier.IsConfirmedAsync(previous, transactionHash, ct))
+        // Always verify the exact durable revision rather than trusting a caller's
+        // possibly stale mutation object.
+        var current = await store.GetAsync(previous.AccountId, previous.NetworkId, previous.Id, ct)
+            ?? throw new KeyNotFoundException("Mutation disappeared before reconciliation.");
+        RequireScope(current, previous.AccountId, previous.NetworkId);
+        if (current.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
+            current.TransactionHash is not null &&
+            !string.Equals(current.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Submission state or transaction hash changed.");
+        if (!await verifier.IsConfirmedAsync(current, transactionHash, ct))
             throw new InvalidOperationException("Ledger confirmation did not match the intended mutation.");
-        var next = previous with { State = VaultSyncState.Confirmed, TransactionHash = transactionHash };
-        if (!await store.TryReplaceAsync(previous, next, ct))
+        var next = current with { State = VaultSyncState.Confirmed, TransactionHash = transactionHash };
+        if (!await store.TryReplaceAsync(current, next, ct))
             throw new InvalidOperationException("Concurrent queue change; reconcile manually.");
         return next;
     }
