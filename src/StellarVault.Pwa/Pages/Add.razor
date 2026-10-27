@@ -11,6 +11,8 @@
 @inject IStellarUploadCheckpointStore Checkpoints
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
+@inject VaultPendingMutationQueue PendingQueue
+@inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 
@@ -46,6 +48,7 @@ else
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
                 <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="ReviewAsync">REVIEW FILE COST AND APPROVE</button>
+                @if (CanSaveOffline) { <button class="pixel-button compact" type="button" disabled="@(_busy || _loading || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="SaveOfflineDraftAsync">SAVE ENCRYPTED LOCAL FILE DRAFT</button> }
             </div>
         }
         else
@@ -78,7 +81,8 @@ else
                 <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>COMMIT STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
-                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
+                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
+                @if (CanSaveOffline) { <button class="pixel-button compact" type="button" disabled="@(_busy || _loading || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="SaveOfflineDraftAsync">SAVE ENCRYPTED LOCAL DRAFT</button> }
             </div>
         }
     </section>
@@ -297,6 +301,44 @@ else
         _fileBytes = null;
     }
     public void Dispose() => ClearFileBytes();
+    private bool CanSaveOffline => Retention.AllowsLocalPersistence &&
+        Sessions.IsUnlocked && Sessions.ActiveAccountId is not null;
+
+    private async Task SaveOfflineDraftAsync()
+    {
+        if (_busy || _loading || !CanSaveOffline) return;
+        _busy = true;
+        _estimate = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_title) ||
+                (_kind != "folder" && _kind != "file" && string.IsNullOrWhiteSpace(_secret)))
+                throw new InvalidOperationException("Provide the required record fields first.");
+            if (_kind == "file" && _fileBytes is null)
+                throw new InvalidOperationException("Choose a file first.");
+            var account = Sessions.ActiveAccountId
+                ?? throw new InvalidOperationException("Unlock the local vault first.");
+            var payload = JsonSerializer.SerializeToUtf8Bytes(Draft());
+            try
+            {
+                var kind = _kind switch {
+                    "file" => VaultMutationKind.UploadFile,
+                    "folder" => RecordId is null ? VaultMutationKind.CreateFolder : VaultMutationKind.UpdateFolder,
+                    _ => RecordId is null ? VaultMutationKind.CreateRecord : VaultMutationKind.UpdateRecord
+                };
+                var mutation = VaultPendingMutation.Create(account,
+                    Networks.CredentialKey(account), kind, RecordId ?? Guid.NewGuid().ToString("N"),
+                    payload, expectedRemoteVersion: RecordId is null ? null : "requires-remote-reconciliation");
+                await PendingQueue.EnqueueAsync(mutation);
+                ClearFileBytes();
+                Nav.NavigateTo(ReturnUrl);
+            }
+            finally { CryptographicOperations.ZeroMemory(payload); }
+        }
+        catch (Exception ex) { _status = "Local draft could not be saved: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
     private static bool SameDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
         x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
         x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
