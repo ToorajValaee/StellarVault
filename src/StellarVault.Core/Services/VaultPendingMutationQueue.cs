@@ -159,9 +159,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         RequireScope(item, accountId, networkId);
         if (item.State != VaultSyncState.Pending)
             throw new InvalidOperationException("Only pending mutations can enter submission.");
-        var ready = await ReviewReadyAsync(accountId, networkId, ct);
-        if (!ready.Any(x => x.Id == item.Id))
-            throw new InvalidOperationException("Mutation dependencies are not confirmed.");
+        // Legacy entry point is intentionally disabled: it bypasses the approved
+        // quote fingerprint, time limit, and cost ceiling checks.
+        throw new NotSupportedException("Use ReserveApprovedSubmissionAsync with a fresh reviewed quote.");
         // Persist intent BEFORE any external network submission. On a crash,
         // the entry remains Submitting and must be reconciled, never auto-replayed.
         var next = item with { State = VaultSyncState.Submitting };
