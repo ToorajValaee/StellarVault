@@ -172,10 +172,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// The remote inventory is advisory: a network race still requires reconciliation.</summary>
     public async Task<VaultPendingMutation> ReservePreflightedSubmissionAsync(
         VaultSyncApprovalSnapshot quote, string accountId, string networkId,
-        IReadOnlyCollection<string> remoteRecordIds, DateTimeOffset now,
+        IReadOnlyCollection<LedgerRecordItem> remoteRecords, DateTimeOffset now,
         CancellationToken ct = default)
     {
-        await PreflightCreateAsync(quote, accountId, networkId, remoteRecordIds, now, ct);
+        await PreflightCreateAsync(quote, accountId, networkId, remoteRecords, now, ct);
         var item = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
             ?? throw new KeyNotFoundException("Approved mutation no longer exists.");
         RequireScope(item, accountId, networkId);
@@ -191,11 +191,11 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// record-ID inventory supplied by the caller and never mutates queue state.</summary>
     public async Task<VaultSyncPreflightResult> PreflightCreateAsync(
         VaultSyncApprovalSnapshot quote, string accountId, string networkId,
-        IReadOnlyCollection<string> remoteRecordIds, DateTimeOffset now,
+        IReadOnlyCollection<LedgerRecordItem> remoteRecords, DateTimeOffset now,
         CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
-        ArgumentNullException.ThrowIfNull(remoteRecordIds);
+        ArgumentNullException.ThrowIfNull(remoteRecords);
         var item = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
             ?? throw new KeyNotFoundException("Quoted mutation not found.");
         RequireScope(item, accountId, networkId);
@@ -208,7 +208,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
             item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit))
             throw new InvalidOperationException("Unsupported creation ID or mutation type.");
-        if (remoteRecordIds.Contains(item.EntityId, StringComparer.OrdinalIgnoreCase))
+        if (remoteRecords.Any(x => x.Id.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Target ledger record ID already exists.");
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
         LedgerRecordDraft draft;
@@ -228,7 +228,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (draft.FolderId is not null && all.Any(x => x.EntityId == draft.FolderId &&
             x.State != VaultSyncState.Confirmed))
             throw new InvalidOperationException("Local parent folder has not been confirmed on Stellar.");
-        if (draft.FolderId is not null && !remoteRecordIds.Contains(draft.FolderId, StringComparer.OrdinalIgnoreCase))
+        if (draft.FolderId is not null && !remoteRecords.Any(x => x.Id.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase) && x.IsFolder))
             throw new InvalidOperationException("Parent folder is absent from the current ledger inventory.");
         if (all.Any(x => x.Id != item.Id && x.EntityId.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Another local mutation shares this record ID.");
