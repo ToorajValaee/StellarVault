@@ -135,7 +135,13 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             var missing = item.DependsOn.Where(id => !byId.ContainsKey(id)).ToArray();
             var waiting = item.DependsOn.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
-            if (missing.Length == 0 && waiting.Length == 0) ready.Add(item);
+            // New ledger records require 16 hexadecimal characters. Legacy
+            // device draft IDs are never silently truncated or published.
+            var invalidCreateId = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder &&
+                (item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit));
+            if (invalidCreateId)
+                blocked.Add(new VaultSyncBlockedMutation(item.Id, ["invalid-ledger-record-id"], waiting));
+            else if (missing.Length == 0 && waiting.Length == 0) ready.Add(item);
             else blocked.Add(new VaultSyncBlockedMutation(item.Id, missing, waiting));
         }
         return new VaultSyncReview(ready.OrderBy(x => x.CreatedUtc).ToArray(),
