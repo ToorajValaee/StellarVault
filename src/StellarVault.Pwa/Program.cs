@@ -24,6 +24,7 @@ builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier>();
 builder.Services.AddScoped<VaultPendingMutationQueue>();
+builder.Services.AddScoped<VaultManualSyncCoordinator>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
 builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IStellarUploadCheckpointStore, BrowserStellarUploadCheckpointStore>();

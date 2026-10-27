@@ -56,3 +56,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - A side-effect-free VaultQueuedCreatePolicy now rejects malformed create drafts, duplicate local entity IDs, invalid tags/titles, unsupported file protocol masquerading as a normal record, and unpublished/self parent folder references.
 - Queue readiness, publication preflight, and fee-preview UI consult the same policy. This does not prove remote state and still does not enable broadcast.
 - Continue to prioritize the true Horizon transaction-to-record proof and explicit one-shot publication/reconciliation; no builds or tests were run.
+
+
+## Latest implementation: manual Sync execution service
+- PWA VaultManualSyncCoordinator has a single-shot PublishApprovedCreateAsync path for eligible create record/folder mutations. It demands explicit approval, current ledger connection, fresh quote, typed remote preflight, updated fee bounds and durable CAS reservation before calling PublishWithIdAsync.
+- After a send attempt it records Uncertain (with transaction hash if available). It never automatically retries or marks confirmed. Current UI does NOT expose the publish action; the live evidence verifier is still deny-by-default. A failed durable uncertain-state write may leave Submitting and requires manual recovery.
+- This is untested/uncompiled. Do not enable UI until transaction-to-record evidence, approval UX, single-flight concurrency and error recovery have been audited.
