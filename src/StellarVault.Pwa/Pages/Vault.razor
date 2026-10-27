@@ -57,6 +57,7 @@ else
                             {
                                 <div class="data-field"><span class="field-label">@estimate.Title</span>
                                     <span>@estimate.Summary</span>
+                                    @if (estimate.Snapshot is not null) { <small>Draft fingerprint: @estimate.Snapshot.DraftSha256.Substring(0, 12) · quote expires after 5 minutes</small> }
                                 </div>
                             }
                         }
@@ -468,7 +469,7 @@ else
         return false;
     }
 
-    private sealed record PendingEstimate(string Title, string Summary);
+    private sealed record PendingEstimate(string Title, string Summary, VaultSyncApprovalSnapshot? Snapshot = null);
     private List<PendingEstimate> _syncEstimates = [];
     private string? _syncEstimateNote;
 
@@ -511,8 +512,9 @@ else
                         continue;
                     }
                     var fee = await Ledger.EstimateAsync(draft);
+                    var snapshot = VaultSyncApprovalGuard.Capture(mutation, fee.NetworkFeeXlm, fee.PeakReserveXlm, DateTimeOffset.UtcNow);
                     _syncEstimates.Add(new PendingEstimate(draft.Title,
-                        $"Indicative: {fee.Transactions} transaction(s), {fee.Operations} operations, fee {fee.NetworkFeeXlm} XLM, peak reserve {fee.PeakReserveXlm} XLM."));
+                        $"Indicative: {fee.Transactions} transaction(s), {fee.Operations} operations, fee {fee.NetworkFeeXlm} XLM, peak reserve {fee.PeakReserveXlm} XLM.", snapshot));
                 }
                 catch (Exception ex)
                 {
