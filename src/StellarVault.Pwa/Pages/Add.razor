@@ -327,7 +327,7 @@ else
                     _ => RecordId is null ? VaultMutationKind.CreateRecord : VaultMutationKind.UpdateRecord
                 };
                 var mutation = VaultPendingMutation.Create(account,
-                    Networks.CredentialKey(account), kind, RecordId ?? Guid.NewGuid().ToString("N"),
+                    Networks.CredentialKey(account), kind, RecordId ?? Guid.NewGuid().ToString("N")[..16],
                     payload, expectedRemoteVersion: RecordId is null ? null : "requires-remote-reconciliation");
                 await PendingQueue.EnqueueAsync(mutation);
                 ClearFileBytes();
