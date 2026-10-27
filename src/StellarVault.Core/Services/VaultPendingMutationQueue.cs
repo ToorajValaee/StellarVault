@@ -150,25 +150,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             all.Count(x => x.State == VaultSyncState.Conflict));
     }
 
-    public async Task<VaultPendingMutation> MarkSubmittingAsync(
-        string accountId, string networkId, string mutationId, CancellationToken ct = default)
-    {
-        retention.RequireLocalPersistence();
-        var item = await store.GetAsync(accountId, networkId, mutationId, ct)
-            ?? throw new KeyNotFoundException("Pending mutation not found.");
-        RequireScope(item, accountId, networkId);
-        if (item.State != VaultSyncState.Pending)
-            throw new InvalidOperationException("Only pending mutations can enter submission.");
-        // Legacy entry point is intentionally disabled: it bypasses the approved
-        // quote fingerprint, time limit, and cost ceiling checks.
-        throw new NotSupportedException("Use ReserveApprovedSubmissionAsync with a fresh reviewed quote.");
-        // Persist intent BEFORE any external network submission. On a crash,
-        // the entry remains Submitting and must be reconciled, never auto-replayed.
-        var next = item with { State = VaultSyncState.Submitting };
-        if (!await store.TryReplaceAsync(item, next, ct))
-            throw new InvalidOperationException("Concurrent queue change; review again.");
-        return next;
-    }
+    [Obsolete("Use ReserveApprovedSubmissionAsync with a fresh reviewed quote.")]
+    public Task<VaultPendingMutation> MarkSubmittingAsync(
+        string accountId, string networkId, string mutationId, CancellationToken ct = default) =>
+        throw new NotSupportedException("Submission reservation requires an approved quote.");
 
     /// <summary>Reserve one mutation for submission only after checking a fresh
     /// account/network-scoped quote and the exact durable queue revision.
