@@ -616,6 +616,14 @@ else
                             "Not estimated: parent folder has not been published."));
                         continue;
                     }
+                    var source = await PendingQueue.ReviewAllAsync(mutation.AccountId, mutation.NetworkId);
+                    var problems = VaultQueuedCreatePolicy.Problems(mutation, source);
+                    if (problems.Length > 0)
+                    {
+                        _syncEstimates.Add(new PendingEstimate(draft.Title,
+                            "Not estimated: " + string.Join(", ", problems)));
+                        continue;
+                    }
                     var fee = await Ledger.EstimateAsync(draft);
                     var snapshot = VaultSyncApprovalGuard.Capture(mutation, fee.NetworkFeeXlm, fee.PeakReserveXlm, DateTimeOffset.UtcNow);
                     _syncEstimates.Add(new PendingEstimate(draft.Title,

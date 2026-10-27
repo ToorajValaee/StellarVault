@@ -140,25 +140,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             var missing = item.DependsOn.Where(id => !byId.ContainsKey(id)).ToArray();
             var waiting = item.DependsOn.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
-            // New ledger records require 16 hexadecimal characters. Legacy
-            // device draft IDs are never silently truncated or published.
-            var invalidCreateId = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder &&
-                (item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit));
-            if (item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
-            {
-                try
-                {
-                    var draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload);
-                    if (draft is null) missing = [..missing, "invalid-draft"];
-                    else if (draft.FolderId is not null && localFolderIds.Contains(draft.FolderId))
-                        missing = [..missing, "unpublished-local-parent-folder"];
-                }
-                catch (System.Text.Json.JsonException) { missing = [..missing, "invalid-draft"]; }
-            }
-            if (invalidCreateId)
-                blocked.Add(new VaultSyncBlockedMutation(item.Id, ["invalid-ledger-record-id"], waiting));
-            else if (missing.Length == 0 && waiting.Length == 0) ready.Add(item);
-            else blocked.Add(new VaultSyncBlockedMutation(item.Id, missing, waiting));
+            var problems = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                ? VaultQueuedCreatePolicy.Problems(item, all) : [];
+            if (problems.Length == 0 && missing.Length == 0 && waiting.Length == 0)
+                ready.Add(item);
+            else
+                blocked.Add(new VaultSyncBlockedMutation(item.Id, [..missing, ..problems], waiting));
         }
         return new VaultSyncReview(ready.OrderBy(x => x.CreatedUtc).ToArray(),
             blocked.ToArray(), all.Count(x => x.State == VaultSyncState.Uncertain ||
@@ -224,6 +211,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (remoteRecords.Any(x => x.Id.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Target ledger record ID already exists.");
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
+        var problems = VaultQueuedCreatePolicy.Problems(item, all);
+        if (problems.Length > 0)
+            throw new InvalidDataException("Queued create cannot be published: " + string.Join(", ", problems));
         LedgerRecordDraft draft;
         try
         {
