@@ -42,7 +42,7 @@
 
       <div class="legal-summary">
         <strong>Plain-language summary</strong>
-        <p>SVAULT is designed to encrypt credential records in your browser before ledger operations are prepared. Badje does not intend to receive readable vault content or your database secret through the normal application flow. Information submitted to a public Stellar network may be publicly visible, widely replicated and effectively permanent, even when the record payload is encrypted.</p>
+        <p>SVAULT is designed to encrypt credential records in your browser before ledger operations are prepared. Badje does not intend to receive readable vault content or your BIP-39 recovery phrase through the normal application flow. Information submitted to a public Stellar network may be publicly visible, widely replicated and effectively permanent, even when the record payload is encrypted.</p>
       </div>
 
       <nav class="legal-toc" aria-label="Privacy Policy contents">
@@ -81,8 +81,8 @@
           <p>The hosting and network infrastructure may automatically process technical information such as IP address, browser and device type, requested URL, date and time, referring page, response status and security events. This information is used to deliver the site, diagnose failures, prevent abuse and protect the service.</p>
 
           <h3>2.3 SVAULT record content and secrets</h3>
-          <p>SVAULT is designed so that credential fields you enter—such as title, username, URL, secret, notes and tags—are processed and encrypted in the browser before ledger chunks are prepared. Under the intended production architecture, Badje does not intentionally receive the readable record content or database secret through the normal app workflow.</p>
-          <p>Your browser may temporarily hold decrypted information and the database secret in memory while the active session is open. Closing or refreshing the app may require you to enter the database secret again. Browser behavior, extensions, device compromise and implementation changes can affect this protection.</p>
+          <p>SVAULT is designed so that credential fields you enter—such as title, username, URL, secret, notes and tags—are processed and encrypted in the browser before ledger chunks are prepared. Under the intended production architecture, Badje does not intentionally receive the readable record content or BIP-39 recovery phrase through the normal app workflow.</p>
+          <p>The on-chain-only mode uses the BIP-39 recovery phrase during the active browser session. If you explicitly enable encrypted device storage, the application may also store an encrypted recovery-phrase envelope and encrypted local vault data, protected by your separate local vault passphrase. On-chain-only access requires you to enter the recovery phrase again after a page restart. Encrypted-device access may instead restore signing credentials after local passphrase unlock. Browser behavior, extensions, device compromise and implementation changes can affect this protection.</p>
 
           <h3>2.4 Local browser storage</h3>
           <p>SVAULT may use browser storage for functional settings such as selected network, interface preferences or installation-related information. The website does not intentionally use advertising cookies, cross-site tracking pixels or behavioral advertising technologies at the time of this policy.</p>
@@ -147,7 +147,7 @@
         <section id="security">
           <h2>9. Security and limitations</h2>
           <p>Badje uses reasonable technical and organizational measures intended to protect the service. SVAULT's security model includes local encryption and an explicit approval step, but no system is completely secure.</p>
-          <p>You are responsible for protecting your database secret, signing keys, device, browser profile, backups and selected network. Badje cannot recover a lost database secret and cannot fully protect you from malware, malicious extensions, phishing, compromised devices, weak backups or unsafe custom networks.</p>
+          <p>You are responsible for protecting your BIP-39 recovery phrase, signing keys, device, browser profile, backups and selected network. Badje cannot recover a lost BIP-39 recovery phrase and cannot fully protect you from malware, malicious extensions, phishing, compromised devices, weak backups or unsafe custom networks.</p>
         </section>
 
         <section id="children">
