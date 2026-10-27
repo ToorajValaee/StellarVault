@@ -210,3 +210,14 @@ test('shared offline queue requires storage consent and reconciles uncertain sub
   assert.ok(queue.includes('State = VaultSyncState.Confirmed'));
   assert.ok(!queue.includes('PublishAsync('));
 });
+
+test('on-chain-only access distinguishes unfunded root from connection failure', () => {
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const preflight = access.indexOf('await ReportAccessStageAsync("checking Stellar root account")');
+  const local = access.indexOf('await ReportAccessStageAsync("checking local credentials")');
+  const ledger = access.indexOf('await ReportAccessStageAsync("connecting to Stellar ledger")');
+  assert.ok(preflight > 0 && preflight < local && local < ledger);
+  assert.ok(access.includes('Fund or create this account on that network'));
+  const network = fs.readFileSync(path.join(root, 'js', 'vault-v2-network.js'), 'utf8');
+  assert.ok(network.includes('if (response.status === 404) return false'));
+});
