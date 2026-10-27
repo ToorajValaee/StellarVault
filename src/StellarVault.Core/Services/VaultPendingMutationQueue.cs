@@ -161,6 +161,35 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>Conservatively recover interrupted attempts: never automatically resubmit
+    /// an entry once submission intent has been durably written.</summary>
+    public async Task<IReadOnlyList<VaultPendingMutation>> ReviewInterruptedAsync(
+        string accountId, string networkId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var entries = await ScopedEntriesAsync(accountId, networkId, ct);
+        return entries.Where(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+            .OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
+    }
+
+    /// <summary>After a process crash, convert persisted Submitting intent into
+    /// Uncertain. No retry is performed, even if no transaction hash was saved.</summary>
+    public async Task<VaultPendingMutation> QuarantineInterruptedAsync(
+        string accountId, string networkId, string mutationId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var item = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Interrupted mutation not found.");
+        RequireScope(item, accountId, networkId);
+        if (item.State == VaultSyncState.Uncertain) return item;
+        if (item.State != VaultSyncState.Submitting)
+            throw new InvalidOperationException("Only interrupted submission attempts can be quarantined.");
+        var next = item with { State = VaultSyncState.Uncertain };
+        if (!await store.TryReplaceAsync(item, next, ct))
+            throw new InvalidOperationException("Queue changed during recovery; review again.");
+        return next;
+    }
+
     public async Task<VaultPendingMutation> MarkUncertainAsync(
         VaultPendingMutation submitting, string? transactionHash, CancellationToken ct = default)
     {
