@@ -230,6 +230,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidOperationException("Local parent folder has not been confirmed on Stellar.");
         if (draft.FolderId is not null && !remoteRecords.Any(x => x.Id.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase) && x.IsFolder))
             throw new InvalidOperationException("Parent folder is absent from the current ledger inventory.");
+        if (all.Any(x => x.Id != item.Id && (x.State == VaultSyncState.Submitting || x.State == VaultSyncState.Uncertain)))
+            throw new InvalidOperationException("An earlier submission must be reconciled first.");
         if (all.Any(x => x.Id != item.Id && x.EntityId.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Another local mutation shares this record ID.");
         return new VaultSyncPreflightResult(item.Id, item.EntityId, quote.DraftSha256,
