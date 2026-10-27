@@ -86,6 +86,16 @@ else
                     </details>
                 </div>
             }
+                @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+                {
+                    @foreach (var draft in PendingLocalFolders.Where(x => PendingFolderId(x) == _folder))
+                    {
+                        <div class="sv-folder-tile">
+                            <button class="pixel-button compact" type="button" @onclick="() => OpenFolder(draft.EntityId)">📁 @PendingTitle(draft) · LOCAL</button>
+                            <button class="pixel-button compact" type="button" @onclick="() => OpenPending(draft)">EDIT DRAFT</button>
+                        </div>
+                    }
+                }
             </div>
             <div class="sv-access-actions">
                 <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
@@ -345,6 +355,19 @@ else
         }
         catch (JsonException) { /* Corrupt drafts remain visible for recovery. */ }
         return change.Kind.ToString();
+    }
+
+    private static string? PendingFolderId(VaultPendingMutation draft)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(draft.EncryptedPayload);
+            if (document.RootElement.TryGetProperty("FolderId", out var folder) &&
+                folder.ValueKind == JsonValueKind.String)
+                return folder.GetString();
+        }
+        catch (JsonException) { }
+        return null;
     }
 
     private IEnumerable<VaultPendingMutation> PendingLocalFolders =>
