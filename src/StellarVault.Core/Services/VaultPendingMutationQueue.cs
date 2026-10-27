@@ -82,6 +82,12 @@ public sealed class DenyVaultLedgerMutationVerifier : IVaultLedgerMutationVerifi
         string transactionHash, CancellationToken ct = default) => Task.FromResult(false);
 }
 
+public sealed record VaultSyncBlockedMutation(string MutationId, string[] MissingDependencies,
+    string[] WaitingDependencies);
+
+public sealed record VaultSyncReview(IReadOnlyList<VaultPendingMutation> Ready,
+    IReadOnlyList<VaultSyncBlockedMutation> Blocked, int NeedsReconciliation, int Conflicts);
+
 public sealed record VaultQueueStatus(int Pending, int Submitting, int Uncertain,
     int Confirmed, int Conflicts, int Failed);
 
@@ -110,6 +116,29 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
                 dependency.State == VaultSyncState.Confirmed))
             .OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
+    }
+
+    /// <summary>Read-only preparation report. It never estimates fees or submits writes.</summary>
+    public async Task<VaultSyncReview> PrepareReviewAsync(string accountId, string networkId,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var all = await ScopedEntriesAsync(accountId, networkId, ct);
+        var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+        var ready = new List<VaultPendingMutation>();
+        var blocked = new List<VaultSyncBlockedMutation>();
+        foreach (var item in all.Where(x => x.State == VaultSyncState.Pending))
+        {
+            var missing = item.DependsOn.Where(id => !byId.ContainsKey(id)).ToArray();
+            var waiting = item.DependsOn.Where(id => byId.TryGetValue(id, out var parent) &&
+                parent.State != VaultSyncState.Confirmed).ToArray();
+            if (missing.Length == 0 && waiting.Length == 0) ready.Add(item);
+            else blocked.Add(new VaultSyncBlockedMutation(item.Id, missing, waiting));
+        }
+        return new VaultSyncReview(ready.OrderBy(x => x.CreatedUtc).ToArray(),
+            blocked.ToArray(), all.Count(x => x.State == VaultSyncState.Uncertain ||
+                x.State == VaultSyncState.Submitting),
+            all.Count(x => x.State == VaultSyncState.Conflict));
     }
 
     public async Task<VaultPendingMutation> MarkSubmittingAsync(
