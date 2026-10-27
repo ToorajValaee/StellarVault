@@ -135,6 +135,15 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>Read all device-only changes, including blocked and uncertain states.
+    /// This never performs network submission or treats drafts as ledger records.</summary>
+    public async Task<IReadOnlyList<VaultPendingMutation>> ReviewAllAsync(
+        string accountId, string networkId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        return await ScopedEntriesAsync(accountId, networkId, ct);
+    }
+
     public async Task<VaultQueueStatus> StatusAsync(string accountId, string networkId,
         CancellationToken ct = default)
     {
