@@ -276,7 +276,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidOperationException("Only untouched legacy create drafts can be migrated.");
         if (entries.Any(x => x.Id != mutationId &&
             (x.EntityId == previous.EntityId ||
-             x.DependsOn.Contains(mutationId, StringComparer.Ordinal))))
+             x.DependsOn.Contains(mutationId, StringComparer.Ordinal) ||
+             System.Text.Encoding.UTF8.GetString(x.EncryptedPayload).Contains(previous.EntityId, StringComparison.Ordinal))))
             throw new InvalidOperationException("Dependent drafts exist. Migrate references before changing this ID.");
         if (entries.Any(x => x.EntityId == newRecordId))
             throw new InvalidOperationException("The target record ID already exists in the local queue.");
