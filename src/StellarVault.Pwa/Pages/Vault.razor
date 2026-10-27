@@ -140,6 +140,18 @@ else
                         <label class="terminal-label">TAGS (COMMA SEPARATED)</label>
                         <input class="terminal-input" @bind="_pendingEditTags" />
                     }
+                    <label class="terminal-label">PARENT FOLDER</label>
+                    <select class="terminal-input" @bind="_pendingEditFolder">
+                        <option value="">MY VAULT (ROOT)</option>
+                        @foreach (var folder in Folders.Where(x => x.Id != _selectedPending.EntityId))
+                        {
+                            <option value="@folder.Id">STELLAR · @folder.Title</option>
+                        }
+                        @foreach (var folder in PendingLocalFolders.Where(x => x.EntityId != _selectedPending.EntityId))
+                        {
+                            <option value="@folder.EntityId">LOCAL · @PendingTitle(folder)</option>
+                        }
+                    </select>
                     <button class="pixel-button compact" type="button" disabled="@_pendingDeleting" @onclick="SavePendingTitleAsync">SAVE LOCAL DRAFT CHANGES</button>
                 }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
@@ -248,18 +260,21 @@ else
 
     private VaultPendingMutation? _selectedPending;
     private string _pendingEditTitle = "";
+    private string _pendingEditFolder = "";
     private string _pendingEditContent = "", _pendingEditUsername = "", _pendingEditUrl = "",
         _pendingEditNotes = "", _pendingEditTags = "";
     private void OpenPending(VaultPendingMutation mutation)
     {
         _selectedPending = mutation;
         _pendingEditTitle = PendingTitle(mutation);
+        _pendingEditFolder = "";
         _pendingEditContent = _pendingEditUsername = _pendingEditUrl = _pendingEditNotes = _pendingEditTags = "";
         try
         {
             using var doc = JsonDocument.Parse(mutation.EncryptedPayload);
             string Read(string key) => doc.RootElement.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString() ?? "" : "";
+            _pendingEditFolder = Read("FolderId");
             _pendingEditContent = Read("Content");
             _pendingEditUsername = Read("UserName");
             _pendingEditUrl = Read("Url");
