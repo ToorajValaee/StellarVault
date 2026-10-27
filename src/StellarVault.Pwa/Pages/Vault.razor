@@ -46,7 +46,21 @@ else
                     <div class="terminal-alert" role="status">
                         <strong>READ-ONLY SYNC REVIEW · NO SUBMISSION</strong>
                         <span>READY: @_syncReview.Ready.Count · DEPENDENCY BLOCKED: @_syncReview.Blocked.Count · REQUIRES RECONCILIATION: @_syncReview.NeedsReconciliation · CONFLICTS: @_syncReview.Conflicts</span>
-                        <span>Transaction costs have not been estimated. No operations have been approved or published.</span>
+                        <span>No operations have been approved or published. Estimates below are informational, per-change, and not a batch transaction quote.</span>
+                        @if (Ledger.IsConnected)
+                        {
+                            <button type="button" class="pixel-button compact" disabled="@_pendingLoading" @onclick="EstimateReadyDraftsAsync">ESTIMATE READY RECORD COSTS</button>
+                        }
+                        @if (_syncEstimates.Count > 0)
+                        {
+                            @foreach (var estimate in _syncEstimates)
+                            {
+                                <div class="data-field"><span class="field-label">@estimate.Title</span>
+                                    <span>@estimate.Summary</span>
+                                </div>
+                            }
+                        }
+                        @if (_syncEstimateNote is not null) { <span>@_syncEstimateNote</span> }
                     </div>
                 }
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
@@ -454,6 +468,63 @@ else
         return false;
     }
 
+    private sealed record PendingEstimate(string Title, string Summary);
+    private List<PendingEstimate> _syncEstimates = [];
+    private string? _syncEstimateNote;
+
+    private async Task EstimateReadyDraftsAsync()
+    {
+        if (_pendingLoading || !Ledger.IsConnected || _syncReview is null ||
+            !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) return;
+        _pendingLoading = true;
+        _syncEstimates = [];
+        _syncEstimateNote = null;
+        try
+        {
+            foreach (var mutation in _syncReview.Ready)
+            {
+                if (mutation.Kind is not (VaultMutationKind.CreateRecord or
+                    VaultMutationKind.CreateFolder or VaultMutationKind.UpdateRecord or
+                    VaultMutationKind.UpdateFolder))
+                {
+                    _syncEstimates.Add(new PendingEstimate(PendingTitle(mutation),
+                        "Not estimated: this mutation needs a separate protocol-aware review."));
+                    continue;
+                }
+                try
+                {
+                    var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
+                        ?? throw new InvalidDataException("Invalid local draft payload.");
+                    // Pending create IDs do not correspond to ledger IDs. Updates must
+                    // be reconciled against the current remote record before costing.
+                    if (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
+                    {
+                        _syncEstimates.Add(new PendingEstimate(draft.Title,
+                            "Not estimated: remote version reconciliation is required first."));
+                        continue;
+                    }
+                    if (!string.IsNullOrEmpty(draft.FolderId) &&
+                        PendingLocalFolders.Any(x => x.EntityId == draft.FolderId))
+                    {
+                        _syncEstimates.Add(new PendingEstimate(draft.Title,
+                            "Not estimated: parent folder has not been published."));
+                        continue;
+                    }
+                    var fee = await Ledger.EstimateAsync(draft);
+                    _syncEstimates.Add(new PendingEstimate(draft.Title,
+                        $"Indicative: {fee.Transactions} transaction(s), {fee.Operations} operations, fee {fee.NetworkFeeXlm} XLM, peak reserve {fee.PeakReserveXlm} XLM."));
+                }
+                catch (Exception ex)
+                {
+                    _syncEstimates.Add(new PendingEstimate(PendingTitle(mutation),
+                        "Estimate unavailable: " + ex.Message));
+                }
+            }
+            _syncEstimateNote = "These estimates are snapshots, not approvals. Fees and reserves may change. Manual synchronization remains disabled.";
+        }
+        finally { _pendingLoading = false; }
+    }
+
     private VaultSyncReview? _syncReview;
     private async Task PrepareLocalSyncReviewAsync()
     {
@@ -462,6 +533,8 @@ else
         _pendingLoading = true;
         _pendingError = null;
         _syncReview = null;
+        _syncEstimates = [];
+        _syncEstimateNote = null;
         try
         {
             _syncReview = await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account));
