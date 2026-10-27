@@ -41,9 +41,15 @@ public sealed record VaultPendingMutation(
             throw new ArgumentException("Network and entity IDs are required.");
         if (!Enum.IsDefined(kind) || encryptedPayload is not { Length: > 0 })
             throw new ArgumentException("Invalid mutation or payload.");
+        if (encryptedPayload.Length > 8 * 1024 * 1024)
+            throw new ArgumentException("A single offline mutation exceeds the current 8 MiB limit.");
+        var prerequisites = dependsOn?.ToArray() ?? [];
+        if (prerequisites.Any(x => !Guid.TryParseExact(x, "N", out _)) ||
+            prerequisites.Distinct(StringComparer.Ordinal).Count() != prerequisites.Length)
+            throw new ArgumentException("Dependencies must be unique mutation IDs.", nameof(dependsOn));
         return new VaultPendingMutation(Guid.NewGuid().ToString("N"), accountId, networkId,
             kind, entityId, encryptedPayload.ToArray(), expectedRemoteVersion,
-            dependsOn?.ToArray() ?? [], VaultSyncState.Pending, null, DateTimeOffset.UtcNow);
+            prerequisites, VaultSyncState.Pending, null, DateTimeOffset.UtcNow);
     }
 }
 
@@ -86,6 +92,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         retention.RequireLocalPersistence();
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null)
             throw new InvalidOperationException("Only new pending drafts can be queued.");
+        if (!Guid.TryParseExact(entry.Id, "N", out _) || entry.DependsOn.Contains(entry.Id, StringComparer.Ordinal))
+            throw new InvalidOperationException("Mutation ID is invalid or depends on itself.");
         if (!await store.AddAsync(entry, ct))
             throw new InvalidOperationException("A mutation with this ID already exists.");
         return entry;
