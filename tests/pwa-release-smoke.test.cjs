@@ -230,3 +230,20 @@ test('offline mutation confirmation requires independent verification and scoped
   assert.ok(queue.includes('Task<VaultQueueStatus> StatusAsync'));
   assert.ok(queue.includes('MarkConflictAsync'));
 });
+
+test('encrypted offline queue stores authenticated envelopes, not readable drafts', () => {
+  const db = fs.readFileSync(path.join(root, 'js', 'vault-v2-indexeddb.js'), 'utf8');
+  const adapter = fs.readFileSync(path.join(root, '..', 'Services', 'IndexedDbVaultPendingMutationStore.cs'), 'utf8');
+  const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
+  assert.ok(db.includes("const version = 2;"));
+  assert.ok(db.includes("'syncQueue'"));
+  assert.ok(db.includes('listQueue'));
+  assert.ok(adapter.includes('VaultCryptoPrimitives.Seal'));
+  assert.ok(adapter.includes('VaultCryptoPrimitives.Open'));
+  assert.ok(adapter.includes('AssociatedData(account, network, id)'));
+  assert.ok(adapter.includes('retention.RequireLocalPersistence()'));
+  assert.ok(adapter.includes('sessions.ActiveAccountId != accountId'));
+  assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
+  assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
+  assert.ok(program.includes('IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier'));
+});
