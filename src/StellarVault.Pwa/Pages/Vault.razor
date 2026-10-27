@@ -222,7 +222,29 @@ else
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
-                <div class="terminal-alert warning" role="status">This entry is an encrypted local draft. It has not been submitted to Stellar. Manual synchronization, conflict resolution and ledger fee approval are still under development.</div>
+                @if (_selectedPending.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                {
+                    <div class="terminal-alert warning" role="alert">
+                        Submission was attempted or its outcome is unknown. Do not publish this change again.
+                        @if (_selectedPending.TransactionHash is not null)
+                        {
+                            <p>Recorded transaction hash: <code>@_selectedPending.TransactionHash</code></p>
+                        }
+                        else
+                        {
+                            <p>No transaction hash was durably recorded. This does not prove that submission failed.</p>
+                        }
+                        <p>Independent ledger reconciliation is required before this change can be marked confirmed.</p>
+                    </div>
+                }
+                else if (_selectedPending.State == VaultSyncState.Confirmed)
+                {
+                    <p role="status">This queue entry has a confirmed state. Verify the corresponding ledger record before relying on it.</p>
+                }
+                else
+                {
+                    <div class="terminal-alert warning" role="status">This is an encrypted local queue entry. Manual synchronization, conflict resolution and fee approval remain under development.</div>
+                }
                 @if (_selectedPending.State == VaultSyncState.Pending)
                 {
                     <button type="button" class="pixel-button compact" @onclick="DiscardSelectedPendingAsync" disabled="@_pendingDeleting">DISCARD LOCAL DRAFT</button>
