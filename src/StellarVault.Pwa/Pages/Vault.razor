@@ -7,6 +7,9 @@
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
+@inject VaultDeviceRetentionGate Retention
+@inject VaultPendingMutationQueue PendingQueue
+@inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="ENCRYPTED STELLAR DATABASE">
@@ -30,6 +33,29 @@ else
             <div class="sv-access-actions">@if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }<button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ SYNC</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
         </header>
         <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
+        @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+        {
+            <section class="terminal-panel" aria-label="Encrypted local pending changes" style="padding:1rem;margin:1rem 0">
+                <div class="panel-kicker">DEVICE STORAGE // NOT ON STELLAR</div>
+                <h2>LOCAL PENDING CHANGES</h2>
+                <p class="advanced-help">These encrypted drafts are stored only on this device. Refreshing ledger records does not publish them. Manual transaction review and synchronization are not available yet.</p>
+                <button type="button" class="pixel-button compact" @onclick="LoadPendingAsync" disabled="@_pendingLoading">↻ REFRESH LOCAL QUEUE</button>
+                @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
+                @if (_pendingItems.Count > 0)
+                {
+                    <p role="status">PENDING: @_pendingItems.Count(x => x.State == VaultSyncState.Pending) · UNCERTAIN: @_pendingItems.Count(x => x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) · CONFLICTS: @_pendingItems.Count(x => x.State == VaultSyncState.Conflict)</p>
+                    <div class="record-list">
+                        @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
+                        {
+                            <div class="record-card" style="cursor:default">
+                                <span class="record-card-body"><strong>@change.Kind</strong><small>LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>@change.Id</small></span>
+                            </div>
+                        }
+                    </div>
+                }
+                else if (_pendingError is null && !_pendingLoading) { <p class="advanced-help">No local drafts loaded. Use Add Record, New Folder or Add File to save one.</p> }
+            </section>
+        }
         @if (!Ledger.IsConnected)
         {
             <div class="terminal-alert warning" role="status">
@@ -161,6 +187,24 @@ else
 </AdaptiveShell>
 
 @code {
+    private IReadOnlyList<VaultPendingMutation> _pendingItems = [];
+    private string? _pendingError;
+    private bool _pendingLoading;
+
+    private async Task LoadPendingAsync()
+    {
+        if (_pendingLoading || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId is not string account) return;
+        _pendingLoading = true;
+        _pendingError = null;
+        try
+        {
+            _pendingItems = await PendingQueue.ReviewAllAsync(account, Networks.CredentialKey(account));
+        }
+        catch (Exception ex) { _pendingError = "Unable to open encrypted device queue: " + ex.Message; }
+        finally { _pendingLoading = false; }
+    }
+
     private IReadOnlyList<LedgerRecordItem> _records = [];
     private string _search = "";
     private string? _folder;
