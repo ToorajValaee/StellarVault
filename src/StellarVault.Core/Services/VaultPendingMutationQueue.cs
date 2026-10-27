@@ -167,6 +167,26 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             items.Count(x => x.State == VaultSyncState.Failed));
     }
 
+    /// <summary>Revise a device-only draft without changing its mutation identity,
+    /// dependencies, intended entity, or original ordering timestamp.</summary>
+    public async Task<VaultPendingMutation> RevisePendingAsync(
+        string accountId, string networkId, string mutationId, byte[] replacementPayload,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        if (replacementPayload is not { Length: > 0 } || replacementPayload.Length > 8 * 1024 * 1024)
+            throw new ArgumentException("Invalid revised draft size.", nameof(replacementPayload));
+        var previous = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Local draft not found.");
+        RequireScope(previous, accountId, networkId);
+        if (previous.State != VaultSyncState.Pending || previous.TransactionHash is not null)
+            throw new InvalidOperationException("Only unsubmitted pending drafts can be edited.");
+        var revised = previous with { EncryptedPayload = replacementPayload.ToArray() };
+        if (!await store.TryReplaceAsync(previous, revised, ct))
+            throw new InvalidOperationException("Local draft changed concurrently; reopen it before saving.");
+        return revised;
+    }
+
     /// <summary>Discard only an unsubmitted draft, and only when no other active
     /// mutation depends on its identifier. Deletion is never a ledger operation.</summary>
     public async Task DiscardPendingAsync(string accountId, string networkId,
