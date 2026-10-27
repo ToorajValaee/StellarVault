@@ -62,7 +62,17 @@ public interface IVaultPendingMutationStore
 /// level must obtain explicit fee approval and confirm remote state before marking
 /// a submission as confirmed. Uncertain entries cannot be retried blindly.
 /// </summary>
-public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store, VaultDeviceRetentionGate retention)
+public interface IVaultLedgerMutationVerifier
+{
+    Task<bool> IsConfirmedAsync(VaultPendingMutation mutation, string transactionHash,
+        CancellationToken ct = default);
+}
+
+public sealed record VaultQueueStatus(int Pending, int Submitting, int Uncertain,
+    int Confirmed, int Conflicts, int Failed);
+
+public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
+    VaultDeviceRetentionGate retention, IVaultLedgerMutationVerifier verifier)
 {
     public async Task<VaultPendingMutation> EnqueueAsync(VaultPendingMutation entry, CancellationToken ct = default)
     {
@@ -78,7 +88,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store, 
         string accountId, string networkId, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
-        var entries = await store.ListAsync(accountId, networkId, ct);
+        var entries = await ScopedEntriesAsync(accountId, networkId, ct);
         var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
         return entries.Where(x => x.State == VaultSyncState.Pending &&
             x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
@@ -92,6 +102,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store, 
         retention.RequireLocalPersistence();
         var item = await store.GetAsync(accountId, networkId, mutationId, ct)
             ?? throw new KeyNotFoundException("Pending mutation not found.");
+        RequireScope(item, accountId, networkId);
         if (item.State != VaultSyncState.Pending)
             throw new InvalidOperationException("Only pending mutations can enter submission.");
         var ready = await ReviewReadyAsync(accountId, networkId, ct);
@@ -117,6 +128,49 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store, 
         return next;
     }
 
+    public async Task<VaultQueueStatus> StatusAsync(string accountId, string networkId,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var items = await ScopedEntriesAsync(accountId, networkId, ct);
+        return new VaultQueueStatus(
+            items.Count(x => x.State == VaultSyncState.Pending),
+            items.Count(x => x.State == VaultSyncState.Submitting),
+            items.Count(x => x.State == VaultSyncState.Uncertain),
+            items.Count(x => x.State == VaultSyncState.Confirmed),
+            items.Count(x => x.State == VaultSyncState.Conflict),
+            items.Count(x => x.State == VaultSyncState.Failed));
+    }
+
+    public async Task<VaultPendingMutation> MarkConflictAsync(VaultPendingMutation previous,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        if (previous.State != VaultSyncState.Pending)
+            throw new InvalidOperationException("Only pending changes can be marked as conflicts.");
+        var next = previous with { State = VaultSyncState.Conflict };
+        if (!await store.TryReplaceAsync(previous, next, ct))
+            throw new InvalidOperationException("Concurrent queue update; review again.");
+        return next;
+    }
+
+    private async Task<IReadOnlyList<VaultPendingMutation>> ScopedEntriesAsync(
+        string accountId, string networkId, CancellationToken ct)
+    {
+        StellarAccountAddress.Validate(accountId);
+        if (string.IsNullOrWhiteSpace(networkId))
+            throw new ArgumentException("Network ID required.", nameof(networkId));
+        var entries = await store.ListAsync(accountId, networkId, ct);
+        foreach (var item in entries) RequireScope(item, accountId, networkId);
+        return entries;
+    }
+
+    private static void RequireScope(VaultPendingMutation item, string accountId, string networkId)
+    {
+        if (item.AccountId != accountId || item.NetworkId != networkId)
+            throw new InvalidDataException("Queue entry belongs to another account or network.");
+    }
+
     public async Task<VaultPendingMutation> ConfirmReconciledAsync(
         VaultPendingMutation previous, string transactionHash, CancellationToken ct = default)
     {
@@ -124,7 +178,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store, 
         if (previous.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             string.IsNullOrWhiteSpace(transactionHash))
             throw new InvalidOperationException("A submitted mutation and verified transaction hash are required.");
-        // Caller MUST first verify the hash against the expected network and entity.
+        if (!await verifier.IsConfirmedAsync(previous, transactionHash, ct))
+            throw new InvalidOperationException("Ledger confirmation did not match the intended mutation.");
         var next = previous with { State = VaultSyncState.Confirmed, TransactionHash = transactionHash };
         if (!await store.TryReplaceAsync(previous, next, ct))
             throw new InvalidOperationException("Concurrent queue change; reconcile manually.");
