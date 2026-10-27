@@ -77,6 +77,21 @@ public sealed class IndexedDbVaultPendingMutationStore(
         }, ct);
     }
 
+    public Task<bool> TryDeleteAsync(VaultPendingMutation expected, CancellationToken ct = default) =>
+        WithKeyAsync(expected.AccountId, async key =>
+        {
+            var id = StorageId(expected.AccountId, expected.NetworkId, expected.Id);
+            byte[]? current = await js.InvokeAsync<byte[]?>("stellarVaultV2Db.readQueue", ct, id);
+            if (current is null) return false;
+            try
+            {
+                var actual = Decode(current, key, expected.AccountId, expected.NetworkId, expected.Id);
+                if (!Equivalent(actual, expected)) return false;
+                return await js.InvokeAsync<bool>("stellarVaultV2Db.deleteQueueIfMatch", ct, id, current);
+            }
+            finally { CryptographicOperations.ZeroMemory(current); }
+        }, ct);
+
     private Task<T> WithKeyAsync<T>(string accountId, Func<ReadOnlyMemory<byte>, Task<T>> work,
         CancellationToken ct)
     {
