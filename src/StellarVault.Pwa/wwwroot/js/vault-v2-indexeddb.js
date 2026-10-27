@@ -2,8 +2,8 @@
 // Never store plaintext data keys, passphrases, private keys or unlocked sessions.
 window.stellarVaultV2Db = (() => {
   const name = 'stellar-vault-v2';
-  const version = 1;
-  const stores = ['credentials', 'objects', 'pointers'];
+  const version = 2;
+  const stores = ['credentials', 'objects', 'pointers', 'syncQueue'];
   let pending;
   function open() {
     if (!pending) pending = new Promise((resolve, reject) => {
@@ -112,6 +112,9 @@ window.stellarVaultV2Db = (() => {
     });
   }
   return Object.freeze({
+    readQueue: key => read('syncQueue', key),
+    addQueue: (key, data) => putImmutable('syncQueue', key, data),
+    replaceQueue: (key, previous, next) => compareExchange('syncQueue', key, previous, next),
     readCredential: key => read('credentials', key),
     createCredential: (key, data) => putImmutable('credentials', key, data),
     replaceCredential: (key, oldData, data) => compareExchange('credentials', key, oldData, data),
