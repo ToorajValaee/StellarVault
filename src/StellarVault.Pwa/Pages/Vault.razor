@@ -126,6 +126,11 @@ else
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
                 <div class="terminal-alert warning" role="status">This entry is an encrypted local draft. It has not been submitted to Stellar. Manual synchronization, conflict resolution and ledger fee approval are still under development.</div>
+                @if (_selectedPending.State == VaultSyncState.Pending)
+                {
+                    <button type="button" class="pixel-button compact" @onclick="DiscardSelectedPendingAsync" disabled="@_pendingDeleting">DISCARD LOCAL DRAFT</button>
+                }
+                @if (_pendingDeleteError is not null) { <div class="terminal-alert warning" role="alert">@_pendingDeleteError</div> }
                 <button type="button" class="pixel-button compact" @onclick="ClosePending">CLOSE</button>
             </section>
         </div>
@@ -204,9 +209,26 @@ else
 </AdaptiveShell>
 
 @code {
+    private bool _pendingDeleting;
+    private string? _pendingDeleteError;
+    private async Task DiscardSelectedPendingAsync()
+    {
+        if (_pendingDeleting || _selectedPending is not { State: VaultSyncState.Pending } selected) return;
+        _pendingDeleting = true;
+        _pendingDeleteError = null;
+        try
+        {
+            await PendingQueue.DiscardPendingAsync(selected.AccountId, selected.NetworkId, selected.Id);
+            _selectedPending = null;
+            await LoadPendingAsync();
+        }
+        catch (Exception ex) { _pendingDeleteError = "Cannot discard local draft: " + ex.Message; }
+        finally { _pendingDeleting = false; }
+    }
+
     private VaultPendingMutation? _selectedPending;
     private void OpenPending(VaultPendingMutation mutation) => _selectedPending = mutation;
-    private void ClosePending() => _selectedPending = null;
+    private void ClosePending() { if (!_pendingDeleting) { _selectedPending = null; _pendingDeleteError = null; } }
 
     private static string PendingTitle(VaultPendingMutation change)
     {
