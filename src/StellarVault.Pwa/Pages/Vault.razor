@@ -73,6 +73,11 @@ else
                 {
                     <span>/</span><button class="pixel-button compact" @onclick="() => _folder = crumb.Id">@crumb.Title</button>
                 }
+                @if (_folder is not null && PendingLocalFolders.Any(x => x.EntityId == _folder))
+                {
+                    <span>/</span><button class="pixel-button compact" @onclick="() => OpenFolder(PendingFolderId(PendingLocalFolders.First(x => x.EntityId == _folder)) ?? "")">LOCAL PARENT</button>
+                    <span>/</span><strong>📁 @PendingTitle(PendingLocalFolders.First(x => x.EntityId == _folder)) (LOCAL)</strong>
+                }
             </nav>
             <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>INCLUDE RECORDS FROM SUBFOLDERS</span></label>
             <div class="sv-folder-grid">
