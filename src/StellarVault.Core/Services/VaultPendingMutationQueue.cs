@@ -421,14 +421,19 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (previous.TransactionHash is not string hash || !IsTransactionHash(hash))
             return new VaultReconciliationResult(previous.Id, previous.State, false,
                 "No verified transaction hash is available; manual investigation required.");
-        if (!await verifier.IsConfirmedAsync(previous, hash, ct))
+        // Route every confirmation through the same verifier and CAS transition.
+        // A receipt lookup by itself must never flip the durable queue state.
+        try
+        {
+            var confirmed = await ConfirmReconciledAsync(previous, hash, ct);
+            return new VaultReconciliationResult(confirmed.Id, confirmed.State, true,
+                "Mutation independently verified and marked confirmed.");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Ledger confirmation", StringComparison.Ordinal))
+        {
             return new VaultReconciliationResult(previous.Id, previous.State, false,
                 "The configured ledger verifier did not confirm this mutation.");
-        var confirmed = previous with { State = VaultSyncState.Confirmed };
-        if (!await store.TryReplaceAsync(previous, confirmed, ct))
-            throw new InvalidOperationException("Queue changed during reconciliation. Review again.");
-        return new VaultReconciliationResult(confirmed.Id, confirmed.State, true,
-            "Mutation independently verified and marked confirmed.");
+        }
     }
 
     public async Task<VaultPendingMutation> ConfirmReconciledAsync(
