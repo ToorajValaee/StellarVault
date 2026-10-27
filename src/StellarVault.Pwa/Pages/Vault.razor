@@ -127,7 +127,20 @@ else
                 {
                     <label class="terminal-label">LOCAL DRAFT TITLE</label>
                     <input class="terminal-input" @bind="_pendingEditTitle" maxlength="256" />
-                    <button class="pixel-button compact" type="button" disabled="@_pendingDeleting" @onclick="SavePendingTitleAsync">SAVE DRAFT TITLE</button>
+                    @if (_selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord)
+                    {
+                        <label class="terminal-label">USERNAME / IDENTIFIER</label>
+                        <input class="terminal-input" @bind="_pendingEditUsername" />
+                        <label class="terminal-label">SECRET / CONTENT</label>
+                        <textarea class="terminal-input terminal-textarea" rows="4" @bind="_pendingEditContent"></textarea>
+                        <label class="terminal-label">URL</label>
+                        <input class="terminal-input" @bind="_pendingEditUrl" />
+                        <label class="terminal-label">NOTES</label>
+                        <textarea class="terminal-input terminal-textarea" rows="3" @bind="_pendingEditNotes"></textarea>
+                        <label class="terminal-label">TAGS (COMMA SEPARATED)</label>
+                        <input class="terminal-input" @bind="_pendingEditTags" />
+                    }
+                    <button class="pixel-button compact" type="button" disabled="@_pendingDeleting" @onclick="SavePendingTitleAsync">SAVE LOCAL DRAFT CHANGES</button>
                 }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
@@ -235,10 +248,26 @@ else
 
     private VaultPendingMutation? _selectedPending;
     private string _pendingEditTitle = "";
+    private string _pendingEditContent = "", _pendingEditUsername = "", _pendingEditUrl = "",
+        _pendingEditNotes = "", _pendingEditTags = "";
     private void OpenPending(VaultPendingMutation mutation)
     {
         _selectedPending = mutation;
         _pendingEditTitle = PendingTitle(mutation);
+        _pendingEditContent = _pendingEditUsername = _pendingEditUrl = _pendingEditNotes = _pendingEditTags = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(mutation.EncryptedPayload);
+            string Read(string key) => doc.RootElement.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString() ?? "" : "";
+            _pendingEditContent = Read("Content");
+            _pendingEditUsername = Read("UserName");
+            _pendingEditUrl = Read("Url");
+            _pendingEditNotes = Read("Notes");
+            if (doc.RootElement.TryGetProperty("Tags", out var tags) && tags.ValueKind == JsonValueKind.Array)
+                _pendingEditTags = string.Join(", ", tags.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()));
+        }
+        catch (JsonException) { }
         _pendingDeleteError = null;
     }
     private async Task SavePendingTitleAsync()
@@ -250,10 +279,19 @@ else
         {
             if (string.IsNullOrWhiteSpace(_pendingEditTitle))
                 throw new InvalidOperationException("A draft title is required.");
-            using var original = JsonDocument.Parse(selected.EncryptedPayload);
             var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selected.EncryptedPayload)
                 ?? throw new InvalidDataException("Cannot read saved draft fields.");
             fields["Title"] = JsonSerializer.SerializeToElement(_pendingEditTitle.Trim());
+            if (selected.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord)
+            {
+                fields["Content"] = JsonSerializer.SerializeToElement(_pendingEditContent);
+                fields["UserName"] = JsonSerializer.SerializeToElement(_pendingEditUsername);
+                fields["Url"] = JsonSerializer.SerializeToElement(_pendingEditUrl);
+                fields["Notes"] = JsonSerializer.SerializeToElement(_pendingEditNotes);
+                fields["Tags"] = JsonSerializer.SerializeToElement(_pendingEditTags.Split(',',
+                    StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+            }
             byte[] revised = JsonSerializer.SerializeToUtf8Bytes(fields);
             try
             {
