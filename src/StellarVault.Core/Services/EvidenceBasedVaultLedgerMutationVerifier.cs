@@ -1,0 +1,52 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace StellarVault.Core.Services;
+
+/// <summary>Verified transaction receipt and independently read record state.
+ /// Providers must bind both to the selected Stellar network.</summary>
+public sealed record VaultLedgerEvidence(
+    string AccountId, string NetworkId, string TransactionHash,
+    bool TransactionSucceeded, string RecordId, LedgerRecordItem? Record);
+
+public interface IVaultLedgerEvidenceProvider
+{
+    Task<VaultLedgerEvidence?> InspectAsync(VaultPendingMutation mutation,
+        string transactionHash, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Strict content-and-receipt verifier for record and folder creation.
+/// Does not claim a queue mutation is confirmed merely because its hash exists.
+/// Unsupported kinds fail closed.
+/// </summary>
+public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenceProvider provider)
+    : IVaultLedgerMutationVerifier
+{
+    public async Task<bool> IsConfirmedAsync(VaultPendingMutation mutation,
+        string transactionHash, CancellationToken ct = default)
+    {
+        if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit) ||
+            mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting))
+            return false;
+        var evidence = await provider.InspectAsync(mutation, transactionHash, ct);
+        if (evidence is null || !evidence.TransactionSucceeded ||
+            evidence.AccountId != mutation.AccountId ||
+            evidence.NetworkId != mutation.NetworkId ||
+            !string.Equals(evidence.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase) ||
+            evidence.RecordId != mutation.EntityId || evidence.Record is null)
+            return false;
+        LedgerRecordDraft? draft;
+        try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload); }
+        catch (JsonException) { return false; }
+        if (draft is null) return false;
+        var actual = evidence.Record;
+        return actual.Id == mutation.EntityId &&
+            actual.Title == draft.Title && actual.Content == draft.Content &&
+            actual.FolderId == draft.FolderId && actual.IsFolder == draft.IsFolder &&
+            actual.UserName == draft.UserName && actual.Url == draft.Url &&
+            actual.Notes == draft.Notes &&
+            (actual.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal);
+    }
+}
