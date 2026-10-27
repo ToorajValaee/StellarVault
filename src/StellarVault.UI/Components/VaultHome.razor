@@ -604,6 +604,22 @@
             var account = await JS.InvokeAsync<string>("stellarVaultV2Mnemonic.rootPublicKey", _mnemonic);
             if (!StellarAccountAddress.IsValid(account))
                 throw new InvalidDataException("Derived root account was not a valid Stellar G-address.");
+            // A mnemonic can derive a valid Stellar address even when the account
+            // does not yet exist on this network. Detect this before opening the
+            // ledger so an unfunded root is not reported as a broken vault.
+            if (!_enableLocalStorage)
+            {
+                await ReportAccessStageAsync("checking Stellar root account");
+                bool rootExists = await JS.InvokeAsync<bool>(
+                    "stellarVaultV2Network.inspectAccount", account, _network,
+                    _customHorizon, _customPassphrase);
+                if (!rootExists)
+                {
+                    _message = "The root account " + account +
+                        " does not exist on the selected Stellar network. Fund or create this account on that network, then try ACCESS VAULT again. No vault data has been deleted or written.";
+                    return;
+                }
+            }
             Retention.Select(_enableLocalStorage
                 ? VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync
                 : VaultDeviceRetentionPolicy.OnChainOnly);
@@ -720,7 +736,9 @@
         catch (Exception ex)
         {
             Logger.LogError("Vault unexpected error at stage {Stage}: {ExceptionType}; HResult {Code}", _accessStage, ex.GetType().FullName, ex.HResult);
-            _message = $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
+            _message = _accessStage == "connecting to Stellar ledger"
+                ? "Unable to connect to the Stellar account on the selected network. Verify that the derived root account exists and is funded, that the network is correct, and that Horizon is reachable. Details: " + ex.Message
+                : $"Vault access failed during {_accessStage} ({ex.GetType().Name}). Check browser console for details.";
         }
         finally
         {
