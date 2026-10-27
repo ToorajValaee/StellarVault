@@ -198,3 +198,15 @@ test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   assert.ok(app.includes('stellarVaultRecentVault.unlockEncryptedSeed'));
   assert.ok(app.includes('Workflow.Lock();\n            Retention.Reset();'));
 });
+
+test('shared offline queue requires storage consent and reconciles uncertain submissions', () => {
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  for (const status of ['Pending', 'Submitting', 'Uncertain', 'Confirmed', 'Conflict', 'Failed'])
+    assert.ok(queue.includes(status));
+  assert.ok(queue.includes('retention.RequireLocalPersistence()'));
+  assert.ok(queue.includes('DependsOn.All'));
+  assert.ok(queue.includes('TryReplaceAsync(item, next, ct)'));
+  assert.ok(queue.includes('State = VaultSyncState.Uncertain'));
+  assert.ok(queue.includes('State = VaultSyncState.Confirmed'));
+  assert.ok(!queue.includes('PublishAsync('));
+});
