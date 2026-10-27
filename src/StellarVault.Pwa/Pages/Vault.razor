@@ -235,6 +235,7 @@ else
                             <p>No transaction hash was durably recorded. This does not prove that submission failed.</p>
                         }
                         <p>Independent ledger reconciliation is required before this change can be marked confirmed.</p>
+                        <button type="button" class="pixel-button compact" disabled="@_pendingDeleting" @onclick="ReconcileSelectedAsync">CHECK LEDGER CONFIRMATION</button>
                     </div>
                 }
                 else if (_selectedPending.State == VaultSyncState.Confirmed)
@@ -353,6 +354,22 @@ else
         }
         catch (Exception ex) { _pendingFileStatus = "Local file recovery failed: " + ex.Message; }
         finally { if (data is not null) CryptographicOperations.ZeroMemory(data); }
+    }
+
+    private async Task ReconcileSelectedAsync()
+    {
+        if (_pendingDeleting || _selectedPending is not { State: VaultSyncState.Uncertain or VaultSyncState.Submitting } selected) return;
+        _pendingDeleting = true;
+        _pendingDeleteError = null;
+        try
+        {
+            var result = await PendingQueue.ReconcileAsync(selected.AccountId, selected.NetworkId, selected.Id);
+            _pendingDeleteError = result.Explanation;
+            await LoadPendingAsync();
+            _selectedPending = _pendingItems.FirstOrDefault(x => x.Id == selected.Id);
+        }
+        catch (Exception ex) { _pendingDeleteError = "Reconciliation unavailable: " + ex.Message; }
+        finally { _pendingDeleting = false; }
     }
 
     private bool _pendingDeleting;
