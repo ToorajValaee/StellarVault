@@ -44,6 +44,7 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
         try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload); }
         catch (JsonException) { return false; }
         if (draft is null) return false;
+        if (draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder)) return false;
         var actual = evidence.Record;
         return actual.Id == mutation.EntityId &&
             actual.Title == draft.Title && actual.Content == draft.Content &&

@@ -21,6 +21,8 @@ public static class VaultSyncApprovalGuard
             throw new InvalidOperationException("Only an untouched pending draft can be quoted.");
         if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
             throw new InvalidOperationException("This mutation requires protocol-aware review.");
+        if (mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Ledger quote requires a valid 16-character record ID.");
         if (feeXlm < 0 || peakReserveXlm < 0)
             throw new ArgumentOutOfRangeException(nameof(feeXlm));
         return new VaultSyncApprovalSnapshot(mutation.Id, mutation.AccountId,
