@@ -336,6 +336,9 @@ else
         try
         {
             await PendingQueue.DiscardPendingAsync(selected.AccountId, selected.NetworkId, selected.Id);
+            _syncReview = null;
+            _syncEstimates = [];
+            _syncEstimateNote = "Queue changed. Review synchronization readiness again.";
             _selectedPending = null;
             await LoadPendingAsync();
         }
@@ -407,6 +410,9 @@ else
             byte[] revised = JsonSerializer.SerializeToUtf8Bytes(fields);
             try
             {
+                _syncReview = null;
+                _syncEstimates = [];
+                _syncEstimateNote = "Local draft changed. Re-run sync review and fee estimation.";
                 _selectedPending = await PendingQueue.RevisePendingAsync(
                     selected.AccountId, selected.NetworkId, selected.Id, revised);
                 await LoadPendingAsync();
