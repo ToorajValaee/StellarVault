@@ -27,7 +27,8 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
     public async Task<bool> IsConfirmedAsync(VaultPendingMutation mutation,
         string transactionHash, CancellationToken ct = default)
     {
-        if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+        if (string.IsNullOrWhiteSpace(transactionHash) ||
+            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
             transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit) ||
             mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))

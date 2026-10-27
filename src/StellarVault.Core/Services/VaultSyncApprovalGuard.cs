@@ -33,6 +33,8 @@ public static class VaultSyncApprovalGuard
         VaultPendingMutation current, string accountId, string networkId,
         DateTimeOffset now, TimeSpan maxAge)
     {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(current);
         if (maxAge <= TimeSpan.Zero || now < snapshot.QuotedUtc ||
             now - snapshot.QuotedUtc > maxAge)
             throw new InvalidOperationException("Sync quote expired. Review costs again.");

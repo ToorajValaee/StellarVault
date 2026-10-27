@@ -238,7 +238,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             string.IsNullOrEmpty(draft.Content) ||
             draft.IsFolder != (item.Kind == VaultMutationKind.CreateFolder))
             throw new InvalidDataException("Queued record does not match the requested creation kind.");
-        if (draft.FolderId is not null && all.Any(x => x.EntityId == draft.FolderId &&
+        if (draft.FolderId is not null && all.Any(x => x.EntityId.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase) &&
             x.State != VaultSyncState.Confirmed))
             throw new InvalidOperationException("Local parent folder has not been confirmed on Stellar.");
         if (draft.FolderId is not null && !remoteRecords.Any(x => x.Id.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase) && x.IsFolder))
