@@ -69,6 +69,20 @@ else
                         }
                         @if (_syncEstimateNote is not null) { <span>@_syncEstimateNote</span> }
                         @if (_approvalStatus is not null) { <p role="status">@_approvalStatus</p> }
+                        @if (_reviewedQuote is not null)
+                        {
+                            <section class="terminal-panel" aria-label="Manual sync approval preview">
+                                <strong>SYNC APPROVAL PREVIEW — NO BROADCAST</strong>
+                                <p>Draft: @_reviewedDraftTitle</p>
+                                <p>Mutation: @_reviewedQuote.MutationId</p>
+                                <p>Estimated network fee: @_reviewedQuote.QuotedFeeXlm XLM</p>
+                                <p>Estimated peak reserve: @_reviewedQuote.QuotedPeakReserveXlm XLM</p>
+                                <p>Account: @_reviewedQuote.AccountId</p>
+                                <p>Network scope: @_reviewedQuote.NetworkId</p>
+                                <label><input type="checkbox" @bind="_approvalAcknowledged" /> I understand this is only a review; it does not publish data.</label>
+                                <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged)" @onclick="ConfirmPreviewOnly">ACKNOWLEDGE REVIEW ONLY</button>
+                            </section>
+                        }
                     </div>
                 }
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
@@ -636,10 +650,21 @@ else
         finally { _pendingLoading = false; }
     }
 
+    private VaultSyncApprovalSnapshot? _reviewedQuote;
+    private bool _approvalAcknowledged;
+    private string? _reviewedDraftTitle;
+    private void ClearSyncApproval()
+    {
+        _reviewedQuote = null;
+        _approvalAcknowledged = false;
+        _reviewedDraftTitle = null;
+    }
+
     private string? _approvalStatus;
     private async Task ReviewApprovalAsync(VaultSyncApprovalSnapshot snapshot)
     {
         _approvalStatus = null;
+        ClearSyncApproval();
         if (_pendingLoading || !Ledger.IsConnected || !Sessions.IsUnlocked ||
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
@@ -657,10 +682,18 @@ else
             if (fresh.NetworkFeeXlm > snapshot.QuotedFeeXlm ||
                 fresh.PeakReserveXlm > snapshot.QuotedPeakReserveXlm)
                 throw new InvalidOperationException("Costs increased. Estimate again.");
-            _approvalStatus = "Quote checked against current queue and costs. Submission remains disabled.";
+            _reviewedQuote = snapshot;
+            _reviewedDraftTitle = draft.Title;
+            _approvalStatus = "Quote checked against current queue and costs. Review the details below. Broadcasting is disabled.";
         }
         catch (Exception ex) { _approvalStatus = "Quote rejected: " + ex.Message; }
         finally { _pendingLoading = false; }
+    }
+
+    private void ConfirmPreviewOnly()
+    {
+        if (_approvalAcknowledged && _reviewedQuote is not null)
+            _approvalStatus = "Review acknowledged locally. No transaction was reserved, signed or broadcast.";
     }
 
     private VaultSyncReview? _syncReview;
