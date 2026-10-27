@@ -221,6 +221,13 @@ else
                 }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
+                @if (_selectedPending.State == VaultSyncState.Pending &&
+                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder &&
+                    _selectedPending.EntityId.Length == 32 && Ledger.IsConnected)
+                {
+                    <p class="advanced-help">Legacy offline ID: migration requires a current ledger read and does not publish data.</p>
+                    <button type="button" class="pixel-button compact" disabled="@_pendingDeleting" @onclick="MigrateSelectedLegacyIdAsync">MIGRATE LEGACY LOCAL ID</button>
+                }
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
                 @if (_selectedPending.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
                 {
@@ -369,6 +376,35 @@ else
             _selectedPending = _pendingItems.FirstOrDefault(x => x.Id == selected.Id);
         }
         catch (Exception ex) { _pendingDeleteError = "Reconciliation unavailable: " + ex.Message; }
+        finally { _pendingDeleting = false; }
+    }
+
+    private async Task MigrateSelectedLegacyIdAsync()
+    {
+        if (_pendingDeleting || !Ledger.IsConnected ||
+            _selectedPending is not { State: VaultSyncState.Pending } selected ||
+            selected.EntityId.Length != 32 ||
+            selected.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)) return;
+        _pendingDeleting = true;
+        _pendingDeleteError = null;
+        try
+        {
+            var records = await Ledger.ReadAsync();
+            var entries = await PendingQueue.ReviewAllAsync(selected.AccountId, selected.NetworkId);
+            var occupied = new HashSet<string>(records.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
+            occupied.UnionWith(entries.Select(x => x.EntityId));
+            string nextId;
+            do { nextId = Guid.NewGuid().ToString("N")[..16]; }
+            while (occupied.Contains(nextId));
+            var migrated = await PendingQueue.MigrateLegacyCreateIdAsync(
+                selected.AccountId, selected.NetworkId, selected.Id, nextId);
+            _selectedPending = migrated;
+            await LoadPendingAsync();
+            _syncReview = null;
+            _syncEstimates = [];
+            _pendingDeleteError = "Legacy draft ID migrated locally. Review dependencies and costs before synchronization.";
+        }
+        catch (Exception ex) { _pendingDeleteError = "Legacy ID migration blocked: " + ex.Message; }
         finally { _pendingDeleting = false; }
     }
 
