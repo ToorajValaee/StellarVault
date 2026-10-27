@@ -704,7 +704,7 @@ else
         {
             var records = await Ledger.ReadAsync();
             var result = await PendingQueue.PreflightCreateAsync(_reviewedQuote, account,
-                Networks.CredentialKey(account), records.Select(x => x.Id).ToArray(),
+                Networks.CredentialKey(account), records,
                 DateTimeOffset.UtcNow);
             _approvalStatus = result.Explanation + " No transaction has been reserved or submitted.";
         }
