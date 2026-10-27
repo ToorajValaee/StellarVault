@@ -82,6 +82,9 @@ public sealed class DenyVaultLedgerMutationVerifier : IVaultLedgerMutationVerifi
         string transactionHash, CancellationToken ct = default) => Task.FromResult(false);
 }
 
+public sealed record VaultReconciliationResult(string MutationId, VaultSyncState State,
+    bool Confirmed, string Explanation);
+
 public sealed record VaultSyncBlockedMutation(string MutationId, string[] MissingDependencies,
     string[] WaitingDependencies);
 
@@ -299,6 +302,31 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
 
     private static bool IsTransactionHash(string hash) =>
         hash.Length == 64 && hash.All(Uri.IsHexDigit);
+
+    /// <summary>Check an uncertain transaction against the configured independent verifier.
+    /// Missing hashes and unverifiable results remain uncertain and are never replayed.</summary>
+    public async Task<VaultReconciliationResult> ReconcileAsync(
+        string accountId, string networkId, string mutationId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var previous = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Mutation not found.");
+        RequireScope(previous, accountId, networkId);
+        if (previous.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting))
+            return new VaultReconciliationResult(previous.Id, previous.State, false,
+                "This entry has no outstanding submission to reconcile.");
+        if (previous.TransactionHash is not string hash || !IsTransactionHash(hash))
+            return new VaultReconciliationResult(previous.Id, previous.State, false,
+                "No verified transaction hash is available; manual investigation required.");
+        if (!await verifier.IsConfirmedAsync(previous, hash, ct))
+            return new VaultReconciliationResult(previous.Id, previous.State, false,
+                "The configured ledger verifier did not confirm this mutation.");
+        var confirmed = previous with { State = VaultSyncState.Confirmed };
+        if (!await store.TryReplaceAsync(previous, confirmed, ct))
+            throw new InvalidOperationException("Queue changed during reconciliation. Review again.");
+        return new VaultReconciliationResult(confirmed.Id, confirmed.State, true,
+            "Mutation independently verified and marked confirmed.");
+    }
 
     public async Task<VaultPendingMutation> ConfirmReconciledAsync(
         VaultPendingMutation previous, string transactionHash, CancellationToken ct = default)
