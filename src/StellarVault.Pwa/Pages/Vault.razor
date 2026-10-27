@@ -48,7 +48,7 @@ else
                         @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
                         {
                             <div class="record-card" style="cursor:default">
-                                <span class="record-card-body"><strong>@change.Kind</strong><small>LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>@change.Id</small></span>
+                                <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>On this device only · Not submitted to Stellar</small></span>
                             </div>
                         }
                     </div>
@@ -187,6 +187,21 @@ else
 </AdaptiveShell>
 
 @code {
+    private static string PendingTitle(VaultPendingMutation change)
+    {
+        // Draft bytes are accessed only while the encrypted local vault session
+        // is open. The queue adapter decrypts the authenticated entry in memory.
+        try
+        {
+            using var document = JsonDocument.Parse(change.EncryptedPayload);
+            if (document.RootElement.TryGetProperty("Title", out var title) &&
+                title.ValueKind == JsonValueKind.String)
+                return title.GetString() ?? change.Kind.ToString();
+        }
+        catch (JsonException) { /* Corrupt drafts remain visible for recovery. */ }
+        return change.Kind.ToString();
+    }
+
     private IReadOnlyList<VaultPendingMutation> _pendingItems = [];
     private string? _pendingError;
     private bool _pendingLoading;
