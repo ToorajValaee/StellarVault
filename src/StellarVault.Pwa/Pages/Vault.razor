@@ -102,7 +102,7 @@ else
                     }
                 }
             </div>
-            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked && _folder is not null)
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
                 @foreach (var draft in _pendingItems.Where(x => x.State == VaultSyncState.Pending &&
                     x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.UploadFile &&
