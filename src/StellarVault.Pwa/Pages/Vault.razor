@@ -30,7 +30,7 @@ else
     <section class="vault-page">
         <header class="page-command-header">
             <div><div class="panel-kicker">DATABASE BROWSER // STELLAR LEDGER</div><h1>VAULT RECORDS</h1><p class="page-subtitle">Search encrypted metadata recovered from the connected Stellar network.</p></div>
-            <div class="sv-access-actions">@if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }<button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ SYNC</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
+            <div class="sv-access-actions">@if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }<button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ REFRESH LEDGER</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
         </header>
         <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
         @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
@@ -47,9 +47,9 @@ else
                     <div class="record-list">
                         @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
                         {
-                            <div class="record-card" style="cursor:default">
-                                <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>On this device only · Not submitted to Stellar</small></span>
-                            </div>
+                            <button type="button" class="record-card" @onclick="() => OpenPending(change)">
+                                <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>On this device only · Not submitted to Stellar</small></span><span class="record-chevron">›</span>
+                            </button>
                         }
                     </div>
                 }
@@ -113,6 +113,23 @@ else
             }
         </section>
     </section>
+    @if (_selectedPending is not null)
+    {
+        <div class="modal-backdrop" @onclick="ClosePending">
+            <section class="record-modal terminal-panel" role="dialog" aria-modal="true"
+                     aria-labelledby="sv-local-draft-title" @onclick:stopPropagation="true">
+                <header class="modal-header">
+                    <div><div class="panel-kicker">LOCAL DRAFT // NOT ON STELLAR</div><h2 id="sv-local-draft-title">@PendingTitle(_selectedPending)</h2></div>
+                    <button class="icon-button close-button" @onclick="ClosePending" aria-label="Close local draft">×</button>
+                </header>
+                <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
+                <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
+                <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
+                <div class="terminal-alert warning" role="status">This entry is an encrypted local draft. It has not been submitted to Stellar. Manual synchronization, conflict resolution and ledger fee approval are still under development.</div>
+                <button type="button" class="pixel-button compact" @onclick="ClosePending">CLOSE</button>
+            </section>
+        </div>
+    }
     @if (_selected is not null)
     {
         <div class="modal-backdrop" @onclick="CloseRecord">
@@ -187,6 +204,10 @@ else
 </AdaptiveShell>
 
 @code {
+    private VaultPendingMutation? _selectedPending;
+    private void OpenPending(VaultPendingMutation mutation) => _selectedPending = mutation;
+    private void ClosePending() => _selectedPending = null;
+
     private static string PendingTitle(VaultPendingMutation change)
     {
         // Draft bytes are accessed only while the encrypted local vault session
