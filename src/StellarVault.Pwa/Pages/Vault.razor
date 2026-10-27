@@ -508,6 +508,7 @@ else
             {
                 _syncReview = null;
                 _syncEstimates = [];
+                ClearSyncApproval();
                 _syncEstimateNote = "Local draft changed. Re-run sync review and fee estimation.";
                 _selectedPending = await PendingQueue.RevisePendingAsync(
                     selected.AccountId, selected.NetworkId, selected.Id, revised);
@@ -582,6 +583,7 @@ else
         _pendingLoading = true;
         _syncEstimates = [];
         _syncEstimateNote = null;
+        ClearSyncApproval();
         try
         {
             foreach (var mutation in _syncReview.Ready)
@@ -644,6 +646,7 @@ else
             _syncReview = await PendingQueue.PrepareReviewAsync(account, network);
             _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
             _syncEstimates = [];
+            ClearSyncApproval();
             _approvalStatus = null;
         }
         catch (Exception ex) { _pendingError = "Interrupted submission review failed: " + ex.Message; }
@@ -706,6 +709,7 @@ else
         _syncReview = null;
         _syncEstimates = [];
         _syncEstimateNote = null;
+        ClearSyncApproval();
         try
         {
             _syncReview = await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account));
