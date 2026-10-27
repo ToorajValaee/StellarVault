@@ -221,3 +221,12 @@ test('on-chain-only access distinguishes unfunded root from connection failure',
   const network = fs.readFileSync(path.join(root, 'js', 'vault-v2-network.js'), 'utf8');
   assert.ok(network.includes('if (response.status === 404) return false'));
 });
+
+test('offline mutation confirmation requires independent verification and scoped status', () => {
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  assert.ok(queue.includes('interface IVaultLedgerMutationVerifier'));
+  assert.ok(queue.includes('await verifier.IsConfirmedAsync(previous, transactionHash, ct)'));
+  assert.ok(queue.includes('Queue entry belongs to another account or network.'));
+  assert.ok(queue.includes('Task<VaultQueueStatus> StatusAsync'));
+  assert.ok(queue.includes('MarkConflictAsync'));
+});
