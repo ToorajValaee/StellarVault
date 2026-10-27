@@ -337,6 +337,7 @@ else
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
     }
     protected override async Task OnInitializedAsync() {
+        if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) await LoadPendingAsync();
         if (!Ledger.IsConnected) return;
         try {
             _registryReady = await Ledger.HasRegistryAsync();
