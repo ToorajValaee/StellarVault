@@ -100,6 +100,25 @@ window.stellarVaultV2Db = (() => {
       tx.onerror = () => {};
     });
   }
+  async function listQueue(scope) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readonly');
+      const entries = [];
+      const request = tx.objectStore('syncQueue').openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        if (typeof cursor.key === 'string' && cursor.key.startsWith(scope + ':'))
+          entries.push({ id: cursor.key.slice(scope.length + 1), data: bytes(cursor.value) });
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error || new Error('Queue scan failed'));
+      tx.oncomplete = () => resolve(entries);
+      tx.onabort = () => reject(tx.error || new Error('Queue scan aborted'));
+      tx.onerror = () => {};
+    });
+  }
   async function removeObject(key) {
     const db = await open();
     return new Promise((resolve, reject) => {
@@ -112,6 +131,7 @@ window.stellarVaultV2Db = (() => {
     });
   }
   return Object.freeze({
+    listQueue,
     readQueue: key => read('syncQueue', key),
     addQueue: (key, data) => putImmutable('syncQueue', key, data),
     replaceQueue: (key, previous, next) => compareExchange('syncQueue', key, previous, next),
