@@ -97,6 +97,18 @@ else
                     }
                 }
             </div>
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked && _folder is not null)
+            {
+                @foreach (var draft in _pendingItems.Where(x => x.State == VaultSyncState.Pending &&
+                    x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.UploadFile &&
+                    PendingFolderId(x) == _folder))
+                {
+                    <button type="button" class="record-card" @onclick="() => OpenPending(draft)">
+                        <span class="record-card-body"><strong>@PendingTitle(draft)</strong><small>LOCAL DRAFT · @draft.Kind · NOT ON STELLAR</small></span>
+                        <span class="record-chevron">›</span>
+                    </button>
+                }
+            }
             <div class="sv-access-actions">
                 <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
                 <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">+ NEW FOLDER</a>
