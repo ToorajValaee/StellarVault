@@ -100,6 +100,26 @@ window.stellarVaultV2Db = (() => {
       tx.onerror = () => {};
     });
   }
+  async function deleteQueueIfMatch(key, expected) {
+    const db = await open();
+    const original = bytes(expected);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('syncQueue', 'readwrite');
+      const store = tx.objectStore('syncQueue');
+      let deleted = false;
+      const request = store.get(key);
+      request.onsuccess = () => {
+        if (request.result !== undefined && equal(bytes(request.result), original)) {
+          store.delete(key);
+          deleted = true;
+        }
+      };
+      request.onerror = () => reject(request.error || new Error('Queue deletion read failed'));
+      tx.oncomplete = () => resolve(deleted);
+      tx.onabort = () => reject(tx.error || new Error('Queue deletion aborted'));
+      tx.onerror = () => {};
+    });
+  }
   async function listQueue(scope) {
     const db = await open();
     return new Promise((resolve, reject) => {
@@ -132,6 +152,7 @@ window.stellarVaultV2Db = (() => {
   }
   return Object.freeze({
     listQueue,
+    deleteQueueIfMatch,
     readQueue: key => read('syncQueue', key),
     addQueue: (key, data) => putImmutable('syncQueue', key, data),
     replaceQueue: (key, previous, next) => compareExchange('syncQueue', key, previous, next),
