@@ -62,3 +62,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - PWA VaultManualSyncCoordinator has a single-shot PublishApprovedCreateAsync path for eligible create record/folder mutations. It demands explicit approval, current ledger connection, fresh quote, typed remote preflight, updated fee bounds and durable CAS reservation before calling PublishWithIdAsync.
 - After a send attempt it records Uncertain (with transaction hash if available). It never automatically retries or marks confirmed. Current UI does NOT expose the publish action; the live evidence verifier is still deny-by-default. A failed durable uncertain-state write may leave Submitting and requires manual recovery.
 - This is untested/uncompiled. Do not enable UI until transaction-to-record evidence, approval UX, single-flight concurrency and error recovery have been audited.
+
+
+## Latest batch: cancellation-safe coordinator
+- PWA manual Sync coordinator now gates concurrent calls within its scope. This does NOT lock other tabs or devices.
+- After durable reservation, cancellation must not prevent persisting the Uncertain state; a fresh token is used for best-effort recovery.
+- If persistence fails, durable Submitting remains and must be reconciled; never blindly retry.
+- No UI broadcast enabled; live verification remains deny-by-default; no builds/tests run.

@@ -14,6 +14,7 @@ public sealed class VaultManualSyncCoordinator(
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks)
 {
+    private readonly SemaphoreSlim submissionGate = new(1, 1);
     public async Task<VaultManualSyncOutcome> PublishApprovedCreateAsync(
         VaultSyncApprovalSnapshot quote, string accountId, bool explicitlyApproved,
         CancellationToken ct = default)
@@ -27,6 +28,8 @@ public sealed class VaultManualSyncCoordinator(
         if (quote.AccountId != accountId || quote.NetworkId != network)
             throw new InvalidOperationException("Approved quote does not belong to this account/network.");
 
+        if (!await submissionGate.WaitAsync(0, ct)) throw new InvalidOperationException("Another submission is active.");
+        try {
         // Perform all fallible validation BEFORE recording submission intent.
         var ready = await queue.PrepareReviewAsync(accountId, network, ct);
         var mutation = ready.Ready.SingleOrDefault(x => x.Id == quote.MutationId)
@@ -61,12 +64,15 @@ public sealed class VaultManualSyncCoordinator(
         // record was included. Always require independent reconciliation.
         if (txHash is not null && (txHash.Length != 64 || !txHash.All(Uri.IsHexDigit)))
             txHash = null;
-        await queue.MarkUncertainAsync(reserved, txHash, ct);
+        try { await queue.MarkUncertainAsync(reserved, txHash, CancellationToken.None); }
+        catch (Exception ex) { throw new InvalidOperationException("Uncertain state could not be saved; do not retry. Reconcile durable Submitting entry.", ex); }
         return new VaultManualSyncOutcome(
             reserved.Id, txHash, VaultSyncState.Uncertain,
             submissionError is null
                 ? "Submission attempted. Independent record-to-transaction verification is required."
                 : "Submission result unknown. Do not retry; reconcile with Stellar before taking any action.");
+        }
+        finally { submissionGate.Release(); }
     }
 }
 
