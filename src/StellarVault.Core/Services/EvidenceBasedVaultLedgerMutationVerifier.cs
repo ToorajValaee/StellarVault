@@ -7,7 +7,8 @@ namespace StellarVault.Core.Services;
  /// Providers must bind both to the selected Stellar network.</summary>
 public sealed record VaultLedgerEvidence(
     string AccountId, string NetworkId, string TransactionHash,
-    bool TransactionSucceeded, string RecordId, LedgerRecordItem? Record);
+    bool TransactionSucceeded, string RecordId, LedgerRecordItem? Record,
+    bool RecordLinkedToTransaction = false);
 
 public interface IVaultLedgerEvidenceProvider
 {
@@ -28,10 +29,12 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
     {
         if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
             transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit) ||
-            mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting))
+            mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
+            mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))
             return false;
         var evidence = await provider.InspectAsync(mutation, transactionHash, ct);
         if (evidence is null || !evidence.TransactionSucceeded ||
+            !evidence.RecordLinkedToTransaction ||
             evidence.AccountId != mutation.AccountId ||
             evidence.NetworkId != mutation.NetworkId ||
             !string.Equals(evidence.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase) ||
