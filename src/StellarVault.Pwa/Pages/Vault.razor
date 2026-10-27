@@ -122,6 +122,13 @@ else
                     <div><div class="panel-kicker">LOCAL DRAFT // NOT ON STELLAR</div><h2 id="sv-local-draft-title">@PendingTitle(_selectedPending)</h2></div>
                     <button class="icon-button close-button" @onclick="ClosePending" aria-label="Close local draft">×</button>
                 </header>
+                @if (_selectedPending.State == VaultSyncState.Pending &&
+                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder)
+                {
+                    <label class="terminal-label">LOCAL DRAFT TITLE</label>
+                    <input class="terminal-input" @bind="_pendingEditTitle" maxlength="256" />
+                    <button class="pixel-button compact" type="button" disabled="@_pendingDeleting" @onclick="SavePendingTitleAsync">SAVE DRAFT TITLE</button>
+                }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
@@ -227,7 +234,38 @@ else
     }
 
     private VaultPendingMutation? _selectedPending;
-    private void OpenPending(VaultPendingMutation mutation) => _selectedPending = mutation;
+    private string _pendingEditTitle = "";
+    private void OpenPending(VaultPendingMutation mutation)
+    {
+        _selectedPending = mutation;
+        _pendingEditTitle = PendingTitle(mutation);
+        _pendingDeleteError = null;
+    }
+    private async Task SavePendingTitleAsync()
+    {
+        if (_pendingDeleting || _selectedPending is not { State: VaultSyncState.Pending } selected) return;
+        _pendingDeleting = true;
+        _pendingDeleteError = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_pendingEditTitle))
+                throw new InvalidOperationException("A draft title is required.");
+            using var original = JsonDocument.Parse(selected.EncryptedPayload);
+            var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selected.EncryptedPayload)
+                ?? throw new InvalidDataException("Cannot read saved draft fields.");
+            fields["Title"] = JsonSerializer.SerializeToElement(_pendingEditTitle.Trim());
+            byte[] revised = JsonSerializer.SerializeToUtf8Bytes(fields);
+            try
+            {
+                _selectedPending = await PendingQueue.RevisePendingAsync(
+                    selected.AccountId, selected.NetworkId, selected.Id, revised);
+                await LoadPendingAsync();
+            }
+            finally { CryptographicOperations.ZeroMemory(revised); }
+        }
+        catch (Exception ex) { _pendingDeleteError = "Cannot revise local draft: " + ex.Message; }
+        finally { _pendingDeleting = false; }
+    }
     private void ClosePending() { if (!_pendingDeleting) { _selectedPending = null; _pendingDeleteError = null; } }
 
     private static string PendingTitle(VaultPendingMutation change)
