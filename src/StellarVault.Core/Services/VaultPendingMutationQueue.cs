@@ -170,6 +170,33 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>Reserve one mutation for submission only after checking a fresh
+    /// account/network-scoped quote and the exact durable queue revision.
+    /// This method never performs the network call.</summary>
+    public async Task<VaultPendingMutation> ReserveApprovedSubmissionAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, string networkId,
+        DateTimeOffset now, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var item = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
+            ?? throw new KeyNotFoundException("Quoted mutation no longer exists.");
+        RequireScope(item, accountId, networkId);
+        VaultSyncApprovalGuard.RequireFresh(quote, item, accountId, networkId,
+            now, TimeSpan.FromMinutes(5));
+        var report = await PrepareReviewAsync(accountId, networkId, ct);
+        if (!report.Ready.Any(x => x.Id == item.Id))
+            throw new InvalidOperationException("Quoted mutation is no longer ready.");
+        if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Unsupported ledger identity or operation.");
+        if (report.NeedsReconciliation != 0)
+            throw new InvalidOperationException("Reconcile interrupted transactions before further submissions.");
+        var next = item with { State = VaultSyncState.Submitting };
+        if (!await store.TryReplaceAsync(item, next, ct))
+            throw new InvalidOperationException("Queued draft changed during approval; review again.");
+        return next;
+    }
+
     /// <summary>Conservatively recover interrupted attempts: never automatically resubmit
     /// an entry once submission intent has been durably written.</summary>
     public async Task<IReadOnlyList<VaultPendingMutation>> ReviewInterruptedAsync(
