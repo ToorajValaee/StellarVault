@@ -68,6 +68,13 @@ public interface IVaultLedgerMutationVerifier
         CancellationToken ct = default);
 }
 
+/// <summary>Default until a network-specific transaction and entity verifier is installed.</summary>
+public sealed class DenyVaultLedgerMutationVerifier : IVaultLedgerMutationVerifier
+{
+    public Task<bool> IsConfirmedAsync(VaultPendingMutation mutation,
+        string transactionHash, CancellationToken ct = default) => Task.FromResult(false);
+}
+
 public sealed record VaultQueueStatus(int Pending, int Submitting, int Uncertain,
     int Confirmed, int Conflicts, int Failed);
 
