@@ -275,9 +275,14 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidOperationException("Only submitting mutations can become uncertain.");
         if (transactionHash is not null && !IsTransactionHash(transactionHash))
             throw new ArgumentException("Expected a 64-character Stellar transaction hash.", nameof(transactionHash));
-        if (submitting.TransactionHash is not null && transactionHash != submitting.TransactionHash)
+        if (submitting.TransactionHash is not null && transactionHash is not null &&
+            !string.Equals(transactionHash, submitting.TransactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Cannot replace a previously recorded transaction hash.");
-        var next = submitting with { State = VaultSyncState.Uncertain, TransactionHash = transactionHash };
+        // A missing response must never erase a transaction hash already persisted.
+        var next = submitting with {
+            State = VaultSyncState.Uncertain,
+            TransactionHash = submitting.TransactionHash ?? transactionHash
+        };
         if (!await store.TryReplaceAsync(submitting, next, ct))
             throw new InvalidOperationException("Concurrent queue change; reconcile manually.");
         return next;
