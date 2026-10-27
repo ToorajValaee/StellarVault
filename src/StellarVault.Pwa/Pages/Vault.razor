@@ -297,6 +297,17 @@ else
             var fields = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(selected.EncryptedPayload)
                 ?? throw new InvalidDataException("Cannot read saved draft fields.");
             fields["Title"] = JsonSerializer.SerializeToElement(_pendingEditTitle.Trim());
+            if (!string.IsNullOrEmpty(_pendingEditFolder))
+            {
+                if (!Folders.Any(x => x.Id == _pendingEditFolder) &&
+                    !PendingLocalFolders.Any(x => x.EntityId == _pendingEditFolder))
+                    throw new InvalidOperationException("Parent folder is unavailable.");
+                if (selected.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder &&
+                    WouldCreateLocalFolderCycle(selected.EntityId, _pendingEditFolder))
+                    throw new InvalidOperationException("Circular folder nesting is not permitted.");
+            }
+            fields["FolderId"] = JsonSerializer.SerializeToElement(
+                string.IsNullOrEmpty(_pendingEditFolder) ? (string?)null : _pendingEditFolder);
             if (selected.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord)
             {
                 fields["Content"] = JsonSerializer.SerializeToElement(_pendingEditContent);
@@ -334,6 +345,29 @@ else
         }
         catch (JsonException) { /* Corrupt drafts remain visible for recovery. */ }
         return change.Kind.ToString();
+    }
+
+    private IEnumerable<VaultPendingMutation> PendingLocalFolders =>
+        _pendingItems.Where(x => x.State == VaultSyncState.Pending &&
+            (x.Kind == VaultMutationKind.CreateFolder || x.Kind == VaultMutationKind.UpdateFolder));
+
+    private bool WouldCreateLocalFolderCycle(string movingId, string parentId)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        while (!string.IsNullOrEmpty(parentId))
+        {
+            if (parentId == movingId || !seen.Add(parentId)) return true;
+            var folder = PendingLocalFolders.FirstOrDefault(x => x.EntityId == parentId);
+            if (folder is null) return false;
+            try
+            {
+                using var doc = JsonDocument.Parse(folder.EncryptedPayload);
+                parentId = doc.RootElement.TryGetProperty("FolderId", out var value) &&
+                    value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+            }
+            catch (JsonException) { return true; }
+        }
+        return false;
     }
 
     private IReadOnlyList<VaultPendingMutation> _pendingItems = [];
