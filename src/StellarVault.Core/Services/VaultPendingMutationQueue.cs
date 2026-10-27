@@ -196,6 +196,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         retention.RequireLocalPersistence();
         if (submitting.State != VaultSyncState.Submitting)
             throw new InvalidOperationException("Only submitting mutations can become uncertain.");
+        if (transactionHash is not null && !IsTransactionHash(transactionHash))
+            throw new ArgumentException("Expected a 64-character Stellar transaction hash.", nameof(transactionHash));
+        if (submitting.TransactionHash is not null && transactionHash != submitting.TransactionHash)
+            throw new InvalidOperationException("Cannot replace a previously recorded transaction hash.");
         var next = submitting with { State = VaultSyncState.Uncertain, TransactionHash = transactionHash };
         if (!await store.TryReplaceAsync(submitting, next, ct))
             throw new InvalidOperationException("Concurrent queue change; reconcile manually.");
@@ -293,13 +297,19 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidDataException("Queue entry belongs to another account or network.");
     }
 
+    private static bool IsTransactionHash(string hash) =>
+        hash.Length == 64 && hash.All(Uri.IsHexDigit);
+
     public async Task<VaultPendingMutation> ConfirmReconciledAsync(
         VaultPendingMutation previous, string transactionHash, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
         if (previous.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
-            string.IsNullOrWhiteSpace(transactionHash))
-            throw new InvalidOperationException("A submitted mutation and verified transaction hash are required.");
+            !IsTransactionHash(transactionHash))
+            throw new InvalidOperationException("A submitted mutation and valid Stellar transaction hash are required.");
+        if (previous.TransactionHash is not null &&
+            !string.Equals(previous.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Reconciliation hash differs from the original submitted transaction.");
         if (!await verifier.IsConfirmedAsync(previous, transactionHash, ct))
             throw new InvalidOperationException("Ledger confirmation did not match the intended mutation.");
         var next = previous with { State = VaultSyncState.Confirmed, TransactionHash = transactionHash };
