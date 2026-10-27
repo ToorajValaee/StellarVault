@@ -40,6 +40,15 @@ else
                 <h2>LOCAL PENDING CHANGES</h2>
                 <p class="advanced-help">These encrypted drafts are stored only on this device. Refreshing ledger records does not publish them. Manual transaction review and synchronization are not available yet.</p>
                 <button type="button" class="pixel-button compact" @onclick="LoadPendingAsync" disabled="@_pendingLoading">↻ REFRESH LOCAL QUEUE</button>
+                <button type="button" class="pixel-button compact" @onclick="PrepareLocalSyncReviewAsync" disabled="@_pendingLoading">REVIEW SYNC READINESS</button>
+                @if (_syncReview is not null)
+                {
+                    <div class="terminal-alert" role="status">
+                        <strong>READ-ONLY SYNC REVIEW · NO SUBMISSION</strong>
+                        <span>READY: @_syncReview.Ready.Count · DEPENDENCY BLOCKED: @_syncReview.Blocked.Count · REQUIRES RECONCILIATION: @_syncReview.NeedsReconciliation · CONFLICTS: @_syncReview.Conflicts</span>
+                        <span>Transaction costs have not been estimated. No operations have been approved or published.</span>
+                    </div>
+                }
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
                 @if (_pendingItems.Count > 0)
                 {
@@ -445,6 +454,22 @@ else
         return false;
     }
 
+    private VaultSyncReview? _syncReview;
+    private async Task PrepareLocalSyncReviewAsync()
+    {
+        if (_pendingLoading || !Retention.AllowsLocalPersistence ||
+            Sessions.ActiveAccountId is not string account) return;
+        _pendingLoading = true;
+        _pendingError = null;
+        _syncReview = null;
+        try
+        {
+            _syncReview = await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account));
+        }
+        catch (Exception ex) { _pendingError = "Sync readiness review failed: " + ex.Message; }
+        finally { _pendingLoading = false; }
+    }
+
     private IReadOnlyList<VaultPendingMutation> _pendingItems = [];
     private string? _pendingError;
     private bool _pendingLoading;
@@ -455,6 +480,7 @@ else
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
         _pendingError = null;
+        _syncReview = null;
         try
         {
             _pendingItems = await PendingQueue.ReviewAllAsync(account, Networks.CredentialKey(account));
