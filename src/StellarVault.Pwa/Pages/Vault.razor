@@ -57,11 +57,13 @@ else
                             {
                                 <div class="data-field"><span class="field-label">@estimate.Title</span>
                                     <span>@estimate.Summary</span>
-                                    @if (estimate.Snapshot is not null) { <small>Draft fingerprint: @estimate.Snapshot.DraftSha256.Substring(0, 12) · quote expires after 5 minutes</small> }
+                                    @if (estimate.Snapshot is not null) { <small>Draft fingerprint: @estimate.Snapshot.DraftSha256.Substring(0, 12) · quote expires after 5 minutes</small>
+                                        <button type="button" class="pixel-button compact" @onclick="() => ReviewApprovalAsync(estimate.Snapshot)">REVALIDATE QUOTE</button> }
                                 </div>
                             }
                         }
                         @if (_syncEstimateNote is not null) { <span>@_syncEstimateNote</span> }
+                        @if (_approvalStatus is not null) { <p role="status">@_approvalStatus</p> }
                     </div>
                 }
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
@@ -530,6 +532,33 @@ else
             }
             _syncEstimateNote = "These estimates are snapshots, not approvals. Fees and reserves may change. Manual synchronization remains disabled.";
         }
+        finally { _pendingLoading = false; }
+    }
+
+    private string? _approvalStatus;
+    private async Task ReviewApprovalAsync(VaultSyncApprovalSnapshot snapshot)
+    {
+        _approvalStatus = null;
+        if (_pendingLoading || !Ledger.IsConnected || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId is not string account) return;
+        _pendingLoading = true;
+        try
+        {
+            var network = Networks.CredentialKey(account);
+            var review = await PendingQueue.PrepareReviewAsync(account, network);
+            var mutation = review.Ready.SingleOrDefault(x => x.Id == snapshot.MutationId)
+                ?? throw new InvalidOperationException("Mutation is no longer ready.");
+            VaultSyncApprovalGuard.RequireFresh(snapshot, mutation, account, network,
+                DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
+                ?? throw new InvalidDataException("Invalid queued record draft.");
+            var fresh = await Ledger.EstimateAsync(draft);
+            if (fresh.NetworkFeeXlm > snapshot.QuotedFeeXlm ||
+                fresh.PeakReserveXlm > snapshot.QuotedPeakReserveXlm)
+                throw new InvalidOperationException("Costs increased. Estimate again.");
+            _approvalStatus = "Quote checked against current queue and costs. Submission remains disabled.";
+        }
+        catch (Exception ex) { _approvalStatus = "Quote rejected: " + ex.Message; }
         finally { _pendingLoading = false; }
     }
 
