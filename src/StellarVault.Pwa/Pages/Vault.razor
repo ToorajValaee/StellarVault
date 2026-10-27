@@ -46,6 +46,11 @@ else
                     <div class="terminal-alert" role="status">
                         <strong>READ-ONLY SYNC REVIEW · NO SUBMISSION</strong>
                         <span>READY: @_syncReview.Ready.Count · DEPENDENCY BLOCKED: @_syncReview.Blocked.Count · REQUIRES RECONCILIATION: @_syncReview.NeedsReconciliation · CONFLICTS: @_syncReview.Conflicts</span>
+                        @if (_syncReview.NeedsReconciliation > 0)
+                        {
+                            <p class="terminal-alert warning">Previously attempted transactions require independent Stellar verification. Never retry them automatically.</p>
+                            <button type="button" class="pixel-button compact" disabled="@_pendingLoading" @onclick="QuarantineInterruptedAsync">QUARANTINE INTERRUPTED ATTEMPTS</button>
+                        }
                         <span>No operations have been approved or published. Estimates below are informational, per-change, and not a batch transaction quote.</span>
                         @if (Ledger.IsConnected)
                         {
@@ -532,6 +537,27 @@ else
             }
             _syncEstimateNote = "These estimates are snapshots, not approvals. Fees and reserves may change. Manual synchronization remains disabled.";
         }
+        finally { _pendingLoading = false; }
+    }
+
+    private async Task QuarantineInterruptedAsync()
+    {
+        if (_pendingLoading || !Retention.AllowsLocalPersistence ||
+            !Sessions.IsUnlocked || Sessions.ActiveAccountId is not string account) return;
+        _pendingLoading = true;
+        try
+        {
+            var network = Networks.CredentialKey(account);
+            var interrupted = await PendingQueue.ReviewInterruptedAsync(account, network);
+            foreach (var entry in interrupted.Where(x => x.State == VaultSyncState.Submitting))
+                await PendingQueue.QuarantineInterruptedAsync(account, network, entry.Id);
+            _pendingError = null;
+            _syncReview = await PendingQueue.PrepareReviewAsync(account, network);
+            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            _syncEstimates = [];
+            _approvalStatus = null;
+        }
+        catch (Exception ex) { _pendingError = "Interrupted submission review failed: " + ex.Message; }
         finally { _pendingLoading = false; }
     }
 
