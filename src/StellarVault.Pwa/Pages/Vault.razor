@@ -181,6 +181,13 @@ else
                     </select>
                     <button class="pixel-button compact" type="button" disabled="@_pendingDeleting" @onclick="SavePendingTitleAsync">SAVE LOCAL DRAFT CHANGES</button>
                 }
+                @if (_selectedPending.Kind == VaultMutationKind.UploadFile)
+                {
+                    <div class="data-field"><span class="field-label">ENCRYPTED LOCAL FILE</span><p>This copy exists only on this device.</p>
+                        <button class="pixel-button compact" type="button" @onclick="DownloadPendingFileAsync">DOWNLOAD LOCAL FILE</button>
+                        @if (_pendingFileStatus is not null) { <p role="status">@_pendingFileStatus</p> }
+                    </div>
+                }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
@@ -268,6 +275,33 @@ else
 </AdaptiveShell>
 
 @code {
+    private string? _pendingFileStatus;
+    private async Task DownloadPendingFileAsync()
+    {
+        if (_selectedPending is not { Kind: VaultMutationKind.UploadFile } item) return;
+        byte[]? data = null;
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
+                ?? throw new InvalidDataException("Local file draft is invalid.");
+            if (!draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal))
+                throw new InvalidDataException("Unsupported local file draft format.");
+            var file = JsonSerializer.Deserialize<StellarLedgerFileProtocol.Single>(
+                draft.Content[StellarLedgerFileProtocol.SinglePrefix.Length..])
+                ?? throw new InvalidDataException("Invalid local file metadata.");
+            data = Convert.FromBase64String(file.DataBase64);
+            if (file.Sha256Hex is null ||
+                !string.Equals(Convert.ToHexString(SHA256.HashData(data)), file.Sha256Hex,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new CryptographicException("Local file checksum mismatch.");
+            StellarLedgerFileProtocol.ValidateName(file.FileName);
+            await JS.InvokeVoidAsync("stellarVaultV2Download.save", file.FileName, data);
+            _pendingFileStatus = "Local file downloaded. It has not been published on Stellar.";
+        }
+        catch (Exception ex) { _pendingFileStatus = "Local file recovery failed: " + ex.Message; }
+        finally { if (data is not null) CryptographicOperations.ZeroMemory(data); }
+    }
+
     private bool _pendingDeleting;
     private string? _pendingDeleteError;
     private async Task DiscardSelectedPendingAsync()
@@ -293,6 +327,7 @@ else
     private void OpenPending(VaultPendingMutation mutation)
     {
         _selectedPending = mutation;
+        _pendingFileStatus = null;
         _pendingEditTitle = PendingTitle(mutation);
         _pendingEditFolder = "";
         _pendingEditContent = _pendingEditUsername = _pendingEditUrl = _pendingEditNotes = _pendingEditTags = "";
