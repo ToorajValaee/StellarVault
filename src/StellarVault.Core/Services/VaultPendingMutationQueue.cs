@@ -161,28 +161,30 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// <summary>Reserve one mutation for submission only after checking a fresh
     /// account/network-scoped quote and the exact durable queue revision.
     /// This method never performs the network call.</summary>
-    public async Task<VaultPendingMutation> ReserveApprovedSubmissionAsync(
+    [Obsolete("Use ReservePreflightedSubmissionAsync after an independent remote ID inventory check.")]
+    public Task<VaultPendingMutation> ReserveApprovedSubmissionAsync(
         VaultSyncApprovalSnapshot quote, string accountId, string networkId,
-        DateTimeOffset now, CancellationToken ct = default)
+        DateTimeOffset now, CancellationToken ct = default) =>
+        throw new NotSupportedException("Submission reservation requires a fresh remote record inventory.");
+
+    /// <summary>Durably reserve only after comparing a fresh remote ID inventory
+    /// with the exact approved local queue revision. Never broadcasts a transaction.
+    /// The remote inventory is advisory: a network race still requires reconciliation.</summary>
+    public async Task<VaultPendingMutation> ReservePreflightedSubmissionAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, string networkId,
+        IReadOnlyCollection<string> remoteRecordIds, DateTimeOffset now,
+        CancellationToken ct = default)
     {
-        retention.RequireLocalPersistence();
+        await PreflightCreateAsync(quote, accountId, networkId, remoteRecordIds, now, ct);
         var item = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
-            ?? throw new KeyNotFoundException("Quoted mutation no longer exists.");
+            ?? throw new KeyNotFoundException("Approved mutation no longer exists.");
         RequireScope(item, accountId, networkId);
         VaultSyncApprovalGuard.RequireFresh(quote, item, accountId, networkId,
             now, TimeSpan.FromMinutes(5));
-        var report = await PrepareReviewAsync(accountId, networkId, ct);
-        if (!report.Ready.Any(x => x.Id == item.Id))
-            throw new InvalidOperationException("Quoted mutation is no longer ready.");
-        if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
-            item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit))
-            throw new InvalidOperationException("Unsupported ledger identity or operation.");
-        if (report.NeedsReconciliation != 0)
-            throw new InvalidOperationException("Reconcile interrupted transactions before further submissions.");
-        var next = item with { State = VaultSyncState.Submitting };
-        if (!await store.TryReplaceAsync(item, next, ct))
-            throw new InvalidOperationException("Queued draft changed during approval; review again.");
-        return next;
+        var reserved = item with { State = VaultSyncState.Submitting };
+        if (!await store.TryReplaceAsync(item, reserved, ct))
+            throw new InvalidOperationException("Local draft was modified during submission reservation.");
+        return reserved;
     }
 
     /// <summary>Read-only last-mile eligibility guard. Requires a current ledger
