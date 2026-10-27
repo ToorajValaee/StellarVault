@@ -61,6 +61,7 @@ public interface IVaultPendingMutationStore
     Task<IReadOnlyList<VaultPendingMutation>> ListAsync(string accountId, string networkId, CancellationToken ct = default);
     Task<bool> AddAsync(VaultPendingMutation entry, CancellationToken ct = default);
     Task<bool> TryReplaceAsync(VaultPendingMutation previous, VaultPendingMutation replacement, CancellationToken ct = default);
+    Task<bool> TryDeleteAsync(VaultPendingMutation expected, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -164,6 +165,25 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             items.Count(x => x.State == VaultSyncState.Confirmed),
             items.Count(x => x.State == VaultSyncState.Conflict),
             items.Count(x => x.State == VaultSyncState.Failed));
+    }
+
+    /// <summary>Discard only an unsubmitted draft, and only when no other active
+    /// mutation depends on its identifier. Deletion is never a ledger operation.</summary>
+    public async Task DiscardPendingAsync(string accountId, string networkId,
+        string mutationId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var entries = await ScopedEntriesAsync(accountId, networkId, ct);
+        var current = entries.SingleOrDefault(x => x.Id == mutationId)
+            ?? throw new KeyNotFoundException("Local draft not found.");
+        if (current.State != VaultSyncState.Pending || current.TransactionHash is not null)
+            throw new InvalidOperationException("Submitted, uncertain or resolved changes cannot be discarded.");
+        if (entries.Any(x => x.Id != mutationId &&
+            x.State is not (VaultSyncState.Confirmed or VaultSyncState.Failed) &&
+            x.DependsOn.Contains(mutationId, StringComparer.Ordinal)))
+            throw new InvalidOperationException("Another pending change depends on this draft.");
+        if (!await store.TryDeleteAsync(current, ct))
+            throw new InvalidOperationException("Draft changed while discarding; refresh the local queue.");
     }
 
     public async Task<VaultPendingMutation> MarkConflictAsync(VaultPendingMutation previous,
