@@ -211,6 +211,25 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (remoteRecordIds.Contains(item.EntityId, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("Target ledger record ID already exists.");
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
+        LedgerRecordDraft draft;
+        try
+        {
+            draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
+                ?? throw new InvalidDataException("Missing queued draft.");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new InvalidDataException("Queued draft is malformed.", ex);
+        }
+        if (string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
+            string.IsNullOrEmpty(draft.Content) ||
+            draft.IsFolder != (item.Kind == VaultMutationKind.CreateFolder))
+            throw new InvalidDataException("Queued record does not match the requested creation kind.");
+        if (draft.FolderId is not null && all.Any(x => x.EntityId == draft.FolderId &&
+            x.State != VaultSyncState.Confirmed))
+            throw new InvalidOperationException("Local parent folder has not been confirmed on Stellar.");
+        if (draft.FolderId is not null && !remoteRecordIds.Contains(draft.FolderId, StringComparer.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Parent folder is absent from the current ledger inventory.");
         if (all.Any(x => x.Id != item.Id && x.EntityId.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Another local mutation shares this record ID.");
         return new VaultSyncPreflightResult(item.Id, item.EntityId, quote.DraftSha256,
