@@ -33,6 +33,9 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
             mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))
             return false;
+        if (mutation.TransactionHash is not null &&
+            !string.Equals(mutation.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+            return false;
         var evidence = await provider.InspectAsync(mutation, transactionHash, ct);
         if (evidence is null || !evidence.TransactionSucceeded ||
             !evidence.RecordLinkedToTransaction ||

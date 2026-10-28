@@ -274,6 +274,21 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     }
 
     /// <summary>Read-only recovery advice. Missing transaction identity never authorizes replay.</summary>
+    /// <summary>Enumerate unresolved submissions without changing durable state.</summary>
+    public async Task<IReadOnlyList<VaultRecoveryInspection>> InspectOutstandingRecoveriesAsync(
+        string accountId, string networkId, CancellationToken ct = default)
+    {
+        var entries = await ScopedEntriesAsync(accountId, networkId, ct);
+        var outstanding = entries.Where(x =>
+            x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain);
+        return outstanding.Select(x => new VaultRecoveryInspection(x.Id, x.State,
+            x.TransactionHash is { Length: 64 } hash && IsTransactionHash(hash) ? hash : null,
+            true, x.TransactionHash is { Length: 64 } tx && IsTransactionHash(tx)
+                ? "Verify the recorded transaction against the intended record. Never resubmit automatically."
+                : "Transaction hash unavailable. Investigate ledger history manually; never resubmit automatically."
+        )).ToArray();
+    }
+
     public async Task<VaultRecoveryInspection> InspectRecoveryAsync(
         string accountId, string networkId, string mutationId, CancellationToken ct = default)
     {
@@ -502,6 +517,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             current.TransactionHash is not null &&
             !string.Equals(current.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Submission state or transaction hash changed.");
+        var sameScope = await ScopedEntriesAsync(current.AccountId, current.NetworkId, ct);
+        if (sameScope.Any(x => x.Id != current.Id && x.TransactionHash is string hash &&
+            string.Equals(hash, transactionHash, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Transaction hash is already assigned to another queue mutation.");
         if (!await verifier.IsConfirmedAsync(current, transactionHash, ct))
             throw new InvalidOperationException("Ledger confirmation did not match the intended mutation.");
         var next = current with { State = VaultSyncState.Confirmed, TransactionHash = transactionHash };

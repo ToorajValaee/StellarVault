@@ -98,3 +98,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 ## Latest batch: verifier consistency
 - Evidence verifier compares hexadecimal record IDs case-insensitively and refuses malformed empty or oversized titles and missing content.
 - Still requires trustworthy transaction-to-record linkage; DENY default persists. No builds/tests run.
+
+
+## 2026-10-28: batch recovery inspection and hash uniqueness
+- Added InspectOutstandingRecoveriesAsync for read-only, account/network-scoped enumeration of Submitting and Uncertain queue entries with actionable no-retry guidance.
+- Confirmation now refuses a transaction hash already attached to another queue mutation in the same scope.
+- Evidence verifier rejects a supplied hash that conflicts with a mutation's previously stored hash.
+- This does not establish transaction-to-record proof and is not cross-device protection. No builds/tests were run. The PWA remains deny-by-default for live verification and manual Sync action is not exposed.
