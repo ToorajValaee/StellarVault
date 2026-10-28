@@ -94,6 +94,20 @@ else
                     {
                         <p class="terminal-alert warning" role="status">UNRESOLVED SUBMISSIONS: DO NOT RETRY. A transaction may already have reached Stellar. Inspect each item's hash and reconcile independently.</p>
                     }
+                    @if (_recoveryInspections.Count > 0)
+                    {
+                        <section aria-label="Submission recovery details">
+                            <strong>RECOVERY INSPECTION — READ ONLY</strong>
+                            @foreach (var recovery in _recoveryInspections)
+                            {
+                                <p role="status">
+                                    MUTATION: @recovery.MutationId · STATE: @recovery.State
+                                    · HASH: @(recovery.TransactionHash ?? "NOT RECORDED")
+                                    · @recovery.Guidance
+                                </p>
+                            }
+                        </section>
+                    }
                     <div class="record-list">
                         @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
                         {
@@ -754,6 +768,7 @@ else
     }
 
     private IReadOnlyList<VaultPendingMutation> _pendingItems = [];
+    private IReadOnlyList<VaultRecoveryInspection> _recoveryInspections = [];
     private string? _pendingError;
     private bool _pendingLoading;
 
@@ -764,9 +779,12 @@ else
         _pendingLoading = true;
         _pendingError = null;
         _syncReview = null;
+        _recoveryInspections = [];
         try
         {
-            _pendingItems = await PendingQueue.ReviewAllAsync(account, Networks.CredentialKey(account));
+            var network = Networks.CredentialKey(account);
+            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            _recoveryInspections = await PendingQueue.InspectOutstandingRecoveriesAsync(account, network);
         }
         catch (Exception ex) { _pendingError = "Unable to open encrypted device queue: " + ex.Message; }
         finally { _pendingLoading = false; }

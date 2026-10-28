@@ -105,3 +105,8 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Confirmation now refuses a transaction hash already attached to another queue mutation in the same scope.
 - Evidence verifier rejects a supplied hash that conflicts with a mutation's previously stored hash.
 - This does not establish transaction-to-record proof and is not cross-device protection. No builds/tests were run. The PWA remains deny-by-default for live verification and manual Sync action is not exposed.
+
+
+## 2026-10-28 recovery inspection in /vault
+- Pending queue load now retrieves scoped, read-only outstanding recovery inspections and shows each unresolved mutation ID, state, persisted hash if available and no-retry guidance.
+- No network transactions are initiated by this view. No build/tests executed. Live independent transaction evidence and manual Sync UI are still not available.
