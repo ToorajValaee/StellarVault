@@ -121,7 +121,7 @@ else
                 }
                 @if (_folder is not null && PendingLocalFolders.Any(x => x.EntityId == _folder))
                 {
-                    <span>/</span><button class="pixel-button compact" @onclick="() => OpenFolder(PendingFolderId(PendingLocalFolders.First(x => x.EntityId == _folder)) ?? "")">LOCAL PARENT</button>
+                    <span>/</span><button class="pixel-button compact" @onclick="OpenLocalParentFolder">LOCAL PARENT</button>
                     <span>/</span><strong>📁 @PendingTitle(PendingLocalFolders.First(x => x.EntityId == _folder)) (LOCAL)</strong>
                 }
             </nav>
@@ -829,6 +829,11 @@ else
     private readonly HashSet<string> _revealedIds = new(StringComparer.Ordinal);
     private void ToggleReveal(string id) { if (!_revealedIds.Add(id)) _revealedIds.Remove(id); }
     private void OpenFolder(string id) { _folder = id; _revealedIds.Clear(); }
+    private void OpenLocalParentFolder()
+    {
+        var local = PendingLocalFolders.FirstOrDefault(x => x.EntityId == _folder);
+        if (local is not null) OpenFolder(PendingFolderId(local) ?? string.Empty);
+    }
     private LedgerRecordItem? _deleteCandidate;
     private async Task SelectDelete(LedgerRecordItem item) {
         if (_busy) return;

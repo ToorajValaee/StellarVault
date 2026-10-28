@@ -451,7 +451,6 @@
     private string _mnemonic = string.Empty;
     private readonly string[] _mnemonicWords = new string[24];
     private int _mnemonicWordCount = 12;
-    private bool _showMnemonic;
     private void UpdateMnemonicWord(int index, string value)
     {
         var words = value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -471,7 +470,6 @@
     {
         Array.Clear(_mnemonicWords);
         _mnemonic = string.Empty;
-        _showMnemonic = false;
     }
     private bool _ledgerRegistryReady;
     private string _ledgerTitle = string.Empty;

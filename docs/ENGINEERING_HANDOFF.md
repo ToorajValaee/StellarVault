@@ -69,3 +69,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - After durable reservation, cancellation must not prevent persisting the Uncertain state; a fresh token is used for best-effort recovery.
 - If persistence fails, durable Submitting remains and must be reconciled; never blindly retry.
 - No UI broadcast enabled; live verification remains deny-by-default; no builds/tests run.
+
+
+## 2026-10-28 compiler fix
+- Fixed the /vault Razor LOCAL PARENT button that contained an unescaped nested string literal inside @onclick and generated CS1525 / CS1026. It now calls OpenLocalParentFolder, which looks up the active local folder and navigates to its parent.
+- Removed unused VaultHome._showMnemonic field and assignment responsible for CS0414 warning.
+- Based on user-provided net10.0 browser-wasm build output; changes committed without running a build or tests in this environment. Re-run dotnet build and report any remaining errors.
