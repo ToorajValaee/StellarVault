@@ -90,11 +90,15 @@ else
                 @if (_pendingItems.Count > 0)
                 {
                     <p role="status">PENDING: @_pendingItems.Count(x => x.State == VaultSyncState.Pending) · UNCERTAIN: @_pendingItems.Count(x => x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) · CONFLICTS: @_pendingItems.Count(x => x.State == VaultSyncState.Conflict)</p>
+                    @if (_pendingItems.Any(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain))
+                    {
+                        <p class="terminal-alert warning" role="status">UNRESOLVED SUBMISSIONS: DO NOT RETRY. A transaction may already have reached Stellar. Inspect each item's hash and reconcile independently.</p>
+                    }
                     <div class="record-list">
                         @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
                         {
                             <button type="button" class="record-card" @onclick="() => OpenPending(change)">
-                                <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>On this device only · Not submitted to Stellar</small></span><span class="record-chevron">›</span>
+                                <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>@(change.State is VaultSyncState.Submitting or VaultSyncState.Uncertain ? "Submission may have reached Stellar — do not retry" : change.State == VaultSyncState.Confirmed ? "Independently confirmed" : "On this device only · Not submitted to Stellar")</small></span><span class="record-chevron">›</span>
                             </button>
                         }
                     </div>

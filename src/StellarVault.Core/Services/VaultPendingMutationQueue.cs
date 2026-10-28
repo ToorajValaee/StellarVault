@@ -273,6 +273,25 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>Read-only recovery advice. Missing transaction identity never authorizes replay.</summary>
+    public async Task<VaultRecoveryInspection> InspectRecoveryAsync(
+        string accountId, string networkId, string mutationId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var item = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Mutation not found.");
+        RequireScope(item, accountId, networkId);
+        var unresolved = item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
+        var hasHash = item.TransactionHash is string hash && IsTransactionHash(hash);
+        var guidance = unresolved
+            ? hasHash
+                ? "Submission unresolved. Independently reconcile the recorded transaction hash; do not resubmit."
+                : "Submission unresolved without a recorded transaction hash. Investigate ledger history manually; do not resubmit."
+            : "No unresolved submission detected.";
+        return new VaultRecoveryInspection(item.Id, item.State,
+            hasHash ? item.TransactionHash : null, unresolved, guidance);
+    }
+
     public async Task<bool> NeedsManualRecoveryAsync(string accountId, string networkId, string mutationId, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
@@ -491,3 +510,6 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 }
+
+public sealed record VaultRecoveryInspection(string MutationId, VaultSyncState State,
+    string? TransactionHash, bool NeedsInvestigation, string Guidance);

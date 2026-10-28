@@ -87,3 +87,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - MarkUncertainAsync reloads the durable entry, verifies the current state and hash, and atomically transitions the current revision. This prevents overwriting a concurrent reconciliation state.
 - Added read-only NeedsManualRecoveryAsync for unresolved Submitting/Uncertain mutations.
 - Live record-to-transaction verification and UI publishing remain disabled; builds/tests not run.
+
+
+## 2026-10-28: unresolved submission visibility
+- Core now offers read-only InspectRecoveryAsync with persisted transaction hash (when valid) and no-replay guidance for Submitting/Uncertain entries.
+- /vault pending list now displays an explicit unresolved-submission warning, and state-aware labels replace misleading 'Not submitted' text for Submitting/Uncertain/Confirmed entries.
+- Publishing remains disabled in UI; evidence verifier is still deny-by-default. No builds/tests were run for these changes.
