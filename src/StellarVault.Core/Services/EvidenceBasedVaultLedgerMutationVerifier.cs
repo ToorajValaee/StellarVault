@@ -36,7 +36,10 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
         if (mutation.TransactionHash is not null &&
             !string.Equals(mutation.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
             return false;
-        var evidence = await provider.InspectAsync(mutation, transactionHash, ct);
+        VaultLedgerEvidence? evidence;
+        try { evidence = await provider.InspectAsync(mutation, transactionHash, ct); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; } // Evidence unavailable or invalid must never confirm a mutation.
         if (evidence is null || !evidence.TransactionSucceeded ||
             !evidence.RecordLinkedToTransaction ||
             evidence.AccountId != mutation.AccountId ||
@@ -49,7 +52,10 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
         catch (JsonException) { return false; }
         if (draft is null || string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
             string.IsNullOrEmpty(draft.Content)) return false;
-        if (draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder)) return false;
+        if (draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder) ||
+            draft.Tags is { Length: > 24 } ||
+            draft.Tags?.Any(tag => tag is null || tag.Length > 64) == true)
+            return false;
         var actual = evidence.Record;
         return string.Equals(actual.Id, mutation.EntityId, StringComparison.OrdinalIgnoreCase) &&
             actual.Title == draft.Title && actual.Content == draft.Content &&

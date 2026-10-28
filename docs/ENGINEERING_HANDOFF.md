@@ -110,3 +110,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 ## 2026-10-28 recovery inspection in /vault
 - Pending queue load now retrieves scoped, read-only outstanding recovery inspections and shows each unresolved mutation ID, state, persisted hash if available and no-retry guidance.
 - No network transactions are initiated by this view. No build/tests executed. Live independent transaction evidence and manual Sync UI are still not available.
+
+
+## 2026-10-28: fail-closed evidence inspection
+- EvidenceBasedVaultLedgerMutationVerifier now treats provider failures as unconfirmed, while preserving caller cancellation, and refuses invalid draft tag shape.
+- Horizon inspector rejects responses whose effective request host differs from the configured Horizon host; an HTTP client can still redirect within a host, so this is not a complete redirect policy.
+- Independent transaction-to-record proof is NOT implemented, verifier is still DENY in PWA DI, and manual Sync UI stays disabled.
+- Source changes not compiled or tested; rerun dotnet build when validation is resumed.

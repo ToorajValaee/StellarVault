@@ -30,7 +30,10 @@ public sealed class HorizonVaultTransactionInspector(HttpClient client)
         var baseUrl = horizonUrl.TrimEnd('/') + "/";
         using var request = new HttpRequestMessage(HttpMethod.Get,
             new Uri(new Uri(baseUrl), "transactions/" + transactionHash.ToLowerInvariant()));
+        // Prevent an HTTP redirect from silently changing the configured evidence host.
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (response.RequestMessage?.RequestUri?.Host != origin.Host)
+            return null;
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         var receipt = await response.Content.ReadFromJsonAsync<Receipt>(cancellationToken: ct);
