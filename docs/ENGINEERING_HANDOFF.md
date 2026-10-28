@@ -81,3 +81,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Manual coordinator rechecks network selection and connection before reservation and before publication. Cancellation after reservation is treated as uncertain, not retried.
 - Core preflight fails closed when remote inventory has missing or duplicate record IDs.
 - Remaining: transaction-to-record proof, cross-tab concurrency, full Sync UI, production security validation. Builds/tests not run for this commit.
+
+
+## 2026-10-28 recovery batch
+- MarkUncertainAsync reloads the durable entry, verifies the current state and hash, and atomically transitions the current revision. This prevents overwriting a concurrent reconciliation state.
+- Added read-only NeedsManualRecoveryAsync for unresolved Submitting/Uncertain mutations.
+- Live record-to-transaction verification and UI publishing remain disabled; builds/tests not run.

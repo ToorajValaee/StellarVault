@@ -273,6 +273,15 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    public async Task<bool> NeedsManualRecoveryAsync(string accountId, string networkId, string mutationId, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        var item = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Mutation not found.");
+        RequireScope(item, accountId, networkId);
+        return item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
+    }
+
     public async Task<VaultPendingMutation> MarkUncertainAsync(
         VaultPendingMutation submitting, string? transactionHash, CancellationToken ct = default)
     {
@@ -284,12 +293,20 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (submitting.TransactionHash is not null && transactionHash is not null &&
             !string.Equals(transactionHash, submitting.TransactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Cannot replace a previously recorded transaction hash.");
+        var durable = await store.GetAsync(submitting.AccountId, submitting.NetworkId, submitting.Id, ct)
+            ?? throw new KeyNotFoundException("Submission no longer exists.");
+        RequireScope(durable, submitting.AccountId, submitting.NetworkId);
+        if (durable.State != VaultSyncState.Submitting)
+            throw new InvalidOperationException("Submission state changed; inspect the queue.");
+        if (durable.TransactionHash is not null && transactionHash is not null &&
+            !string.Equals(durable.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Transaction hash changed; manual investigation required.");
         // A missing response must never erase a transaction hash already persisted.
-        var next = submitting with {
+        var next = durable with {
             State = VaultSyncState.Uncertain,
-            TransactionHash = submitting.TransactionHash ?? transactionHash
+            TransactionHash = durable.TransactionHash ?? transactionHash
         };
-        if (!await store.TryReplaceAsync(submitting, next, ct))
+        if (!await store.TryReplaceAsync(durable, next, ct))
             throw new InvalidOperationException("Concurrent queue change; reconcile manually.");
         return next;
     }
