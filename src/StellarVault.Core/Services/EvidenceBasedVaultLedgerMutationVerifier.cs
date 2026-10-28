@@ -39,15 +39,16 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
             evidence.AccountId != mutation.AccountId ||
             evidence.NetworkId != mutation.NetworkId ||
             !string.Equals(evidence.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase) ||
-            evidence.RecordId != mutation.EntityId || evidence.Record is null)
+            !string.Equals(evidence.RecordId, mutation.EntityId, StringComparison.OrdinalIgnoreCase) || evidence.Record is null)
             return false;
         LedgerRecordDraft? draft;
         try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload); }
         catch (JsonException) { return false; }
-        if (draft is null) return false;
+        if (draft is null || string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
+            string.IsNullOrEmpty(draft.Content)) return false;
         if (draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder)) return false;
         var actual = evidence.Record;
-        return actual.Id == mutation.EntityId &&
+        return string.Equals(actual.Id, mutation.EntityId, StringComparison.OrdinalIgnoreCase) &&
             actual.Title == draft.Title && actual.Content == draft.Content &&
             actual.FolderId == draft.FolderId && actual.IsFolder == draft.IsFolder &&
             actual.UserName == draft.UserName && actual.Url == draft.Url &&

@@ -93,3 +93,8 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Core now offers read-only InspectRecoveryAsync with persisted transaction hash (when valid) and no-replay guidance for Submitting/Uncertain entries.
 - /vault pending list now displays an explicit unresolved-submission warning, and state-aware labels replace misleading 'Not submitted' text for Submitting/Uncertain/Confirmed entries.
 - Publishing remains disabled in UI; evidence verifier is still deny-by-default. No builds/tests were run for these changes.
+
+
+## Latest batch: verifier consistency
+- Evidence verifier compares hexadecimal record IDs case-insensitively and refuses malformed empty or oversized titles and missing content.
+- Still requires trustworthy transaction-to-record linkage; DENY default persists. No builds/tests run.
