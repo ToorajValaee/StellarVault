@@ -75,3 +75,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Fixed the /vault Razor LOCAL PARENT button that contained an unescaped nested string literal inside @onclick and generated CS1525 / CS1026. It now calls OpenLocalParentFolder, which looks up the active local folder and navigates to its parent.
 - Removed unused VaultHome._showMnemonic field and assignment responsible for CS0414 warning.
 - Based on user-provided net10.0 browser-wasm build output; changes committed without running a build or tests in this environment. Re-run dotnet build and report any remaining errors.
+
+
+## 2026-10-28 batch: ledger selection and inventory safety
+- Manual coordinator rechecks network selection and connection before reservation and before publication. Cancellation after reservation is treated as uncertain, not retried.
+- Core preflight fails closed when remote inventory has missing or duplicate record IDs.
+- Remaining: transaction-to-record proof, cross-tab concurrency, full Sync UI, production security validation. Builds/tests not run for this commit.

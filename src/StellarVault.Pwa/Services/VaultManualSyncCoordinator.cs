@@ -47,12 +47,18 @@ public sealed class VaultManualSyncCoordinator(
 
         // Durable CAS reservation is the no-replay boundary. No automatic retries
         // are allowed after this point, even when publishing throws.
+        if (!ledger.IsConnected || networks.CredentialKey(accountId) != network)
+            throw new InvalidOperationException("Ledger selection changed; review again.");
+        ct.ThrowIfCancellationRequested();
         var reserved = await queue.ReservePreflightedSubmissionAsync(
             quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
         string? txHash = null;
         Exception? submissionError = null;
         try
         {
+            if (!ledger.IsConnected || networks.CredentialKey(accountId) != network)
+                throw new InvalidOperationException("Ledger selection changed after reservation.");
+            ct.ThrowIfCancellationRequested();
             txHash = await ledger.PublishWithIdAsync(reserved.EntityId, draft);
         }
         catch (Exception ex)

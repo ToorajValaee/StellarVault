@@ -208,6 +208,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
             item.EntityId.Length != 16 || !item.EntityId.All(Uri.IsHexDigit))
             throw new InvalidOperationException("Unsupported creation ID or mutation type.");
+        if (remoteRecords.Any(x => string.IsNullOrWhiteSpace(x.Id)) ||
+            remoteRecords.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase).Any(x => x.Count() > 1))
+            throw new InvalidDataException("Ledger record inventory is malformed or contains duplicate IDs.");
         if (remoteRecords.Any(x => x.Id.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Target ledger record ID already exists.");
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
