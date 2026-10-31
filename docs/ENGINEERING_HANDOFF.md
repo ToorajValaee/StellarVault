@@ -164,3 +164,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - The sync review UI now calls VaultManualSyncCoordinator.CanPublishApprovedCreateAsync rather than duplicating only a record collision check; it rechecks queue scope, remote records, cost ceiling and fresh quote.
 - Still no broadcast button, no production evidence verifier, and no user-facing transaction submission. Builds/tests not run.
 - Major next work: transaction-to-record provenance, file chunking/dependencies, end-to-end browser integration. A maturity estimate is not a validation score.
+
+
+## 2026-10-31: actual HD-v2 transaction provenance discovery
+- Inspected src/StellarVault.Pwa/LegacyLedger/StellarVaultStore.cs: AddAsync stages encrypted chunks followed by the final svh:<recordId> manifest ManageData operation; SubmitWritesAsync may broadcast multiple transactions and returns ONLY the last transaction hash. A last-hash receipt alone does not establish the entire record chain.
+- Introduced read-only HorizonVaultManifestInspector to query transactions/{hash}/operations (max 200), requiring a ManageData svh:<recordId> operation and matching transaction_hash; bounded reads, HTTPS endpoint pinning. Registered the inspector in PWA DI. This is a PROVENANCE COMPONENT ONLY, not a full independent proof: confirmation also needs transaction success, exact account/network binding, valid manifest/chunks, and independently decoded record data. Do not wire EvidenceBasedVaultLedgerMutationVerifier as enabled until these are complete.
+- Code has not been compiled or tested. Manual Sync UI and automatic confirmation remain disabled.
