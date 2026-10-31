@@ -129,3 +129,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - InspectAsync snapshots the exact expected transaction URL before SendAsync, and validates the effective HTTPS authority/path against that immutable target to detect redirection; rejects unexpected query parameters.
 - Rejects declared receipt bodies over 256KiB. Chunked content without Content-Length remains unbounded by this guard.
 - Still no transaction-to-record proof or UI Sync enablement. Build/tests not run.
+
+
+## 2026-10-31 bounded receipt parsing
+- Horizon inspector now reads response bodies with a hard 256 KiB cap, including chunked responses without Content-Length, and rejects invalid JSON instead of trusting unbounded ReadFromJsonAsync.
+- This remains receipt inspection only. No transaction-to-record provenance provider is wired; do not enable UI publishing based on it.
+- No builds or tests performed.

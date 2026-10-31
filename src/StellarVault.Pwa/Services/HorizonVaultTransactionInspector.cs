@@ -1,5 +1,5 @@
 using System.Net;
-using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using StellarVault.Core.Services;
 
@@ -40,7 +40,21 @@ public sealed class HorizonVaultTransactionInspector(HttpClient client)
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength is > 262144) return null;
-        var receipt = await response.Content.ReadFromJsonAsync<Receipt>(cancellationToken: ct);
+        const int maxReceiptBytes = 262144;
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var bounded = new MemoryStream();
+        var buffer = new byte[8192];
+        while (true)
+        {
+            var count = await stream.ReadAsync(buffer.AsMemory(), ct);
+            if (count == 0) break;
+            if (bounded.Length + count > maxReceiptBytes) return null;
+            bounded.Write(buffer, 0, count);
+        }
+        bounded.Position = 0;
+        Receipt? receipt;
+        try { receipt = await JsonSerializer.DeserializeAsync<Receipt>(bounded, cancellationToken: ct); }
+        catch (JsonException) { return null; }
         if (receipt is null || !receipt.Successful || receipt.Ledger <= 0 ||
             string.IsNullOrWhiteSpace(receipt.SourceAccount) ||
             !string.Equals(receipt.Hash, transactionHash, StringComparison.OrdinalIgnoreCase))
