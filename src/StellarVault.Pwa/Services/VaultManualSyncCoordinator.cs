@@ -23,19 +23,24 @@ public sealed class VaultManualSyncCoordinator(
         if (!ledger.IsConnected) return false;
         var network = networks.CredentialKey(accountId);
         if (quote.AccountId != accountId || quote.NetworkId != network) return false;
-        var review = await queue.PrepareReviewAsync(accountId, network, ct);
-        var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId);
-        if (mutation is null) return false;
-        VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, network,
-            DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
-        var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
-            ?? throw new InvalidDataException("Queued draft invalid.");
-        var remote = await ledger.ReadAsync();
-        await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
-        var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
-        return ledger.IsConnected && networks.CredentialKey(accountId) == network &&
-            cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
-            cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+        try
+        {
+            var review = await queue.PrepareReviewAsync(accountId, network, ct);
+            var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId);
+            if (mutation is null) return false;
+            VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, network,
+                DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload);
+            if (draft is null) return false;
+            var remote = await ledger.ReadAsync();
+            await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
+            var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
+            return ledger.IsConnected && networks.CredentialKey(accountId) == network &&
+                cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
+                cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
     }
 
     public async Task<VaultManualSyncOutcome> PublishApprovedCreateAsync(

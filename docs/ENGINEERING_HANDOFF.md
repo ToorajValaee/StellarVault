@@ -147,3 +147,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Added VaultManualSyncCoordinator.CanPublishApprovedCreateAsync for non-broadcast eligibility checks using current queue readiness, unchanged quote, current remote records, and latest fees/reserve ceiling.
 - This method does NOT reserve, sign, or broadcast. The existing submission coordinator still has its own final checks and the UI does not expose publishing.
 - No build/test run. Critical blockers remain verified transaction-to-record linkage, explicit production approval, and complete offline file/dependency flows.
+
+
+## 2026-10-31: fail-closed read-only eligibility
+- CanPublishApprovedCreateAsync now returns false for invalid/stale quote, malformed draft, failed ledger query, network changes or insufficient fee ceiling instead of allowing expected failures to bubble into a misleading publish-ready UI state.
+- Caller cancellation is still propagated. This method performs only reads and never authorizes or submits a transaction.
+- A separate final submission preflight remains mandatory. Live record-linked verification and publishing UI remain disabled. No builds/tests run.
