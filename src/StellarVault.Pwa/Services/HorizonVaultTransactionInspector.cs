@@ -25,19 +25,23 @@ public sealed class HorizonVaultTransactionInspector(HttpClient client)
             origin.Scheme != Uri.UriSchemeHttps || origin.UserInfo.Length != 0 ||
             !string.IsNullOrEmpty(origin.Query) || !string.IsNullOrEmpty(origin.Fragment))
             throw new ArgumentException("A valid HTTPS Horizon endpoint is required.", nameof(horizonUrl));
-        if (transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit))
+        if (string.IsNullOrWhiteSpace(transactionHash) || transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid Stellar transaction hash.", nameof(transactionHash));
         var baseUrl = horizonUrl.TrimEnd('/') + "/";
         using var request = new HttpRequestMessage(HttpMethod.Get,
             new Uri(new Uri(baseUrl), "transactions/" + transactionHash.ToLowerInvariant()));
         // Prevent an HTTP redirect from silently changing the configured evidence host.
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (response.RequestMessage?.RequestUri?.Host != origin.Host)
+        if (response.RequestMessage?.RequestUri is not Uri effective ||
+            effective.Scheme != Uri.UriSchemeHttps ||
+            effective.Authority != origin.Authority ||
+            effective.AbsolutePath != request.RequestUri!.AbsolutePath)
             return null;
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         var receipt = await response.Content.ReadFromJsonAsync<Receipt>(cancellationToken: ct);
         if (receipt is null || !receipt.Successful || receipt.Ledger <= 0 ||
+            string.IsNullOrWhiteSpace(receipt.SourceAccount) ||
             !string.Equals(receipt.Hash, transactionHash, StringComparison.OrdinalIgnoreCase))
             return null;
         return receipt;

@@ -117,3 +117,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Horizon inspector rejects responses whose effective request host differs from the configured Horizon host; an HTTP client can still redirect within a host, so this is not a complete redirect policy.
 - Independent transaction-to-record proof is NOT implemented, verifier is still DENY in PWA DI, and manual Sync UI stays disabled.
 - Source changes not compiled or tested; rerun dotnet build when validation is resumed.
+
+
+## 2026-10-31: Horizon receipt boundary
+- Horizon inspector now rejects missing hashes, non-HTTPS or changed-authority/path effective responses, and transaction receipts lacking source account.
+- This does NOT prove a record was written in the inspected transaction. The independent evidence provider and UI publication remain disabled.
+- No tests or build performed in this batch.
