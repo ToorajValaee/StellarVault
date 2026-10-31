@@ -98,6 +98,15 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (draft.Title.Length > 256 || draft.Tags?.Length > 24 ||
             draft.Tags?.Any(t => t.Length > 64) == true)
             throw new ArgumentException("Record title or tags exceed the supported limits.");
+        var store = RequireStore();
+        var snapshot = await store.ReadAsync();
+        if (snapshot.Warnings.Count != 0)
+            throw new InvalidDataException("Incomplete ledger read blocks publication.");
+        if (snapshot.Records.Any(x => string.Equals(x.Record.Id, recordId, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Target record ID already exists.");
+        if (!string.IsNullOrEmpty(draft.FolderId) &&
+            !snapshot.Records.Any(x => string.Equals(x.Record.Id, draft.FolderId, StringComparison.OrdinalIgnoreCase) && x.Record.Kind == "folder"))
+            throw new InvalidOperationException("Parent is missing or is not a folder.");
         var now = DateTimeOffset.UtcNow;
         var record = new VaultRecord
         {
@@ -113,7 +122,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             CreatedUtc = now,
             UpdatedUtc = now
         };
-        string hash = await RequireStore().AddAsync(record);
+        string hash = await store.AddAsync(record);
         if (string.IsNullOrWhiteSpace(hash))
             throw new InvalidOperationException("Stellar did not return a confirmed transaction hash.");
         return hash;

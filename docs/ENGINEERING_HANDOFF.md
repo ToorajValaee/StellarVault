@@ -153,3 +153,8 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - CanPublishApprovedCreateAsync now returns false for invalid/stale quote, malformed draft, failed ledger query, network changes or insufficient fee ceiling instead of allowing expected failures to bubble into a misleading publish-ready UI state.
 - Caller cancellation is still propagated. This method performs only reads and never authorizes or submits a transaction.
 - A separate final submission preflight remains mandatory. Live record-linked verification and publishing UI remain disabled. No builds/tests run.
+
+
+## 2026-10-31: ledger writer rechecks before Create
+- BrowserStellarLedgerRecords.PublishWithIdAsync now reads current ledger state before creating, blocks on recovery warnings or occupied IDs, and validates any parent exists and is a folder. This also protects direct callers outside the offline Sync coordinator.
+- This remains a best-effort time-of-check, not a ledger-atomic uniqueness guarantee. No live evidence provider, no UI Sync enablement, no build/tests run.
