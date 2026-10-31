@@ -135,3 +135,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Horizon inspector now reads response bodies with a hard 256 KiB cap, including chunked responses without Content-Length, and rejects invalid JSON instead of trusting unbounded ReadFromJsonAsync.
 - This remains receipt inspection only. No transaction-to-record provenance provider is wired; do not enable UI publishing based on it.
 - No builds or tests performed.
+
+
+## 2026-10-31: receipt content policy and production gap summary
+- Horizon receipt inspection now rejects mismatched effective URL fragments and unexpected declared non-JSON media types. The bounded 256 KiB reader remains in place.
+- CURRENT RELEASE BLOCKERS: no authenticated transaction-to-record linkage; deny-by-default verifier; manual publishing UI not enabled; full offline folder/file sync incomplete; multi-client concurrency and conflict handling incomplete; cryptography, PWA, builds/tests and deployment security have not been validated.
+- This commit is NOT a production readiness claim. No build or tests run.

@@ -35,11 +35,15 @@ public sealed class HorizonVaultTransactionInspector(HttpClient client)
         if (response.RequestMessage?.RequestUri is not Uri effective ||
             effective.Scheme != Uri.UriSchemeHttps ||
             !string.Equals(effective.Authority, expectedUri.Authority, StringComparison.OrdinalIgnoreCase) ||
-            effective.AbsolutePath != expectedUri.AbsolutePath || effective.Query.Length != 0)
+            effective.AbsolutePath != expectedUri.AbsolutePath ||
+            effective.Query.Length != 0 || effective.Fragment.Length != 0)
             return null;
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength is > 262144) return null;
+        if (response.Content.Headers.ContentType?.MediaType is string mediaType &&
+            !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) &&
+            !mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase)) return null;
         const int maxReceiptBytes = 262144;
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var bounded = new MemoryStream();
