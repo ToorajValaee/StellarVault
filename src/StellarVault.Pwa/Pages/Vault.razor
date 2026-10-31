@@ -9,6 +9,7 @@
 @inject VaultSessionWorkflow Workflow
 @inject VaultDeviceRetentionGate Retention
 @inject VaultPendingMutationQueue PendingQueue
+@inject VaultManualSyncCoordinator ManualSync
 @inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
 
@@ -81,7 +82,7 @@ else
                                 <p>Network scope: @_reviewedQuote.NetworkId</p>
                                 <label><input type="checkbox" @bind="_approvalAcknowledged" /> I understand this is only a review; it does not publish data.</label>
                                 <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged)" @onclick="ConfirmPreviewOnly">ACKNOWLEDGE REVIEW ONLY</button>
-                                <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged || _pendingLoading || !Ledger.IsConnected)" @onclick="CheckApprovedPreflightAsync">CHECK REMOTE ID COLLISION</button>
+                                <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged || _pendingLoading || !Ledger.IsConnected)" @onclick="CheckApprovedPreflightAsync">CHECK COMPLETE ELIGIBILITY</button>
                             </section>
                         }
                     </div>
@@ -728,11 +729,8 @@ else
         _approvalStatus = null;
         try
         {
-            var records = await Ledger.ReadAsync();
-            var result = await PendingQueue.PreflightCreateAsync(_reviewedQuote, account,
-                Networks.CredentialKey(account), records,
-                DateTimeOffset.UtcNow);
-            _approvalStatus = result.Explanation + " No transaction has been reserved or submitted.";
+            var eligible = await ManualSync.CanPublishApprovedCreateAsync(_reviewedQuote, account);
+            _approvalStatus = eligible ? "Current approval, ledger and costs pass the read-only check. Publishing stays disabled." : "Eligibility failed. Review network, draft, remote records and cost limits again.";
         }
         catch (Exception ex)
         {

@@ -158,3 +158,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 ## 2026-10-31: ledger writer rechecks before Create
 - BrowserStellarLedgerRecords.PublishWithIdAsync now reads current ledger state before creating, blocks on recovery warnings or occupied IDs, and validates any parent exists and is a folder. This also protects direct callers outside the offline Sync coordinator.
 - This remains a best-effort time-of-check, not a ledger-atomic uniqueness guarantee. No live evidence provider, no UI Sync enablement, no build/tests run.
+
+
+## 2026-10-31: /vault read-only sync eligibility integration
+- The sync review UI now calls VaultManualSyncCoordinator.CanPublishApprovedCreateAsync rather than duplicating only a record collision check; it rechecks queue scope, remote records, cost ceiling and fresh quote.
+- Still no broadcast button, no production evidence verifier, and no user-facing transaction submission. Builds/tests not run.
+- Major next work: transaction-to-record provenance, file chunking/dependencies, end-to-end browser integration. A maturity estimate is not a validation score.
