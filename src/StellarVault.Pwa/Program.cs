@@ -27,6 +27,7 @@ builder.Services.AddScoped<VaultPendingMutationQueue>();
 builder.Services.AddScoped<VaultManualSyncCoordinator>();
 builder.Services.AddScoped<HorizonVaultTransactionInspector>();
 builder.Services.AddScoped<HorizonVaultManifestInspector>();
+builder.Services.AddScoped<HorizonVaultPublicationDiagnostic>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
 builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IStellarUploadCheckpointStore, BrowserStellarUploadCheckpointStore>();

@@ -170,3 +170,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Inspected src/StellarVault.Pwa/LegacyLedger/StellarVaultStore.cs: AddAsync stages encrypted chunks followed by the final svh:<recordId> manifest ManageData operation; SubmitWritesAsync may broadcast multiple transactions and returns ONLY the last transaction hash. A last-hash receipt alone does not establish the entire record chain.
 - Introduced read-only HorizonVaultManifestInspector to query transactions/{hash}/operations (max 200), requiring a ManageData svh:<recordId> operation and matching transaction_hash; bounded reads, HTTPS endpoint pinning. Registered the inspector in PWA DI. This is a PROVENANCE COMPONENT ONLY, not a full independent proof: confirmation also needs transaction success, exact account/network binding, valid manifest/chunks, and independently decoded record data. Do not wire EvidenceBasedVaultLedgerMutationVerifier as enabled until these are complete.
 - Code has not been compiled or tested. Manual Sync UI and automatic confirmation remain disabled.
+
+
+## 2026-10-31: combined read-only Horizon diagnostics
+- Added HorizonVaultPublicationDiagnostic to combine successful receipt and matching manifest operation evidence; registered in PWA DI.
+- This is NOT a complete cryptographic proof of record contents or transaction-to-record linkage. It cannot confirm a queue mutation. The default verifier stays disabled and the publishing UI stays disabled.
+- No build or tests run. Next: verify chunk history, network binding, and record content before enabling confirmation.
