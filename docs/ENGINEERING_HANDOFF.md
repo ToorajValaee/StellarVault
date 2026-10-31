@@ -141,3 +141,9 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Horizon receipt inspection now rejects mismatched effective URL fragments and unexpected declared non-JSON media types. The bounded 256 KiB reader remains in place.
 - CURRENT RELEASE BLOCKERS: no authenticated transaction-to-record linkage; deny-by-default verifier; manual publishing UI not enabled; full offline folder/file sync incomplete; multi-client concurrency and conflict handling incomplete; cryptography, PWA, builds/tests and deployment security have not been validated.
 - This commit is NOT a production readiness claim. No build or tests run.
+
+
+## 2026-10-31: read-only publication eligibility check
+- Added VaultManualSyncCoordinator.CanPublishApprovedCreateAsync for non-broadcast eligibility checks using current queue readiness, unchanged quote, current remote records, and latest fees/reserve ceiling.
+- This method does NOT reserve, sign, or broadcast. The existing submission coordinator still has its own final checks and the UI does not expose publishing.
+- No build/test run. Critical blockers remain verified transaction-to-record linkage, explicit production approval, and complete offline file/dependency flows.

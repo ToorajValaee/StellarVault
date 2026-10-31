@@ -15,6 +15,29 @@ public sealed class VaultManualSyncCoordinator(
     VaultNetworkSelection networks)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
+    public async Task<bool> CanPublishApprovedCreateAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(quote);
+        retention.RequireLocalPersistence();
+        if (!ledger.IsConnected) return false;
+        var network = networks.CredentialKey(accountId);
+        if (quote.AccountId != accountId || quote.NetworkId != network) return false;
+        var review = await queue.PrepareReviewAsync(accountId, network, ct);
+        var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId);
+        if (mutation is null) return false;
+        VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, network,
+            DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+        var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
+            ?? throw new InvalidDataException("Queued draft invalid.");
+        var remote = await ledger.ReadAsync();
+        await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
+        var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
+        return ledger.IsConnected && networks.CredentialKey(accountId) == network &&
+            cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
+            cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+    }
+
     public async Task<VaultManualSyncOutcome> PublishApprovedCreateAsync(
         VaultSyncApprovalSnapshot quote, string accountId, bool explicitlyApproved,
         CancellationToken ct = default)
