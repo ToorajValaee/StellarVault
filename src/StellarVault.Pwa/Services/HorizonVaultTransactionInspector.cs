@@ -28,17 +28,18 @@ public sealed class HorizonVaultTransactionInspector(HttpClient client)
         if (string.IsNullOrWhiteSpace(transactionHash) || transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid Stellar transaction hash.", nameof(transactionHash));
         var baseUrl = horizonUrl.TrimEnd('/') + "/";
-        using var request = new HttpRequestMessage(HttpMethod.Get,
-            new Uri(new Uri(baseUrl), "transactions/" + transactionHash.ToLowerInvariant()));
+        var expectedUri = new Uri(new Uri(baseUrl), "transactions/" + transactionHash.ToLowerInvariant());
+        using var request = new HttpRequestMessage(HttpMethod.Get, expectedUri);
         // Prevent an HTTP redirect from silently changing the configured evidence host.
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (response.RequestMessage?.RequestUri is not Uri effective ||
             effective.Scheme != Uri.UriSchemeHttps ||
-            effective.Authority != origin.Authority ||
-            effective.AbsolutePath != request.RequestUri!.AbsolutePath)
+            !string.Equals(effective.Authority, expectedUri.Authority, StringComparison.OrdinalIgnoreCase) ||
+            effective.AbsolutePath != expectedUri.AbsolutePath || effective.Query.Length != 0)
             return null;
         if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
+        if (response.Content.Headers.ContentLength is > 262144) return null;
         var receipt = await response.Content.ReadFromJsonAsync<Receipt>(cancellationToken: ct);
         if (receipt is null || !receipt.Successful || receipt.Ledger <= 0 ||
             string.IsNullOrWhiteSpace(receipt.SourceAccount) ||
