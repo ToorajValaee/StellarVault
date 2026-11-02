@@ -176,3 +176,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Added HorizonVaultPublicationDiagnostic to combine successful receipt and matching manifest operation evidence; registered in PWA DI.
 - This is NOT a complete cryptographic proof of record contents or transaction-to-record linkage. It cannot confirm a queue mutation. The default verifier stays disabled and the publishing UI stays disabled.
 - No build or tests run. Next: verify chunk history, network binding, and record content before enabling confirmation.
+
+
+## 2026-11-02: AI repository guidance and fail-closed Horizon diagnostic
+- Added root AGENTS.md as an AI-readable repository contract linking this handoff, architecture, local persistence opt-in, no-blind-retry, and the unverified HD-v2 transaction provenance limitation.
+- Hardened HorizonVaultPublicationDiagnostic: validate inputs before querying, propagate caller cancellation, return an unverified finding for invalid/unavailable/malformed provider responses rather than letting an exception be interpreted as successful evidence.
+- This diagnostic STILL does not prove the decrypted record, chunks, account/network or a complete publication; deny-by-default confirmation and UI publication remain unchanged.
+- No compilation or tests have been run; production readiness is not established.
