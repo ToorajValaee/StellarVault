@@ -128,3 +128,11 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - MAUI registers the shared queue, consent gate, deny confirmation verifier and shared coordinator. Native ownership verification and hybrid UI remain gated.
 - Do not confuse this Core refactor with completed hybrid UI or native release readiness. Direct on-chain behavior is left unchanged.
 - Builds/tests remain deferred by user request. Verify both hosts and queue concurrency before release.
+
+## 2026-11-03: shared hybrid review and fee-preview vertical slice
+
+- `VaultHybridSyncReviewService` in Core now owns read-only queued-create review/fee estimation: consent and selected account/network checks, full queue/dependency review, remote record-ID inventory, shared create policy, full `PreflightCreateAsync`, fresh per-mutation fee estimate, and quote snapshot creation. Unsupported update/delete/file mutations receive explicit non-publishable explanations.
+- The PWA's old `EstimateReadyDraftsAsync` per-record JSON/dependency/estimate loop was removed; its existing page now calls the Core service and maps the result into the existing review UI. Existing direct on-chain workflows remain unchanged; no queued publication is enabled.
+- New `StellarVault.UI/Components/VaultHybridSyncReview.razor` provides a reusable read-only native queue review and fee-preview panel. Native workspace renders it; it refuses queue access without an unlocked local session and explicit retention consent. MAUI and PWA both register the same Core review service.
+- Native `DenyVaultAccountAuthorizer` remains, so its panel correctly reports local-unlock unavailable; this is a shared UI preparation step, NOT completed native hybrid consent/unlock or publishing. Keep `DenyVaultLedgerMutationVerifier` and disabled queued broadcasting.
+- No builds/tests run by prior user preference; check Razor compilation, Core service provider resolution, queue/mock ledger review fixtures, concurrent state changes, and both hosts before release.

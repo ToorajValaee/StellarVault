@@ -292,3 +292,13 @@ Added FileSystemVaultPendingMutationStore to Core, implementing IVaultPendingMut
 MAUI now registers the local-retention consent gate, native encrypted queue adapter, shared pending queue, shared coordinator and deny-by-default verification. Native ownership authorization remains denied, so these registrations do not unlock a complete hybrid mode or expose paid transactions.
 
 Remaining: move shared review and fee/approval orchestration to Core/UI, complete offline file/folder Sync, native authorization, tests and release gates. Existing direct on-chain writer was deliberately left alone. No builds or tests were run at the user's request.
+
+## 2026-11-03: Core hybrid review + PWA/native shared UI integration
+
+**Delivered source changes**
+- New `VaultHybridSyncReviewService` in Core. It provides side-effect-free review of pending creates/folders: checks retention consent, account/network namespace, dependencies and blocked/conflict/uncertain states, reads one ledger inventory, rejects duplicate record IDs and missing parents, reuses `VaultQueuedCreatePolicy` and `VaultPendingMutationQueue.PreflightCreateAsync`, obtains fee/reserve estimates from `IStellarLedgerRecords` and produces short-lived `VaultSyncApprovalSnapshot`s. Update/delete/file kinds are explicitly not estimated.
+- Removed the PWA page's duplicate fee and dependency-review implementation. `EstimateReadyDraftsAsync` now maps the Core service report to the existing informational review UI. It does not enable publish or queue confirmation.
+- Added reusable `StellarVault.UI/Components/VaultHybridSyncReview.razor`, used by MAUI's NativeVaultWorkspace. The shared panel shows ready/blocked/uncertain/conflict counts and per-draft explanations and estimates, requires unlocked local device vault plus retention consent, and contains no submit or mutate actions.
+- Registered `VaultHybridSyncReviewService` scoped in both PWA and MAUI. Native still retains a deny-by-default owner authorizer, so the actual native hybrid session remains inaccessible until independently authorized.
+
+**Remaining vertical slice**: native local-vault authorization and explicit storage-mode consent, shared offline-create/edit workflow, reviewed queue submission UX, durable transaction attribution/confirmation, cross-platform file chunk queue and conflict resolution. Direct on-chain writer untouched. Test/compile not run at the user's request.

@@ -10,6 +10,7 @@
 @inject VaultDeviceRetentionGate Retention
 @inject VaultPendingMutationQueue PendingQueue
 @inject VaultManualSyncCoordinator ManualSync
+@inject VaultHybridSyncReviewService HybridReview
 @inject VaultUnrecordedSubmissionDiagnostic UnknownHashInvestigation
 @inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
@@ -669,63 +670,24 @@ else
 
     private async Task EstimateReadyDraftsAsync()
     {
-        if (_pendingLoading || !Ledger.IsConnected || _syncReview is null ||
-            !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) return;
+        if (_pendingLoading || !Retention.AllowsLocalPersistence ||
+            !Sessions.IsUnlocked || Sessions.ActiveAccountId is not string account)
+            return;
         _pendingLoading = true;
         _syncEstimates = [];
         _syncEstimateNote = null;
         ClearSyncApproval();
         try
         {
-            foreach (var mutation in _syncReview.Ready)
-            {
-                if (mutation.Kind is not (VaultMutationKind.CreateRecord or
-                    VaultMutationKind.CreateFolder or VaultMutationKind.UpdateRecord or
-                    VaultMutationKind.UpdateFolder))
-                {
-                    _syncEstimates.Add(new PendingEstimate(PendingTitle(mutation),
-                        "Not estimated: this mutation needs a separate protocol-aware review."));
-                    continue;
-                }
-                try
-                {
-                    var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
-                        ?? throw new InvalidDataException("Invalid local draft payload.");
-                    // Pending create IDs do not correspond to ledger IDs. Updates must
-                    // be reconciled against the current remote record before costing.
-                    if (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
-                    {
-                        _syncEstimates.Add(new PendingEstimate(draft.Title,
-                            "Not estimated: remote version reconciliation is required first."));
-                        continue;
-                    }
-                    if (!string.IsNullOrEmpty(draft.FolderId) &&
-                        PendingLocalFolders.Any(x => x.EntityId == draft.FolderId))
-                    {
-                        _syncEstimates.Add(new PendingEstimate(draft.Title,
-                            "Not estimated: parent folder has not been published."));
-                        continue;
-                    }
-                    var source = await PendingQueue.ReviewAllAsync(mutation.AccountId, mutation.NetworkId);
-                    var problems = VaultQueuedCreatePolicy.Problems(mutation, source);
-                    if (problems.Length > 0)
-                    {
-                        _syncEstimates.Add(new PendingEstimate(draft.Title,
-                            "Not estimated: " + string.Join(", ", problems)));
-                        continue;
-                    }
-                    var fee = await Ledger.EstimateAsync(draft);
-                    var snapshot = VaultSyncApprovalGuard.Capture(mutation, fee.NetworkFeeXlm, fee.PeakReserveXlm, DateTimeOffset.UtcNow);
-                    _syncEstimates.Add(new PendingEstimate(draft.Title,
-                        $"Indicative: {fee.Transactions} transaction(s), {fee.Operations} operations, fee {fee.NetworkFeeXlm} XLM, peak reserve {fee.PeakReserveXlm} XLM.", snapshot));
-                }
-                catch (Exception ex)
-                {
-                    _syncEstimates.Add(new PendingEstimate(PendingTitle(mutation),
-                        "Estimate unavailable: " + ex.Message));
-                }
-            }
-            _syncEstimateNote = "These estimates are snapshots, not approvals. Fees and reserves may change. Manual synchronization remains disabled.";
+            var report = await HybridReview.ReviewAsync(account, estimateFees: true);
+            _syncReview = report.Queue;
+            _syncEstimates = report.Estimates.Select(x =>
+                new PendingEstimate(x.Title, x.Explanation, x.Quote)).ToList();
+            _syncEstimateNote = "Estimates are read-only and expire. Manual synchronization remains disabled.";
+        }
+        catch (Exception)
+        {
+            _syncEstimateNote = "Shared hybrid review unavailable. Reconnect and refresh the queue; no transaction was sent.";
         }
         finally { _pendingLoading = false; }
     }

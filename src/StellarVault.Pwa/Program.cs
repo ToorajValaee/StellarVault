@@ -26,6 +26,7 @@ builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMuta
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier>();
 builder.Services.AddScoped<VaultPendingMutationQueue>();
 builder.Services.AddScoped<VaultManualSyncCoordinator>();
+builder.Services.AddScoped<VaultHybridSyncReviewService>();
 builder.Services.AddScoped<HorizonVaultTransactionInspector>();
 builder.Services.AddScoped<HorizonVaultManifestInspector>();
 builder.Services.AddScoped<HorizonVaultCurrentChunkInspector>();

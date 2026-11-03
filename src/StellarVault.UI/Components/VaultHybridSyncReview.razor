@@ -1,0 +1,91 @@
+@using StellarVault.Core.Services
+@inject VaultHybridSyncReviewService HybridReview
+@inject VaultSessionManager Sessions
+@inject VaultDeviceRetentionGate Retention
+@inject IStellarLedgerRecords Ledger
+
+<section class="terminal-panel" aria-label="Hybrid encrypted device queue">
+    <div class="panel-heading">
+        <div><div class="panel-kicker">ENCRYPTED DEVICE VAULT // HYBRID SYNC</div>
+        <h3>LOCAL CHANGES — READ-ONLY REVIEW</h3></div>
+    </div>
+    <p>Local drafts are not on Stellar. Sync requires a separate explicit transaction approval.
+       A failed or unknown submission must never be retried automatically.</p>
+    @if (!Retention.AllowsLocalPersistence)
+    {
+        <p role="status">Encrypted device retention is not enabled for this session. No queue data will be opened.</p>
+    }
+    else if (!Sessions.IsUnlocked || Sessions.ActiveAccountId is not string)
+    {
+        <p role="status">Unlock the encrypted local vault before reviewing device-only changes.</p>
+    }
+    else
+    {
+        <button type="button" class="pixel-button compact" disabled="@_busy"
+                @onclick="ReviewAsync">REVIEW LOCAL CHANGES</button>
+        <button type="button" class="pixel-button compact" disabled="@(_busy || !Ledger.IsConnected)"
+                @onclick="EstimateAsync">ESTIMATE SYNC COSTS — NO BROADCAST</button>
+        @if (_report is not null)
+        {
+            <p role="status">Ready: @_report.Queue.Ready.Count · Blocked: @_report.Queue.Blocked.Count ·
+                Uncertain: @_report.Queue.NeedsReconciliation · Conflicts: @_report.Queue.Conflicts</p>
+            @if (_report.Queue.NeedsReconciliation > 0)
+            {
+                <p class="terminal-alert warning" role="alert">Unresolved submission detected. Do not retry or publish additional drafts before investigating the ledger.</p>
+            }
+            @foreach (var item in _report.Estimates)
+            {
+                <div class="data-field">
+                    <strong>@item.Title</strong>
+                    <p>@item.Kind — @item.Explanation</p>
+                    @if (item.Quote is not null)
+                    {
+                        <small>Quote is informative only and expires after 5 minutes. No submission has been authorized.</small>
+                    }
+                </div>
+            }
+            @foreach (var blocked in _report.Queue.Blocked)
+            {
+                <p class="terminal-alert warning" role="status">Blocked mutation @blocked.MutationId:
+                    @string.Join(", ", blocked.MissingDependencies.Concat(blocked.WaitingDependencies))</p>
+            }
+        }
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p role="alert" class="terminal-alert warning">@_error</p>
+        }
+    }
+</section>
+
+@code {
+    private VaultHybridSyncReviewService.Report? _report;
+    private string? _error;
+    private bool _busy;
+
+    private Task ReviewAsync() => LoadAsync(false);
+    private Task EstimateAsync() => LoadAsync(true);
+
+    private async Task LoadAsync(bool costs)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence ||
+            !Sessions.IsUnlocked || Sessions.ActiveAccountId is not string account)
+            return;
+        _busy = true;
+        _error = null;
+        _report = null;
+        try
+        {
+            _report = await HybridReview.ReviewAsync(account, costs);
+            if (!Sessions.IsUnlocked || Sessions.ActiveAccountId != account)
+            {
+                _report = null;
+                _error = "Local vault session changed during review. Unlock and review again.";
+            }
+        }
+        catch (Exception)
+        {
+            _error = "Hybrid queue review is unavailable. No transaction was sent.";
+        }
+        finally { _busy = false; }
+    }
+}
