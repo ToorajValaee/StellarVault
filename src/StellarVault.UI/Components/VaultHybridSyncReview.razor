@@ -40,11 +40,14 @@
                     <div class="data-field">
                         <p>Mutation <code>@pending.Id</code> · @pending.Kind · @pending.State</p>
                         @if (pending.TransactionHash is { Length: 64 } recordedHash &&
-                            pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
+                            pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
                         {
                             <p>Recorded hash: <code>@recordedHash</code></p>
                             <button type="button" class="pixel-button compact"
-                                    disabled="@(_busy || !Ledger.IsConnected)"
+                                    disabled="@(_busy || !Ledger.IsConnected ||
+                                        (pending.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder &&
+                                         Networks.Network != "testnet"))"
                                     @onclick="() => VerifyRecordedHashAsync(pending)">
                                 VERIFY RECORDED TRANSACTION — NO RETRY
                             </button>
@@ -55,7 +58,7 @@
                         }
                         else
                         {
-                            <p role="alert">Update/delete transaction recorded. Historical confirmation for this mutation kind is not available. Do not retry.</p>
+                            <p role="alert">Deletion transaction recorded. Historical tombstone confirmation is not available. Do not retry.</p>
                         }
                     </div>
                 }
@@ -100,8 +103,9 @@
                         Submitting may spend real XLM. This action writes the local draft
                         to Stellar. Even if a transaction hash is returned, the queue will
                         remain Uncertain until independently verified reconciliation.
-                        Update/delete historical confirmation is not yet available, so
-                        those operations will remain quarantined after submission.
+                        Update historical confirmation now requires the exact manifest-commit
+                        hash; deletion remains quarantined until historical tombstone
+                        verification is implemented.
                         Never repeat an interrupted submission.
                     </p>
                     <label class="sv-biometric-choice">
@@ -164,7 +168,9 @@
         if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
             Sessions.ActiveAccountId != mutation.AccountId ||
             mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
-            mutation.TransactionHash is not { Length: 64 })
+            mutation.TransactionHash is not { Length: 64 } ||
+            (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder &&
+             Networks.Network != "testnet"))
             return;
         CancelApproval();
         _busy = true;

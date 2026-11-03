@@ -63,7 +63,8 @@ public sealed record VaultReadResult(
 
 public sealed record VaultMutationResult(
     string TransactionHash,
-    string? Warning = null);
+    string? Warning = null,
+    string? CommitTransactionHash = null);
 
 public sealed record VaultCostEstimate(
     int OperationCount,

@@ -56,3 +56,7 @@ A shared Core service and Razor component now stage offline encrypted updates/de
 ## Testnet-only queued update/delete Sync — 2026-11-03
 
 Shared Core fee review and manual approval now support version-pinned remote update/delete mutations. Original record fingerprint, fresh remote inventory, parent constraints and cost limits are rechecked before durable reservation; a single attempted writer call is quarantined `Uncertain` pending a future transaction-specific proof. Because the underlying Stellar writer does not support atomic on-chain version preconditions, Public Mainnet and custom-network queued update/delete submission remain disabled in Core and UI. Existing direct on-chain CRUD remains unchanged. Creation fee-estimation routing is corrected to use create rather than update estimates. PWA/MAUI compile and Testnet validation remain outstanding.
+
+## Update proof, primary receipt identity (2026-11-03)
+
+The hybrid queue now records the manifest-commit hash for updates and manifest-delete hash for deletions, instead of later cleanup receipts. Legacy direct on-chain return hashes remain backward compatible. The shared Core evidence verifier and PWA/MAUI Horizon history adapter now permit recorded-hash UPDATE confirmation on Testnet after full decrypted historical record-to-transaction proof. This does not enforce predecessor-version atomicity. DELETE remains Uncertain because tombstone historical proof is absent; queued Mainnet/custom remote UPDATE/DELETE publishing stays blocked.

@@ -376,7 +376,8 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             UpdatedUtc = DateTimeOffset.UtcNow
         };
         var result = await RequireStore().UpdateAsync(current, updated);
-        return LedgerMutationResult.RequireConfirmed(result.TransactionHash, result.Warning);
+        return LedgerMutationResult.RequireConfirmed(
+            result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }
 
     public async Task<LedgerMutationResult> DeleteAsync(string id)
@@ -389,7 +390,8 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (current.Record.IsFolder && snapshot.Records.Any(x => x.Record.FolderId == id))
             throw new InvalidOperationException("Move or delete the folder's contents before deleting the folder.");
         var result = await RequireStore().DeleteAsync(current);
-        return LedgerMutationResult.RequireConfirmed(result.TransactionHash, result.Warning);
+        return LedgerMutationResult.RequireConfirmed(
+            result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }
 
     public async Task DisconnectAsync()

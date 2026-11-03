@@ -483,7 +483,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
                     $"A later edit or delete can retry cleanup. Details: {ex.Message}";
             }
 
-            return new VaultMutationResult(lastHash, cleanupWarning);
+            return new VaultMutationResult(lastHash, cleanupWarning, commitHash);
         }
             finally
             {
@@ -510,7 +510,10 @@ public sealed class StellarVaultStore : IAsyncDisposable
             .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
             .ToArray();
 
+        // This receipt deletes the manifest and is authoritative for the
+        // record's removal. Later orphan-chunk cleanup has a DIFFERENT hash.
         var lastHash = await SubmitWritesAsync(headerDeletes);
+        var manifestDeleteHash = lastHash;
         string? cleanupWarning = null;
 
         try
@@ -535,7 +538,7 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 : $"{cleanupWarning} {cleanupFailure}";
         }
 
-        return new VaultMutationResult(lastHash, cleanupWarning);
+        return new VaultMutationResult(lastHash, cleanupWarning, manifestDeleteHash);
     }
 
     public async ValueTask DisposeAsync()

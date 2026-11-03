@@ -28,13 +28,19 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
         string transactionHash, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(transactionHash) ||
-            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
             transactionHash.Length != 64 || !transactionHash.All(Uri.IsHexDigit) ||
             mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))
             return false;
-        if (mutation.TransactionHash is not null &&
-            !string.Equals(mutation.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+        // Never confirm using a guessed or externally discovered candidate hash.
+        if (mutation.TransactionHash is not { Length: 64 } stored ||
+            !string.Equals(stored, transactionHash, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder &&
+            (mutation.ExpectedRemoteVersion is not { Length: 64 } baseline ||
+             !baseline.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')))
             return false;
         VaultLedgerEvidence? evidence;
         try { evidence = await provider.InspectAsync(mutation, transactionHash, ct); }
@@ -52,7 +58,7 @@ public sealed class EvidenceBasedVaultLedgerMutationVerifier(IVaultLedgerEvidenc
         catch (JsonException) { return false; }
         if (draft is null || string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
             string.IsNullOrEmpty(draft.Content)) return false;
-        if (draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder) ||
+        if (draft.IsFolder != (mutation.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder) ||
             draft.Tags is { Length: > 24 } ||
             draft.Tags?.Any(tag => tag is null || tag.Length > 64) == true)
             return false;

@@ -25,7 +25,8 @@ public sealed class HorizonVaultQueuedMutationEvidenceProvider(
         CancellationToken ct = default)
     {
         if (mutation is null ||
-            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
             mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             mutation.TransactionHash is not { Length: 64 } stored ||
             !stored.All(Uri.IsHexDigit) ||
@@ -63,6 +64,11 @@ public sealed class HorizonVaultQueuedMutationEvidenceProvider(
                 uri.AbsolutePath != "/")
                 return null;
 
+            // Queued remote updates are experimental Testnet-only. A historical
+            // update match proves its final value was written, but not that
+            // the pinned predecessor was atomically checked by Stellar.
+            if (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder &&
+                selected != "testnet") return null;
             var root = await ledger.InspectAccountInfoAsync();
             if (root.RootAccountId != mutation.AccountId) return null;
             var manifest = await manifests.InspectManifestAsync(
@@ -77,7 +83,7 @@ public sealed class HorizonVaultQueuedMutationEvidenceProvider(
             catch (JsonException) { return null; }
             if (draft is null || string.IsNullOrEmpty(draft.Content) ||
                 string.IsNullOrWhiteSpace(draft.Title) ||
-                draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder))
+                draft.IsFolder != (mutation.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder))
                 return null;
 
             var historical = await diagnostic.InspectHistoricalRecordAsync(

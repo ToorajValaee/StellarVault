@@ -260,7 +260,11 @@ public sealed class VaultManualSyncCoordinator(
                         ?? throw new InvalidDataException("Reserved update draft was invalid.");
                     outcome = await ledger.UpdateAsync(reserved.EntityId, draft);
                 }
-                hash = outcome.TransactionHash;
+                // The mutation's identity is the manifest WRITE for updates
+                // or manifest DELETE for deletions, not a later cleanup tx.
+                // If the writer did not report the primary receipt, quarantine
+                // without assigning an unverifiable cleanup hash.
+                hash = outcome.CommitTransactionHash;
             }
             catch (Exception ex) { submissionError = ex; }
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
@@ -273,7 +277,9 @@ public sealed class VaultManualSyncCoordinator(
             }
             return new VaultManualSyncOutcome(reserved.Id, hash, VaultSyncState.Uncertain,
                 submissionError is null
-                    ? "Remote update/delete submitted. Historical update/delete confirmation is not yet available. Do not retry."
+                    ? reserved.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder
+                        ? "Update manifest submitted. Inspect the recorded commit hash with authenticated historical verification; do not retry."
+                        : "Deletion attempted. Tombstone confirmation is unavailable; do not retry."
                     : "Remote update/delete outcome unknown. The mutation is quarantined; do not retry.");
         }
         finally { submissionGate.Release(); }

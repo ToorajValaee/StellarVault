@@ -25,14 +25,18 @@ public sealed record LedgerCostPreview(int Operations, int Transactions, decimal
 public sealed record LedgerFundingStatus(string RootAccountId, string BalanceXlm, string SpendableXlm, string RequiredAdditionalXlm, bool CanInitialize);
 /// <summary>Ledger mutations must not be presented as confirmed without a transaction receipt.
 /// A receipt is necessary but the transport must also verify successful ledger inclusion.</summary>
-public sealed record LedgerMutationResult(string TransactionHash, string? Warning = null)
+public sealed record LedgerMutationResult(
+    string TransactionHash, string? Warning = null,
+    string? CommitTransactionHash = null)
 {
-    public static LedgerMutationResult RequireConfirmed(string? transactionHash, string? warning = null)
+    public static LedgerMutationResult RequireConfirmed(
+        string? transactionHash, string? warning = null,
+        string? commitTransactionHash = null)
     {
         if (string.IsNullOrWhiteSpace(transactionHash))
             throw new InvalidOperationException(
                 "Stellar mutation returned no transaction hash. Reconcile ledger state before retrying.");
-        return new LedgerMutationResult(transactionHash, warning);
+        return new LedgerMutationResult(transactionHash, warning, commitTransactionHash);
     }
 }
 public sealed record LedgerRecordItem(string Id, string Title, string Content, string? FolderId = null, string[]? Tags = null, bool IsFolder = false, string? UserName = null, string? Url = null, string? Notes = null);
