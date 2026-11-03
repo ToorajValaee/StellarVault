@@ -18,11 +18,15 @@ window.stellarVault = (() => {
     }
 
     function normalizeHorizonUrl(value) {
-        const url = String(value || '').trim().replace(/\/+$/, '');
-        if (!url) {
-            throw new Error('Horizon URL is required.');
-        }
-        return url;
+        // Treat Horizon as an explicit network trust boundary. A URL carrying
+        // credentials, query, fragments or paths must never configure signing.
+        const parsed = new URL(String(value || '').trim());
+        const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+        if ((parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) ||
+            parsed.username || parsed.password || parsed.search || parsed.hash ||
+            parsed.pathname !== '/' || parsed.origin === 'null')
+            throw new Error('Use a direct HTTPS Horizon root URL (HTTP only on loopback).');
+        return parsed.origin;
     }
 
     async function inspectHorizon(horizonUrl) {
@@ -32,6 +36,9 @@ window.stellarVault = (() => {
             const response = await fetch(`${normalizedHorizon}${path}`, {
                 method: 'GET',
                 headers: { Accept: 'application/json' },
+                credentials: 'omit',
+                redirect: 'error',
+                mode: 'cors',
                 cache: 'no-store'
             });
 

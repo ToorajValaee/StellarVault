@@ -15,29 +15,22 @@ window.stellarVaultHdDiscovery = (() => {
     const url = String(horizonUrl || '').trim().replace(/\/+$/, '');
     if (!url || !networkPassphrase) throw new Error('Network settings required');
     const server = new sdk.Horizon.Server(url, { allowHttp: url.startsWith('http://') });
-    // Prefer standard SEP-0005; try legacy BIP32 only when the standard
-    // account is definitively absent. Never mask network or auth failures.
-    let root, rootKeypair, rootId, derivationScheme;
-    const absent = [];
-    for (const scheme of ['sep5', 'bip32-compat']) {
-      const rootRaw = await window.stellarVaultHd.accountSeed(seed, 0, scheme);
-      let candidate;
-      try { candidate = sdk.Keypair.fromRawEd25519Seed(rootRaw); }
-      finally { rootRaw.fill(0); }
-      const accountId = candidate.publicKey();
-      try {
-        root = await server.loadAccount(accountId);
-        rootKeypair = candidate;
-        rootId = accountId;
-        derivationScheme = scheme;
-        break;
-      } catch (error) {
-        if (Number(error?.response?.status) !== 404) throw error;
-        absent.push(accountId);
-      }
+    // Only SEP-5 is implemented by hd-keys.js. Earlier releases advertised
+    // a bip32-compat fallback, but accountSeed does not implement it. Do not
+    // silently pretend to recover a legacy root or derive the wrong child keys.
+    const derivationScheme = 'sep5';
+    const rootRaw = await window.stellarVaultHd.accountSeed(seed, 0, derivationScheme);
+    let rootKeypair;
+    try { rootKeypair = sdk.Keypair.fromRawEd25519Seed(rootRaw); }
+    finally { rootRaw.fill(0); }
+    const rootId = rootKeypair.publicKey();
+    let root;
+    try {
+      root = await server.loadAccount(rootId);
+    } catch (error) {
+      if (Number(error?.response?.status) !== 404) throw error;
+      throw new Error('No SEP-5 index-0 Stellar account exists for this mnemonic on the selected network. Verify the mnemonic, optional BIP-39 passphrase and network. Legacy derivation is not implemented; do not fund an unverified address.');
     }
-    if (!root)
-      throw new Error('No index-0 account found for this mnemonic on the selected network. Checked standard Stellar derivation (' + absent[0] + ') and compatible derivation (' + absent[1] + '). Verify your mnemonic, optional BIP39 passphrase and network. Do not fund an unverified address.');
     const native = (root.balances || []).find(b => b.asset_type === 'native');
     if (!native) throw new Error('Root account has no native XLM balance');
     const macKey = await window.stellarVaultRegistry.registryMacKey(

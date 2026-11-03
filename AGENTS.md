@@ -77,3 +77,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - Require the authenticated current registry to match cached revision/highest/active indices and include the requested index, and the derived child account to exist, before permitting exact historical ciphertext decryption. Key/seed material remains in the browser session and temporary Ed25519 seed bytes are zeroed.
 - `StellarVaultStore.CompareHistoricalHdRecordAsync` now requires this lineage gate before `LoadChainAsync`/decryption. It fails closed on unsupported `bip32-compat` scheme. Legacy fallback appears in discovery but the current `hd-keys.js` accountSeed supports only `sep5`; do not silently assert compatibility.
 - This verifies deterministic **current unlocked-session lineage**, not independently proven historic root registry state at publication ledger nor network consensus or time-of-check atomicity. Do NOT register a live `IVaultLedgerEvidenceProvider` or expose publishing without audit and tests.
+
+## 2026-11-03: HD recovery fail-closed and browser Horizon trust boundary
+
+- `ledger-compat/hd-discovery.js` now attempts only SEP-5 index-0 recovery, the sole scheme actually implemented in `hd-keys.js`. Previous code misleadingly tried `bip32-compat` after a 404, which always threw from `accountSeed`. Legacy scheme accounts are **not** recovered or migrated; keep unsupported paths explicit rather than auto-guessing.
+- `ledger-compat/app.js` now validates direct Horizon root URLs (HTTPS, or HTTP only on localhost/loopback), rejecting embedded credentials, paths, query and fragment; browser-side Horizon discovery fetches omit credentials and reject redirects. These are trust-boundary safeguards, not proof of independently verified consensus.
+- A seed with an absent SEP-5 root should fail with actionable recovery guidance instead of attempting unsupported keys. No changes to queue confirmation or broadcast UX; the mutation verifier remains deny-by-default.
+- No builds/tests run per project instruction. Browser SDK CORS, local loopback scenarios and regression fixtures need testing before release.
