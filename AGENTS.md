@@ -48,3 +48,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - `HorizonVaultNetworkInspector` compares the selected exact Stellar network passphrase against a bounded HTTPS Horizon root response and computes SHA-256 network ID. This is an endpoint-attested identity check, **not an independent consensus proof**. Never accept a passphrase merely discovered from an arbitrary endpoint as the expected value.
 - `HorizonVaultPublicationDiagnostic.InspectBoundHistoryAsync` composes the expected passphrase check with the historical ciphertext diagnostic. It deliberately does not implement `IVaultLedgerEvidenceProvider` or enable confirmation.
 - Historical chunk operations now require a positive ledger number matching each successful receipt; different ledger numbers sharing a transaction hash are rejected. Account operations/history may be pruned and still require root-HD lineage and matching decrypted record content.
+
+## Horizon schema compatibility correction (2026-11-03)
+
+- Do not require `ledger` from a Horizon ManageData operation object. The documented operation representation provides `id`, `transaction_hash`, `transaction_successful`, `source_account`, `name`, and `value`; determine ledger height through the corresponding successful transaction receipt.
+- Historical chunk provenance uses strict operation IDs before the manifest operation, and successful chunk receipt ledger numbers no later than the final receipt ledger. Receipt ledger equality can be valid for multiple operations in one transaction/ledger.
+- The historical coordinator now fetches the final transaction receipt and manifest once each, rather than performing a redundant preliminary diagnostic and fetching again.
+- Treat this correction as source-only until tested against real Horizon operation pages; do not enable mutation confirmation, signing, or broadcast.

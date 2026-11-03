@@ -53,7 +53,7 @@ public sealed class HorizonVaultHistoricalChunkInspector(
             return Failed(0, 0, "Invalid or excessive historical inspection inputs.");
 
         var chunks = new byte[manifest.ChunkCount][];
-        var hashes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        var hashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var found = 0;
         var cursor = manifest.ManifestOperationId;
         var pages = 0;
@@ -155,10 +155,6 @@ public sealed class HorizonVaultHistoricalChunkInspector(
                         hash.ValueKind != JsonValueKind.String ||
                         hash.GetString() is not { Length: 64 } transactionHash ||
                         !transactionHash.All(Uri.IsHexDigit) ||
-                        !operation.TryGetProperty("ledger", out var operationLedger) ||
-                        operationLedger.ValueKind != JsonValueKind.Number ||
-                        !operationLedger.TryGetInt64(out var ledgerNumber) ||
-                        ledgerNumber <= 0 || ledgerNumber > manifestLedger ||
                         !operation.TryGetProperty("value", out var value) ||
                         value.ValueKind != JsonValueKind.String)
                         return Failed(found, pages + 1, "Historical chunk write is not valid successful evidence.");
@@ -175,10 +171,7 @@ public sealed class HorizonVaultHistoricalChunkInspector(
                         return Failed(found, pages + 1, "Historical chunk length mismatch.");
 
                     chunks[index] = bytes;
-                    if (hashes.TryGetValue(transactionHash, out var priorLedger) &&
-                        priorLedger != ledgerNumber)
-                        return Failed(found, pages + 1, "One transaction hash appeared on multiple ledgers.");
-                    hashes[transactionHash] = ledgerNumber;
+                    hashes.Add(transactionHash);
                     found++;
                 }
                 if (previous >= cursor)
@@ -191,10 +184,10 @@ public sealed class HorizonVaultHistoricalChunkInspector(
 
             // Account-operation success alone is not trusted: individually inspect
             // every distinct chunk transaction and bound it by the manifest ledger.
-            foreach (var pair in hashes)
+            foreach (var transactionHash in hashes)
             {
-                var receipt = await transactions.InspectAsync(horizonUrl, pair.Key, ct);
-                if (receipt is null || receipt.Ledger != pair.Value || receipt.Ledger > manifestLedger)
+                var receipt = await transactions.InspectAsync(horizonUrl, transactionHash, ct);
+                if (receipt is null || receipt.Ledger <= 0 || receipt.Ledger > manifestLedger)
                     return Failed(found, pages, "A chunk transaction lacked a valid earlier receipt.");
             }
 
@@ -205,7 +198,7 @@ public sealed class HorizonVaultHistoricalChunkInspector(
             var equal = CryptographicOperations.FixedTimeEquals(actualDigest, expectedDigest);
             CryptographicOperations.ZeroMemory(actualDigest);
             CryptographicOperations.ZeroMemory(expectedDigest);
-            return new(equal, found, pages + 1,
+            return new(equal, found, pages,
                 equal
                     ? "Historical chunk writes precede the manifest and match its ciphertext hash; network lineage and decrypted record remain unverified."
                     : "Historical chunk writes do not match the committed ciphertext hash.");

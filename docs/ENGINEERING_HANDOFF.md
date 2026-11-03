@@ -212,3 +212,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Historical chunk operation `ledger` must match its successful transaction receipt ledger and not exceed the manifest ledger; conflicting ledger assignments for the same hash fail closed.
 - Pending: verify HD root-child derivation, record decryption and exact approved mutation, production-grade all-size history pagination, queue integration, folder/file Sync, and comprehensive runtime/security tests.
 - No builds/tests run by user preference; manually validate Horizon root, operation ledger field and transaction fixture interoperability before trusting results. Confirmation remains DENY and UI broadcast stays disabled.
+
+## 2026-11-03: correction for Horizon ManageData operation schema
+
+- Reviewed the official Stellar Horizon ManageData operation example: its documented JSON lacks an operation-level `ledger` field. Prior implementation required this field and could incorrectly reject genuine chunk operations. Updated `HorizonVaultHistoricalChunkInspector` to rely on a successful, hash-matched transaction receipt for each chunk transaction's ledger, and maintain strict descending operation ID ordering before the manifest.
+- Corrected historical diagnostic's success page count (no longer off by one) and reduced redundant final receipt/manifest fetches in `InspectHistoricalChunksAsync`. Endpoints remain read-only and bounded, with fail-closed error handling.
+- Note: the verified receipt ledger may equal the manifest ledger if multiple operations occur in the same ledger; operation ID ordering is the temporal constraint used here. Chunk history, endpoint network claims and ciphertext digest still do not prove decrypted record contents or HD root lineage.
+- Status: committed source changes, no build/tests performed per user preference. Next priority is derived HD root-to-child lineage and content-level evidence; maintain deny-by-default queue verification and disabled publishing UI.

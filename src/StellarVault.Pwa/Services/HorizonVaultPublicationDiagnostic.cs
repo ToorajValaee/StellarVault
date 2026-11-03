@@ -44,26 +44,27 @@ public sealed class HorizonVaultPublicationDiagnostic(
         static HorizonVaultHistoricalChunkInspector.HistoricalFinding Reject(string reason) =>
             new(false, 0, 0, reason);
 
-        if (expectedNodeAccount is not { Length: 56 } ||
+        if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit) ||
+            recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit) ||
+            expectedNodeAccount is not { Length: 56 } ||
             expectedNodeAccount[0] != 'G' ||
             !expectedNodeAccount.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7'))
-            return Reject("Expected HD child account is invalid.");
+            return Reject("Historical inspection inputs are invalid.");
 
         try
         {
-            var preliminary = await InspectForNodeAsync(
-                endpoint, hash, recordId, expectedNodeAccount, ct);
-            if (!preliminary.TransactionSucceeded || !preliminary.ManifestFound ||
-                !string.Equals(preliminary.ManifestOperationSourceAccount,
-                    expectedNodeAccount, StringComparison.Ordinal))
-                return Reject("Receipt and expected HD child manifest were not established.");
-
+            // Inspect each immutable on-chain transaction once, rather than
+            // re-fetching its receipt and manifest through a preliminary call.
             var receipt = await transactions.InspectAsync(endpoint, hash, ct);
+            if (receipt is null)
+                return Reject("Successful final transaction receipt unavailable.");
+
             var manifest = await manifests.InspectManifestAsync(endpoint, hash, recordId, ct);
-            if (receipt is null || manifest is null ||
+            if (manifest is null || manifest.ManifestOperationId <= 0 ||
+                !string.Equals(manifest.TransactionHash, hash, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(manifest.OperationSourceAccount,
                     expectedNodeAccount, StringComparison.Ordinal))
-                return Reject("Manifest receipt or child-account linkage changed.");
+                return Reject("Final transaction lacks a valid manifest written by the expected HD child.");
 
             return await history.InspectAsync(endpoint, manifest, receipt.Ledger, ct);
         }
