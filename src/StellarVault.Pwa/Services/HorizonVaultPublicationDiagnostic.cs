@@ -8,11 +8,50 @@ namespace StellarVault.Pwa.Services;
 public sealed class HorizonVaultPublicationDiagnostic(
     HorizonVaultTransactionInspector transactions,
     HorizonVaultManifestInspector manifests,
-    HorizonVaultCurrentChunkInspector chunks)
+    HorizonVaultCurrentChunkInspector chunks,
+    HorizonVaultHistoricalChunkInspector history)
 {
     public Task<HorizonVaultPublicationFinding> InspectAsync(
         string endpoint, string hash, string recordId, CancellationToken ct = default) =>
         InspectForNodeAsync(endpoint, hash, recordId, null, ct);
+
+    /// <summary>
+    /// Inspect successful pre-manifest chunk operations, their receipts and
+    /// committed ciphertext hash. This is a read-only diagnostic, never queue proof.
+    /// </summary>
+    public async Task<HorizonVaultHistoricalChunkInspector.HistoricalFinding> InspectHistoricalChunksAsync(
+        string endpoint, string hash, string recordId, string expectedNodeAccount,
+        CancellationToken ct = default)
+    {
+        static HorizonVaultHistoricalChunkInspector.HistoricalFinding Reject(string reason) =>
+            new(false, 0, 0, reason);
+
+        if (expectedNodeAccount is not { Length: 56 } ||
+            expectedNodeAccount[0] != 'G' ||
+            !expectedNodeAccount.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7'))
+            return Reject("Expected HD child account is invalid.");
+
+        try
+        {
+            var preliminary = await InspectForNodeAsync(
+                endpoint, hash, recordId, expectedNodeAccount, ct);
+            if (!preliminary.TransactionSucceeded || !preliminary.ManifestFound ||
+                !string.Equals(preliminary.ManifestOperationSourceAccount,
+                    expectedNodeAccount, StringComparison.Ordinal))
+                return Reject("Receipt and expected HD child manifest were not established.");
+
+            var receipt = await transactions.InspectAsync(endpoint, hash, ct);
+            var manifest = await manifests.InspectManifestAsync(endpoint, hash, recordId, ct);
+            if (receipt is null || manifest is null ||
+                !string.Equals(manifest.OperationSourceAccount,
+                    expectedNodeAccount, StringComparison.Ordinal))
+                return Reject("Manifest receipt or child-account linkage changed.");
+
+            return await history.InspectAsync(endpoint, manifest, receipt.Ledger, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Historical chunk diagnostic failed closed."); }
+    }
 
     /// <summary>
     /// Opt-in read-only current-account snapshot check. This deliberately does NOT

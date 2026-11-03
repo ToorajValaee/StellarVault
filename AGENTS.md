@@ -36,3 +36,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - `HorizonVaultPublicationDiagnostic.InspectCurrentSnapshotAsync` binds the read-only snapshot check to a successful receipt and an explicitly supplied HD child operation-source account. It must not mark a queue item Confirmed.
 - A current account snapshot is mutable and **not** evidence that all chunks were written before the manifest transaction. Network passphrase and deterministic root-to-child lineage are still unverified; the verifier remains deny-by-default.
 - Cap account JSON at 2 MiB and ciphertext inspected at 1 MiB; larger data must fail closed until a paginated/historical verifier is designed.
+
+## Historical chunk provenance diagnostics (2026-11-03)
+
+- `HorizonVaultHistoricalChunkInspector` scans bounded descending `/accounts/{HD-child}/operations` pages, anchored *before* the final manifest operation ID. It reconstructs the latest successful generation-specific `svc:` writes, verifies their unique transaction receipts, checks ledger ordering, and recomputes the manifest's SHA-256 ciphertext commitment.
+- Limits: 64 chunks, 16 pages × 200 operations, 512 KiB per response. Missing/pruned history, malformed writes, cursor failures, unexpected redirects and unmatched digests fail closed.
+- `HorizonVaultPublicationDiagnostic.InspectHistoricalChunksAsync` is intentionally read-only and requires the expected child operation source account. This is not full verification: network passphrase, deterministic child derivation/lineage and decrypted record fields are still unproven. The actual mutation verifier remains deny-by-default and Sync UI broadcasting stays unavailable.
+- IMPORTANT: Horizon cannot independently establish its network identity merely from transaction hashes/receipts. Bind known network passphrase and trusted endpoint separately before any future confirmation action.

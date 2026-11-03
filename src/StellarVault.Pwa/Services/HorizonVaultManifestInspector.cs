@@ -22,7 +22,8 @@ public sealed class HorizonVaultManifestInspector(HttpClient client)
         int EncryptedLength,
         string Generation,
         string CiphertextSha256,
-        long UpdatedUnixSeconds);
+        long UpdatedUnixSeconds,
+        long ManifestOperationId = 0);
 
     public async Task<bool> ContainsManifestWriteAsync(
         string horizonUrl, string transactionHash, string recordId,
@@ -125,6 +126,16 @@ public sealed class HorizonVaultManifestInspector(HttpClient client)
                     (long)chunkCount * ChunkBytes < encryptedLength)
                     return null;
 
+                if (!operation.TryGetProperty("id", out var operationId) ||
+                    operationId.ValueKind != JsonValueKind.String ||
+                    !long.TryParse(operationId.GetString(),
+                        System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var numericId) ||
+                    numericId <= 0 ||
+                    !operation.TryGetProperty("transaction_successful", out var succeeded) ||
+                    succeeded.ValueKind != JsonValueKind.True)
+                    return null;
+
                 found = new ManifestEvidence(
                     recordId.ToLowerInvariant(),
                     transactionHash.ToLowerInvariant(),
@@ -133,7 +144,8 @@ public sealed class HorizonVaultManifestInspector(HttpClient client)
                     encryptedLength,
                     Convert.ToHexString(bytes.AsSpan(47, 4)).ToLowerInvariant(),
                     Convert.ToHexString(bytes.AsSpan(7, 32)).ToLowerInvariant(),
-                    updated);
+                    updated,
+                    numericId);
             }
 
             return found;
