@@ -1,0 +1,110 @@
+using System.Text.Json;
+using StellarVault.Core.Services;
+using StellarVaultPwa.Core;
+
+namespace StellarVault.Pwa.Services;
+
+/// <summary>
+/// Read-only evidence review for an already-reserved queued create. Neither
+/// authorizes submission nor implements IVaultLedgerMutationVerifier.
+/// No draft contents or signing material are returned in the result.
+/// </summary>
+public sealed class VaultQueuedCreateHistoricalReview(
+    VaultNetworkSelection selection,
+    HorizonVaultPublicationDiagnostic diagnostic)
+{
+    public sealed record Finding(
+        bool ScopeMatched,
+        bool HistoricalRecordMatched,
+        string Explanation);
+
+    public async Task<Finding> InspectAsync(
+        VaultPendingMutation mutation, string transactionHash,
+        string expectedNodeAccount, int expectedNodeIndex,
+        CancellationToken ct = default)
+    {
+        static Finding Reject(string reason) => new(false, false, reason);
+
+        if (mutation is null ||
+            mutation.State is not (VaultSyncState.Submitting or VaultSyncState.Uncertain) ||
+            mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            mutation.TransactionHash is not { Length: 64 } storedHash ||
+            !storedHash.All(Uri.IsHexDigit) ||
+            transactionHash is not { Length: 64 } || !transactionHash.All(Uri.IsHexDigit) ||
+            !string.Equals(storedHash, transactionHash, StringComparison.OrdinalIgnoreCase) ||
+            mutation.EntityId is not { Length: 16 } || !mutation.EntityId.All(Uri.IsHexDigit) ||
+            mutation.AccountId is not { Length: 56 } || mutation.AccountId[0] != 'G' ||
+            !mutation.AccountId.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7') ||
+            mutation.Id is not { Length: 32 } || !Guid.TryParseExact(mutation.Id, "N", out _) ||
+            mutation.EncryptedPayload is not { Length: > 0 and <= 8_388_608 } ||
+            expectedNodeAccount is not { Length: 56 } || expectedNodeAccount[0] != 'G' ||
+            !expectedNodeAccount.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7') ||
+            expectedNodeIndex is <= 0 or >= 64)
+            return Reject("Mutation identity, final hash, or HD child inputs are invalid.");
+
+        string scopedNetwork;
+        try { scopedNetwork = selection.CredentialKey(mutation.AccountId); }
+        catch (Exception) { return Reject("The currently selected network has no valid account scope."); }
+        if (!string.Equals(mutation.NetworkId, scopedNetwork, StringComparison.Ordinal))
+            return Reject("Queued mutation belongs to a different account or Stellar network.");
+
+        string endpoint;
+        string passphrase;
+        switch (selection.Network)
+        {
+            case "testnet":
+                endpoint = "https://horizon-testnet.stellar.org";
+                passphrase = StellarNetworkPassphrases.Testnet;
+                break;
+            case "public":
+                endpoint = "https://horizon.stellar.org";
+                passphrase = StellarNetworkPassphrases.Public;
+                break;
+            case "custom":
+                endpoint = selection.CustomHorizonUrl;
+                passphrase = selection.CustomPassphrase ?? string.Empty;
+                break;
+            default:
+                return Reject("Unsupported selected Stellar network.");
+        }
+
+        if (string.IsNullOrWhiteSpace(passphrase) ||
+            !Uri.TryCreate(endpoint, UriKind.Absolute, out var address) ||
+            address.Scheme != Uri.UriSchemeHttps || address.UserInfo.Length != 0 ||
+            address.Query.Length != 0 || address.Fragment.Length != 0 ||
+            address.AbsolutePath != "/")
+            return Reject("Selected Horizon endpoint is not an explicit HTTPS root.");
+
+        LedgerRecordDraft draft;
+        try
+        {
+            draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
+                ?? throw new JsonException("Missing draft.");
+        }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
+        {
+            return Reject("Stored queued create payload cannot be decoded.");
+        }
+
+        if (string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
+            string.IsNullOrEmpty(draft.Content) ||
+            draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder) ||
+            draft.Tags is { Length: > 24 } ||
+            draft.Tags?.Any(tag => tag is null || tag.Length > 64) == true ||
+            string.Equals(draft.FolderId, mutation.EntityId, StringComparison.OrdinalIgnoreCase))
+            return Reject("Stored draft is not a supported record or folder creation.");
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var finding = await diagnostic.InspectHistoricalRecordAsync(
+                endpoint, passphrase, transactionHash, mutation.EntityId,
+                mutation.AccountId, expectedNodeAccount, expectedNodeIndex, draft, ct);
+            return new(true, finding.EndpointNetworkMatches &&
+                finding.HistoricalChunksAvailable && finding.HistoricalRecordMatches,
+                finding.Explanation);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Queued-create historical review failed closed."); }
+    }
+}
