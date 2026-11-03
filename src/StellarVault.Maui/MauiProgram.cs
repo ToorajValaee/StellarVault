@@ -40,6 +40,9 @@ public static class MauiProgram
         // recorded-hash create operations can ever be confirmed by Core CAS.
         builder.Services.AddScoped<HttpClient>();
         builder.Services.AddScoped<HorizonVaultTransactionInspector>();
+        builder.Services.AddScoped<HorizonVaultDeletionInspector>();
+        builder.Services.AddScoped<IVaultDeletionTombstoneReader, HorizonVaultDeletionTombstoneReader>();
+        builder.Services.AddScoped<VaultDeletionRecoveryReview>();
         builder.Services.AddScoped<HorizonVaultManifestInspector>();
         builder.Services.AddScoped<HorizonVaultCurrentChunkInspector>();
         builder.Services.AddScoped<HorizonVaultHistoricalChunkInspector>();

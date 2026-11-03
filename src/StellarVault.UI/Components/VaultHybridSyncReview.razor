@@ -3,6 +3,7 @@
 @inject VaultManualSyncCoordinator ManualSync
 @inject VaultNetworkSelection Networks
 @inject VaultPendingMutationQueue PendingQueue
+@inject VaultDeletionRecoveryReview DeletionReview
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
@@ -56,9 +57,30 @@
                         {
                             <p role="alert">No hash was recorded. The original submission might have succeeded. This action cannot automatically confirm it; investigate independently.</p>
                         }
+                        else if (pending.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder &&
+                                 pending.TransactionHash is { Length: 64 } deletionHash)
+                        {
+                            <p>Recorded manifest-deletion hash: <code>@deletionHash</code></p>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || !Ledger.IsConnected)"
+                                    @onclick="() => InspectDeletionAsync(pending)">
+                                INSPECT DELETION TOMBSTONE — READ ONLY
+                            </button>
+                            @if (_deletionFindings.TryGetValue(pending.Id, out var tombstone))
+                            {
+                                <p role="status">@tombstone.Explanation</p>
+                                <p>Target manifest deletes: @tombstone.DeletedManifestCount ·
+                                    Authenticated HD sources: @tombstone.AuthenticatedHdSources ·
+                                    Currently absent: @tombstone.CurrentRecordAbsent</p>
+                                <p class="terminal-alert warning" role="alert">
+                                    This diagnostic never confirms a deletion. Prior record provenance
+                                    and all-copy history are not verified. Do not retry.
+                                </p>
+                            }
+                        }
                         else
                         {
-                            <p role="alert">Deletion transaction recorded. Historical tombstone confirmation is not available. Do not retry.</p>
+                            <p role="alert">Recorded transaction cannot be independently attributed. Do not retry.</p>
                         }
                     </div>
                 }
@@ -149,6 +171,7 @@
     private string? _error;
     private bool _busy;
     private IReadOnlyList<VaultPendingMutation> _unresolved = [];
+    private readonly Dictionary<string, VaultDeletionTombstoneFinding> _deletionFindings = new(StringComparer.Ordinal);
     private VaultSyncApprovalSnapshot? _selectedQuote;
     private string? _selectedTitle;
     private VaultMutationKind _selectedKind;
@@ -161,6 +184,30 @@
         _selectedTitle = null;
         _explicitApproval = false;
         _mainnetApproved = false;
+    }
+
+    private async Task InspectDeletionAsync(VaultPendingMutation mutation)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId != mutation.AccountId ||
+            mutation.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) ||
+            mutation.TransactionHash is not { Length: 64 })
+            return;
+        CancelApproval();
+        _busy = true;
+        _deletionFindings.Remove(mutation.Id);
+        try
+        {
+            var finding = await DeletionReview.InspectAsync(
+                mutation.AccountId, mutation.Id);
+            _deletionFindings[mutation.Id] = finding;
+        }
+        catch (Exception)
+        {
+            _deletionFindings[mutation.Id] = new(false, false, false, 0,
+                "Deletion history unavailable. Queue state unchanged. Do not retry.");
+        }
+        finally { _busy = false; }
     }
 
     private async Task VerifyRecordedHashAsync(VaultPendingMutation mutation)
@@ -283,6 +330,7 @@
         _error = null;
         _report = null;
         _unresolved = [];
+        _deletionFindings.Clear();
         try
         {
             _report = await HybridReview.ReviewAsync(account, costs);

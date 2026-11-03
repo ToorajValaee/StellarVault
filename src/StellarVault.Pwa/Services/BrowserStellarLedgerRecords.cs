@@ -237,7 +237,11 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             var matches = snapshot.Nodes.Where(x =>
                 x.Position is > 0 and < 64 &&
                 x.AccountId == childAccount).ToArray();
-            return matches.Length == 1 ? matches[0].Position : null;
+            if (matches.Length != 1 ||
+                !await store.VerifyCurrentHdLineageAsync(
+                    expectedRoot, childAccount, matches[0].Position, ct))
+                return null;
+            return matches[0].Position;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return null; }

@@ -60,3 +60,5 @@ Shared Core fee review and manual approval now support version-pinned remote upd
 ## Update proof, primary receipt identity (2026-11-03)
 
 The hybrid queue now records the manifest-commit hash for updates and manifest-delete hash for deletions, instead of later cleanup receipts. Legacy direct on-chain return hashes remain backward compatible. The shared Core evidence verifier and PWA/MAUI Horizon history adapter now permit recorded-hash UPDATE confirmation on Testnet after full decrypted historical record-to-transaction proof. This does not enforce predecessor-version atomicity. DELETE remains Uncertain because tombstone historical proof is absent; queued Mainnet/custom remote UPDATE/DELETE publishing stays blocked.
+
+Recorded-hash child resolution now also requires seed-derived `inspectHdLineage` verification in the connected HD session, rather than trusting a matching read snapshot alone. No deletion queue confirmation is enabled.
