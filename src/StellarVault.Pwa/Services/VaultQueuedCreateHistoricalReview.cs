@@ -11,7 +11,9 @@ namespace StellarVault.Pwa.Services;
 /// </summary>
 public sealed class VaultQueuedCreateHistoricalReview(
     VaultNetworkSelection selection,
-    HorizonVaultPublicationDiagnostic diagnostic)
+    HorizonVaultPublicationDiagnostic diagnostic,
+    IVaultPendingMutationStore store,
+    VaultDeviceRetentionGate retention)
 {
     public sealed record Finding(
         bool ScopeMatched,
@@ -41,6 +43,19 @@ public sealed class VaultQueuedCreateHistoricalReview(
             !expectedNodeAccount.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7') ||
             expectedNodeIndex is <= 0 or >= 64)
             return Reject("Mutation identity, final hash, or HD child inputs are invalid.");
+
+        // The supplied object may be stale or fabricated. Compare with the
+        // durable, authenticated queue entry before any Horizon network access.
+        VaultPendingMutation? durable;
+        try
+        {
+            retention.RequireLocalPersistence();
+            durable = await store.GetAsync(mutation.AccountId, mutation.NetworkId, mutation.Id, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Durable queued mutation is unavailable."); }
+        if (durable is null || !SameRevision(durable, mutation))
+            return Reject("Queued mutation changed or is not the current durable revision.");
 
         string scopedNetwork;
         try { scopedNetwork = selection.CredentialKey(mutation.AccountId); }
@@ -100,6 +115,14 @@ public sealed class VaultQueuedCreateHistoricalReview(
             var finding = await diagnostic.InspectHistoricalRecordAsync(
                 endpoint, passphrase, transactionHash, mutation.EntityId,
                 mutation.AccountId, expectedNodeAccount, expectedNodeIndex, draft, ct);
+            // A long-running history scan can race edits, lock/unlock, a
+            // network switch or reconciliation in another tab. Never report a
+            // positive diagnostic for a stale queue revision.
+            var after = await store.GetAsync(mutation.AccountId, mutation.NetworkId, mutation.Id, ct);
+            if (after is null || !SameRevision(durable, after) ||
+                !string.Equals(selection.CredentialKey(mutation.AccountId),
+                    mutation.NetworkId, StringComparison.Ordinal))
+                return Reject("Queue revision or selected network changed during inspection.");
             return new(true, finding.EndpointNetworkMatches &&
                 finding.HistoricalChunksAvailable && finding.HistoricalRecordMatches,
                 finding.Explanation);
@@ -107,4 +130,15 @@ public sealed class VaultQueuedCreateHistoricalReview(
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return Reject("Queued-create historical review failed closed."); }
     }
+
+    private static bool SameRevision(VaultPendingMutation a, VaultPendingMutation b) =>
+        a.Id == b.Id && a.AccountId == b.AccountId && a.NetworkId == b.NetworkId &&
+        a.Kind == b.Kind && a.EntityId == b.EntityId &&
+        a.EncryptedPayload is not null && b.EncryptedPayload is not null &&
+        a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
+        a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
+        a.DependsOn is not null && b.DependsOn is not null &&
+        a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
+        a.State == b.State && a.TransactionHash == b.TransactionHash &&
+        a.CreatedUtc == b.CreatedUtc;
 }

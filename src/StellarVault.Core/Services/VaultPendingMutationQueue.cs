@@ -332,6 +332,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         RequireScope(durable, submitting.AccountId, submitting.NetworkId);
         if (durable.State != VaultSyncState.Submitting)
             throw new InvalidOperationException("Submission state changed; inspect the queue.");
+        // A caller must not advance another tab's revised submission, even if
+        // its state and transaction hash happen to be unchanged.
+        if (!SameDurableRevision(durable, submitting))
+            throw new InvalidOperationException("Submission revision changed; reconcile the durable queue before proceeding.");
         if (durable.TransactionHash is not null && transactionHash is not null &&
             !string.Equals(durable.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Transaction hash changed; manual investigation required.");
@@ -465,6 +469,17 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidDataException("Queue entry belongs to another account or network.");
     }
 
+    private static bool SameDurableRevision(VaultPendingMutation a, VaultPendingMutation b) =>
+        a.Id == b.Id && a.AccountId == b.AccountId && a.NetworkId == b.NetworkId &&
+        a.Kind == b.Kind && a.EntityId == b.EntityId &&
+        a.EncryptedPayload is not null && b.EncryptedPayload is not null &&
+        a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
+        a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
+        a.DependsOn is not null && b.DependsOn is not null &&
+        a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
+        a.State == b.State && a.TransactionHash == b.TransactionHash &&
+        a.CreatedUtc == b.CreatedUtc;
+
     private static bool IsTransactionHash(string hash) =>
         hash.Length == 64 && hash.All(Uri.IsHexDigit);
 
@@ -513,6 +528,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var current = await store.GetAsync(previous.AccountId, previous.NetworkId, previous.Id, ct)
             ?? throw new KeyNotFoundException("Mutation disappeared before reconciliation.");
         RequireScope(current, previous.AccountId, previous.NetworkId);
+        if (!SameDurableRevision(current, previous))
+            throw new InvalidOperationException("Queue revision changed during reconciliation; inspect and retry the review.");
         if (current.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
             current.TransactionHash is not null &&
             !string.Equals(current.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
