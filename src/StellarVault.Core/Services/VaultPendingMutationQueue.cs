@@ -298,6 +298,32 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             remoteRecords.Any(x => string.Equals(x.FolderId, current.EntityId,
                 StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Folder has children: conflict.");
+        if (current.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
+        {
+            VaultDeletionIntent intent;
+            try
+            {
+                intent = System.Text.Json.JsonSerializer.Deserialize<VaultDeletionIntent>(
+                    current.EncryptedPayload)
+                    ?? throw new InvalidDataException("Deletion baseline envelope missing.");
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new InvalidDataException("Deletion baseline envelope is malformed.", ex);
+            }
+            if (intent.Original is null || intent.ManifestSourceAccounts is not
+                    { Length: > 0 and <= 63 } owners ||
+                owners.Any(x => !StellarAccountAddress.IsValid(x)) ||
+                owners.Distinct(StringComparer.Ordinal).Count() != owners.Length ||
+                intent.Original.IsFolder != remote.IsFolder ||
+                VaultHybridRemoteMutationWorkspace.Fingerprint(new LedgerRecordItem(
+                    current.EntityId, intent.Original.Title, intent.Original.Content,
+                    intent.Original.FolderId, intent.Original.Tags,
+                    intent.Original.IsFolder, intent.Original.UserName,
+                    intent.Original.Url, intent.Original.Notes)) != baseline)
+                throw new InvalidDataException(
+                    "Deletion lacks an authenticated original record and manifest-owner snapshot.");
+        }
         if (current.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
         {
             LedgerRecordDraft draft;

@@ -18,7 +18,8 @@ public sealed class HorizonVaultDeletionTombstoneReader(
 {
     public async Task<VaultDeletionTombstoneFinding> InspectAsync(
         string accountId, string networkId, string transactionHash,
-        string recordId, CancellationToken ct = default)
+        string recordId, IReadOnlyList<string> expectedManifestSources,
+        CancellationToken ct = default)
     {
         static VaultDeletionTombstoneFinding Reject(string explanation) =>
             new(false, false, false, 0, explanation);
@@ -42,7 +43,8 @@ public sealed class HorizonVaultDeletionTombstoneReader(
             if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(passphrase))
                 return Reject("Selected Stellar network does not support historical review.");
             var finding = await inspector.InspectAsync(
-                endpoint, passphrase, accountId, transactionHash, recordId, ct);
+                endpoint, passphrase, accountId, transactionHash, recordId,
+                expectedManifestSources, ct);
             if (sessions.Epoch != epoch || !sessions.IsUnlocked ||
                 sessions.ActiveAccountId != accountId || !ledger.IsConnected ||
                 networks.Network != selected ||
@@ -54,7 +56,7 @@ public sealed class HorizonVaultDeletionTombstoneReader(
                     finding.AllOperationsAreTargetManifestDeletes,
                 finding.SourcesBelongToAuthenticatedHdChain,
                 finding.RecordCurrentlyAbsent, finding.ManifestDeletes,
-                finding.Explanation);
+                finding.Explanation, finding.StagedSourcesMatched);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return Reject("Historical tombstone inspection failed closed."); }

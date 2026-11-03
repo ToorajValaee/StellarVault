@@ -14,7 +14,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     VaultSessionManager sessions,
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
-    IStellarLedgerRecords ledger)
+    IStellarLedgerRecords ledger,
+    IVaultLedgerManifestCopyInventory copies)
 {
     public sealed record RemoteItem(string Id, string Title, bool IsFolder,
         string? FolderId, string Content, string? UserName, string? Url,
@@ -123,7 +124,19 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             ? original.IsFolder ? VaultMutationKind.DeleteFolder : VaultMutationKind.DeleteRecord
             : original.IsFolder ? VaultMutationKind.UpdateFolder : VaultMutationKind.UpdateRecord;
         var baseline = Fingerprint(original);
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(delete ? ToDraft(original) : proposed!);
+        string[]? manifestOwners = null;
+        if (delete)
+        {
+            manifestOwners = (await copies.InspectOwnersAsync(scope.Account,
+                original.Id, ct)).ToArray();
+            if (manifestOwners.Length == 0 || manifestOwners.Length > 63 ||
+                manifestOwners.Distinct(StringComparer.Ordinal).Count() != manifestOwners.Length)
+                throw new InvalidDataException("Cannot pin a complete, unique HD manifest-owner inventory.");
+        }
+        byte[] payload = delete
+            ? JsonSerializer.SerializeToUtf8Bytes(
+                new VaultDeletionIntent(ToDraft(original), manifestOwners!))
+            : JsonSerializer.SerializeToUtf8Bytes(proposed!);
         try
         {
             EnsureScope(scope);
@@ -134,6 +147,15 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                 string.Equals(x.Id, recordId, StringComparison.OrdinalIgnoreCase));
             if (now is null || Fingerprint(now) != baseline)
                 throw new InvalidOperationException("Remote record changed during staging; refresh.");
+            if (delete)
+            {
+                var latestOwners = (await copies.InspectOwnersAsync(scope.Account,
+                    original.Id, ct)).ToArray();
+                if (!latestOwners.Order(StringComparer.Ordinal)
+                        .SequenceEqual(manifestOwners!, StringComparer.Ordinal))
+                    throw new InvalidOperationException(
+                        "HD manifest-copy inventory changed while staging the deletion.");
+            }
             // Recheck the scoped queue after network I/O as well; concurrent
             // tabs can add a competing mutation while Horizon is queried.
             var latest = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);

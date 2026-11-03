@@ -20,6 +20,7 @@ builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAutho
 builder.Services.AddScoped<VaultNetworkSelection>();
 builder.Services.AddScoped<BrowserStellarLedgerRecords>();
 builder.Services.AddScoped<IStellarLedgerRecords>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
+builder.Services.AddScoped<IVaultLedgerManifestCopyInventory>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();

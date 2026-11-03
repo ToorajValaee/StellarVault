@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace StellarVault.Core.Services;
 
 /// <summary>
@@ -9,7 +11,8 @@ public interface IVaultDeletionTombstoneReader
 {
     Task<VaultDeletionTombstoneFinding> InspectAsync(
         string accountId, string networkId, string transactionHash,
-        string recordId, CancellationToken ct = default);
+        string recordId, IReadOnlyList<string> expectedManifestSources,
+        CancellationToken ct = default);
 }
 
 public sealed record VaultDeletionTombstoneFinding(
@@ -17,7 +20,8 @@ public sealed record VaultDeletionTombstoneFinding(
     bool AuthenticatedHdSources,
     bool CurrentRecordAbsent,
     int DeletedManifestCount,
-    string Explanation);
+    string Explanation,
+    bool StagedSourcesMatched = false);
 
 public sealed class VaultDeletionRecoveryReview(
     IVaultPendingMutationStore store,
@@ -51,8 +55,22 @@ public sealed class VaultDeletionRecoveryReview(
                 !baseline.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
                 return Reject("This is not an unresolved version-pinned deletion with a recorded transaction hash.");
 
+            VaultDeletionIntent? intent;
+            try { intent = JsonSerializer.Deserialize<VaultDeletionIntent>(original.EncryptedPayload); }
+            catch (JsonException) { intent = null; }
+            if (intent?.Original is null ||
+                intent.ManifestSourceAccounts is not { Length: > 0 and <= 63 } owners ||
+                owners.Any(x => !StellarAccountAddress.IsValid(x)) ||
+                owners.Distinct(StringComparer.Ordinal).Count() != owners.Length ||
+                VaultHybridRemoteMutationWorkspace.Fingerprint(
+                    new LedgerRecordItem(original.EntityId, intent.Original.Title,
+                        intent.Original.Content, intent.Original.FolderId,
+                        intent.Original.Tags, intent.Original.IsFolder,
+                        intent.Original.UserName, intent.Original.Url,
+                        intent.Original.Notes)) != baseline)
+                return Reject("Original staged record or manifest-owner snapshot is missing or does not match the pinned baseline.");
             var finding = await reader.InspectAsync(accountId, scope,
-                hash, original.EntityId, ct);
+                hash, original.EntityId, owners, ct);
             // A network round trip cannot authorize evidence for a stale
             // queue snapshot or a changed unlocked session.
             var after = await store.GetAsync(accountId, scope, mutationId, ct);

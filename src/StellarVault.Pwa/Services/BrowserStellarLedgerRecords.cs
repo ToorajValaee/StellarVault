@@ -7,7 +7,7 @@ namespace StellarVault.Pwa.Services;
 
 /// <summary>HD-v2 ledger path using the original transaction writer and manifest
 /// format. Never silently falls back to IndexedDB when submission fails.</summary>
-public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IAsyncDisposable
+public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory, IAsyncDisposable
 {
     private StellarVaultStore? _store;
     public bool IsConnected => _store is not null;
@@ -245,6 +245,40 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return null; }
+    }
+
+    public async Task<IReadOnlyList<string>> InspectOwnersAsync(
+        string rootAccountId, string recordId, CancellationToken ct = default)
+    {
+        if (!IsConnected || !StellarAccountAddress.IsValid(rootAccountId) ||
+            recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Invalid manifest inventory scope.");
+        var store = RequireStore();
+        if (store.RootAccountId != rootAccountId)
+            throw new UnauthorizedAccessException("Connected signer root does not match the local vault.");
+        ct.ThrowIfCancellationRequested();
+        var snapshot = await store.ReadAsync();
+        ct.ThrowIfCancellationRequested();
+        if (snapshot.Warnings.Count != 0 || snapshot.Nodes.Count == 0 ||
+            snapshot.Nodes[0].AccountId != rootAccountId)
+            throw new InvalidDataException("HD inventory contains recovery warnings or an unexpected root.");
+        var key = "svh:" + recordId.ToLowerInvariant();
+        var owners = snapshot.Nodes.Where(x => x.Data.ContainsKey(key))
+            .Select(x => x.AccountId).ToArray();
+        if (owners.Length == 0 || owners.Length > 63 ||
+            owners.Distinct(StringComparer.Ordinal).Count() != owners.Length)
+            throw new InvalidDataException("Manifest-owner inventory is missing or ambiguous.");
+        foreach (var owner in owners)
+        {
+            var node = snapshot.Nodes.SingleOrDefault(x => x.AccountId == owner);
+            if (node is null || node.Position is <= 0 or >= 64 ||
+                !await store.VerifyCurrentHdLineageAsync(
+                    rootAccountId, owner, node.Position, ct))
+                throw new InvalidDataException("Manifest-owner HD lineage cannot be authenticated.");
+        }
+        if (!IsConnected || store.RootAccountId != rootAccountId)
+            throw new InvalidOperationException("Connected signing session changed.");
+        return owners.Order(StringComparer.Ordinal).ToArray();
     }
 
     public async Task<IReadOnlyList<LedgerRecordItem>> ReadAsync()

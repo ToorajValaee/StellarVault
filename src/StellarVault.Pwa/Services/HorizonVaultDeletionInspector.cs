@@ -27,7 +27,8 @@ public sealed class HorizonVaultDeletionInspector(
         bool SourcesBelongToAuthenticatedHdChain,
         int ManifestDeletes,
         bool RecordCurrentlyAbsent,
-        string Explanation)
+        string Explanation,
+        bool StagedSourcesMatched = false)
     {
         // Even all true fields do NOT authorize queue confirmation:
         // prior-content provenance and all-copy historical coverage are missing.
@@ -36,12 +37,18 @@ public sealed class HorizonVaultDeletionInspector(
 
     public async Task<Finding> InspectAsync(
         string endpoint, string passphrase, string rootAccount,
-        string transactionHash, string recordId, CancellationToken ct = default)
+        string transactionHash, string recordId,
+        IReadOnlyList<string> expectedManifestSources,
+        CancellationToken ct = default)
     {
         static Finding Reject(string message) =>
             new(false, false, false, false, 0, false, message);
 
-        if (!StellarAccountAddress.IsValid(rootAccount) ||
+        if (expectedManifestSources is not { Count: > 0 and <= 63 } ||
+            expectedManifestSources.Any(x => !StellarAccountAddress.IsValid(x)) ||
+            expectedManifestSources.Distinct(StringComparer.Ordinal).Count() !=
+                expectedManifestSources.Count ||
+            !StellarAccountAddress.IsValid(rootAccount) ||
             recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit) ||
             transactionHash is not { Length: 64 } || !transactionHash.All(Uri.IsHexDigit) ||
             string.IsNullOrWhiteSpace(passphrase) ||
@@ -142,6 +149,11 @@ public sealed class HorizonVaultDeletionInspector(
                         "Recorded transaction contains an unexpected, duplicated or non-tombstone operation.");
             }
 
+            var expectedSources = expectedManifestSources.ToHashSet(StringComparer.Ordinal);
+            if (!sources.SetEquals(expectedSources))
+                return new(true, true, true, false, sources.Count, false,
+                    "Deletion operation sources do not match all manifest-owning accounts recorded when the deletion was staged. Do not confirm or retry.");
+
             foreach (var source in sources)
             {
                 // An HD child source is derived from the live authenticated
@@ -165,7 +177,8 @@ public sealed class HorizonVaultDeletionInspector(
             return new(true, true, true, true, sources.Count, absent,
                 absent
                     ? "Authenticated manifest deletion operations found, and the record is currently absent. Prior-record provenance and all-copy history remain unproven; do not confirm or retry."
-                    : "Authenticated manifest deletion operations found, but the record is still present. Investigate other copies or subsequent writes; do not confirm or retry.");
+                    : "Authenticated manifest deletion operations found, but the record is still present. Investigate other copies or subsequent writes; do not confirm or retry.",
+                StagedSourcesMatched: true);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)

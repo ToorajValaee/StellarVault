@@ -11,7 +11,8 @@ public sealed class VaultManualSyncCoordinator(
     IStellarLedgerRecords ledger,
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
-    VaultSessionManager sessions)
+    VaultSessionManager sessions,
+    IVaultLedgerManifestCopyInventory copyInventory)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
 
@@ -183,6 +184,7 @@ public sealed class VaultManualSyncCoordinator(
             var remote = await ledger.ReadAsync();
             await queue.PreflightRemoteMutationAsync(quote, accountId,
                 context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+            await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var cost = await EstimateRemoteCostAsync(mutation);
             await RequireConnectedRootAsync(context, ct);
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
@@ -190,6 +192,37 @@ public sealed class VaultManualSyncCoordinator(
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
+    }
+
+    private async Task RequireFreshDeletionCopyInventoryAsync(
+        VaultPendingMutation mutation, NetworkContext context, CancellationToken ct)
+    {
+        if (mutation.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
+            return;
+        VaultDeletionIntent intent;
+        try
+        {
+            intent = JsonSerializer.Deserialize<VaultDeletionIntent>(mutation.EncryptedPayload)
+                ?? throw new InvalidDataException("Encrypted deletion intent is empty.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("Encrypted deletion intent is malformed.", ex);
+        }
+        var expected = intent.ManifestSourceAccounts;
+        if (expected is not { Length: > 0 and <= 63 } ||
+            expected.Any(x => !StellarAccountAddress.IsValid(x)) ||
+            expected.Distinct(StringComparer.Ordinal).Count() != expected.Length)
+            throw new InvalidDataException("Deletion manifest-owner inventory is missing or invalid.");
+        await RequireConnectedRootAsync(context, ct);
+        var current = await copyInventory.InspectOwnersAsync(context.AccountId,
+            mutation.EntityId, ct);
+        if (current.Count != expected.Length ||
+            !current.Order(StringComparer.Ordinal)
+                .SequenceEqual(expected.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                "Manifest-owner HD inventory changed since staging; do not submit this deletion.");
+        await RequireConnectedRootAsync(context, ct);
     }
 
     private async Task<LedgerCostPreview> EstimateRemoteCostAsync(VaultPendingMutation mutation)
@@ -233,6 +266,7 @@ public sealed class VaultManualSyncCoordinator(
             var remote = await ledger.ReadAsync();
             await queue.PreflightRemoteMutationAsync(quote, accountId,
                 context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+            await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var cost = await EstimateRemoteCostAsync(mutation);
             if (cost.NetworkFeeXlm > quote.QuotedFeeXlm ||
                 cost.PeakReserveXlm > quote.QuotedPeakReserveXlm)
@@ -240,6 +274,7 @@ public sealed class VaultManualSyncCoordinator(
 
             await RequireConnectedRootAsync(context, ct);
             ct.ThrowIfCancellationRequested();
+            await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var reserved = await queue.ReservePreflightedRemoteMutationAsync(
                 quote, accountId, context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
 
