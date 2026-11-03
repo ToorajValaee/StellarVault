@@ -191,3 +191,10 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - HorizonVaultPublicationDiagnostic.InspectForNodeAsync can additionally compare the manifest operation source with a known HD child account. The transaction receipt's source_account is NOT assumed to equal the operation source in sponsored flows.
 - These are structural/evidence improvements only: they do NOT retrieve historical svc: chunk writes, prove chunk hash matches, decrypt the record, establish expected root HD lineage, or verify network passphrase. NEVER enable queued confirmation or manual publishing UI from this diagnostic.
 - No builds or tests run per user direction. Recheck C# compilation, Horizon JSON response shapes, and real transaction fixtures when testing is authorized. 
+
+## 2026-11-03: read-only current HD-v2 chunk commitment diagnostic
+- Added `HorizonVaultCurrentChunkInspector`: fetches a bounded, HTTPS-pinned current Horizon HD child account response; requires expected account identity, the exact matching current `svh:` manifest envelope, and all generation-indexed `svc:` ciphertext chunks with exact lengths.
+- Computes SHA-256 incrementally and compares with the manifest's committed ciphertext digest using fixed-time comparison. Returns only a structured finding, not ciphertext or decrypted data. Limits: 2 MiB JSON response and 1 MiB ciphertext.
+- Added `HorizonVaultPublicationDiagnostic.InspectCurrentSnapshotAsync` for an opt-in diagnostic binding the receipt and manifest to an explicit expected HD child and inspecting current account chunks. Registered the service in PWA DI.
+- CRITICAL: this checks a **mutable current account snapshot**, not historical writes, transaction ordering, or network/root lineage. It cannot prove record plaintext, publication timing, or independent confirmation. `IVaultLedgerMutationVerifier` remains deny-by-default; UI publishing remains disabled.
+- No build or test was run per user preference. Next: historical account operation provenance across pages/transactions and ledger ordering; decode expected record fields with account/network binding before enabling confirmation.

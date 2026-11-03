@@ -7,11 +7,39 @@ namespace StellarVault.Pwa.Services;
 /// </summary>
 public sealed class HorizonVaultPublicationDiagnostic(
     HorizonVaultTransactionInspector transactions,
-    HorizonVaultManifestInspector manifests)
+    HorizonVaultManifestInspector manifests,
+    HorizonVaultCurrentChunkInspector chunks)
 {
     public Task<HorizonVaultPublicationFinding> InspectAsync(
         string endpoint, string hash, string recordId, CancellationToken ct = default) =>
         InspectForNodeAsync(endpoint, hash, recordId, null, ct);
+
+    /// <summary>
+    /// Opt-in read-only current-account snapshot check. This deliberately does NOT
+    /// set confirmation eligibility: snapshot state cannot prove chunk transaction
+    /// history or the intended network passphrase.
+    /// </summary>
+    public async Task<HorizonVaultCurrentChunkInspector.SnapshotFinding> InspectCurrentSnapshotAsync(
+        string endpoint, string hash, string recordId, string expectedNodeAccount,
+        CancellationToken ct = default)
+    {
+        var preliminary = await InspectForNodeAsync(endpoint, hash, recordId, expectedNodeAccount, ct);
+        if (!preliminary.TransactionSucceeded || !preliminary.ManifestFound ||
+            !string.Equals(preliminary.ManifestOperationSourceAccount, expectedNodeAccount, StringComparison.Ordinal))
+            return new(false, false, 0, "Receipt and expected HD child manifest were not established.");
+
+        try
+        {
+            var manifest = await manifests.InspectManifestAsync(endpoint, hash, recordId, ct);
+            if (manifest is null ||
+                !string.Equals(manifest.OperationSourceAccount, expectedNodeAccount, StringComparison.Ordinal))
+                return new(false, false, 0, "Manifest evidence changed during snapshot inspection.");
+
+            return await chunks.InspectAsync(endpoint, manifest, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return new(false, false, 0, "Current account snapshot could not be verified."); }
+    }
 
     /// <summary>
     /// When known, bind the manifest operation's source account to the expected

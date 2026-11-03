@@ -29,3 +29,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - `HorizonVaultPublicationDiagnostic.InspectForNodeAsync` optionally checks the **operation** source account against the expected HD child. A sponsored transaction's receipt source may be different.
 - Manifest metadata (including ciphertext digest and generation) is only a commitment; verify historical `svc:` writes, their account lineage, SHA-256 assembled ciphertext, expected decrypted record fields, and network identity before considering any confirmation integration.
 - Never confuse `ManifestFound` with a verified queue mutation. Fail closed on ambiguous/missing operations and incomplete pages. The default verifier and UI publishing feature remain disabled.
+
+## Current-state ciphertext diagnostics (2026-11-03)
+
+- `HorizonVaultCurrentChunkInspector` reads only the current Horizon account `data` snapshot, requiring an exact matching HD-v2 manifest, generation-indexed `svc:` chunks, exact chunk lengths and SHA-256 ciphertext commitment. It returns no encrypted bytes.
+- `HorizonVaultPublicationDiagnostic.InspectCurrentSnapshotAsync` binds the read-only snapshot check to a successful receipt and an explicitly supplied HD child operation-source account. It must not mark a queue item Confirmed.
+- A current account snapshot is mutable and **not** evidence that all chunks were written before the manifest transaction. Network passphrase and deterministic root-to-child lineage are still unverified; the verifier remains deny-by-default.
+- Cap account JSON at 2 MiB and ciphertext inspected at 1 MiB; larger data must fail closed until a paginated/historical verifier is designed.
