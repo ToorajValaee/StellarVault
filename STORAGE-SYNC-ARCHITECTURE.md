@@ -94,3 +94,7 @@ Shared Core now checks that every pending create's serialized parent FolderId ma
 ## Guided nested-folder Sync (2026-11-03)
 
 The shared Core read-only `VaultHybridFolderSyncPlan` turns encrypted create-folder/create-record queue entries into a manual parent-first verification/publishing sequence, with explicit waiting/ready/repair/unresolved statuses. The shared Sync UI renders each step across PWA and MAUI, offers optional fresh cost review for ready entries, reloads after a submission attempt or historical confirmation, and invalidates cached approvals on vault session changes. No automatic network writes, retries or child approvals; current ledger inventory and explicit per-mutation approval remain required.
+
+## Interrupted submission quarantine and global Sync gate (2026-11-03)
+
+The shared Sync UI now offers explicit no-retry quarantine of a durable Submitting mutation. Core verifies its exact queue revision and CAS-updates only to Uncertain; account/network/session checks and immediate workflow reload prevent stale screen actions. The guided folder/child Sync plan no longer marks children ready while any unresolved submission or conflict globally prevents new fee approvals. Neither action changes the direct on-chain flow or permits automatic broadcast/replay.

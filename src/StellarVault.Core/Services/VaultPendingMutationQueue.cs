@@ -419,6 +419,32 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>
+    /// Quarantine exactly the interrupted submission revision displayed to
+    /// the user. A stale UI snapshot may not change another tab's queue entry.
+    /// Durable CAS is the only state transition; never submits to Stellar.
+    /// </summary>
+    public async Task<VaultPendingMutation> QuarantineInterruptedIfUnchangedAsync(
+        VaultPendingMutation expected, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.State != VaultSyncState.Submitting)
+            throw new InvalidOperationException("Only recorded Submitting intent may be quarantined.");
+        var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+            expected.Id, ct) ?? throw new KeyNotFoundException("Interrupted mutation missing.");
+        RequireScope(current, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(current, expected) ||
+            current.State != VaultSyncState.Submitting)
+            throw new InvalidOperationException(
+                "Submission changed since the review. Reopen the encrypted queue.");
+        var quarantined = current with { State = VaultSyncState.Uncertain };
+        if (!await store.TryReplaceAsync(current, quarantined, ct))
+            throw new InvalidOperationException(
+                "Submission changed during quarantine. Refresh queue before investigating.");
+        return quarantined;
+    }
+
     /// <summary>Read-only recovery advice. Missing transaction identity never authorizes replay.</summary>
     /// <summary>Enumerate unresolved submissions without changing durable state.</summary>
     public async Task<IReadOnlyList<VaultRecoveryInspection>> InspectOutstandingRecoveriesAsync(

@@ -82,6 +82,18 @@
                 {
                     <div class="data-field">
                         <p>Mutation <code>@pending.Id</code> · @pending.Kind · @pending.State</p>
+                        @if (pending.State == VaultSyncState.Submitting)
+                        {
+                            <p class="terminal-alert warning" role="alert">
+                                This submission may have reached Stellar before the app was interrupted.
+                                Quarantining it will not resubmit or confirm anything.
+                            </p>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@_busy"
+                                    @onclick="() => QuarantineInterruptedAsync(pending)">
+                                QUARANTINE INTERRUPTED SUBMISSION — NO RETRY
+                            </button>
+                        }
                         @if (pending.TransactionHash is { Length: 64 } recordedHash &&
                             pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
                                 VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
@@ -300,6 +312,51 @@
         _selectedTitle = null;
         _explicitApproval = false;
         _mainnetApproved = false;
+    }
+
+    private async Task QuarantineInterruptedAsync(VaultPendingMutation mutation)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId != mutation.AccountId ||
+            mutation.State != VaultSyncState.Submitting)
+            return;
+        CancelApproval();
+        var epoch = Sessions.Epoch;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var network = Networks.CredentialKey(mutation.AccountId);
+            if (network != mutation.NetworkId)
+                throw new InvalidOperationException("Selected network changed.");
+            // Re-read current durable mutation; never act on a stale screen
+            // or any entry that is no longer in Submitting.
+            var current = (await PendingQueue.ReviewAllAsync(
+                mutation.AccountId, network)).SingleOrDefault(x => x.Id == mutation.Id);
+            if (current is null || current.State != VaultSyncState.Submitting ||
+                current.TransactionHash != mutation.TransactionHash ||
+                !current.EncryptedPayload.AsSpan().SequenceEqual(mutation.EncryptedPayload) ||
+                Sessions.Epoch != epoch)
+                throw new InvalidOperationException("Submitting entry changed since review.");
+            await PendingQueue.QuarantineInterruptedIfUnchangedAsync(mutation);
+            if (Sessions.Epoch != epoch || !Sessions.IsUnlocked ||
+                Sessions.ActiveAccountId != mutation.AccountId ||
+                Networks.CredentialKey(mutation.AccountId) != network)
+                throw new InvalidOperationException("Vault session or network changed.");
+            _report = await HybridReview.ReviewAsync(mutation.AccountId, estimateFees: false);
+            _unresolved = (await PendingQueue.ReviewAllAsync(
+                mutation.AccountId, network)).Where(x =>
+                    x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                .ToArray();
+            _error = "Interrupted submission quarantined as Uncertain. No transaction was sent, retried, or confirmed. Investigate the recorded hash or ledger history before further Sync.";
+        }
+        catch (Exception)
+        {
+            _report = null;
+            _unresolved = [];
+            _error = "Could not safely quarantine this submission. Refresh the encrypted queue and inspect the ledger; do not retry.";
+        }
+        finally { _busy = false; }
     }
 
     private async Task InspectDeletionAsync(VaultPendingMutation mutation)

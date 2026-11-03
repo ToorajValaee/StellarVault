@@ -100,6 +100,10 @@ public static class VaultHybridFolderSyncPlan
                     VaultQueuedCreatePolicy.Problems(item, all).All(x =>
                         x == "unpublished-local-parent-folder") =>
                     StepStatus.WaitingForParent,
+                _ when readyIds.Contains(item.Id) &&
+                    review.NeedsReconciliation != 0 => StepStatus.AwaitingVerification,
+                _ when readyIds.Contains(item.Id) &&
+                    review.Conflicts != 0 => StepStatus.NeedsRepair,
                 _ when readyIds.Contains(item.Id) => StepStatus.ReadyForReview,
                 _ => StepStatus.NeedsRepair
             };
