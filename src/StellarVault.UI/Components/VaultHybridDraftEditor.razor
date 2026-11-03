@@ -24,6 +24,13 @@
         <label class="terminal-label" for="hybrid-draft-parent">PARENT FOLDER ID (OPTIONAL — STELLAR OR LOCAL PENDING)</label>
         <input id="hybrid-draft-parent" class="terminal-input" maxlength="16"
                @bind="_folderId" disabled="@_busy" autocomplete="off" />
+        @if (!string.IsNullOrWhiteSpace(_folderId))
+        {
+            <p class="advanced-help">Selected parent: <code>@_folderId</code>.
+                An unpublished parent blocks the child until it is independently confirmed.</p>
+            <button type="button" class="pixel-button compact" disabled="@_busy"
+                    @onclick="ClearParent">MOVE TO ROOT (NO PARENT)</button>
+        }
         @if (!_isFolder)
         {
             <label class="terminal-label" for="hybrid-draft-content">ENCRYPTED RECORD CONTENT</label>
@@ -55,20 +62,29 @@
             <div class="data-field">
                 <strong>@draft.Draft.Title</strong>
                 <p>@draft.Kind · @draft.State · @draft.CreatedUtc.ToLocalTime().ToString("g")</p>
+                @if (!string.IsNullOrWhiteSpace(draft.Draft.FolderId))
+                {
+                    <p class="advanced-help">Parent folder: @draft.Draft.FolderId</p>
+                }
                 @if (draft.State == VaultSyncState.Pending)
                 {
                     <button type="button" class="pixel-button compact" disabled="@_busy"
                             @onclick="() => Open(draft)">EDIT LOCAL DRAFT</button>
-                    @if (draft.Kind == VaultMutationKind.CreateFolder)
-                    {
-                        <button type="button" class="pixel-button compact" disabled="@_busy"
-                                @onclick="() => SelectParent(draft)">USE FOLDER AS LOCAL PARENT</button>
-                        <small>Local folder ID: @draft.EntityId</small>
-                    }
                 }
                 else
                 {
                     <small>Submitted or unresolved. Cannot be edited or replayed.</small>
+                }
+                @if (draft.Kind == VaultMutationKind.CreateFolder &&
+                    draft.State is VaultSyncState.Pending or VaultSyncState.Confirmed)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => SelectParent(draft)">SET AS CURRENT PARENT</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => CreateChild(draft, false)">NEW RECORD IN FOLDER</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => CreateChild(draft, true)">NEW SUBFOLDER</button>
+                    <small>Folder ID: @draft.EntityId</small>
                 }
             </div>
         }
@@ -93,11 +109,28 @@
 
     private void NewRecord() => Reset(false);
     private void NewFolder() => Reset(true);
+    private void ClearParent() { if (!_busy) _folderId = ""; }
+
+    private void CreateChild(VaultHybridDraftWorkspace.DraftItem parent, bool folder)
+    {
+        if (_busy || parent.Kind != VaultMutationKind.CreateFolder ||
+            parent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed)) return;
+        Reset(folder);
+        _folderId = parent.EntityId;
+        _status = "New local child of " + parent.Draft.Title +
+            ". Save it offline; publication will wait for the parent.";
+    }
 
     private void SelectParent(VaultHybridDraftWorkspace.DraftItem item)
     {
-        if (_busy || item.State != VaultSyncState.Pending ||
+        if (_busy || item.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed) ||
             item.Kind != VaultMutationKind.CreateFolder) return;
+        if (_editingId is not null && _items.Any(x => x.MutationId == _editingId &&
+            x.EntityId.Equals(item.EntityId, StringComparison.OrdinalIgnoreCase)))
+        {
+            _status = "A folder cannot be its own parent.";
+            return;
+        }
         _folderId = item.EntityId;
         _status = "Local parent selected. Child stays blocked from Stellar publication until the parent is confirmed.";
     }
@@ -143,7 +176,7 @@
             else await Drafts.ReviseAsync(_editingId, draft);
             _items = await Drafts.ListAsync();
             Reset(_isFolder);
-            _status = "Encrypted draft saved locally. It has NOT been published to Stellar.";
+            _status = "Encrypted draft saved locally. Parent dependencies were revised with the draft. No Stellar transaction occurred.";
         }
         catch (Exception)
         {

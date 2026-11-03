@@ -56,20 +56,15 @@ public sealed class VaultHybridDraftWorkspace(
             throw new InvalidOperationException("Only unpublished local creates can be revised.");
         ValidateDraft(draft, current.Kind);
         var proposedDependencies = ParentDependencies(draft, entries, current.EntityId);
-        if (!proposedDependencies.SequenceEqual(current.DependsOn, StringComparer.Ordinal) &&
-            !(proposedDependencies.Length == 0 && current.DependsOn.Length == 1 &&
-              entries.Any(x => x.Id == current.DependsOn[0] &&
-                  x.EntityId.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase) &&
-                  x.State == VaultSyncState.Confirmed)))
-            throw new InvalidOperationException(
-                "Changing a local parent dependency requires creating a new draft. Existing dependencies remain immutable.");
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
         try
         {
-            // A parent that is still local keeps this draft blocked until
-            // its dependency is independently confirmed on the ledger.
+            // The encrypted payload and dependency edge must be committed in
+            // the SAME durable CAS revision; never leave the parent pointer and
+            // queue dependency out of sync.
             RequireSameScope(account, scope);
-            return await queue.RevisePendingAsync(account, scope, mutationId, payload, ct);
+            return await queue.RevisePendingCreateAsync(
+                current, payload, proposedDependencies, ct);
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
     }

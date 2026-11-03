@@ -78,3 +78,7 @@ Both hosts now register the same `IVaultGuardedLedgerMutations` interface implem
 ## Conflict-safe record copy and deletion quote support (2026-11-03)
 
 Hybrid deletion fee review now correctly unwraps `VaultDeletionIntent.Original` before estimating a version-pinned DeleteRecord/DeleteFolder; the strict queue preflight still validates original fingerprint and manifest owners. Public/custom queued update/delete quotes are blocked in the shared Core review layer. Pending offline record updates can be saved as a new encrypted CREATE draft with a fresh ID using the shared Core and UI on PWA/MAUI; this preserves proposed data without overwriting any published record or automatically discarding the source. It is an append-only recovery option, not atomic multi-device conflict resolution.
+
+## Offline folder move/reparent, 2026-11-03
+
+Local encrypted record and folder drafts can now move among root, pending local folders and already-confirmed parent folders. Shared Core changes payload and queue dependency edge together through one durable per-mutation CAS and rejects stale revisions or dependency cycles. Shared UI in PWA/MAUI offers child creation, folder selection, root move and visible parent IDs. Pending-parent children remain blocked from Stellar publication until confirmed. On-chain atomic multi-device coordination remains an independent release blocker.

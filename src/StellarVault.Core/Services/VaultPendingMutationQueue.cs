@@ -534,6 +534,105 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return revised;
     }
 
+    /// <summary>
+    /// Atomically revise a pending local CREATE draft and its parent dependency
+    /// in one durable store CAS. This does not submit Stellar transactions.
+    /// Prevents stale-editor overwrites, local folder cycles and dangling
+    /// dependency IDs. A cross-tab change after the read still fails closed
+    /// at later review/preflight; this is not a multi-entry transaction.
+    /// </summary>
+    public async Task<VaultPendingMutation> RevisePendingCreateAsync(
+        VaultPendingMutation expected, byte[] replacementPayload,
+        string[] replacementDependencies, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(replacementDependencies);
+        if (replacementPayload is not { Length: > 0 } ||
+            replacementPayload.Length > 8 * 1024 * 1024 ||
+            replacementDependencies.Length > 1 ||
+            replacementDependencies.Any(x => !Guid.TryParseExact(x, "N", out _)))
+            throw new ArgumentException("Invalid revised local create or parent dependency.");
+        var all = await ScopedEntriesAsync(expected.AccountId, expected.NetworkId, ct);
+        var previous = await store.GetAsync(expected.AccountId, expected.NetworkId, expected.Id, ct)
+            ?? throw new KeyNotFoundException("Pending local create was removed.");
+        RequireScope(previous, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(previous, expected) ||
+            previous.State != VaultSyncState.Pending ||
+            previous.TransactionHash is not null ||
+            previous.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            throw new InvalidOperationException(
+                "Local create changed since it was opened or is no longer editable.");
+
+        LedgerRecordDraft draft;
+        try
+        {
+            draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(replacementPayload)
+                ?? throw new InvalidDataException("Updated local draft was empty.");
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new InvalidDataException("Updated local draft payload is invalid.", ex);
+        }
+        var candidate = previous with
+        {
+            EncryptedPayload = replacementPayload.ToArray(),
+            DependsOn = replacementDependencies.ToArray()
+        };
+        var issues = VaultQueuedCreatePolicy.Problems(candidate, all);
+        if (issues.Any(x => x != "unpublished-local-parent-folder"))
+            throw new InvalidOperationException(
+                "Invalid local create: " + string.Join(", ", issues));
+
+        VaultPendingMutation? localParent = null;
+        if (!string.IsNullOrEmpty(draft.FolderId))
+        {
+            var matches = all.Where(x => x.Id != previous.Id &&
+                x.EntityId.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (matches.Length > 1)
+                throw new InvalidOperationException("Parent record ID is ambiguous.");
+            localParent = matches.SingleOrDefault();
+            if (localParent is not null && localParent.Kind != VaultMutationKind.CreateFolder)
+                throw new InvalidOperationException("Parent is not a created folder.");
+        }
+        if (localParent is null || localParent.State == VaultSyncState.Confirmed)
+        {
+            if (candidate.DependsOn.Length != 0)
+                throw new InvalidOperationException(
+                    "Remote or confirmed parents must not have pending-local dependencies.");
+        }
+        else
+        {
+            if (localParent.State != VaultSyncState.Pending ||
+                localParent.TransactionHash is not null ||
+                candidate.DependsOn.Length != 1 ||
+                candidate.DependsOn[0] != localParent.Id)
+                throw new InvalidOperationException(
+                    "Pending parent folder must have exactly its own queue dependency.");
+        }
+
+        // Detect cycles using queued dependency edges even for parents that
+        // have been reparented by a different editor. No local self-ancestor
+        // may become a parent after this revision.
+        var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal) { candidate.Id };
+        var cursor = candidate.DependsOn.SingleOrDefault();
+        while (cursor is not null)
+        {
+            if (!visited.Add(cursor) || !byId.TryGetValue(cursor, out var ancestor))
+                throw new InvalidOperationException("Folder dependency cycle or missing ancestor.");
+            if (ancestor.Kind != VaultMutationKind.CreateFolder ||
+                ancestor.State is VaultSyncState.Failed or VaultSyncState.Conflict)
+                throw new InvalidOperationException("Folder ancestor is not publishable.");
+            cursor = ancestor.DependsOn.SingleOrDefault();
+        }
+
+        if (!await store.TryReplaceAsync(previous, candidate, ct))
+            throw new InvalidOperationException(
+                "Local draft changed while reparenting; reopen it before saving.");
+        return candidate;
+    }
+
     /// <summary>Explicitly migrate a legacy 32-character draft entity ID.
     /// Never silently truncate: dependent drafts must first be handled separately.</summary>
     public async Task<VaultPendingMutation> MigrateLegacyCreateIdAsync(
