@@ -98,3 +98,7 @@ The shared Core read-only `VaultHybridFolderSyncPlan` turns encrypted create-fol
 ## Interrupted submission quarantine and global Sync gate (2026-11-03)
 
 The shared Sync UI now offers explicit no-retry quarantine of a durable Submitting mutation. Core verifies its exact queue revision and CAS-updates only to Uncertain; account/network/session checks and immediate workflow reload prevent stale screen actions. The guided folder/child Sync plan no longer marks children ready while any unresolved submission or conflict globally prevents new fee approvals. Neither action changes the direct on-chain flow or permits automatic broadcast/replay.
+
+## Missing-hash history investigation — 2026-11-04
+
+Added a read-only Core+PWA/MAUI investigation for unresolved queued record/folder CREATE and Testnet UPDATE lacking recorded transaction hashes. Searches a bounded recent root-funded transaction window for candidate manifest writes, authenticates each through HD lineage and historical registry/chunks/plaintext, and shows potential hashes without modifying the encrypted queue or asserting attribution. Zero matches is never proof of transaction failure, and no candidate authorizes retry/confirmation. Hashless DELETE remains excluded. Stronger pre-broadcast receipt identity and full Testnet validation remain release blockers.

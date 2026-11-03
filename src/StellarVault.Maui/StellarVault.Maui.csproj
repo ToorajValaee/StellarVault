@@ -40,6 +40,8 @@
              Link="SharedStellarLedger/HorizonVaultQueuedMutationEvidenceProvider.cs" />
     <Compile Include="../StellarVault.Pwa/Services/HorizonVaultDeletionTombstoneReader.cs"
              Link="SharedStellarLedger/HorizonVaultDeletionTombstoneReader.cs" />
+    <Compile Include="../StellarVault.Pwa/Services/HorizonVaultUnrecordedSubmissionReader.cs"
+             Link="SharedStellarLedger/HorizonVaultUnrecordedSubmissionReader.cs" />
     <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>

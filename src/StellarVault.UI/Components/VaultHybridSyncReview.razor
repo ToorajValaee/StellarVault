@@ -4,6 +4,7 @@
 @inject VaultNetworkSelection Networks
 @inject VaultPendingMutationQueue PendingQueue
 @inject VaultDeletionRecoveryReview DeletionReview
+@inject VaultUnrecordedSubmissionReview UnrecordedReview
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
@@ -109,7 +110,35 @@
                         }
                         else if (pending.TransactionHash is null)
                         {
-                            <p role="alert">No hash was recorded. The original submission might have succeeded. This action cannot automatically confirm it; investigate independently.</p>
+                            <p role="alert">No transaction hash was recorded. The original submission might have succeeded.
+                                Do not retry. Historical candidate search is read-only and NEVER authorizes confirmation.</p>
+                            @if (pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
+                            {
+                                <button class="pixel-button compact" type="button"
+                                        disabled="@(_busy || !Ledger.IsConnected ||
+                                            (pending.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder &&
+                                             Networks.Network != "testnet"))"
+                                        @onclick="() => InvestigateUnrecordedAsync(pending)">
+                                    INVESTIGATE MISSING TRANSACTION HASH — READ ONLY
+                                </button>
+                                @if (_unrecordedFindings.TryGetValue(pending.Id, out var discovered))
+                                {
+                                    <p role="status">@discovered.Explanation</p>
+                                    <p>Transactions inspected: @discovered.ExaminedTransactions ·
+                                        Complete historical search: @discovered.SearchComplete</p>
+                                    @foreach (var candidate in discovered.HistoricallyMatchedTransactionHashes)
+                                    {
+                                        <p>Historical candidate: <code>@candidate</code>
+                                            <strong>NOT QUEUE CONFIRMATION</strong></p>
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                <p role="status">This mutation type has no safe hashless candidate search.
+                                    Preserve the unresolved queue entry for independent investigation.</p>
+                            }
                         }
                         else if (pending.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder &&
                                  pending.TransactionHash is { Length: 64 } deletionHash)
@@ -257,6 +286,7 @@
             _report = null;
             _unresolved = [];
             _deletionFindings.Clear();
+            _unrecordedFindings.Clear();
             _error = null;
             StateHasChanged();
         });
@@ -300,6 +330,7 @@
     private bool _busy;
     private IReadOnlyList<VaultPendingMutation> _unresolved = [];
     private readonly Dictionary<string, VaultDeletionTombstoneFinding> _deletionFindings = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, VaultUnrecordedSubmissionFinding> _unrecordedFindings = new(StringComparer.Ordinal);
     private VaultSyncApprovalSnapshot? _selectedQuote;
     private string? _selectedTitle;
     private VaultMutationKind _selectedKind;
@@ -312,6 +343,34 @@
         _selectedTitle = null;
         _explicitApproval = false;
         _mainnetApproved = false;
+    }
+
+    private async Task InvestigateUnrecordedAsync(VaultPendingMutation mutation)
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence ||
+            Sessions.ActiveAccountId != mutation.AccountId ||
+            mutation.State is not (VaultSyncState.Submitting or VaultSyncState.Uncertain) ||
+            mutation.TransactionHash is not null)
+            return;
+        CancelApproval();
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _unrecordedFindings.Remove(mutation.Id);
+        try
+        {
+            var finding = await UnrecordedReview.InspectAsync(
+                mutation.AccountId, mutation.Id);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch &&
+                Sessions.ActiveAccountId == mutation.AccountId)
+                _unrecordedFindings[mutation.Id] = finding;
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _unrecordedFindings[mutation.Id] = new([], 0, false,
+                    "Historical search unavailable. Queue state was not changed; never retry blindly.");
+        }
+        finally { _busy = false; }
     }
 
     private async Task QuarantineInterruptedAsync(VaultPendingMutation mutation)

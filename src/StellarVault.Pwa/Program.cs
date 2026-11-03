@@ -39,6 +39,8 @@ builder.Services.AddScoped<HorizonVaultDeletionPredecessorInspector>();
 builder.Services.AddScoped<IVaultDeletionTombstoneReader, HorizonVaultDeletionTombstoneReader>();
 builder.Services.AddScoped<VaultDeletionRecoveryReview>();
 builder.Services.AddScoped<HorizonVaultManifestInspector>();
+builder.Services.AddScoped<IVaultUnrecordedSubmissionReader, HorizonVaultUnrecordedSubmissionReader>();
+builder.Services.AddScoped<VaultUnrecordedSubmissionReview>();
 builder.Services.AddScoped<HorizonVaultCurrentChunkInspector>();
 builder.Services.AddScoped<HorizonVaultHistoricalChunkInspector>();
 builder.Services.AddScoped<HorizonVaultHistoricalRegistryInspector>();
