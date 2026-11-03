@@ -19,8 +19,15 @@ public static class VaultSyncApprovalGuard
     {
         if (mutation.State != VaultSyncState.Pending || mutation.TransactionHash is not null)
             throw new InvalidOperationException("Only an untouched pending draft can be quoted.");
-        if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+        if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+            VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
             throw new InvalidOperationException("This mutation requires protocol-aware review.");
+        if ((mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) &&
+            (mutation.ExpectedRemoteVersion is not { Length: 64 } version ||
+             !version.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f')))
+            throw new InvalidOperationException("Remote mutation requires a pinned content version.");
         if (mutation.EntityId.Length != 16 || !mutation.EntityId.All(Uri.IsHexDigit))
             throw new InvalidOperationException("Ledger quote requires a valid 16-character record ID.");
         if (feeXlm < 0 || peakReserveXlm < 0)

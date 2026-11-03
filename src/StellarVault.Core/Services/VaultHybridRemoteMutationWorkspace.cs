@@ -245,7 +245,7 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         new(item.Title, item.Content, item.FolderId, item.Tags?.ToArray(),
             item.IsFolder, item.UserName, item.Url, item.Notes);
 
-    private static string Fingerprint(LedgerRecordItem item)
+    public static string Fingerprint(LedgerRecordItem item)
     {
         var content = JsonSerializer.SerializeToUtf8Bytes(new
         {

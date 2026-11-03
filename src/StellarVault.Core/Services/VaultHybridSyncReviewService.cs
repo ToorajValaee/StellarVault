@@ -48,10 +48,13 @@ public sealed class VaultHybridSyncReviewService(
         foreach (var mutation in review.Ready)
         {
             ct.ThrowIfCancellationRequested();
-            if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            var isCreate = mutation.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder;
+            var isRemote = mutation.Kind is VaultMutationKind.UpdateRecord or
+                VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder;
+            if (!isCreate && !isRemote)
             {
                 details.Add(new(mutation.Id, mutation.Kind, mutation.Kind.ToString(),
-                    "Requires protocol-aware update, delete or file synchronization."));
+                    "Requires staged file synchronization."));
                 continue;
             }
 
@@ -60,14 +63,15 @@ public sealed class VaultHybridSyncReviewService(
             catch (JsonException) { draft = null; }
             if (draft is null || string.IsNullOrWhiteSpace(draft.Title) ||
                 draft.Title.Length > 256 || string.IsNullOrEmpty(draft.Content) ||
-                draft.IsFolder != (mutation.Kind == VaultMutationKind.CreateFolder))
+                draft.IsFolder != (mutation.Kind is VaultMutationKind.CreateFolder or
+                    VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder))
             {
                 details.Add(new(mutation.Id, mutation.Kind, mutation.Kind.ToString(),
                     "Queued creation payload is malformed or inconsistent."));
                 continue;
             }
 
-            var problems = VaultQueuedCreatePolicy.Problems(mutation, all);
+            var problems = isCreate ? VaultQueuedCreatePolicy.Problems(mutation, all) : [];
             if (problems.Length > 0)
             {
                 details.Add(new(mutation.Id, mutation.Kind, draft.Title,
@@ -85,30 +89,40 @@ public sealed class VaultHybridSyncReviewService(
                 continue;
             }
 
-            if (remote.Any(x => string.Equals(x.Id, mutation.EntityId, StringComparison.OrdinalIgnoreCase)))
+            if (isCreate)
             {
-                details.Add(new(mutation.Id, mutation.Kind, draft.Title,
-                    "Ledger already contains this record ID; reconcile before publishing."));
-                continue;
-            }
-
-            if (!string.IsNullOrEmpty(draft.FolderId) &&
-                !remote.Any(x => string.Equals(x.Id, draft.FolderId,
-                    StringComparison.OrdinalIgnoreCase) && x.IsFolder))
-            {
-                details.Add(new(mutation.Id, mutation.Kind, draft.Title,
-                    "Parent folder has not been confirmed on Stellar."));
-                continue;
+                if (remote.Any(x => string.Equals(x.Id, mutation.EntityId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    details.Add(new(mutation.Id, mutation.Kind, draft.Title,
+                        "Ledger already contains this record ID; reconcile before publishing."));
+                    continue;
+                }
+                if (!string.IsNullOrEmpty(draft.FolderId) &&
+                    !remote.Any(x => string.Equals(x.Id, draft.FolderId,
+                        StringComparison.OrdinalIgnoreCase) && x.IsFolder))
+                {
+                    details.Add(new(mutation.Id, mutation.Kind, draft.Title,
+                        "Parent folder has not been confirmed on Stellar."));
+                    continue;
+                }
             }
 
             try
             {
                 // Re-run the durable queue's complete eligibility policy.
-                await queue.PreflightCreateAsync(
-                    VaultSyncApprovalGuard.Capture(mutation, decimal.MaxValue,
-                        decimal.MaxValue, DateTimeOffset.UtcNow),
-                    accountId, networkId, remote, DateTimeOffset.UtcNow, ct);
-                var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
+                var inspectionQuote = VaultSyncApprovalGuard.Capture(
+                    mutation, decimal.MaxValue, decimal.MaxValue, DateTimeOffset.UtcNow);
+                if (isCreate)
+                    await queue.PreflightCreateAsync(inspectionQuote, accountId,
+                        networkId, remote, DateTimeOffset.UtcNow, ct);
+                else
+                    await queue.PreflightRemoteMutationAsync(inspectionQuote, accountId,
+                        networkId, remote, DateTimeOffset.UtcNow, ct);
+                // Existing record IDs mean UPDATE, null ID means CREATE.
+                // Deletion has its own cost estimator.
+                var cost = mutation.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                    ? await ledger.EstimateDeleteAsync(mutation.EntityId)
+                    : await ledger.EstimateAsync(draft, isCreate ? null : mutation.EntityId);
                 if (networks.Network != selectedNetwork ||
                     networks.CredentialKey(accountId) != networkId ||
                     networks.CustomPassphrase != selectedPassphrase ||

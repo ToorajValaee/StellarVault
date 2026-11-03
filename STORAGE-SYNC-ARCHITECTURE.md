@@ -52,3 +52,7 @@ Both hosts now compile the same historical Horizon evidence adapter for the Core
 ## Hybrid remote modifications, 2026-11-03
 
 A shared Core service and Razor component now stage offline encrypted updates/deletes of published records/folders across PWA and MAUI. Proposed mutations pin the full remote record fingerprint and expose read-only divergence checks before future Sync. The user can revise an offline update or discard an unsubmitted change without network access. Actual update/delete hybrid publication and historical confirmation are still disabled until signed version preflight, durable per-entity uniqueness and independent receipt linkage are implemented. Direct on-chain operations remain unchanged.
+
+## Testnet-only queued update/delete Sync — 2026-11-03
+
+Shared Core fee review and manual approval now support version-pinned remote update/delete mutations. Original record fingerprint, fresh remote inventory, parent constraints and cost limits are rechecked before durable reservation; a single attempted writer call is quarantined `Uncertain` pending a future transaction-specific proof. Because the underlying Stellar writer does not support atomic on-chain version preconditions, Public Mainnet and custom-network queued update/delete submission remain disabled in Core and UI. Existing direct on-chain CRUD remains unchanged. Creation fee-estimation routing is corrected to use create rather than update estimates. PWA/MAUI compile and Testnet validation remain outstanding.

@@ -244,6 +244,122 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             "Read-only preflight passed. This is not permission to broadcast.");
     }
 
+    /// <summary>
+    /// Version-pinned, read-only preflight for a published record/folder update
+    /// or deletion. This is not a transaction authorization and never writes
+    /// the ledger. Fingerprints are computed from the full recovered record.
+    /// </summary>
+    public async Task<VaultSyncPreflightResult> PreflightRemoteMutationAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, string networkId,
+        IReadOnlyCollection<LedgerRecordItem> remoteRecords, DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(remoteRecords);
+        var current = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
+            ?? throw new KeyNotFoundException("Quoted mutation is missing.");
+        RequireScope(current, accountId, networkId);
+        VaultSyncApprovalGuard.RequireFresh(quote, current, accountId, networkId,
+            now, TimeSpan.FromMinutes(5));
+        if (current.Kind is not (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) ||
+            current.EntityId is not { Length: 16 } ||
+            !current.EntityId.All(Uri.IsHexDigit) ||
+            current.ExpectedRemoteVersion is not { Length: 64 } baseline ||
+            !baseline.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            current.DependsOn.Length != 0)
+            throw new InvalidOperationException("Mutation is not a valid version-pinned remote change.");
+        var review = await PrepareReviewAsync(accountId, networkId, ct);
+        if (review.NeedsReconciliation != 0 || review.Conflicts != 0 ||
+            !review.Ready.Any(x => x.Id == current.Id))
+            throw new InvalidOperationException("Unresolved submissions or conflicts block Sync.");
+        var scoped = await ScopedEntriesAsync(accountId, networkId, ct);
+        if (scoped.Any(x => x.Id != current.Id &&
+            x.EntityId.Equals(current.EntityId, StringComparison.OrdinalIgnoreCase) &&
+            x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)))
+            throw new InvalidOperationException("Another active queue mutation targets the same remote record.");
+
+        if (remoteRecords.Any(x => x is null || x.Id is not { Length: 16 } ||
+            !x.Id.All(Uri.IsHexDigit)) ||
+            remoteRecords.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                .Any(group => group.Count() != 1))
+            throw new InvalidDataException("Remote inventory is invalid or ambiguous.");
+        var remote = remoteRecords.SingleOrDefault(x =>
+            x.Id.Equals(current.EntityId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("Remote target disappeared: conflict.");
+        if (remote.IsFolder != (current.Kind is VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder) ||
+            VaultHybridRemoteMutationWorkspace.Fingerprint(remote) != baseline)
+            throw new InvalidOperationException("Remote contents differ from the pinned baseline: conflict.");
+        if (remote.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
+            remote.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
+            remote.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("File-protocol records cannot use the text update/delete flow.");
+        if (current.Kind is VaultMutationKind.DeleteFolder &&
+            remoteRecords.Any(x => string.Equals(x.FolderId, current.EntityId,
+                StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Folder has children: conflict.");
+        if (current.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
+        {
+            LedgerRecordDraft draft;
+            try
+            {
+                draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(current.EncryptedPayload)
+                    ?? throw new InvalidDataException("Update draft is missing.");
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new InvalidDataException("Update draft is invalid.", ex);
+            }
+            if (draft.IsFolder != remote.IsFolder || string.IsNullOrWhiteSpace(draft.Title) ||
+                draft.Title.Length > 256 || string.IsNullOrEmpty(draft.Content) ||
+                draft.Tags is { Length: > 24 } ||
+                draft.Tags?.Any(x => x is null || x.Length > 64) == true)
+                throw new InvalidDataException("Update draft is malformed or changes record kind.");
+            if (!string.IsNullOrEmpty(draft.FolderId))
+            {
+                if (draft.FolderId.Length != 16 || !draft.FolderId.All(Uri.IsHexDigit) ||
+                    !remoteRecords.Any(x => x.IsFolder && x.Id.Equals(draft.FolderId,
+                        StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException("Parent folder is unavailable: conflict.");
+                var ancestor = draft.FolderId;
+                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    { current.EntityId };
+                while (!string.IsNullOrEmpty(ancestor))
+                {
+                    if (!visited.Add(ancestor))
+                        throw new InvalidOperationException("Remote folder move forms a cycle.");
+                    var parent = remoteRecords.Single(x => x.IsFolder &&
+                        x.Id.Equals(ancestor, StringComparison.OrdinalIgnoreCase));
+                    ancestor = parent.FolderId;
+                }
+            }
+        }
+        return new(current.Id, current.EntityId, quote.DraftSha256,
+            "Versioned remote record matches the pinned baseline. This is a read-only preflight.");
+    }
+
+    /// <summary>
+    /// Reserves an explicitly approved remote mutation with durable CAS. No
+    /// network call is made here; any later outcome must remain quarantined
+    /// until a transaction-specific verifier is available.
+    /// </summary>
+    public async Task<VaultPendingMutation> ReservePreflightedRemoteMutationAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, string networkId,
+        IReadOnlyCollection<LedgerRecordItem> remoteRecords, DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        await PreflightRemoteMutationAsync(quote, accountId, networkId, remoteRecords, now, ct);
+        var current = await store.GetAsync(accountId, networkId, quote.MutationId, ct)
+            ?? throw new KeyNotFoundException("Quoted mutation disappeared.");
+        RequireScope(current, accountId, networkId);
+        VaultSyncApprovalGuard.RequireFresh(quote, current, accountId, networkId,
+            now, TimeSpan.FromMinutes(5));
+        var next = current with { State = VaultSyncState.Submitting };
+        if (!await store.TryReplaceAsync(current, next, ct))
+            throw new InvalidOperationException("Queue revision changed during reservation.");
+        return next;
+    }
+
     /// <summary>Conservatively recover interrupted attempts: never automatically resubmit
     /// an entry once submission intent has been durably written.</summary>
     public async Task<IReadOnlyList<VaultPendingMutation>> ReviewInterruptedAsync(

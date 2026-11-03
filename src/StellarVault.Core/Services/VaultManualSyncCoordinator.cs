@@ -78,7 +78,7 @@ public sealed class VaultManualSyncCoordinator(
             var remote = await ledger.ReadAsync();
             await queue.PreflightCreateAsync(quote, accountId, context.NetworkId,
                 remote, DateTimeOffset.UtcNow, ct);
-            var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
+            var cost = await ledger.EstimateAsync(draft);
             await RequireConnectedRootAsync(context, ct);
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
@@ -116,7 +116,7 @@ public sealed class VaultManualSyncCoordinator(
             ?? throw new InvalidDataException("Invalid queued create payload.");
         var remote = await ledger.ReadAsync();
         await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
-        var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
+        var cost = await ledger.EstimateAsync(draft);
         if (cost.NetworkFeeXlm > quote.QuotedFeeXlm ||
             cost.PeakReserveXlm > quote.QuotedPeakReserveXlm)
             throw new InvalidOperationException("Transaction costs exceed approved quote.");
@@ -151,6 +151,130 @@ public sealed class VaultManualSyncCoordinator(
             submissionError is null
                 ? "Submission attempted. Independent record-to-transaction verification is required."
                 : "Submission result unknown. Do not retry; reconcile with Stellar before taking any action.");
+        }
+        finally { submissionGate.Release(); }
+    }
+
+    /// <summary>
+    /// A single, explicitly approved version-pinned UPDATE or DELETE attempt.
+    /// A recorded hash is never sufficient for confirmation: the current
+    /// evidence verifier deliberately supports CREATE only. The result stays
+    /// Uncertain until update/delete-specific evidence exists.
+    /// </summary>
+    public async Task<bool> CanPublishApprovedRemoteMutationAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, CancellationToken ct = default)
+    {
+        try
+        {
+            // Remote update/delete ledger writes currently have no atomic
+            // on-chain expected-version precondition. Restrict experimental
+            // manual submission to Testnet until that race is resolved.
+            if (networks.Network != "testnet") return false;
+            var context = CaptureContext(accountId);
+            if (quote.AccountId != accountId || quote.NetworkId != context.NetworkId)
+                return false;
+            await RequireConnectedRootAsync(context, ct);
+            var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
+            if (review.NeedsReconciliation != 0 || review.Conflicts != 0 ||
+                !review.Ready.Any(x => x.Id == quote.MutationId)) return false;
+            var mutation = review.Ready.Single(x => x.Id == quote.MutationId);
+            VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId,
+                context.NetworkId, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+            var remote = await ledger.ReadAsync();
+            await queue.PreflightRemoteMutationAsync(quote, accountId,
+                context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+            var cost = await EstimateRemoteCostAsync(mutation);
+            await RequireConnectedRootAsync(context, ct);
+            return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
+                cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
+    }
+
+    private async Task<LedgerCostPreview> EstimateRemoteCostAsync(VaultPendingMutation mutation)
+    {
+        if (mutation.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
+            return await ledger.EstimateDeleteAsync(mutation.EntityId);
+        if (mutation.Kind is not (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder))
+            throw new InvalidOperationException("Unsupported version-pinned operation.");
+        var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload)
+            ?? throw new InvalidDataException("Update draft is missing.");
+        return await ledger.EstimateAsync(draft, mutation.EntityId);
+    }
+
+    public async Task<VaultManualSyncOutcome> PublishApprovedRemoteMutationAsync(
+        VaultSyncApprovalSnapshot quote, string accountId, bool explicitlyApproved,
+        CancellationToken ct = default)
+    {
+        if (!explicitlyApproved)
+            throw new InvalidOperationException("Explicit transaction approval is required.");
+        if (networks.Network != "testnet")
+            throw new InvalidOperationException(
+                "Hybrid update/delete submission is Testnet-only until atomic remote-version protection and historical confirmation are implemented.");
+        var context = CaptureContext(accountId);
+        if (quote.AccountId != accountId || quote.NetworkId != context.NetworkId)
+            throw new InvalidOperationException("Approved quote belongs to another account or network.");
+        if (!await submissionGate.WaitAsync(0, ct))
+            throw new InvalidOperationException("Another submission is active.");
+        try
+        {
+            await RequireConnectedRootAsync(context, ct);
+            var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
+            if (review.NeedsReconciliation != 0 || review.Conflicts != 0)
+                throw new InvalidOperationException("Resolve earlier submissions and conflicts first.");
+            var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId)
+                ?? throw new InvalidOperationException("The approved remote mutation is no longer ready.");
+            VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId,
+                context.NetworkId, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+            if (mutation.Kind is not (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+                VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
+                throw new InvalidOperationException("Only version-pinned remote changes can use this operation.");
+            var remote = await ledger.ReadAsync();
+            await queue.PreflightRemoteMutationAsync(quote, accountId,
+                context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+            var cost = await EstimateRemoteCostAsync(mutation);
+            if (cost.NetworkFeeXlm > quote.QuotedFeeXlm ||
+                cost.PeakReserveXlm > quote.QuotedPeakReserveXlm)
+                throw new InvalidOperationException("Network costs changed; obtain a new approval.");
+
+            await RequireConnectedRootAsync(context, ct);
+            ct.ThrowIfCancellationRequested();
+            var reserved = await queue.ReservePreflightedRemoteMutationAsync(
+                quote, accountId, context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+
+            string? hash = null;
+            Exception? submissionError = null;
+            try
+            {
+                await RequireConnectedRootAsync(context, ct);
+                ct.ThrowIfCancellationRequested();
+                LedgerMutationResult outcome;
+                if (reserved.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
+                {
+                    outcome = await ledger.DeleteAsync(reserved.EntityId);
+                }
+                else
+                {
+                    var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(reserved.EncryptedPayload)
+                        ?? throw new InvalidDataException("Reserved update draft was invalid.");
+                    outcome = await ledger.UpdateAsync(reserved.EntityId, draft);
+                }
+                hash = outcome.TransactionHash;
+            }
+            catch (Exception ex) { submissionError = ex; }
+            if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
+                hash = null;
+            try { await queue.MarkUncertainAsync(reserved, hash, CancellationToken.None); }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Submission state could not be persisted. The durable Submitting entry MUST be investigated; do not retry.", ex);
+            }
+            return new VaultManualSyncOutcome(reserved.Id, hash, VaultSyncState.Uncertain,
+                submissionError is null
+                    ? "Remote update/delete submitted. Historical update/delete confirmation is not yet available. Do not retry."
+                    : "Remote update/delete outcome unknown. The mutation is quarantined; do not retry.");
         }
         finally { submissionGate.Release(); }
     }

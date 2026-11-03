@@ -39,7 +39,8 @@
                 {
                     <div class="data-field">
                         <p>Mutation <code>@pending.Id</code> · @pending.Kind · @pending.State</p>
-                        @if (pending.TransactionHash is { Length: 64 } recordedHash)
+                        @if (pending.TransactionHash is { Length: 64 } recordedHash &&
+                            pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
                         {
                             <p>Recorded hash: <code>@recordedHash</code></p>
                             <button type="button" class="pixel-button compact"
@@ -48,9 +49,13 @@
                                 VERIFY RECORDED TRANSACTION — NO RETRY
                             </button>
                         }
-                        else
+                        else if (pending.TransactionHash is null)
                         {
                             <p role="alert">No hash was recorded. The original submission might have succeeded. This action cannot automatically confirm it; investigate independently.</p>
+                        }
+                        else
+                        {
+                            <p role="alert">Update/delete transaction recorded. Historical confirmation for this mutation kind is not available. Do not retry.</p>
                         }
                     </div>
                 }
@@ -74,17 +79,29 @@
             {
                 <section class="terminal-panel" aria-label="Explicit hybrid sync transaction approval">
                     <h3>PAID STELLAR TRANSACTION APPROVAL</h3>
-                    <p><strong>@_selectedTitle</strong> · @(_selectedKind == VaultMutationKind.CreateFolder ? "FOLDER" : "RECORD")</p>
+                    <p><strong>@_selectedTitle</strong> · @(_selectedKind.ToString().ToUpperInvariant())</p>
                     <p>Account: <code>@_selectedQuote.AccountId</code></p>
                     <p>Network: <code>@Networks.Network</code></p>
                     <p>Record mutation: <code>@_selectedQuote.MutationId</code></p>
                     <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm XLM</strong></p>
                     <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm XLM</strong></p>
                     <p>Draft fingerprint: <code>@(_selectedQuote.DraftSha256[..12])</code></p>
+                    @if (_selectedKind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+                        VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
+                    {
+                        <p class="terminal-alert warning" role="alert">
+                            Experimental update/delete Sync is Testnet-only. The remote version is
+                            checked before submission but Stellar does not enforce an atomic
+                            version precondition; concurrent external changes remain possible.
+                            Update/delete historical confirmation is not implemented.
+                        </p>
+                    }
                     <p class="terminal-alert warning" role="alert">
                         Submitting may spend real XLM. This action writes the local draft
                         to Stellar. Even if a transaction hash is returned, the queue will
-                        remain Uncertain until an independently verified reconciliation.
+                        remain Uncertain until independently verified reconciliation.
+                        Update/delete historical confirmation is not yet available, so
+                        those operations will remain quarantined after submission.
                         Never repeat an interrupted submission.
                     </p>
                     <label class="sv-biometric-choice">
@@ -101,7 +118,10 @@
                         </label>
                     }
                     <button type="button" class="pixel-button primary"
-                            disabled="@(_busy || !_explicitApproval || (Networks.Network == "public" && !_mainnetApproved) || !Ledger.IsConnected)"
+                            disabled="@(_busy || !_explicitApproval ||
+                                (_selectedKind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+                                  VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) && Networks.Network != "testnet" ||
+                                (Networks.Network == "public" && !_mainnetApproved) || !Ledger.IsConnected)"
                             @onclick="PublishSelectedAsync">APPROVE AND SUBMIT ONE MUTATION</button>
                     <button type="button" class="pixel-button compact" disabled="@_busy"
                             @onclick="CancelApproval">CANCEL WITHOUT SUBMISSION</button>
@@ -184,8 +204,10 @@
         _error = null;
         try
         {
-            if (!await ManualSync.CanPublishApprovedCreateAsync(
-                item.Quote, _report.AccountId))
+            var canPublish = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                ? await ManualSync.CanPublishApprovedCreateAsync(item.Quote, _report.AccountId)
+                : await ManualSync.CanPublishApprovedRemoteMutationAsync(item.Quote, _report.AccountId);
+            if (!canPublish)
             {
                 _error = "Queue, signing root, network, remote inventory or fee estimate changed. Review again.";
                 _report = null;
@@ -222,8 +244,11 @@
             // Shared Core coordinator repeats all approval checks, fee checks,
             // signed-root binding and durable CAS reservation. After reservation,
             // failure is ALWAYS an unknown outcome and must never be retried.
-            var outcome = await ManualSync.PublishApprovedCreateAsync(
-                quote, account, explicitlyApproved: true);
+            var outcome = _selectedKind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                ? await ManualSync.PublishApprovedCreateAsync(
+                    quote, account, explicitlyApproved: true)
+                : await ManualSync.PublishApprovedRemoteMutationAsync(
+                    quote, account, explicitlyApproved: true);
             _error = "SUBMISSION UNRESOLVED. Mutation " + outcome.MutationId +
                 ". Transaction hash: " + (outcome.TransactionHash ?? "NOT RECORDED") +
                 ". " + outcome.Message +
