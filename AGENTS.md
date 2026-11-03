@@ -55,3 +55,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - Historical chunk provenance uses strict operation IDs before the manifest operation, and successful chunk receipt ledger numbers no later than the final receipt ledger. Receipt ledger equality can be valid for multiple operations in one transaction/ledger.
 - The historical coordinator now fetches the final transaction receipt and manifest once each, rather than performing a redundant preliminary diagnostic and fetching again.
 - Treat this correction as source-only until tested against real Horizon operation pages; do not enable mutation confirmation, signing, or broadcast.
+
+## 2026-11-03 connected HD-v2 record comparison
+
+- `BrowserStellarLedgerRecords.InspectConnectedRecordAsync` compares the decrypted **current** record against an approved `LedgerRecordDraft` using the already-unlocked HD-v2 session, explicitly verifying expected root, child account, node position, Horizon endpoint and network passphrase. It returns **no plaintext** and rejects recovery warnings or ambiguous duplicates. This is read-only; it neither unlocks a new session nor broadcasts.
+- `HorizonVaultPublicationDiagnostic.InspectBoundRecordAsync` combines network-passphrase check, historical ciphertext commitment, current ciphertext snapshot and connected decrypted record comparison. **The result is NOT proof for mutation confirmation**: current account data can change and the historical verifier doesn't decrypt the exact historical bytes. An authorized queue confirmation provider still needs immutable exact-historical-bytes decryption and independent HD root-lineage/network trust guarantees.
+- DI now registers `BrowserStellarLedgerRecords` once and maps `IStellarLedgerRecords` to the SAME scoped instance. Do not use a separate ledger instance for verification, and do not expose these diagnostics as confirmation or broadcasting UI.
+- Tests/builds remain deferred at user request. This source-level change needs explicit .NET 10 build, browser, and Testnet validation before production use.

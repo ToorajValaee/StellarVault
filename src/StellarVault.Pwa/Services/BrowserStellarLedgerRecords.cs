@@ -43,6 +43,72 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         }
     }
 
+    /// <summary>
+    /// Read-only comparison of the decrypted CURRENT HD-v2 record against a
+    /// caller-supplied approved draft. No plaintext is returned in the finding.
+    /// Requires an already-open signing session; never unlocks or publishes.
+    /// </summary>
+    public async Task<ConnectedVaultRecordFinding> InspectConnectedRecordAsync(
+        string expectedRootAccount, string expectedNodeAccount, int expectedNodeIndex,
+        string expectedHorizonUrl, string expectedNetworkPassphrase,
+        string recordId, LedgerRecordDraft expected, CancellationToken ct = default)
+    {
+        static ConnectedVaultRecordFinding Reject(string reason) => new(false, reason);
+        if (!IsConnected || expected is null ||
+            expectedRootAccount is not { Length: 56 } ||
+            expectedNodeAccount is not { Length: 56 } ||
+            expectedNodeIndex is <= 0 or > 64 ||
+            recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit) ||
+            string.IsNullOrWhiteSpace(expectedNetworkPassphrase) ||
+            !Uri.TryCreate(expectedHorizonUrl, UriKind.Absolute, out var expectedEndpoint) ||
+            expectedEndpoint.Scheme != Uri.UriSchemeHttps ||
+            expectedEndpoint.UserInfo.Length != 0 ||
+            expectedEndpoint.Query.Length != 0 || expectedEndpoint.Fragment.Length != 0)
+            return Reject("Invalid or disconnected HD-v2 comparison inputs.");
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var store = RequireStore();
+            if (!string.Equals(store.RootAccountId, expectedRootAccount, StringComparison.Ordinal) ||
+                !string.Equals(store.Settings.Passphrase, expectedNetworkPassphrase, StringComparison.Ordinal) ||
+                !Uri.TryCreate(store.Settings.NormalizedHorizonUrl, UriKind.Absolute, out var sessionEndpoint) ||
+                Uri.Compare(sessionEndpoint, expectedEndpoint, UriComponents.SchemeAndServer | UriComponents.Path,
+                    UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+                return Reject("Connected root, Horizon endpoint or network selection differs.");
+
+            var read = await store.ReadAsync();
+            ct.ThrowIfCancellationRequested();
+            if (read.Warnings.Count != 0 ||
+                read.Nodes.Count == 0 ||
+                read.Nodes[0].Position != 0 ||
+                !string.Equals(read.Nodes[0].AccountId, expectedRootAccount, StringComparison.Ordinal) ||
+                read.Nodes.Count(x => x.Position == expectedNodeIndex &&
+                    string.Equals(x.AccountId, expectedNodeAccount, StringComparison.Ordinal)) != 1 ||
+                read.Records.Count(x => string.Equals(x.Record.Id, recordId,
+                    StringComparison.OrdinalIgnoreCase)) != 1)
+                return Reject("Connected HD chain or record is incomplete or ambiguous.");
+
+            var record = read.Records.Single(x => string.Equals(x.Record.Id, recordId,
+                StringComparison.OrdinalIgnoreCase));
+            var actual = record.Record;
+            if (!string.Equals(record.NodeAccountId, expectedNodeAccount, StringComparison.Ordinal) ||
+                !string.Equals(actual.Id, recordId, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(actual.Title, expected.Title, StringComparison.Ordinal) ||
+                !string.Equals(actual.Secret, expected.Content, StringComparison.Ordinal) ||
+                !string.Equals(actual.FolderId, expected.FolderId, StringComparison.Ordinal) ||
+                actual.IsFolder != expected.IsFolder ||
+                !string.Equals(actual.UserName, expected.UserName ?? string.Empty, StringComparison.Ordinal) ||
+                !string.Equals(actual.Url, expected.Url ?? string.Empty, StringComparison.Ordinal) ||
+                !string.Equals(actual.Notes, expected.Notes ?? string.Empty, StringComparison.Ordinal) ||
+                !(actual.Tags ?? []).SequenceEqual(expected.Tags ?? [], StringComparer.Ordinal))
+                return Reject("Decrypted current record differs from the approved draft or HD child.");
+            return new(true, "Current session decrypted record and approved fields match the requested HD child.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Connected HD record comparison could not be established."); }
+    }
+
     public Task<bool> HasRegistryAsync() => Task.FromResult(RequireStore().RegistryInitialized);
 
     public async Task<LedgerFundingStatus> InspectRegistryFundingAsync()
@@ -234,3 +300,6 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     public ValueTask DisposeAsync() => DisposeCoreAsync();
     private async ValueTask DisposeCoreAsync() => await DisconnectAsync();
 }
+
+/// <summary>Read-only finding: never carries decrypted vault data.</summary>
+public sealed record ConnectedVaultRecordFinding(bool Matches, string Explanation);

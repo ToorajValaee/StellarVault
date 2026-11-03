@@ -1,3 +1,5 @@
+using StellarVault.Core.Services;
+
 namespace StellarVault.Pwa.Services;
 
 /// <summary>
@@ -10,11 +12,57 @@ public sealed class HorizonVaultPublicationDiagnostic(
     HorizonVaultManifestInspector manifests,
     HorizonVaultCurrentChunkInspector chunks,
     HorizonVaultHistoricalChunkInspector history,
-    HorizonVaultNetworkInspector networks)
+    HorizonVaultNetworkInspector networks,
+    BrowserStellarLedgerRecords connectedRecords)
 {
     public Task<HorizonVaultPublicationFinding> InspectAsync(
         string endpoint, string hash, string recordId, CancellationToken ct = default) =>
         InspectForNodeAsync(endpoint, hash, recordId, null, ct);
+
+    /// <summary>
+    /// Strictly diagnostic: require a matching selected Horizon network, historical
+    /// ciphertext commitment, matching current snapshot, and decryption through the
+    /// already-open HD session. Confirmation still requires an audited provider and
+    /// immutable record-to-transaction proof; no queue state is changed here.
+    /// </summary>
+    public async Task<HorizonVaultRecordComparisonFinding> InspectBoundRecordAsync(
+        string endpoint, string expectedNetworkPassphrase, string hash, string recordId,
+        string expectedRootAccount, string expectedNodeAccount, int expectedNodeIndex,
+        LedgerRecordDraft approvedDraft, CancellationToken ct = default)
+    {
+        static HorizonVaultRecordComparisonFinding Reject(string reason) =>
+            new(false, false, false, false, reason);
+
+        if (approvedDraft is null || string.IsNullOrWhiteSpace(approvedDraft.Title) ||
+            string.IsNullOrEmpty(approvedDraft.Content))
+            return Reject("Approved record draft is missing or malformed.");
+
+        try
+        {
+            var history = await InspectBoundHistoryAsync(endpoint, expectedNetworkPassphrase,
+                hash, recordId, expectedNodeAccount, ct);
+            if (!history.EndpointNetworkMatches || !history.HistoricalCiphertextMatches)
+                return new(history.EndpointNetworkMatches, history.HistoricalCiphertextMatches,
+                    false, false, history.Explanation);
+
+            var snapshot = await InspectCurrentSnapshotAsync(
+                endpoint, hash, recordId, expectedNodeAccount, ct);
+            if (!snapshot.CurrentManifestMatches || !snapshot.CurrentChunksMatch)
+                return new(true, true, false, false,
+                    "Current account ciphertext does not match the historically inspected manifest.");
+
+            var decrypted = await connectedRecords.InspectConnectedRecordAsync(
+                expectedRootAccount, expectedNodeAccount, expectedNodeIndex, endpoint,
+                expectedNetworkPassphrase, recordId, approvedDraft, ct);
+
+            return new(true, true, true, decrypted.Matches,
+                decrypted.Matches
+                    ? "Historical/current ciphertext and current decrypted record match; this diagnostic is NOT queue confirmation."
+                    : decrypted.Explanation);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Bound record comparison failed closed."); }
+    }
 
     /// <summary>
     /// Combined read-only network-passphrase and historical chunk diagnostic.
@@ -162,3 +210,14 @@ public sealed record HorizonVaultBoundPublicationFinding(
     bool HistoricalCiphertextMatches,
     string Explanation,
     string? NetworkIdHex);
+
+/// <summary>
+/// Read-only diagnostics of a connected root and current HD-v2 record.
+/// Never indicates that publishing or queue confirmation may proceed.
+/// </summary>
+public sealed record HorizonVaultRecordComparisonFinding(
+    bool EndpointNetworkMatches,
+    bool HistoricalCiphertextMatches,
+    bool CurrentCiphertextMatches,
+    bool CurrentDecryptedRecordMatches,
+    string Explanation);

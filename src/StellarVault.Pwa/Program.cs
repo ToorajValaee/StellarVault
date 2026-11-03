@@ -18,7 +18,8 @@ builder.Services.AddScoped(_ => new HttpClient());
 // SWallet integration can replace this with real challenge verification later.
 builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAuthorizer>();
 builder.Services.AddScoped<VaultNetworkSelection>();
-builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
+builder.Services.AddScoped<BrowserStellarLedgerRecords>();
+builder.Services.AddScoped<IStellarLedgerRecords>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
