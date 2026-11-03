@@ -183,3 +183,11 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Hardened HorizonVaultPublicationDiagnostic: validate inputs before querying, propagate caller cancellation, return an unverified finding for invalid/unavailable/malformed provider responses rather than letting an exception be interpreted as successful evidence.
 - This diagnostic STILL does not prove the decrypted record, chunks, account/network or a complete publication; deny-by-default confirmation and UI publication remain unchanged.
 - No compilation or tests have been run; production readiness is not established.
+
+
+## 2026-11-03: HD-v2 manifest payload evidence (read-only)
+- HorizonVaultManifestInspector now offers structured InspectManifestAsync evidence: operation source account, HD-v2 generation, encrypted chunk count/length, ciphertext SHA-256 digest and manifest update timestamp.
+- Requires one unique svh:<recordId> ManageData write with the requested transaction hash and a valid 51-byte version-2 manifest; rejects malformed base64, invalid length/count, invalid operation source, ambiguous duplicates, and potentially truncated 200-operation pages. Continues to enforce HTTPS, effective URL matching, bounded 256 KiB JSON reads, and caller cancellation.
+- HorizonVaultPublicationDiagnostic.InspectForNodeAsync can additionally compare the manifest operation source with a known HD child account. The transaction receipt's source_account is NOT assumed to equal the operation source in sponsored flows.
+- These are structural/evidence improvements only: they do NOT retrieve historical svc: chunk writes, prove chunk hash matches, decrypt the record, establish expected root HD lineage, or verify network passphrase. NEVER enable queued confirmation or manual publishing UI from this diagnostic.
+- No builds or tests run per user direction. Recheck C# compilation, Horizon JSON response shapes, and real transaction fixtures when testing is authorized. 
