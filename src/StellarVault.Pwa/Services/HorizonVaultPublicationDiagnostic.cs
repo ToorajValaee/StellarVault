@@ -13,7 +13,8 @@ public sealed class HorizonVaultPublicationDiagnostic(
     HorizonVaultCurrentChunkInspector chunks,
     HorizonVaultHistoricalChunkInspector history,
     HorizonVaultNetworkInspector networks,
-    BrowserStellarLedgerRecords connectedRecords)
+    BrowserStellarLedgerRecords connectedRecords,
+    HorizonVaultHistoricalRegistryInspector registries)
 {
     public Task<HorizonVaultPublicationFinding> InspectAsync(
         string endpoint, string hash, string recordId, CancellationToken ct = default) =>
@@ -60,6 +61,31 @@ public sealed class HorizonVaultPublicationDiagnostic(
                     expectedNodeAccount, StringComparison.Ordinal))
                 return new(true, false, false,
                     "Manifest was not published by the expected HD child account.");
+
+            // The historical root registry must have been written before the
+            // inspected manifest, be from the requested root account, and
+            // authenticate under the unlocked seed + expected network.
+            var historicalRegistry = await registries.InspectAsync(
+                endpoint, expectedRootAccount, manifest.ManifestOperationId, ct);
+            if (historicalRegistry is null)
+                return new(true, false, false,
+                    "Historical root registry operation was unavailable or incomplete.");
+            try
+            {
+                var registryReceipt = await transactions.InspectAsync(
+                    endpoint, historicalRegistry.TransactionHash, ct);
+                if (registryReceipt is null || registryReceipt.Ledger > receipt.Ledger ||
+                    !await connectedRecords.CheckHistoricalRegistryAsync(
+                        expectedRootAccount, expectedNodeAccount, expectedNodeIndex,
+                        endpoint, expectedPassphrase, historicalRegistry.Envelope, ct))
+                    return new(true, false, false,
+                        "Historical registry receipt or seed-authenticated child allocation did not match.");
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    historicalRegistry.Envelope);
+            }
 
             var historyResult = await history.InspectAndCompareAsync(
                 endpoint, manifest, receipt.Ledger,

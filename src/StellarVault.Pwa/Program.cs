@@ -30,6 +30,7 @@ builder.Services.AddScoped<HorizonVaultTransactionInspector>();
 builder.Services.AddScoped<HorizonVaultManifestInspector>();
 builder.Services.AddScoped<HorizonVaultCurrentChunkInspector>();
 builder.Services.AddScoped<HorizonVaultHistoricalChunkInspector>();
+builder.Services.AddScoped<HorizonVaultHistoricalRegistryInspector>();
 builder.Services.AddScoped<HorizonVaultNetworkInspector>();
 builder.Services.AddScoped<HorizonVaultPublicationDiagnostic>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();

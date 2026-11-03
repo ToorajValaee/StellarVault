@@ -84,3 +84,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - `ledger-compat/app.js` now validates direct Horizon root URLs (HTTPS, or HTTP only on localhost/loopback), rejecting embedded credentials, paths, query and fragment; browser-side Horizon discovery fetches omit credentials and reject redirects. These are trust-boundary safeguards, not proof of independently verified consensus.
 - A seed with an absent SEP-5 root should fail with actionable recovery guidance instead of attempting unsupported keys. No changes to queue confirmation or broadcast UX; the mutation verifier remains deny-by-default.
 - No builds/tests run per project instruction. Browser SDK CORS, local loopback scenarios and regression fixtures need testing before release.
+
+## 2026-11-03 historical root registry diagnostic
+
+- `HorizonVaultHistoricalRegistryInspector` performs a bounded (16 × 200 operations) descending root-account history lookup anchored before the manifest operation ID. It returns the latest `sv:registry:v2` ManageData envelope as an **untrusted candidate**; malformed/deleted/unsuccessful matching operations fail closed.
+- `stellarVault.stellar.inspectHistoricalHdRegistry` checks the 50-byte envelope using the session's seed-derived registry HMAC key, expected network passphrase and SEP-5 root/child address derivation, requiring the expected child index to be allocated. Callers must additionally validate the candidate transaction receipt and ordering. Only the already-unlocked HD session is used; secret keys never leave JS.
+- `HorizonVaultPublicationDiagnostic.InspectHistoricalRecordAsync` now requires historical root registry evidence and authentication before historical chunk decryption. This remains a **read-only diagnostic**, not a queue evidence provider. Horizon history can be pruned, and an endpoint-reported receipt is not independent consensus proof. Keep DENY verifier, disable broadcast UI.
+- Registry HMAC verification does not establish all historical root governance/account creation/signers. Never interpret a matching record as final confirmation before protocol and browser tests/security review.

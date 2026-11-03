@@ -261,6 +261,42 @@ window.stellarVault = (() => {
     // Read-only, seed-derived lineage check. Re-authenticate the current root
     // registry instead of trusting a cached allocation index. Does not export
     // seed, child private key, registry MAC key or plaintext.
+    // Verify a HISTORICAL registry envelope using this session's seed-derived
+    // MAC key. The supplied bytes MUST first come from a validated historical
+    // ManageData operation and successful transaction receipt. No key export.
+    async function inspectHistoricalHdRegistry(sessionId, expectedRoot, expectedChild,
+        index, envelopeBytes) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2' || session.derivationScheme !== 'sep5' ||
+            session.rootAccountId !== expectedRoot ||
+            !/^G[A-Z2-7]{55}$/.test(String(expectedRoot)) ||
+            !/^G[A-Z2-7]{55}$/.test(String(expectedChild)) ||
+            !Number.isSafeInteger(index) || index < 1 || index > 63)
+            return false;
+        const envelope = new Uint8Array(envelopeBytes);
+        if (envelope.length !== 50) return false;
+        try {
+            const rootRaw = await window.stellarVaultHd.accountSeed(session.hdSeed, 0, 'sep5');
+            let derivedRoot;
+            try { derivedRoot = requireStellarSdk().Keypair.fromRawEd25519Seed(rootRaw).publicKey(); }
+            finally { rootRaw.fill(0); }
+            if (derivedRoot !== expectedRoot) return false;
+
+            const childRaw = await window.stellarVaultHd.accountSeed(session.hdSeed, index, 'sep5');
+            let derivedChild;
+            try { derivedChild = requireStellarSdk().Keypair.fromRawEd25519Seed(childRaw).publicKey(); }
+            finally { childRaw.fill(0); }
+            if (derivedChild !== expectedChild) return false;
+
+            const key = await window.stellarVaultRegistry.registryMacKey(
+                session.hdSeed, session.networkPassphrase, expectedRoot);
+            const historical = await window.stellarVaultRegistry.decode(key, envelope);
+            return historical.highestAllocatedIndex >= index &&
+                historical.activeWriteIndex <= historical.highestAllocatedIndex;
+        } catch { return false; }
+        finally { envelope.fill(0); }
+    }
+
     async function inspectHdLineage(sessionId, expectedRoot, expectedChild, index) {
         const session = requireSession(sessionId);
         if (session.mode !== 'hd-v2' || !session.registry ||
@@ -684,6 +720,7 @@ window.stellarVault = (() => {
             deleteSession,
             loadChain,
             inspectHdLineage,
+            inspectHistoricalHdRegistry,
             createAndAppendChild,
             submitManageData,
             submitHdManageData,

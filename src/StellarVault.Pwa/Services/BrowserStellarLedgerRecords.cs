@@ -44,6 +44,37 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     }
 
     /// <summary>
+    /// Check a receipt-validated historic registry envelope with the current
+    /// connected seed and selected network. No transaction or unlock occurs.
+    /// </summary>
+    public async Task<bool> CheckHistoricalRegistryAsync(
+        string expectedRoot, string expectedChild, int childIndex,
+        string expectedHorizonUrl, string expectedPassphrase,
+        byte[] envelope, CancellationToken ct = default)
+    {
+        if (!IsConnected || envelope is not { Length: 50 } ||
+            !Uri.TryCreate(expectedHorizonUrl, UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme != Uri.UriSchemeHttps ||
+            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 ||
+            endpoint.Fragment.Length != 0)
+            return false;
+        try
+        {
+            var store = RequireStore();
+            if (!string.Equals(store.RootAccountId, expectedRoot, StringComparison.Ordinal) ||
+                !string.Equals(store.Settings.Passphrase, expectedPassphrase, StringComparison.Ordinal) ||
+                !Uri.TryCreate(store.Settings.NormalizedHorizonUrl, UriKind.Absolute, out var connected) ||
+                Uri.Compare(connected, endpoint, UriComponents.SchemeAndServer | UriComponents.Path,
+                    UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+                return false;
+            return await store.CheckHistoricalRegistryAsync(
+                expectedRoot, expectedChild, childIndex, envelope, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>
     /// Decrypt and compare the exact ciphertext supplied by a successful
     /// historical proof, using only the already-connected HD session.
     /// The caller must clear the ciphertext after this method returns.

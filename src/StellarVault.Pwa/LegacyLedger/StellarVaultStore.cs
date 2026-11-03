@@ -97,6 +97,30 @@ public sealed class StellarVaultStore : IAsyncDisposable
     }
 
     /// <summary>
+    /// Verify an already receipt-checked historical root registry envelope using
+    /// the connected seed-derived registry MAC and expected child derivation.
+    /// This does not establish independent Horizon trust.
+    /// </summary>
+    public async Task<bool> CheckHistoricalRegistryAsync(
+        string expectedRoot, string expectedChild, int index, byte[] envelope,
+        CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null ||
+            !string.Equals(_rootAccountId, expectedRoot, StringComparison.Ordinal) ||
+            index is <= 0 or >= MaxChainLength || envelope is not { Length: 50 })
+            return false;
+        try
+        {
+            return await _js.InvokeAsync<bool>(
+                "stellarVault.stellar.inspectHistoricalHdRegistry", ct,
+                _sessionId, expectedRoot, expectedChild, index, envelope);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>
     /// Compare already provenance-checked HISTORICAL encrypted bytes using the
     /// existing in-memory HD session. No transaction is sent; no plaintext is
     /// returned. The caller owns and clears the ciphertext buffer.
