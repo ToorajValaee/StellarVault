@@ -18,7 +18,8 @@ public sealed class VaultHybridSyncReviewService(
 
     public sealed record Report(
         string AccountId, string NetworkId, VaultSyncReview Queue,
-        IReadOnlyList<Item> Estimates, bool LedgerConnected);
+        IReadOnlyList<Item> Estimates, bool LedgerConnected,
+        VaultHybridFolderSyncPlan.Plan FolderPlan);
 
     public async Task<Report> ReviewAsync(string accountId, bool estimateFees,
         CancellationToken ct = default)
@@ -170,6 +171,7 @@ public sealed class VaultHybridSyncReviewService(
             networks.CustomHorizonUrl != selectedEndpoint)
             throw new InvalidOperationException("Selected network changed during hybrid review.");
 
-        return new(accountId, networkId, review, details, ledger.IsConnected);
+        return new(accountId, networkId, review, details, ledger.IsConnected,
+            VaultHybridFolderSyncPlan.Build(all, review));
     }
 }

@@ -90,3 +90,7 @@ Create and remote-update editors now carry their *opened payload SHA-256*, disti
 ## Folder dependency consistency, 2026-11-03
 
 Shared Core now checks that every pending create's serialized parent FolderId matches its durable queue dependency. Missing, stale, ambiguous, failed, non-folder and cyclic local parents cannot appear ready. The shared Sync UI explains blocked reasons and the required manual correction; pending-parent children still wait for independent parent confirmation. No automatic reparenting or transaction retry, and no change to direct on-chain writes.
+
+## Guided nested-folder Sync (2026-11-03)
+
+The shared Core read-only `VaultHybridFolderSyncPlan` turns encrypted create-folder/create-record queue entries into a manual parent-first verification/publishing sequence, with explicit waiting/ready/repair/unresolved statuses. The shared Sync UI renders each step across PWA and MAUI, offers optional fresh cost review for ready entries, reloads after a submission attempt or historical confirmation, and invalidates cached approvals on vault session changes. No automatic network writes, retries or child approvals; current ledger inventory and explicit per-mutation approval remain required.

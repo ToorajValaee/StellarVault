@@ -7,6 +7,7 @@
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
+@implements IDisposable
 
 <section class="terminal-panel" aria-label="Hybrid encrypted device queue">
     <div class="panel-heading">
@@ -33,6 +34,47 @@
         {
             <p role="status">Ready: @_report.Queue.Ready.Count · Blocked: @_report.Queue.Blocked.Count ·
                 Uncertain: @_report.Queue.NeedsReconciliation · Conflicts: @_report.Queue.Conflicts</p>
+            @if (_report.FolderPlan.Steps.Count > 0)
+            {
+                <section class="terminal-panel" aria-label="Offline folder and record synchronization order">
+                    <div class="panel-kicker">OFFLINE FOLDER TREE // SYNC ORDER</div>
+                    <p>Ready for review: @_report.FolderPlan.Ready ·
+                        Waiting for parent: @_report.FolderPlan.Waiting ·
+                        Needs repair: @_report.FolderPlan.NeedsRepair ·
+                        Awaiting verification: @_report.FolderPlan.AwaitingVerification ·
+                        Verified: @_report.FolderPlan.Confirmed</p>
+                    <p>Folders must be submitted and independently confirmed before
+                       dependent child records or subfolders can be approved.
+                       Each submission needs its own fee quote and explicit approval.</p>
+                    @foreach (var step in _report.FolderPlan.Steps)
+                    {
+                        <div class="data-field">
+                            <strong>@step.Label</strong>
+                            <p>@(step.IsFolder ? "FOLDER" : "RECORD") ·
+                                @step.Status · ID <code>@step.EntityId</code></p>
+                            @if (!string.IsNullOrWhiteSpace(step.ParentEntityId))
+                            {
+                                <p>Parent ID: <code>@step.ParentEntityId</code>
+                                    @if (step.ParentMutationId is not null)
+                                    {
+                                        <span> · Local parent mutation: <code>@step.ParentMutationId</code></span>
+                                    }
+                                </p>
+                            }
+                            <p role="status">@step.Explanation</p>
+                        </div>
+                    }
+                    @if (_report.Queue.NeedsReconciliation == 0 &&
+                        _report.Queue.Conflicts == 0 && _report.FolderPlan.Ready > 0)
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || !Ledger.IsConnected)"
+                                @onclick="EstimateAsync">
+                            REVIEW NEXT READY FOLDER / CHILD COSTS — NO SUBMISSION
+                        </button>
+                    }
+                </section>
+            }
             @if (_report.Queue.NeedsReconciliation > 0)
             {
                 <p class="terminal-alert warning" role="alert">Unresolved submission detected. Do not retry or publish additional drafts before investigating the ledger.</p>
@@ -190,6 +232,26 @@
 </section>
 
 @code {
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnVaultSessionChanged;
+    }
+
+    private void OnVaultSessionChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            CancelApproval();
+            _report = null;
+            _unresolved = [];
+            _deletionFindings.Clear();
+            _error = null;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Sessions.StateChanged -= OnVaultSessionChanged;
+
     private static string BlockedReason(string code) => code switch
     {
         "parent-dependency-mismatch" =>
@@ -285,7 +347,7 @@
             var result = await PendingQueue.ReconcileAsync(
                 mutation.AccountId, network, mutation.Id);
             _error = result.Confirmed
-                ? "Historically verified transaction confirmed for this exact queued mutation. Review the remaining queue and its dependent drafts again."
+                ? "This exact transaction was historically verified. The folder tree below now shows children eligible for a NEW fee review; no child was automatically submitted."
                 : "Transaction remains unresolved: " + result.Explanation +
                   " Do not retry or discard the draft automatically.";
             _unresolved = (await PendingQueue.ReviewAllAsync(mutation.AccountId, network))
@@ -360,6 +422,23 @@
                 ". Transaction hash: " + (outcome.TransactionHash ?? "NOT RECORDED") +
                 ". " + outcome.Message +
                 " Do not resubmit. Investigate and reconcile before any other Sync.";
+            // Refresh the read-only queue immediately so that the user sees
+            // the unresolved submission and its blocked descendants instead
+            // of an empty panel after an attempted publication.
+            try
+            {
+                _report = await HybridReview.ReviewAsync(account, estimateFees: false);
+                _unresolved = (await PendingQueue.ReviewAllAsync(
+                    account, _report.NetworkId)).Where(x =>
+                    x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                    .ToArray();
+            }
+            catch (Exception)
+            {
+                _report = null;
+                _unresolved = [];
+                _error += " Local queue refresh failed; review manually before any further action.";
+            }
         }
         catch (Exception)
         {
@@ -379,6 +458,7 @@
         if (_busy || !Retention.AllowsLocalPersistence ||
             !Sessions.IsUnlocked || Sessions.ActiveAccountId is not string account)
             return;
+        var openingEpoch = Sessions.Epoch;
         CancelApproval();
         _busy = true;
         _error = null;
@@ -391,7 +471,9 @@
             _unresolved = (await PendingQueue.ReviewAllAsync(account,
                 _report.NetworkId)).Where(x =>
                     x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain).ToArray();
-            if (!Sessions.IsUnlocked || Sessions.ActiveAccountId != account)
+            if (!Sessions.IsUnlocked || Sessions.Epoch != openingEpoch ||
+                Sessions.ActiveAccountId != account ||
+                Networks.CredentialKey(account) != _report.NetworkId)
             {
                 _report = null;
                 _error = "Local vault session changed during review. Unlock and review again.";
