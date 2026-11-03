@@ -120,3 +120,11 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - Fixed the missing `VaultQueuedCreateHistoricalReview.InspectUnrecordedCandidateAsync` API found in committed source even though `VaultUnrecordedSubmissionDiagnostic` called it. The shared inspection core separates strict saved-hash evidence (hash must match) from unknown-hash candidate evidence (durable hash must be null). Both retain durable revision and network rechecks.
 - The modal only offers normal CHECK LEDGER CONFIRMATION when a stored hash exists. Unresolved state without hash remains quarantined; UI explanations emphasize non-attribution of candidate tx to the original browser attempt. This is read-only recovery visibility, not an alternative to independently audited confirmation.
 - No builds/tests run per previous instruction. Razor rendering and browser/Testnet full path must be validated.
+
+## 2026-11-03: hybrid Sync consolidation
+
+- Manual Sync coordinator and outcome types moved to Core. PWA keeps the same DI registration; its old coordinator source must be removed from the commit.
+- New Core FileSystemVaultPendingMutationStore implements encrypted native queue persistence with the session key, associated account/network/id data, exclusive file locking, and atomic CAS writes.
+- MAUI registers the shared queue, consent gate, deny confirmation verifier and shared coordinator. Native ownership verification and hybrid UI remain gated.
+- Do not confuse this Core refactor with completed hybrid UI or native release readiness. Direct on-chain behavior is left unchanged.
+- Builds/tests remain deferred by user request. Verify both hosts and queue concurrency before release.

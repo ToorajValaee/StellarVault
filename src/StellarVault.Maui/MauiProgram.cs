@@ -24,6 +24,19 @@ public static class MauiProgram
         // Never retain a WebView JS runtime in an app-wide singleton.
         builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
         builder.Services.AddScoped<VaultStorageModeGate>();
+        // Hybrid queue mechanics are shared with PWA, but native account
+        // authorization still fails closed until a signed challenge is enabled.
+        // All queue payloads and metadata are encrypted with the unlocked
+        // device vault key; no native plaintext queue files are written.
+        builder.Services.AddScoped<VaultDeviceRetentionGate>();
+        builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
+            new FileSystemVaultPendingMutationStore(
+                services.GetRequiredService<VaultSessionManager>(),
+                services.GetRequiredService<VaultDeviceRetentionGate>(),
+                Path.Combine(FileSystem.AppDataDirectory, "vault-pending-queue")));
+        builder.Services.AddScoped<IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier>();
+        builder.Services.AddScoped<VaultPendingMutationQueue>();
+        builder.Services.AddScoped<VaultManualSyncCoordinator>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.

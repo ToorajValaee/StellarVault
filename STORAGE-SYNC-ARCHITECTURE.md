@@ -26,3 +26,9 @@ Keep the consent gate, encrypted draft model, sync state machine and conflict se
 ## Delivery status
 
 The consent gate has been introduced in core. **Neither mode is yet completely enforced by the current PWA**, whose access workflow still unconditionally uses local passphrase credentials. Do not release either selectable mode until access, all storage services, sync and deletion follow these invariants.
+
+## Architecture status — 2026-11-03
+
+Manual Sync coordination now lives in Core and is shared by both hosts. The PWA continues using its encrypted IndexedDB mutation store. MAUI registers a new native encrypted filesystem mutation store using the same account/network/id authenticated encryption contract, plus the shared queue and deny-by-default verifier.
+
+This is platform infrastructure, not a completed hybrid experience. The shared offline-create/edit/review/publish workflow is not yet integrated across both UIs, native local-vault account authorization remains gated, and file/folder synchronization plus conflict handling still need completion. Direct on-chain operations are preserved as the established user flow.

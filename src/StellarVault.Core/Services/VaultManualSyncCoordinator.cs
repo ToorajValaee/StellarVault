@@ -1,7 +1,5 @@
 using System.Text.Json;
-using StellarVault.Core.Services;
-
-namespace StellarVault.Pwa.Services;
+namespace StellarVault.Core.Services;
 
 /// <summary>
 /// Single-shot manual publishing boundary. The caller must obtain an explicit,

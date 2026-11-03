@@ -282,3 +282,13 @@ Read this handoff and current main HEAD; continue via GitHub tools. For batch co
 - Added a candidate transaction investigation panel in the selected pending mutation modal for Submitting/Uncertain create-record/folder with no durable hash. Requires a connected HD session, 64-hex candidate hash, expected G-address and deterministic child index 1..63; shows matched vs unverified result without affecting queue state or enabling publication. Existing CHECK LEDGER CONFIRMATION remains only for entries with recorded hashes.
 - Discovered compile-facing source mismatch from prior commit: `VaultUnrecordedSubmissionDiagnostic` invokes `VaultQueuedCreateHistoricalReview.InspectUnrecordedCandidateAsync` but the prior committed reviewer lacked that method. Added the method and a shared `InspectCoreAsync` with explicit candidate/stored-hash input policy and unchanged durable before/after revision guards.
 - No builds/tests were run. Validate Razor compile, DI resolution, browser network identity, historical Horizon fixture shape, race behavior and UX text. Matching an external transaction candidate is NOT proof that the local interrupted submission produced it; do not assign transaction hash or mark Confirmed.
+
+## 2026-11-03 Core-owned Sync and encrypted MAUI queue
+
+The manual Sync coordinator and outcome record have moved from PWA Services to Core Services. Its existing fee approvals, durable submission reservation, no-replay rules and Uncertain quarantine remain intact. The PWA now consumes the Core service without copying it.
+
+Added FileSystemVaultPendingMutationStore to Core, implementing IVaultPendingMutationStore for native hosts. Queue entries are fully encrypted with the unlocked account vault key and the same account/network/id associated data as the browser queue. Process-wide file locks, checked revisions and same-directory atomic replacement safeguard cooperating writers. Serialized JSON size permits base64 expansion of the existing 8 MiB mutation cap. This is not an anti-rollback anchor.
+
+MAUI now registers the local-retention consent gate, native encrypted queue adapter, shared pending queue, shared coordinator and deny-by-default verification. Native ownership authorization remains denied, so these registrations do not unlock a complete hybrid mode or expose paid transactions.
+
+Remaining: move shared review and fee/approval orchestration to Core/UI, complete offline file/folder Sync, native authorization, tests and release gates. Existing direct on-chain writer was deliberately left alone. No builds or tests were run at the user's request.
