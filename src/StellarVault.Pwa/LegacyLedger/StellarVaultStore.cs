@@ -434,10 +434,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     public async Task<VaultMutationResult> UpdateAsync(
         VaultRecordLocation expectedLocation,
-        VaultRecord record)
+        VaultRecord record, string? expectedRemoteVersion = null)
     {
         ThrowIfDisposed();
         ValidateRecord(record);
+        // The guarded hybrid path must re-read the original decrypted record
+        // here, inside the transport writer, rather than relying only on an
+        // earlier Core fee approval. Direct on-chain CRUD remains unchanged.
+        if (expectedRemoteVersion is not null)
+            await RequireCurrentVersionAsync(
+                expectedLocation.Record.Id, expectedRemoteVersion);
 
         if (!string.Equals(expectedLocation.Record.Id, record.Id, StringComparison.Ordinal))
             throw new InvalidOperationException("The edited record ID does not match the original record.");
@@ -514,10 +520,23 @@ public sealed class StellarVaultStore : IAsyncDisposable
             }
     }
 
-    public async Task<VaultMutationResult> DeleteAsync(VaultRecordLocation expectedLocation)
+    public async Task<VaultMutationResult> DeleteAsync(
+        VaultRecordLocation expectedLocation,
+        string? expectedRemoteVersion = null,
+        IReadOnlyList<string>? expectedManifestOwners = null)
     {
         ThrowIfDisposed();
         ValidateRecordId(expectedLocation.Record.Id);
+        if (expectedRemoteVersion is not null)
+        {
+            if (expectedManifestOwners is not { Count: > 0 and <= 63 } ||
+                expectedManifestOwners.Any(x => !StellarAccountAddress.IsValid(x)) ||
+                expectedManifestOwners.Distinct(StringComparer.Ordinal).Count() !=
+                    expectedManifestOwners.Count)
+                throw new InvalidDataException("Guarded deletion requires a valid complete manifest-owner set.");
+            await RequireCurrentVersionAsync(
+                expectedLocation.Record.Id, expectedRemoteVersion);
+        }
 
         var nodes = await LoadChainAsync();
         var headerName = HeaderName(expectedLocation.Record.Id);
@@ -527,6 +546,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
         if (headerNodes.Length == 0)
             throw new InvalidOperationException("The record no longer exists.");
+        if (expectedRemoteVersion is not null)
+        {
+            var owners = headerNodes.Select(x => x.AccountId)
+                .Order(StringComparer.Ordinal).ToArray();
+            if (!owners.SequenceEqual(
+                    expectedManifestOwners!.Order(StringComparer.Ordinal),
+                    StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    "HD manifest-owner set changed at the transport boundary; deletion was not submitted.");
+        }
 
         var headerDeletes = headerNodes
             .Select(node => DeleteWrite(node.AccountId, headerName))
@@ -580,6 +609,31 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
         _rootAccountId = null;
         _disposed = true;
+    }
+
+    private async Task RequireCurrentVersionAsync(
+        string recordId, string expectedVersion)
+    {
+        if (expectedVersion is not { Length: 64 } ||
+            !expectedVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidDataException("A valid pinned version is required.");
+        var now = await ReadAsync();
+        if (now.Warnings.Count != 0)
+            throw new InvalidDataException(
+                "Incomplete HD recovery prevents a guarded remote mutation.");
+        var matches = now.Records.Where(x =>
+            string.Equals(x.Record.Id, recordId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                "Remote record is missing or ambiguous at the final write boundary.");
+        var r = matches[0].Record;
+        var current = new LedgerRecordItem(r.Id, r.Title, r.Secret,
+            r.FolderId, r.Tags, r.IsFolder, r.UserName, r.Url, r.Notes);
+        if (!string.Equals(
+                VaultHybridRemoteMutationWorkspace.Fingerprint(current),
+                expectedVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Remote version changed after Sync approval. No guarded mutation was submitted.");
     }
 
     private async Task<List<VaultNodeSnapshot>> LoadChainAsync()

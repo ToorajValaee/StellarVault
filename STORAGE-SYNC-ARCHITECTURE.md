@@ -70,3 +70,7 @@ New hybrid deletions persist an encrypted `VaultDeletionIntent` containing the f
 ## Historical deletion predecessor coverage (2026-11-03)
 
 The shared PWA/MAUI deletion investigation can now resolve each tombstone source's nearest preceding historical manifest write and verify its encrypted chunks, registry and decrypted plaintext against the originally staged deletion record. A separate `HistoricalPredecessorMatched` finding is reported alongside source-set coverage and current absence. It remains diagnostic only, not queue confirmation: no atomic remote-version condition exists and concurrent edits/copies may still race. Core remains fail-closed, Mainnet remote writes remain gated.
+
+## Guarded optimistic ledger transport — 2026-11-03
+
+Both hosts now register the same `IVaultGuardedLedgerMutations` interface implemented by their connected HD-v2 adapter. The Core queued remote UPDATE/DELETE coordinator passes the immutable pinned baseline (and deletion manifest owner inventory) to the writer. The writer itself re-reads the decrypted remote record and rechecks ownership before writing; it fails closed if the expected baseline or deletion-copy set drifted. This minimizes, but cannot eliminate, cross-device race windows. These are **not atomic Stellar record preconditions**, and Mainnet/custom queued remote writes remain blocked pending a transactional coordination protocol.

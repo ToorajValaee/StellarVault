@@ -119,9 +119,10 @@
                     {
                         <p class="terminal-alert warning" role="alert">
                             Experimental update/delete Sync is Testnet-only. The remote version is
-                            checked before submission but Stellar does not enforce an atomic
-                            version precondition; concurrent external changes remain possible.
-                            Update/delete historical confirmation is not implemented.
+                            checked again inside the ledger writer along with the deletion
+                            manifest owners, but Stellar does not enforce an atomic
+                            version precondition. Concurrent external changes remain possible.
+                            Update confirmation is Testnet-only; deletion cannot yet be confirmed.
                         </p>
                     }
                     <p class="terminal-alert warning" role="alert">

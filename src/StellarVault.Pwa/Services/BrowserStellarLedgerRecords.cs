@@ -7,7 +7,8 @@ namespace StellarVault.Pwa.Services;
 
 /// <summary>HD-v2 ledger path using the original transaction writer and manifest
 /// format. Never silently falls back to IndexedDB when submission fails.</summary>
-public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory, IAsyncDisposable
+public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory,
+    IVaultGuardedLedgerMutations, IAsyncDisposable
 {
     private StellarVaultStore? _store;
     public bool IsConnected => _store is not null;
@@ -377,7 +378,22 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         return Preview(await store.EstimateDeleteAsync(location));
     }
 
-    public async Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft)
+    public Task<LedgerMutationResult> UpdateAsync(string id, LedgerRecordDraft draft) =>
+        UpdateCoreAsync(id, draft, null);
+
+    public Task<LedgerMutationResult> UpdateIfUnchangedAsync(
+        string recordId, LedgerRecordDraft draft, string expectedVersion,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (expectedVersion is not { Length: 64 } ||
+            !expectedVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidDataException("Guarded update requires an authenticated pinned version.");
+        return UpdateCoreAsync(recordId, draft, expectedVersion);
+    }
+
+    private async Task<LedgerMutationResult> UpdateCoreAsync(
+        string id, LedgerRecordDraft draft, string? expectedVersion)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var snapshot = await RequireStore().ReadAsync();
@@ -413,12 +429,31 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             Kind = current.Record.Kind, CreatedUtc = current.Record.CreatedUtc,
             UpdatedUtc = DateTimeOffset.UtcNow
         };
-        var result = await RequireStore().UpdateAsync(current, updated);
+        var result = await RequireStore().UpdateAsync(
+            current, updated, expectedVersion);
         return LedgerMutationResult.RequireConfirmed(
             result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }
 
-    public async Task<LedgerMutationResult> DeleteAsync(string id)
+    public Task<LedgerMutationResult> DeleteAsync(string id) =>
+        DeleteCoreAsync(id, null, null);
+
+    public Task<LedgerMutationResult> DeleteIfUnchangedAsync(
+        string recordId, string expectedVersion,
+        IReadOnlyList<string> expectedManifestOwners,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (expectedVersion is not { Length: 64 } ||
+            !expectedVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidDataException("Guarded deletion requires a pinned version.");
+        ArgumentNullException.ThrowIfNull(expectedManifestOwners);
+        return DeleteCoreAsync(recordId, expectedVersion, expectedManifestOwners);
+    }
+
+    private async Task<LedgerMutationResult> DeleteCoreAsync(
+        string id, string? expectedVersion,
+        IReadOnlyList<string>? expectedManifestOwners)
     {
         var snapshot = await RequireStore().ReadAsync();
         if (snapshot.Warnings.Count > 0)
@@ -427,7 +462,8 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             ?? throw new InvalidOperationException("Record no longer exists; synchronize first.");
         if (current.Record.IsFolder && snapshot.Records.Any(x => x.Record.FolderId == id))
             throw new InvalidOperationException("Move or delete the folder's contents before deleting the folder.");
-        var result = await RequireStore().DeleteAsync(current);
+        var result = await RequireStore().DeleteAsync(
+            current, expectedVersion, expectedManifestOwners);
         return LedgerMutationResult.RequireConfirmed(
             result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }

@@ -12,7 +12,8 @@ public sealed class VaultManualSyncCoordinator(
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
     VaultSessionManager sessions,
-    IVaultLedgerManifestCopyInventory copyInventory)
+    IVaultLedgerManifestCopyInventory copyInventory,
+    IVaultGuardedLedgerMutations guardedLedger)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
 
@@ -285,15 +286,25 @@ public sealed class VaultManualSyncCoordinator(
                 await RequireConnectedRootAsync(context, ct);
                 ct.ThrowIfCancellationRequested();
                 LedgerMutationResult outcome;
+                // Use the hybrid-only guarded writer; NEVER fall back to the
+                // direct on-chain CRUD methods if optimistic checks fail.
+                if (reserved.ExpectedRemoteVersion is not { Length: 64 } version)
+                    throw new InvalidDataException("Version-pinned mutation is missing its baseline.");
                 if (reserved.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
                 {
-                    outcome = await ledger.DeleteAsync(reserved.EntityId);
+                    var intent = JsonSerializer.Deserialize<VaultDeletionIntent>(reserved.EncryptedPayload)
+                        ?? throw new InvalidDataException("Reserved deletion intent is missing.");
+                    if (intent.ManifestSourceAccounts is not { Length: > 0 })
+                        throw new InvalidDataException("Reserved deletion has no authenticated manifest owner list.");
+                    outcome = await guardedLedger.DeleteIfUnchangedAsync(
+                        reserved.EntityId, version, intent.ManifestSourceAccounts, ct);
                 }
                 else
                 {
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(reserved.EncryptedPayload)
                         ?? throw new InvalidDataException("Reserved update draft was invalid.");
-                    outcome = await ledger.UpdateAsync(reserved.EntityId, draft);
+                    outcome = await guardedLedger.UpdateIfUnchangedAsync(
+                        reserved.EntityId, draft, version, ct);
                 }
                 // The mutation's identity is the manifest WRITE for updates
                 // or manifest DELETE for deletions, not a later cleanup tx.
