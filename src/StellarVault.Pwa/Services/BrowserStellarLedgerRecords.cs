@@ -203,6 +203,46 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
 
     public Task InitializeRegistryAsync() => RequireStore().InitializeHdRegistryAsync();
 
+    /// <summary>
+    /// Resolve HD child index from the authenticated currently-connected chain,
+    /// never from user-entered indices or untrusted Horizon transaction fields.
+    /// An incomplete or ambiguous discovery fails closed.
+    /// </summary>
+    public async Task<int?> ResolveAuthenticatedHdChildAsync(
+        string expectedRoot, string childAccount, string expectedHorizon,
+        string expectedPassphrase, CancellationToken ct = default)
+    {
+        if (!IsConnected || !StellarAccountAddress.IsValid(expectedRoot) ||
+            !StellarAccountAddress.IsValid(childAccount) ||
+            !Uri.TryCreate(expectedHorizon, UriKind.Absolute, out var expectedEndpoint) ||
+            expectedEndpoint.Scheme != Uri.UriSchemeHttps)
+            return null;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var store = RequireStore();
+            if (store.RootAccountId != expectedRoot ||
+                store.Settings.Passphrase != expectedPassphrase ||
+                !Uri.TryCreate(store.Settings.NormalizedHorizonUrl, UriKind.Absolute, out var currentEndpoint) ||
+                Uri.Compare(currentEndpoint, expectedEndpoint,
+                    UriComponents.SchemeAndServer | UriComponents.Path,
+                    UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+                return null;
+            var snapshot = await store.ReadAsync();
+            ct.ThrowIfCancellationRequested();
+            if (snapshot.Warnings.Count != 0 || snapshot.Nodes.Count == 0 ||
+                snapshot.Nodes[0].Position != 0 ||
+                snapshot.Nodes[0].AccountId != expectedRoot)
+                return null;
+            var matches = snapshot.Nodes.Where(x =>
+                x.Position is > 0 and < 64 &&
+                x.AccountId == childAccount).ToArray();
+            return matches.Length == 1 ? matches[0].Position : null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return null; }
+    }
+
     public async Task<IReadOnlyList<LedgerRecordItem>> ReadAsync()
     {
         var read = await RequireStore().ReadAsync();

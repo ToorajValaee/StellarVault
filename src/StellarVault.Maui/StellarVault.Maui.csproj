@@ -30,6 +30,14 @@
              Link="SharedStellarLedger/%(Filename)%(Extension)" />
     <Compile Include="../StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs"
              Link="SharedStellarLedger/BrowserStellarLedgerRecords.cs" />
+    <!-- One host-neutral implementation of Horizon historical evidence,
+         linked into native alongside the existing browser HD-v2 adapter. -->
+    <Compile Include="../StellarVault.Pwa/Services/HorizonVault*Inspector.cs"
+             Link="SharedStellarLedger/%(Filename)%(Extension)" />
+    <Compile Include="../StellarVault.Pwa/Services/HorizonVaultPublicationDiagnostic.cs"
+             Link="SharedStellarLedger/HorizonVaultPublicationDiagnostic.cs" />
+    <Compile Include="../StellarVault.Pwa/Services/HorizonVaultQueuedMutationEvidenceProvider.cs"
+             Link="SharedStellarLedger/HorizonVaultQueuedMutationEvidenceProvider.cs" />
     <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>

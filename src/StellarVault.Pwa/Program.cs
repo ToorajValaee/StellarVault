@@ -23,7 +23,8 @@ builder.Services.AddScoped<IStellarLedgerRecords>(sp => sp.GetRequiredService<Br
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
-builder.Services.AddScoped<IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier>();
+builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
+builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
 builder.Services.AddScoped<VaultPendingMutationQueue>();
 builder.Services.AddScoped<VaultManualSyncCoordinator>();
 builder.Services.AddScoped<VaultHybridSyncReviewService>();

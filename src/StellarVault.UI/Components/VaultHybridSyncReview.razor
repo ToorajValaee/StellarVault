@@ -2,6 +2,7 @@
 @inject VaultHybridSyncReviewService HybridReview
 @inject VaultManualSyncCoordinator ManualSync
 @inject VaultNetworkSelection Networks
+@inject VaultPendingMutationQueue PendingQueue
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
@@ -34,6 +35,25 @@
             @if (_report.Queue.NeedsReconciliation > 0)
             {
                 <p class="terminal-alert warning" role="alert">Unresolved submission detected. Do not retry or publish additional drafts before investigating the ledger.</p>
+                @foreach (var pending in _unresolved)
+                {
+                    <div class="data-field">
+                        <p>Mutation <code>@pending.Id</code> · @pending.Kind · @pending.State</p>
+                        @if (pending.TransactionHash is { Length: 64 } recordedHash)
+                        {
+                            <p>Recorded hash: <code>@recordedHash</code></p>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || !Ledger.IsConnected)"
+                                    @onclick="() => VerifyRecordedHashAsync(pending)">
+                                VERIFY RECORDED TRANSACTION — NO RETRY
+                            </button>
+                        }
+                        else
+                        {
+                            <p role="alert">No hash was recorded. The original submission might have succeeded. This action cannot automatically confirm it; investigate independently.</p>
+                        }
+                    </div>
+                }
             }
             @foreach (var item in _report.Estimates)
             {
@@ -104,6 +124,7 @@
     private VaultHybridSyncReviewService.Report? _report;
     private string? _error;
     private bool _busy;
+    private IReadOnlyList<VaultPendingMutation> _unresolved = [];
     private VaultSyncApprovalSnapshot? _selectedQuote;
     private string? _selectedTitle;
     private VaultMutationKind _selectedKind;
@@ -116,6 +137,40 @@
         _selectedTitle = null;
         _explicitApproval = false;
         _mainnetApproved = false;
+    }
+
+    private async Task VerifyRecordedHashAsync(VaultPendingMutation mutation)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId != mutation.AccountId ||
+            mutation.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
+            mutation.TransactionHash is not { Length: 64 })
+            return;
+        CancelApproval();
+        _busy = true;
+        _error = null;
+        _report = null;
+        try
+        {
+            var network = Networks.CredentialKey(mutation.AccountId);
+            if (network != mutation.NetworkId)
+                throw new InvalidOperationException("Network mismatch.");
+            var result = await PendingQueue.ReconcileAsync(
+                mutation.AccountId, network, mutation.Id);
+            _error = result.Confirmed
+                ? "Historically verified transaction confirmed for this exact queued mutation. Review the remaining queue and its dependent drafts again."
+                : "Transaction remains unresolved: " + result.Explanation +
+                  " Do not retry or discard the draft automatically.";
+            _unresolved = (await PendingQueue.ReviewAllAsync(mutation.AccountId, network))
+                .Where(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                .ToArray();
+            _report = await HybridReview.ReviewAsync(mutation.AccountId, estimateFees: false);
+        }
+        catch (Exception)
+        {
+            _error = "Historical verification was unavailable or queue state changed. The original submission may have reached Stellar; do not retry.";
+        }
+        finally { _busy = false; }
     }
 
     private async Task SelectQuoteAsync(VaultHybridSyncReviewService.Item item)
@@ -196,9 +251,13 @@
         _busy = true;
         _error = null;
         _report = null;
+        _unresolved = [];
         try
         {
             _report = await HybridReview.ReviewAsync(account, costs);
+            _unresolved = (await PendingQueue.ReviewAllAsync(account,
+                _report.NetworkId)).Where(x =>
+                    x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain).ToArray();
             if (!Sessions.IsUnlocked || Sessions.ActiveAccountId != account)
             {
                 _report = null;

@@ -22,7 +22,9 @@ public static class MauiProgram
         // BlazorWebView provides IJSRuntime within its component scope. Keep
         // the signing session, gate and upload services in that same scope.
         // Never retain a WebView JS runtime in an app-wide singleton.
-        builder.Services.AddScoped<IStellarLedgerRecords, BrowserStellarLedgerRecords>();
+        builder.Services.AddScoped<BrowserStellarLedgerRecords>();
+        builder.Services.AddScoped<IStellarLedgerRecords>(
+            services => services.GetRequiredService<BrowserStellarLedgerRecords>());
         builder.Services.AddScoped<VaultStorageModeGate>();
         // Hybrid queue mechanics are shared with PWA, but native account
         // authorization still fails closed until a signed challenge is enabled.
@@ -34,7 +36,18 @@ public static class MauiProgram
                 services.GetRequiredService<VaultSessionManager>(),
                 services.GetRequiredService<VaultDeviceRetentionGate>(),
                 Path.Combine(FileSystem.AppDataDirectory, "vault-pending-queue")));
-        builder.Services.AddScoped<IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier>();
+        // Historical evidence adapter shares the PWA implementation; only
+        // recorded-hash create operations can ever be confirmed by Core CAS.
+        builder.Services.AddScoped<HttpClient>();
+        builder.Services.AddScoped<HorizonVaultTransactionInspector>();
+        builder.Services.AddScoped<HorizonVaultManifestInspector>();
+        builder.Services.AddScoped<HorizonVaultCurrentChunkInspector>();
+        builder.Services.AddScoped<HorizonVaultHistoricalChunkInspector>();
+        builder.Services.AddScoped<HorizonVaultHistoricalRegistryInspector>();
+        builder.Services.AddScoped<HorizonVaultNetworkInspector>();
+        builder.Services.AddScoped<HorizonVaultPublicationDiagnostic>();
+        builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
+        builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
         builder.Services.AddScoped<VaultPendingMutationQueue>();
         builder.Services.AddScoped<VaultManualSyncCoordinator>();
         builder.Services.AddScoped<VaultHybridSyncReviewService>();

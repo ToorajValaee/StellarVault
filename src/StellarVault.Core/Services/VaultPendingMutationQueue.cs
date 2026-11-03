@@ -518,10 +518,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         if (previous.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
-            !IsTransactionHash(transactionHash))
-            throw new InvalidOperationException("A submitted mutation and valid Stellar transaction hash are required.");
-        if (previous.TransactionHash is not null &&
-            !string.Equals(previous.TransactionHash, transactionHash, StringComparison.OrdinalIgnoreCase))
+            !IsTransactionHash(transactionHash) ||
+            previous.TransactionHash is not { Length: 64 } storedHash ||
+            !IsTransactionHash(storedHash))
+            throw new InvalidOperationException(
+                "Confirmation requires the exact hash durably recorded when submission completed.");
+        if (!string.Equals(storedHash, transactionHash, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Reconciliation hash differs from the original submitted transaction.");
         // Always verify the exact durable revision rather than trusting a caller's
         // possibly stale mutation object.
