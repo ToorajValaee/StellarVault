@@ -58,8 +58,17 @@ public sealed class VaultHybridSyncReviewService(
                 continue;
             }
 
+            // New deletion queue entries contain a VaultDeletionIntent, not a
+            // bare LedgerRecordDraft. Resolve the original approved record for
+            // fee previews; the durable queue preflight authenticates the
+            // envelope, pinned original fingerprint, and manifest-owner set.
             LedgerRecordDraft? draft;
-            try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload); }
+            try
+            {
+                draft = mutation.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                    ? JsonSerializer.Deserialize<VaultDeletionIntent>(mutation.EncryptedPayload)?.Original
+                    : JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload);
+            }
             catch (JsonException) { draft = null; }
             if (draft is null || string.IsNullOrWhiteSpace(draft.Title) ||
                 draft.Title.Length > 256 || string.IsNullOrEmpty(draft.Content) ||
@@ -67,7 +76,7 @@ public sealed class VaultHybridSyncReviewService(
                     VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder))
             {
                 details.Add(new(mutation.Id, mutation.Kind, mutation.Kind.ToString(),
-                    "Queued creation payload is malformed or inconsistent."));
+                    "Queued record/folder payload is malformed or inconsistent."));
                 continue;
             }
 
@@ -76,6 +85,13 @@ public sealed class VaultHybridSyncReviewService(
             {
                 details.Add(new(mutation.Id, mutation.Kind, draft.Title,
                     "Not ready: " + string.Join(", ", problems)));
+                continue;
+            }
+
+            if (isRemote && selectedNetwork != "testnet")
+            {
+                details.Add(new(mutation.Id, mutation.Kind, draft.Title,
+                    "Hybrid queued update/delete publication is Testnet-only. Mainnet/custom writes are blocked until an atomic version protocol exists."));
                 continue;
             }
 

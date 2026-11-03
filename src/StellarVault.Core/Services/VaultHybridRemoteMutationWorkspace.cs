@@ -15,7 +15,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
     IStellarLedgerRecords ledger,
-    IVaultLedgerManifestCopyInventory copies)
+    IVaultLedgerManifestCopyInventory copies,
+    VaultHybridDraftWorkspace drafts)
 {
     public sealed record RemoteItem(string Id, string Title, bool IsFolder,
         string? FolderId, string Content, string? UserName, string? Url,
@@ -199,6 +200,54 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                 scope.Network, mutationId, payload, ct);
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
+    }
+
+    /// <summary>
+    /// Preserve a conflicted or otherwise unsafe *record update* as a brand-new
+    /// encrypted local CREATE. This never overwrites the published original,
+    /// submits no transaction, and DOES NOT erase the source update. The user
+    /// must review/discard that update separately to clear the Sync queue.
+    /// Folder moves and deletions are excluded to avoid silently changing
+    /// the meaning of existing folder dependencies.
+    /// </summary>
+    public async Task<VaultPendingMutation> PreserveUpdateAsNewRecordAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        var scope = Capture();
+        var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        var source = entries.SingleOrDefault(x => x.Id == mutationId)
+            ?? throw new KeyNotFoundException("Offline update is missing.");
+        if (source.Kind != VaultMutationKind.UpdateRecord ||
+            source.State != VaultSyncState.Pending ||
+            source.TransactionHash is not null ||
+            !ValidRecordId(source.EntityId) ||
+            !ValidDigest(source.ExpectedRemoteVersion))
+            throw new InvalidOperationException(
+                "Only an unsubmitted, version-pinned record update can be preserved as a new record.");
+
+        LedgerRecordDraft draft;
+        try
+        {
+            draft = JsonSerializer.Deserialize<LedgerRecordDraft>(source.EncryptedPayload)
+                ?? throw new InvalidDataException("Offline update payload is missing.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("Offline update payload cannot be recovered.", ex);
+        }
+        ValidateProposed(draft, isFolder: false, source.EntityId);
+        // The title identifies the fork without changing its secret/content or
+        // metadata. The original staged mutation stays intact for recovery.
+        var suffix = " (offline copy)";
+        var trimmed = draft.Title.Trim();
+        var copyTitle = trimmed.Length + suffix.Length <= 256
+            ? trimmed + suffix
+            : trimmed[..(256 - suffix.Length)] + suffix;
+        var copy = draft with { Title = copyTitle };
+        EnsureScope(scope);
+        var created = await drafts.CreateAsync(copy, ct);
+        EnsureScope(scope);
+        return created;
     }
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)

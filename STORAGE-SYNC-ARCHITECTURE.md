@@ -74,3 +74,7 @@ The shared PWA/MAUI deletion investigation can now resolve each tombstone source
 ## Guarded optimistic ledger transport — 2026-11-03
 
 Both hosts now register the same `IVaultGuardedLedgerMutations` interface implemented by their connected HD-v2 adapter. The Core queued remote UPDATE/DELETE coordinator passes the immutable pinned baseline (and deletion manifest owner inventory) to the writer. The writer itself re-reads the decrypted remote record and rechecks ownership before writing; it fails closed if the expected baseline or deletion-copy set drifted. This minimizes, but cannot eliminate, cross-device race windows. These are **not atomic Stellar record preconditions**, and Mainnet/custom queued remote writes remain blocked pending a transactional coordination protocol.
+
+## Conflict-safe record copy and deletion quote support (2026-11-03)
+
+Hybrid deletion fee review now correctly unwraps `VaultDeletionIntent.Original` before estimating a version-pinned DeleteRecord/DeleteFolder; the strict queue preflight still validates original fingerprint and manifest owners. Public/custom queued update/delete quotes are blocked in the shared Core review layer. Pending offline record updates can be saved as a new encrypted CREATE draft with a fresh ID using the shared Core and UI on PWA/MAUI; this preserves proposed data without overwriting any published record or automatically discarding the source. It is an append-only recovery option, not atomic multi-device conflict resolution.

@@ -116,6 +116,14 @@
                             <button class="pixel-button compact" type="button" disabled="@_busy"
                                     @onclick="() => OpenLocalUpdate(item)">EDIT OFFLINE UPDATE</button>
                         }
+                        @if (item.Kind == VaultMutationKind.UpdateRecord &&
+                            item.UpdatedDraft is not null)
+                        {
+                            <button class="pixel-button compact" type="button" disabled="@_busy"
+                                    @onclick="() => PreserveAsNewAsync(item.MutationId)">
+                                PRESERVE AS NEW ENCRYPTED RECORD — NO OVERWRITE
+                            </button>
+                        }
                         <button class="pixel-button compact" type="button" disabled="@_busy"
                                 @onclick="() => DiscardAsync(item.MutationId)">DISCARD LOCAL CHANGE</button>
                     }
@@ -126,9 +134,12 @@
                 </div>
             }
         }
-        <p class="advanced-help">Update/delete publishing and confirmation are deliberately disabled
-           until their transaction-specific conflict and historical verification workflow is complete.
-           Staging never writes to Stellar.</p>
+        <p class="advanced-help">Queued update/delete submission is experimental and
+           restricted to Testnet; it is not atomic against another writer. Deletions
+           cannot yet be historically confirmed. For a conflicting record update,
+           preserve the proposed contents as a new encrypted CREATE draft instead
+           of overwriting the published record. Saving or preserving a draft never
+           sends a Stellar transaction.</p>
     }
 </section>
 
@@ -274,6 +285,29 @@
         {
             _drift = new Dictionary<string, string>(StringComparer.Ordinal);
             _message = "Remote version comparison unavailable. Do not publish affected changes.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PreserveAsNewAsync(string mutationId)
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
+            return;
+        _busy = true;
+        try
+        {
+            var created = await Changes.PreserveUpdateAsNewRecordAsync(mutationId);
+            _local = await Changes.ListAsync();
+            _message = "A separate encrypted local CREATE draft was saved as record " +
+                created.EntityId +
+                ". The original published record was NOT overwritten. " +
+                "The original staged update remains in the queue; inspect and discard it " +
+                "separately before attempting Sync. No Stellar transaction occurred.";
+        }
+        catch (Exception)
+        {
+            _message = "Could not preserve a separate copy. The original offline update " +
+                "was not discarded or submitted. Verify local storage and parent folder.";
         }
         finally { _busy = false; }
     }
