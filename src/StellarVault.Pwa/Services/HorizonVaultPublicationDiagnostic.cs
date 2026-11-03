@@ -9,11 +9,29 @@ public sealed class HorizonVaultPublicationDiagnostic(
     HorizonVaultTransactionInspector transactions,
     HorizonVaultManifestInspector manifests,
     HorizonVaultCurrentChunkInspector chunks,
-    HorizonVaultHistoricalChunkInspector history)
+    HorizonVaultHistoricalChunkInspector history,
+    HorizonVaultNetworkInspector networks)
 {
     public Task<HorizonVaultPublicationFinding> InspectAsync(
         string endpoint, string hash, string recordId, CancellationToken ct = default) =>
         InspectForNodeAsync(endpoint, hash, recordId, null, ct);
+
+    /// <summary>
+    /// Combined read-only network-passphrase and historical chunk diagnostic.
+    /// Never authorizes queue confirmation, key use, or publication.
+    /// </summary>
+    public async Task<HorizonVaultBoundPublicationFinding> InspectBoundHistoryAsync(
+        string endpoint, string expectedPassphrase, string hash,
+        string recordId, string expectedNodeAccount, CancellationToken ct = default)
+    {
+        var network = await networks.InspectAsync(endpoint, expectedPassphrase, ct);
+        if (!network.Matches)
+            return new(false, false, network.Explanation, null);
+        var historical = await InspectHistoricalChunksAsync(
+            endpoint, hash, recordId, expectedNodeAccount, ct);
+        return new(true, historical.ChunksPublishedBeforeManifest,
+            historical.Explanation, network.NetworkIdHex);
+    }
 
     /// <summary>
     /// Inspect successful pre-manifest chunk operations, their receipts and
@@ -133,3 +151,13 @@ public sealed record HorizonVaultPublicationFinding(
     int? EncryptedLength = null,
     string? Generation = null,
     string? CiphertextSha256 = null);
+
+/// <summary>
+/// Diagnostic only. Even a true ciphertext result does not prove root HD lineage,
+/// decrypted record fields, or an approved queued mutation.
+/// </summary>
+public sealed record HorizonVaultBoundPublicationFinding(
+    bool EndpointNetworkMatches,
+    bool HistoricalCiphertextMatches,
+    string Explanation,
+    string? NetworkIdHex);
