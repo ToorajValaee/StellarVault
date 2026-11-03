@@ -70,3 +70,10 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - `HorizonVaultPublicationDiagnostic.InspectHistoricalRecordAsync` composes endpoint-reported network, receipt, manifest, historical chunk integrity and exact ciphertext-to-approved-record comparison. It is read-only and **must NOT** be wired to queue confirmation. Session-chain discovery is not yet an independently audited deterministic root-child proof, and Horizon is still a trusted endpoint.
 - The current-record diagnostic remains available but should not be used as evidence for a historical mutation. Keep `DenyVaultLedgerMutationVerifier` and disabled broadcast UI.
 - No builds/tests performed. Verify decryption contract and historical Horizon fixtures before any production use.
+
+## 2026-11-03 authenticated HD root-to-child lineage gate
+
+- `stellarVault.stellar.inspectHdLineage` in `src/StellarVault.Pwa/wwwroot/js/ledger-compat/app.js` is an explicit read-only JS session gate. It re-derives root index 0 and the expected HD child index from the in-memory BIP-39 seed using SEP-5, compares their public addresses, reloads the root account from Horizon and verifies the current `sv:registry:v2` HMAC envelope with a session-derived MAC key.
+- Require the authenticated current registry to match cached revision/highest/active indices and include the requested index, and the derived child account to exist, before permitting exact historical ciphertext decryption. Key/seed material remains in the browser session and temporary Ed25519 seed bytes are zeroed.
+- `StellarVaultStore.CompareHistoricalHdRecordAsync` now requires this lineage gate before `LoadChainAsync`/decryption. It fails closed on unsupported `bip32-compat` scheme. Legacy fallback appears in discovery but the current `hd-keys.js` accountSeed supports only `sep5`; do not silently assert compatibility.
+- This verifies deterministic **current unlocked-session lineage**, not independently proven historic root registry state at publication ledger nor network consensus or time-of-check atomicity. Do NOT register a live `IVaultLedgerEvidenceProvider` or expose publishing without audit and tests.

@@ -116,6 +116,14 @@ public sealed class StellarVaultStore : IAsyncDisposable
             return false;
 
         ct.ThrowIfCancellationRequested();
+        // Independently derive root and child addresses from the unlocked seed
+        // and re-authenticate the current on-chain root registry before decrypting.
+        // A cached list of account addresses alone is not lineage evidence.
+        var lineageMatches = await _js.InvokeAsync<bool>(
+            "stellarVault.stellar.inspectHdLineage",
+            ct, _sessionId, expectedRoot, expectedNode, nodeIndex);
+        if (!lineageMatches) return false;
+        ct.ThrowIfCancellationRequested();
         var chain = await LoadChainAsync();
         ct.ThrowIfCancellationRequested();
         if (chain.Count == 0 || chain[0].Position != 0 ||

@@ -251,6 +251,58 @@ window.stellarVault = (() => {
         stellarSessions.delete(sessionId);
     }
 
+    // Read-only, seed-derived lineage check. Re-authenticate the current root
+    // registry instead of trusting a cached allocation index. Does not export
+    // seed, child private key, registry MAC key or plaintext.
+    async function inspectHdLineage(sessionId, expectedRoot, expectedChild, index) {
+        const session = requireSession(sessionId);
+        if (session.mode !== 'hd-v2' || !session.registry ||
+            session.rootAccountId !== expectedRoot ||
+            !/^G[A-Z2-7]{55}$/.test(String(expectedRoot)) ||
+            !/^G[A-Z2-7]{55}$/.test(String(expectedChild)) ||
+            !Number.isSafeInteger(index) || index < 1 || index > 63)
+            return false;
+
+        // Current HD v2 key primitive supports SEP-5. Never downgrade to a
+        // fallback derivation scheme which accountSeed cannot verify.
+        if (session.derivationScheme !== 'sep5') return false;
+        try {
+            const rawRoot = await window.stellarVaultHd.accountSeed(session.hdSeed, 0, 'sep5');
+            let derivedRoot;
+            try { derivedRoot = requireStellarSdk().Keypair.fromRawEd25519Seed(rawRoot).publicKey(); }
+            finally { rawRoot.fill(0); }
+            if (derivedRoot !== expectedRoot) return false;
+
+            const rootAccount = await session.server.loadAccount(expectedRoot);
+            const encoded = rootAccount.data_attr?.['sv:registry:v2'];
+            if (!encoded || typeof encoded !== 'string') return false;
+            const envelope = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+            let registry;
+            try {
+                const key = await window.stellarVaultRegistry.registryMacKey(
+                    session.hdSeed, session.networkPassphrase, expectedRoot);
+                registry = await window.stellarVaultRegistry.decode(key, envelope);
+            } finally { envelope.fill(0); }
+
+            if (registry.highestAllocatedIndex < index ||
+                registry.highestAllocatedIndex !== session.registry.highestAllocatedIndex ||
+                registry.revision !== session.registry.revision ||
+                registry.activeWriteIndex !== session.registry.activeWriteIndex)
+                return false;
+
+            const rawChild = await window.stellarVaultHd.accountSeed(session.hdSeed, index, 'sep5');
+            let derivedChild;
+            try { derivedChild = requireStellarSdk().Keypair.fromRawEd25519Seed(rawChild).publicKey(); }
+            finally { rawChild.fill(0); }
+            if (derivedChild !== expectedChild) return false;
+
+            const childAccount = await session.server.loadAccount(expectedChild);
+            return childAccount.accountId() === expectedChild;
+        } catch {
+            return false;
+        }
+    }
+
     async function loadChain(sessionId, maxChainLength) {
         const session = requireSession(sessionId);
         if (session.mode !== 'hd-v2')
@@ -624,6 +676,7 @@ window.stellarVault = (() => {
             initializeHdRegistry,
             deleteSession,
             loadChain,
+            inspectHdLineage,
             createAndAppendChild,
             submitManageData,
             submitHdManageData,
