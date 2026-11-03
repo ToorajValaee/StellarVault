@@ -26,11 +26,31 @@ public sealed class HorizonVaultHistoricalChunkInspector(
         int InspectedPages,
         string Explanation);
 
-    public async Task<HistoricalFinding> InspectAsync(
+    public Task<HistoricalFinding> InspectAsync(
         string horizonUrl,
         HorizonVaultManifestInspector.ManifestEvidence manifest,
         long manifestLedger,
+        CancellationToken ct = default) =>
+        InspectCoreAsync(horizonUrl, manifest, manifestLedger, null, ct);
+
+    /// <summary>
+    /// Only after successful receipt and SHA-256 checks, passes a temporary
+    /// ciphertext copy to a trusted in-process comparison callback. The buffer
+    /// is zeroed before return. Never persist or log it.
+    /// </summary>
+    public Task<HistoricalFinding> InspectAndCompareAsync(
+        string horizonUrl, HorizonVaultManifestInspector.ManifestEvidence manifest,
+        long manifestLedger, Func<byte[], CancellationToken, Task<bool>> compare,
         CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(compare);
+        return InspectCoreAsync(horizonUrl, manifest, manifestLedger, compare, ct);
+    }
+
+    private async Task<HistoricalFinding> InspectCoreAsync(
+        string horizonUrl, HorizonVaultManifestInspector.ManifestEvidence manifest,
+        long manifestLedger, Func<byte[], CancellationToken, Task<bool>>? compare,
+        CancellationToken ct)
     {
         static HistoricalFinding Failed(int count, int pages, string reason) =>
             new(false, count, pages, reason);
@@ -198,10 +218,34 @@ public sealed class HorizonVaultHistoricalChunkInspector(
             var equal = CryptographicOperations.FixedTimeEquals(actualDigest, expectedDigest);
             CryptographicOperations.ZeroMemory(actualDigest);
             CryptographicOperations.ZeroMemory(expectedDigest);
-            return new(equal, found, pages,
-                equal
-                    ? "Historical chunk writes precede the manifest and match its ciphertext hash; network lineage and decrypted record remain unverified."
-                    : "Historical chunk writes do not match the committed ciphertext hash.");
+            if (!equal)
+                return Failed(found, pages, "Historical ciphertext does not match the manifest commitment.");
+
+            if (compare is not null)
+            {
+                // A fixed-size copy prevents a caller from reading the per-chunk
+                // storage after the callback finishes. The copy is cleared even
+                // when HD decryption throws or is cancelled.
+                var ciphertext = new byte[manifest.EncryptedLength];
+                try
+                {
+                    var offset = 0;
+                    foreach (var chunk in chunks)
+                    {
+                        Buffer.BlockCopy(chunk, 0, ciphertext, offset, chunk.Length);
+                        offset += chunk.Length;
+                    }
+
+                    if (!await compare(ciphertext, ct))
+                        return Failed(found, pages, "Historical ciphertext decryption or approved record comparison failed.");
+                }
+                finally { CryptographicOperations.ZeroMemory(ciphertext); }
+                return new(true, found, pages,
+                    "Exact historical ciphertext decrypts to the expected record; network and root lineage still require trusted binding.");
+            }
+
+            return new(true, found, pages,
+                "Historical encrypted writes match the manifest; record decryption and HD root lineage remain unverified.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return Failed(found, pages, "Historical account operation evidence could not be validated."); }

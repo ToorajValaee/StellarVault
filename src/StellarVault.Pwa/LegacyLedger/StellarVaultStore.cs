@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.JSInterop;
 using StellarVaultPwa.Core;
+using StellarVault.Core.Services;
 
 namespace StellarVaultPwa.Services;
 
@@ -93,6 +94,49 @@ public sealed class StellarVaultStore : IAsyncDisposable
             _settings.BaseReserveStroops,
             _settings.BaseFeeStroops);
         RegistryInitialized = true;
+    }
+
+    /// <summary>
+    /// Compare already provenance-checked HISTORICAL encrypted bytes using the
+    /// existing in-memory HD session. No transaction is sent; no plaintext is
+    /// returned. The caller owns and clears the ciphertext buffer.
+    /// </summary>
+    public async Task<bool> CompareHistoricalHdRecordAsync(
+        string expectedRoot, string expectedNode, int nodeIndex, string recordId,
+        string generation, byte[] ciphertext, LedgerRecordDraft approved,
+        CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+        if (_rootAccountId is null || approved is null ||
+            !string.Equals(_rootAccountId, expectedRoot, StringComparison.Ordinal) ||
+            nodeIndex is <= 0 or >= MaxChainLength ||
+            recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit) ||
+            generation is not { Length: 8 } || !generation.All(Uri.IsHexDigit) ||
+            ciphertext is not { Length: > 0 })
+            return false;
+
+        ct.ThrowIfCancellationRequested();
+        var chain = await LoadChainAsync();
+        ct.ThrowIfCancellationRequested();
+        if (chain.Count == 0 || chain[0].Position != 0 ||
+            !string.Equals(chain[0].AccountId, expectedRoot, StringComparison.Ordinal) ||
+            chain.Count(node => node.Position == nodeIndex &&
+                string.Equals(node.AccountId, expectedNode, StringComparison.Ordinal)) != 1)
+            return false;
+
+        // Decrypt the bytes proven by historical operations, not a mutable
+        // current-account snapshot. VaultCrypto clears its plaintext buffer.
+        var actual = await _crypto.DecryptHdAsync(recordId, nodeIndex, generation, ciphertext);
+        ct.ThrowIfCancellationRequested();
+        return string.Equals(actual.Id, recordId, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(actual.Title, approved.Title, StringComparison.Ordinal) &&
+            string.Equals(actual.Secret, approved.Content, StringComparison.Ordinal) &&
+            string.Equals(actual.FolderId, approved.FolderId, StringComparison.Ordinal) &&
+            actual.IsFolder == approved.IsFolder &&
+            string.Equals(actual.UserName, approved.UserName ?? string.Empty, StringComparison.Ordinal) &&
+            string.Equals(actual.Url, approved.Url ?? string.Empty, StringComparison.Ordinal) &&
+            string.Equals(actual.Notes, approved.Notes ?? string.Empty, StringComparison.Ordinal) &&
+            (actual.Tags ?? []).SequenceEqual(approved.Tags ?? [], StringComparer.Ordinal);
     }
 
     public async Task<VaultReadResult> ReadAsync()

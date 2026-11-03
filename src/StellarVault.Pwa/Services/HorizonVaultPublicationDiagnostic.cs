@@ -20,6 +20,66 @@ public sealed class HorizonVaultPublicationDiagnostic(
         InspectForNodeAsync(endpoint, hash, recordId, null, ct);
 
     /// <summary>
+    /// Compare the EXACT historically published encrypted bytes, after verifying
+    /// network, final transaction, manifest, and chunk history, through the
+    /// connected HD session. Still never a queue confirmation provider.
+    /// </summary>
+    public async Task<HorizonVaultHistoricalRecordFinding> InspectHistoricalRecordAsync(
+        string endpoint, string expectedPassphrase, string transactionHash,
+        string recordId, string expectedRootAccount, string expectedNodeAccount,
+        int expectedNodeIndex, LedgerRecordDraft approvedDraft,
+        CancellationToken ct = default)
+    {
+        static HorizonVaultHistoricalRecordFinding Reject(string reason) =>
+            new(false, false, false, reason);
+
+        if (approvedDraft is null ||
+            string.IsNullOrWhiteSpace(approvedDraft.Title) ||
+            string.IsNullOrEmpty(approvedDraft.Content) ||
+            transactionHash is not { Length: 64 } || !transactionHash.All(Uri.IsHexDigit) ||
+            recordId is not { Length: 16 } || !recordId.All(Uri.IsHexDigit) ||
+            expectedRootAccount is not { Length: 56 } ||
+            expectedNodeAccount is not { Length: 56 } ||
+            expectedNodeIndex is <= 0 or >= 64)
+            return Reject("Historical record verification inputs are invalid.");
+
+        try
+        {
+            var network = await networks.InspectAsync(endpoint, expectedPassphrase, ct);
+            if (!network.Matches)
+                return Reject(network.Explanation);
+
+            var receipt = await transactions.InspectAsync(endpoint, transactionHash, ct);
+            if (receipt is null)
+                return new(true, false, false, "Manifest transaction receipt unavailable.");
+
+            var manifest = await manifests.InspectManifestAsync(
+                endpoint, transactionHash, recordId, ct);
+            if (manifest is null || manifest.ManifestOperationId <= 0 ||
+                !string.Equals(manifest.OperationSourceAccount,
+                    expectedNodeAccount, StringComparison.Ordinal))
+                return new(true, false, false,
+                    "Manifest was not published by the expected HD child account.");
+
+            var historyResult = await history.InspectAndCompareAsync(
+                endpoint, manifest, receipt.Ledger,
+                (ciphertext, token) => connectedRecords.CompareHistoricalEncryptedRecordAsync(
+                    expectedRootAccount, expectedNodeAccount, expectedNodeIndex,
+                    endpoint, expectedPassphrase, recordId, manifest.Generation,
+                    ciphertext, approvedDraft, token),
+                ct);
+
+            // A combined positive result establishes an endpoint-attested,
+            // unlocked-session historical record match, but is still not
+            // independently audited chain lineage or queue authorization.
+            return new(true, historyResult.VerifiedChunkCount == manifest.ChunkCount,
+                historyResult.ChunksPublishedBeforeManifest, historyResult.Explanation);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return Reject("Historical record comparison failed closed."); }
+    }
+
+    /// <summary>
     /// Strictly diagnostic: require a matching selected Horizon network, historical
     /// ciphertext commitment, matching current snapshot, and decryption through the
     /// already-open HD session. Confirmation still requires an audited provider and
@@ -220,4 +280,14 @@ public sealed record HorizonVaultRecordComparisonFinding(
     bool HistoricalCiphertextMatches,
     bool CurrentCiphertextMatches,
     bool CurrentDecryptedRecordMatches,
+    string Explanation);
+
+/// <summary>
+/// Endpoint-attested read-only historical record comparison. Never implies
+/// approval to broadcast, retry or mark a mutation Confirmed.
+/// </summary>
+public sealed record HorizonVaultHistoricalRecordFinding(
+    bool EndpointNetworkMatches,
+    bool HistoricalChunksAvailable,
+    bool HistoricalRecordMatches,
     string Explanation);

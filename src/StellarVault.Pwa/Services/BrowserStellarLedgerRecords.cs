@@ -44,6 +44,41 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     }
 
     /// <summary>
+    /// Decrypt and compare the exact ciphertext supplied by a successful
+    /// historical proof, using only the already-connected HD session.
+    /// The caller must clear the ciphertext after this method returns.
+    /// </summary>
+    public async Task<bool> CompareHistoricalEncryptedRecordAsync(
+        string expectedRootAccount, string expectedNodeAccount, int nodeIndex,
+        string expectedHorizonUrl, string expectedNetworkPassphrase,
+        string recordId, string generation, byte[] ciphertext,
+        LedgerRecordDraft approved, CancellationToken ct = default)
+    {
+        if (!IsConnected || approved is null ||
+            string.IsNullOrWhiteSpace(expectedNetworkPassphrase) ||
+            !Uri.TryCreate(expectedHorizonUrl, UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme != Uri.UriSchemeHttps || endpoint.UserInfo.Length != 0 ||
+            endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
+            return false;
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var store = RequireStore();
+            if (!string.Equals(store.RootAccountId, expectedRootAccount, StringComparison.Ordinal) ||
+                !string.Equals(store.Settings.Passphrase, expectedNetworkPassphrase, StringComparison.Ordinal) ||
+                !Uri.TryCreate(store.Settings.NormalizedHorizonUrl, UriKind.Absolute, out var sessionEndpoint) ||
+                Uri.Compare(sessionEndpoint, endpoint, UriComponents.SchemeAndServer | UriComponents.Path,
+                    UriFormat.Unescaped, StringComparison.OrdinalIgnoreCase) != 0)
+                return false;
+            return await store.CompareHistoricalHdRecordAsync(
+                expectedRootAccount, expectedNodeAccount, nodeIndex,
+                recordId, generation, ciphertext, approved, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>
     /// Read-only comparison of the decrypted CURRENT HD-v2 record against a
     /// caller-supplied approved draft. No plaintext is returned in the finding.
     /// Requires an already-open signing session; never unlocks or publishes.
