@@ -32,3 +32,9 @@ The consent gate has been introduced in core. **Neither mode is yet completely e
 Manual Sync coordination now lives in Core and is shared by both hosts. The PWA continues using its encrypted IndexedDB mutation store. MAUI registers a new native encrypted filesystem mutation store using the same account/network/id authenticated encryption contract, plus the shared queue and deny-by-default verifier.
 
 This is platform infrastructure, not a completed hybrid experience. The shared offline-create/edit/review/publish workflow is not yet integrated across both UIs, native local-vault account authorization remains gated, and file/folder synchronization plus conflict handling still need completion. Direct on-chain operations are preserved as the established user flow.
+
+## Shared offline record/folder slice (2026-11-03)
+
+The shared Core workspace now supports local encrypted pending record/folder creation, revision, listing and removal. A shared Razor editor is integrated into PWA and MAUI. Pending child folders/records record local parent mutation dependencies; publishing remains blocked until the parent is confirmed.
+
+On native, device-only encrypted storage can be explicitly opted into and unlocked with a separate local vault passphrase. This uses the same **local-only account namespace** authorizer as PWA; it is not cryptographic Stellar ownership verification and does not authorize transactions. Existing on-chain operations are preserved. The hybrid record/folder milestone is **not done** until reviewed queue publication, confirmation, recovery and native authorization are validated.

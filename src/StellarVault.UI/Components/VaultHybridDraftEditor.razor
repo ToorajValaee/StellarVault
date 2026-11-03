@@ -1,0 +1,169 @@
+@using StellarVault.Core.Services
+@inject VaultHybridDraftWorkspace Drafts
+@inject VaultSessionManager Sessions
+@inject VaultDeviceRetentionGate Retention
+
+<section class="terminal-panel" aria-label="Offline encrypted record and folder drafts">
+    <div class="panel-kicker">HYBRID // DEVICE-ONLY DRAFTS</div>
+    <h3>OFFLINE RECORDS AND FOLDERS</h3>
+    <p>Local drafts are encrypted on this device. Saving here does not submit anything to Stellar.</p>
+    @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
+    {
+        <p role="status">Choose encrypted local storage and unlock the local vault before editing drafts.</p>
+    }
+    else
+    {
+        <div class="sv-access-actions">
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewRecord">NEW RECORD</button>
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewFolder">NEW FOLDER</button>
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="RefreshAsync">REFRESH DRAFTS</button>
+        </div>
+        <label class="terminal-label" for="hybrid-draft-name">TITLE</label>
+        <input id="hybrid-draft-name" class="terminal-input" maxlength="256"
+               @bind="_title" @bind:event="oninput" disabled="@_busy" />
+        <label class="terminal-label" for="hybrid-draft-parent">PARENT FOLDER ID (OPTIONAL — STELLAR OR LOCAL PENDING)</label>
+        <input id="hybrid-draft-parent" class="terminal-input" maxlength="16"
+               @bind="_folderId" disabled="@_busy" autocomplete="off" />
+        @if (!_isFolder)
+        {
+            <label class="terminal-label" for="hybrid-draft-content">ENCRYPTED RECORD CONTENT</label>
+            <textarea id="hybrid-draft-content" class="terminal-input terminal-textarea"
+                      rows="5" @bind="_content" disabled="@_busy"></textarea>
+            <label class="terminal-label" for="hybrid-draft-username">USERNAME</label>
+            <input id="hybrid-draft-username" class="terminal-input" @bind="_username" disabled="@_busy" />
+            <label class="terminal-label" for="hybrid-draft-url">URL</label>
+            <input id="hybrid-draft-url" class="terminal-input" @bind="_url" disabled="@_busy" />
+            <label class="terminal-label" for="hybrid-draft-notes">NOTES</label>
+            <textarea id="hybrid-draft-notes" class="terminal-input" rows="3" @bind="_notes" disabled="@_busy"></textarea>
+            <label class="terminal-label" for="hybrid-draft-tags">TAGS (COMMA-SEPARATED)</label>
+            <input id="hybrid-draft-tags" class="terminal-input" @bind="_tags" disabled="@_busy" />
+        }
+        <p class="advanced-help">Type: @(_isFolder ? "Folder" : "Record") ·
+            @(_editingId is null ? "New local draft" : "Editing unpublished local draft")</p>
+        <button type="button" class="pixel-button primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || (!_isFolder && string.IsNullOrEmpty(_content)))" @onclick="SaveAsync">SAVE ENCRYPTED LOCAL DRAFT</button>
+        @if (_editingId is not null)
+        {
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="DiscardAsync">DISCARD UNSUBMITTED DRAFT</button>
+        }
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <p role="status" class="terminal-alert">@_status</p>
+        }
+        <div class="panel-kicker">LOCAL DRAFT DIRECTORY</div>
+        @foreach (var draft in _items)
+        {
+            <div class="data-field">
+                <strong>@draft.Draft.Title</strong>
+                <p>@draft.Kind · @draft.State · @draft.CreatedUtc.ToLocalTime().ToString("g")</p>
+                @if (draft.State == VaultSyncState.Pending)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => Open(draft)">EDIT LOCAL DRAFT</button>
+                    @if (draft.Kind == VaultMutationKind.CreateFolder)
+                    {
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="() => SelectParent(draft)">USE FOLDER AS LOCAL PARENT</button>
+                        <small>Local folder ID: @draft.EntityId</small>
+                    }
+                }
+                else
+                {
+                    <small>Submitted or unresolved. Cannot be edited or replayed.</small>
+                }
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private IReadOnlyList<VaultHybridDraftWorkspace.DraftItem> _items = [];
+    private bool _busy;
+    private string? _status, _editingId;
+    private string _title = "", _content = "", _username = "", _url = "",
+        _notes = "", _tags = "", _folderId = "";
+    private bool _isFolder;
+
+    private void Reset(bool folder)
+    {
+        _editingId = null;
+        _isFolder = folder;
+        _title = _content = _username = _url = _notes = _tags = _folderId = "";
+        _status = null;
+    }
+
+    private void NewRecord() => Reset(false);
+    private void NewFolder() => Reset(true);
+
+    private void SelectParent(VaultHybridDraftWorkspace.DraftItem item)
+    {
+        if (_busy || item.State != VaultSyncState.Pending ||
+            item.Kind != VaultMutationKind.CreateFolder) return;
+        _folderId = item.EntityId;
+        _status = "Local parent selected. Child stays blocked from Stellar publication until the parent is confirmed.";
+    }
+
+    private void Open(VaultHybridDraftWorkspace.DraftItem item)
+    {
+        if (_busy || item.State != VaultSyncState.Pending) return;
+        _editingId = item.MutationId;
+        _isFolder = item.Draft.IsFolder;
+        _title = item.Draft.Title;
+        _content = _isFolder ? "" : item.Draft.Content;
+        _folderId = item.Draft.FolderId ?? "";
+        _username = item.Draft.UserName ?? "";
+        _url = item.Draft.Url ?? "";
+        _notes = item.Draft.Notes ?? "";
+        _tags = string.Join(", ", item.Draft.Tags ?? []);
+        _status = "Editing local-only draft. No Stellar transaction will be sent.";
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) return;
+        _busy = true;
+        try { _items = await Drafts.ListAsync(); _status = "Encrypted local drafts loaded."; }
+        catch (Exception) { _items = []; _status = "Cannot read local encrypted drafts."; }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            var draft = new LedgerRecordDraft(_title,
+                _isFolder ? "folder" : _content,
+                string.IsNullOrWhiteSpace(_folderId) ? null : _folderId,
+                _tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                _isFolder, _isFolder ? null : _username,
+                _isFolder ? null : _url, _isFolder ? null : _notes);
+            if (_editingId is null) await Drafts.CreateAsync(draft);
+            else await Drafts.ReviseAsync(_editingId, draft);
+            _items = await Drafts.ListAsync();
+            Reset(_isFolder);
+            _status = "Encrypted draft saved locally. It has NOT been published to Stellar.";
+        }
+        catch (Exception)
+        {
+            _status = "Draft could not be saved. Verify the encrypted session, record fields and parent folder.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardAsync()
+    {
+        if (_busy || _editingId is null) return;
+        _busy = true;
+        try
+        {
+            await Drafts.DiscardAsync(_editingId);
+            _items = await Drafts.ListAsync();
+            Reset(_isFolder);
+            _status = "Unsubmitted local draft discarded. No Stellar operation occurred.";
+        }
+        catch (Exception) { _status = "Cannot discard this draft; inspect its dependencies."; }
+        finally { _busy = false; }
+    }
+}

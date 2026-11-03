@@ -38,6 +38,7 @@ public static class MauiProgram
         builder.Services.AddScoped<VaultPendingMutationQueue>();
         builder.Services.AddScoped<VaultManualSyncCoordinator>();
         builder.Services.AddScoped<VaultHybridSyncReviewService>();
+        builder.Services.AddScoped<VaultHybridDraftWorkspace>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
@@ -53,7 +54,9 @@ public static class MauiProgram
                 Path.Combine(FileSystem.AppDataDirectory, "vault-credentials")));
         builder.Services.AddSingleton<IVaultKeyProtector, NativeVaultKeyProtector>();
         builder.Services.AddSingleton<VaultPassphraseLifecycle>();
-        builder.Services.AddSingleton<IVaultAccountAuthorizer, DenyVaultAccountAuthorizer>();
+        // Device-only local namespace, exactly as in PWA: NOT Stellar ownership.
+        // Signing remains gated by the independent HD mnemonic ledger session.
+        builder.Services.AddSingleton<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAuthorizer>();
         builder.Services.AddSingleton<IVaultChunkStore>(_ =>
             new FileSystemVaultChunkStore(Path.Combine(FileSystem.AppDataDirectory, "vault-objects")));
         builder.Services.AddSingleton<IVaultRecordIndex>(_ =>

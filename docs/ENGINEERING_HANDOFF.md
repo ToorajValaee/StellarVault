@@ -302,3 +302,13 @@ Remaining: move shared review and fee/approval orchestration to Core/UI, complet
 - Registered `VaultHybridSyncReviewService` scoped in both PWA and MAUI. Native still retains a deny-by-default owner authorizer, so the actual native hybrid session remains inaccessible until independently authorized.
 
 **Remaining vertical slice**: native local-vault authorization and explicit storage-mode consent, shared offline-create/edit workflow, reviewed queue submission UX, durable transaction attribution/confirmation, cross-platform file chunk queue and conflict resolution. Direct on-chain writer untouched. Test/compile not run at the user's request.
+
+## 2026-11-03: shared Core/UI offline records and folders, local-only native unlock
+
+A new `StellarVault.Core.Services.VaultHybridDraftWorkspace` provides cross-host encrypted local record/folder draft creation, revision, listing, and discard. It applies the shared consent gate and unlocked account/network scope, validates record/folder draft structure, allocates 16-character record IDs, and encodes pending local folder parents as queue dependencies rather than pretending they are on-chain. The existing `VaultQueuedCreatePolicy` and queue preflight block children until parents are independently confirmed.
+
+New shared `VaultHybridDraftEditor` Razor component adds a usable record/folder editor, pending local folder parent selector, encrypted draft directory, edit and discard actions. It is displayed in PWA Vault when local retention is enabled and in MAUI's native workspace after unlocking local encrypted storage. The existing direct ledger record and file UI is unchanged.
+
+MAUI now presents an explicit device-only retention opt-in and separate vault encryption passphrase, and registers the already-existing `LocalOnlyVaultNamespaceAuthorizer` used in PWA. This **does not verify Stellar ownership**. Native local content is isolated by a G-address namespace and protected by the local wrapped key; ledger transaction authorization is still a separate mnemonic-based HD session. Honest UI warnings disclose the difference. Wallet-signature challenge authorization and secure native key custody remain separate acceptance criteria.
+
+Unfinished: fully approved hybrid Sync publication and independent confirmation remain disabled; local edit/delete of already-published remote entities, offline file sync, native verified wallet ownership, cross-device recovery test, build and browser/device tests still pending. User explicitly requested no builds/tests; none were run.

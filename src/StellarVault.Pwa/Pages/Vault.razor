@@ -38,6 +38,10 @@ else
         <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
         @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
+            <VaultHybridDraftEditor />
+        }
+        @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+        {
             <section class="terminal-panel" aria-label="Encrypted local pending changes" style="padding:1rem;margin:1rem 0">
                 <div class="panel-kicker">DEVICE STORAGE // NOT ON STELLAR</div>
                 <h2>LOCAL PENDING CHANGES</h2>

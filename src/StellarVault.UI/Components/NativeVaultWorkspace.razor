@@ -5,6 +5,7 @@
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
 @inject VaultStorageModeGate StorageMode
+@inject VaultDeviceRetentionGate Retention
 @inject VaultNetworkSelection NetworkSelection
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IVaultNativeFileAccess NativeFiles
@@ -165,16 +166,44 @@
                 <p class="advanced-help">Local session unlocked for account <code>@Sessions.ActiveAccountId</code>.</p>
                 <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
                 <VaultRecordWorkspaceView />
+                <VaultHybridDraftEditor />
+                <VaultHybridSyncReview />
             }
             else
             {
                 <div class="terminal-alert warning" role="status">
-                    <strong>LOCAL VAULT LOCKED ON NATIVE</strong>
-                    <span>Account ownership authorization is not yet available in the native app. Local vault creation and passphrase unlock are intentionally disabled. You can still connect to Stellar above to recover and manage supported on-chain data.</span>
+                    <strong>DEVICE-ONLY ENCRYPTED STORAGE — OPTIONAL</strong>
+                    <span>This local namespace is NOT proof of Stellar account ownership.
+                    An address labels encrypted files; a separate vault passphrase controls access.
+                    Nothing is uploaded or synchronized unless separately approved.</span>
                 </div>
+                <label class="sv-biometric-choice">
+                    <input type="checkbox" @bind="_localConsent" disabled="@_busy" />
+                    I OPT IN TO ENCRYPTED LOCAL DEVICE STORAGE AND ACCEPT DEVICE LOSS/BACKUP RISKS
+                </label>
+                @if (_localConsent)
+                {
+                    <label class="terminal-label" for="native-local-account">STELLAR ACCOUNT (LOCAL NAMESPACE ONLY)</label>
+                    <input id="native-local-account" class="terminal-input"
+                           autocomplete="off" spellcheck="false" maxlength="56"
+                           @bind="_accountId" disabled="@_busy" />
+                    <label class="terminal-label" for="native-local-passphrase">SEPARATE LOCAL ENCRYPTION PASSPHRASE</label>
+                    <input id="native-local-passphrase" class="terminal-input" type="password"
+                           autocomplete="off" @bind="_passphrase" disabled="@_busy" />
+                    <div class="sv-access-actions">
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
+                                @onclick="CreateVault">CREATE LOCAL ENCRYPTED VAULT</button>
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
+                                @onclick="UnlockVault">UNLOCK EXISTING LOCAL VAULT</button>
+                    </div>
+                    <p class="advanced-help">Creating a vault requires a new passphrase of at least 12 characters.
+                       Unlocking an existing device vault uses its original passphrase. Local unlock
+                       does not enable wallet signing or confirm account control.</p>
+                }
             }
             <VaultStorageSecurityNotice Native="true" />
-            <VaultHybridSyncReview />
         </section>
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -837,6 +866,7 @@
         }
     }
 
+    private bool _localConsent;
     private string _accountId = string.Empty;
     private string _passphrase = string.Empty;
     private string? _message;
@@ -856,9 +886,17 @@
         _message = null;
         try
         {
+            if (!_localConsent)
+                throw new InvalidOperationException("Explicit encrypted device storage consent is required.");
+            if (create && _passphrase.Length < 12)
+                throw new ArgumentException("Local vault passphrase must have at least 12 characters.");
+            // Local-only namespace authorization does NOT establish Stellar
+            // signer ownership and MUST NOT be used for paid transactions.
+            StellarAccountAddress.Validate(_accountId.Trim());
+            Retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
             if (create) await Workflow.CreateAsync(_accountId.Trim(), _passphrase);
             else await Workflow.UnlockAsync(_accountId.Trim(), _passphrase);
-            _message = "Session activated.";
+            _message = "Encrypted local vault unlocked. No Stellar ownership proof or transaction approval was granted.";
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException or
                                      System.Security.Cryptography.CryptographicException or
@@ -871,6 +909,7 @@
         }
         finally
         {
+            if (!Sessions.IsUnlocked) Retention.Reset();
             _passphrase = string.Empty;
             _busy = false;
         }
@@ -879,7 +918,9 @@
     private void LockVault()
     {
         Workflow.Lock();
+        Retention.Reset();
         _passphrase = string.Empty;
+        _localConsent = false;
         _message = "Vault locked.";
     }
 
@@ -887,6 +928,7 @@
     {
         Sessions.StateChanged -= OnSessionChanged;
         StorageMode.Reset();
+        Retention.Reset();
         _ledgerMnemonic = string.Empty;
         ClearLedgerView();
         // Closing the WebView must release any session keys retained by JS.
