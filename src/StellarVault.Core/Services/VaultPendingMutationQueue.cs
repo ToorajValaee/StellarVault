@@ -488,6 +488,44 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
     }
 
+    /// <summary>
+    /// Persist the signed final-manifest identity while the submission is still
+    /// Submitting and BEFORE the transport broadcasts that manifest.
+    /// The first valid hash wins and the full durable revision must match.
+    /// This is not confirmation and does not authorize retransmission.
+    /// </summary>
+    public async Task<VaultPendingMutation> CheckpointSignedCreateManifestAsync(
+        VaultPendingMutation expectedSubmitting, string signedManifestHash,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expectedSubmitting);
+        if (expectedSubmitting.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            expectedSubmitting.State != VaultSyncState.Submitting ||
+            expectedSubmitting.TransactionHash is not null ||
+            !IsTransactionHash(signedManifestHash))
+            throw new InvalidOperationException(
+                "Only an exact signed create-manifest transaction may be checkpointed.");
+        var current = await store.GetAsync(
+            expectedSubmitting.AccountId, expectedSubmitting.NetworkId,
+            expectedSubmitting.Id, ct)
+            ?? throw new KeyNotFoundException("Reserved create mutation was removed.");
+        RequireScope(current, expectedSubmitting.AccountId, expectedSubmitting.NetworkId);
+        if (current.State != VaultSyncState.Submitting ||
+            current.TransactionHash is not null ||
+            !SameDurableRevision(current, expectedSubmitting))
+            throw new InvalidOperationException(
+                "Reserved mutation changed before signed manifest checkpoint; abort broadcast.");
+        var next = current with
+        {
+            TransactionHash = signedManifestHash.ToLowerInvariant()
+        };
+        if (!await store.TryReplaceAsync(current, next, ct))
+            throw new InvalidOperationException(
+                "Signed manifest hash could not be persisted before broadcast.");
+        return next;
+    }
+
     public async Task<VaultPendingMutation> MarkUncertainAsync(
         VaultPendingMutation submitting, string? transactionHash, CancellationToken ct = default)
     {

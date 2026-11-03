@@ -29,6 +29,8 @@ public static class MauiProgram
             services => services.GetRequiredService<BrowserStellarLedgerRecords>());
         builder.Services.AddScoped<IVaultGuardedLedgerMutations>(
             services => services.GetRequiredService<BrowserStellarLedgerRecords>());
+        builder.Services.AddScoped<IVaultPreparedCreateLedger>(
+            services => services.GetRequiredService<BrowserStellarLedgerRecords>());
         builder.Services.AddScoped<VaultStorageModeGate>();
         // Hybrid queue mechanics are shared with PWA, but native account
         // authorization still fails closed until a signed challenge is enabled.

@@ -392,7 +392,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
             false);
     }
 
-    public async Task<string> AddAsync(VaultRecord record)
+    public async Task<string> AddAsync(
+        VaultRecord record, Func<string, Task>? checkpointSignedManifest = null)
     {
         ThrowIfDisposed();
         ValidateRecord(record);
@@ -424,7 +425,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 generation);
 
             var writes = BuildRecordWrites(target.AccountId, record.Id, chunks, manifest, generation);
-            return await SubmitWritesAsync(writes);
+            return await SubmitWritesAsync(writes, checkpointSignedManifest,
+                checkpointSignedManifest is null ? null : HeaderName(record.Id));
         }
         finally
         {
@@ -693,7 +695,10 @@ public sealed class StellarVaultStore : IAsyncDisposable
             node.NextAccountId);
     }
 
-    private async Task<string> SubmitWritesAsync(IEnumerable<JsManageDataWrite> writes)
+    private async Task<string> SubmitWritesAsync(
+        IEnumerable<JsManageDataWrite> writes,
+        Func<string, Task>? checkpointSignedManifest = null,
+        string? finalManifestName = null)
     {
         var materialized = writes.ToArray();
         if (materialized.Length == 0)
@@ -715,17 +720,54 @@ public sealed class StellarVaultStore : IAsyncDisposable
         string lastTransactionHash = string.Empty;
         // V2 sponsorship submits each ManageData operation in its own atomic
         // transaction; never route writes through the legacy transaction signer.
+        if ((checkpointSignedManifest is null) != (finalManifestName is null))
+            throw new InvalidOperationException("Signed manifest checkpoint scope is incomplete.");
+        if (finalManifestName is not null &&
+            materialized.Count(x => x.Name == finalManifestName &&
+                x.ValueBase64 is not null) != 1)
+            throw new InvalidOperationException(
+                "Guarded create must contain exactly one final manifest write.");
+
         foreach (var batch in materialized.Chunk(MaxOperationsPerTransaction))
         {
-            lastTransactionHash = await _js.InvokeAsync<string>(
-                "stellarVault.stellar.submitHdManageData",
-                _sessionId,
-                batch,
-                _settings.BaseFeeStroops,
-                _settings.BaseReserveStroops);
+            // A JS-interop reference is alive only during its own awaited call.
+            // Earlier encrypted chunk writes do not identify the final record.
+            if (checkpointSignedManifest is not null &&
+                batch.Any(x => x.Name == finalManifestName))
+            {
+                using var checkpoint = DotNetObjectReference.Create(
+                    new SignedManifestCheckpoint(checkpointSignedManifest));
+                lastTransactionHash = await _js.InvokeAsync<string>(
+                    "stellarVault.stellar.submitHdManageData",
+                    _sessionId, batch, _settings.BaseFeeStroops,
+                    _settings.BaseReserveStroops, checkpoint, finalManifestName);
+            }
+            else
+            {
+                lastTransactionHash = await _js.InvokeAsync<string>(
+                    "stellarVault.stellar.submitHdManageData",
+                    _sessionId, batch, _settings.BaseFeeStroops,
+                    _settings.BaseReserveStroops);
+            }
         }
 
         return lastTransactionHash;
+    }
+
+    public sealed class SignedManifestCheckpoint(Func<string, Task> persist)
+    {
+        private int _consumed;
+
+        [JSInvokable]
+        public async Task CheckpointSignedManifestAsync(string hash)
+        {
+            if (hash is not { Length: 64 } || !hash.All(c =>
+                    c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+                Interlocked.CompareExchange(ref _consumed, 1, 0) != 0)
+                throw new InvalidOperationException(
+                    "Signed final-manifest identity is invalid or already checkpointed.");
+            await persist(hash);
+        }
     }
 
     private List<JsManageDataWrite> BuildRecordWrites(

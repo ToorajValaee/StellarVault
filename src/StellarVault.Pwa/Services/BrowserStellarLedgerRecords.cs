@@ -8,7 +8,7 @@ namespace StellarVault.Pwa.Services;
 /// <summary>HD-v2 ledger path using the original transaction writer and manifest
 /// format. Never silently falls back to IndexedDB when submission fails.</summary>
 public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory,
-    IVaultGuardedLedgerMutations, IAsyncDisposable
+    IVaultGuardedLedgerMutations, IVaultPreparedCreateLedger, IAsyncDisposable
 {
     private StellarVaultStore? _store;
     public bool IsConnected => _store is not null;
@@ -299,7 +299,20 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) =>
         PublishWithIdAsync(Guid.NewGuid().ToString("N")[..16], draft);
 
-    public async Task<string> PublishWithIdAsync(string recordId, LedgerRecordDraft draft)
+    public Task<string> PublishWithIdAsync(string recordId, LedgerRecordDraft draft) =>
+        PublishWithIdCoreAsync(recordId, draft, null);
+
+    public Task<string> PublishWithPreparedHashAsync(
+        string recordId, LedgerRecordDraft draft,
+        Func<string, Task> checkpointSignedManifestHash)
+    {
+        ArgumentNullException.ThrowIfNull(checkpointSignedManifestHash);
+        return PublishWithIdCoreAsync(recordId, draft, checkpointSignedManifestHash);
+    }
+
+    private async Task<string> PublishWithIdCoreAsync(
+        string recordId, LedgerRecordDraft draft,
+        Func<string, Task>? checkpointSignedManifestHash)
     {
         if (recordId.Length != 16 || !recordId.All(Uri.IsHexDigit))
             throw new ArgumentException("Invalid 16-character record identifier.", nameof(recordId));
@@ -333,7 +346,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             CreatedUtc = now,
             UpdatedUtc = now
         };
-        string hash = await store.AddAsync(record);
+        string hash = await store.AddAsync(record, checkpointSignedManifestHash);
         if (string.IsNullOrWhiteSpace(hash))
             throw new InvalidOperationException("Stellar did not return a confirmed transaction hash.");
         return hash;

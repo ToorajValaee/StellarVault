@@ -84,7 +84,7 @@ window.stellarVaultSponsorship = (() => {
   async function writeSponsoredData({
     server, rootKeypair, childKeypair, networkPassphrase,
     baseReserveStroops, baseFeeStroops, name, value,
-    safetyBufferStroops = '0'
+    safetyBufferStroops = '0', onSignedTransaction = null
   }) {
     const sdk = requireSdk();
     if (rootKeypair.publicKey() === childKeypair.publicKey())
@@ -126,7 +126,21 @@ window.stellarVaultSponsorship = (() => {
     const transaction = builder.setTimeout(60).build();
     transaction.sign(rootKeypair);
     transaction.sign(childKeypair);
+    // A hybrid create's final manifest hash must reach encrypted durable
+    // storage BEFORE broadcast. The callback is awaited, and any persistence
+    // failure prevents the final transaction from being sent.
+    if (onSignedTransaction !== null) {
+      if (typeof onSignedTransaction !== 'function')
+        throw new Error('Invalid signed transaction checkpoint handler');
+      const signedHash = transaction.hash().toString('hex');
+      if (!/^[0-9a-f]{64}$/.test(signedHash))
+        throw new Error('Invalid signed transaction identity');
+      await onSignedTransaction(signedHash);
+    }
     const response = await server.submitTransaction(transaction);
+    if (onSignedTransaction !== null && response.hash &&
+        String(response.hash).toLowerCase() !== transaction.hash().toString('hex'))
+      throw new Error('Horizon receipt differs from checkpointed signed manifest identity');
     return response.hash;
   }
 

@@ -13,7 +13,8 @@ public sealed class VaultManualSyncCoordinator(
     VaultNetworkSelection networks,
     VaultSessionManager sessions,
     IVaultLedgerManifestCopyInventory copyInventory,
-    IVaultGuardedLedgerMutations guardedLedger)
+    IVaultGuardedLedgerMutations guardedLedger,
+    IVaultPreparedCreateLedger preparedCreates)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
 
@@ -129,13 +130,24 @@ public sealed class VaultManualSyncCoordinator(
         ct.ThrowIfCancellationRequested();
         var reserved = await queue.ReservePreflightedSubmissionAsync(
             quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
+        var submissionRevision = reserved;
         string? txHash = null;
         Exception? submissionError = null;
         try
         {
             await RequireConnectedRootAsync(context, ct);
             ct.ThrowIfCancellationRequested();
-            txHash = await ledger.PublishWithIdAsync(reserved.EntityId, draft);
+            txHash = await preparedCreates.PublishWithPreparedHashAsync(
+                reserved.EntityId, draft, async signedManifestHash =>
+                {
+                    RequireSameContext(context);
+                    // The fully signed hash is persisted before the JS signer
+                    // broadcasts the final manifest. If CAS or storage fails,
+                    // the callback throws and that manifest is NOT submitted.
+                    submissionRevision = await queue.CheckpointSignedCreateManifestAsync(
+                        submissionRevision, signedManifestHash, CancellationToken.None);
+                    txHash = submissionRevision.TransactionHash;
+                });
         }
         catch (Exception ex)
         {
@@ -144,9 +156,12 @@ public sealed class VaultManualSyncCoordinator(
 
         // PublishWithIdAsync returning a hash does not prove that this exact
         // record was included. Always require independent reconciliation.
+        // A failed/unknown JS broadcast must never erase an already-durable
+        // signed manifest identity. Use the exact revision returned by its CAS.
+        txHash = submissionRevision.TransactionHash ?? txHash;
         if (txHash is not null && (txHash.Length != 64 || !txHash.All(Uri.IsHexDigit)))
             txHash = null;
-        try { await queue.MarkUncertainAsync(reserved, txHash, CancellationToken.None); }
+        try { await queue.MarkUncertainAsync(submissionRevision, txHash, CancellationToken.None); }
         catch (Exception ex) { throw new InvalidOperationException("Uncertain state could not be saved; do not retry. Reconcile durable Submitting entry.", ex); }
         return new VaultManualSyncOutcome(
             reserved.Id, txHash, VaultSyncState.Uncertain,

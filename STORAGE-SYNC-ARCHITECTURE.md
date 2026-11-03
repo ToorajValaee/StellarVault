@@ -102,3 +102,7 @@ The shared Sync UI now offers explicit no-retry quarantine of a durable Submitti
 ## Missing-hash history investigation — 2026-11-04
 
 Added a read-only Core+PWA/MAUI investigation for unresolved queued record/folder CREATE and Testnet UPDATE lacking recorded transaction hashes. Searches a bounded recent root-funded transaction window for candidate manifest writes, authenticates each through HD lineage and historical registry/chunks/plaintext, and shows potential hashes without modifying the encrypted queue or asserting attribution. Zero matches is never proof of transaction failure, and no candidate authorizes retry/confirmation. Hashless DELETE remains excluded. Stronger pre-broadcast receipt identity and full Testnet validation remain release blockers.
+
+## Hybrid CREATE signed-manifest checkpoint (2026-11-04)
+
+The queued CREATE writer now checkpoints the fully signed final-manifest transaction hash in the encrypted durable queue's Submitting entry **before** sending that transaction to Horizon. JS awaits a single-use .NET callback and aborts final-manifest broadcast on a persistence error; coordinator continues from the updated exact CAS revision and preserves the hash if Horizon response is lost. Direct on-chain APIs remain unchanged and historical confirmation remains mandatory. Hashless failures before the final manifest is prepared are still possible, and remote UPDATE/DELETE need separate prepared-hash and atomic version work.

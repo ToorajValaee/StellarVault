@@ -458,7 +458,8 @@ window.stellarVault = (() => {
 
     // Each v2 data entry is owned and signed by its deterministic child.
     // The root pays every transaction fee and sponsors reserves for new entries.
-    async function submitHdManageData(sessionId, writes, baseFeeStroops, baseReserveStroops) {
+    async function submitHdManageData(sessionId, writes, baseFeeStroops, baseReserveStroops,
+                                      manifestCheckpoint = null, finalManifestName = null) {
         const session = requireSession(sessionId);
         if (session.mode !== 'hd-v2' || !session.registry)
             throw new Error('Authenticated v2 session required.');
@@ -483,6 +484,12 @@ window.stellarVault = (() => {
             latestRegistry.highestAllocatedIndex !== session.registry.highestAllocatedIndex ||
             latestRegistry.activeWriteIndex !== session.registry.activeWriteIndex)
             throw new Error('HD registry changed since unlock; refresh before writing.');
+        if ((manifestCheckpoint === null) !== (finalManifestName === null))
+            throw new Error('Hybrid manifest checkpoint requires both handler and manifest name');
+        if (finalManifestName !== null &&
+            (!/^svh:[0-9a-f]{16}$/.test(finalManifestName) ||
+             typeof manifestCheckpoint?.invokeMethodAsync !== 'function'))
+            throw new Error('Invalid hybrid manifest checkpoint scope');
         const seen = new Set();
         const staged = [];
         for (const write of writes) {
@@ -512,6 +519,9 @@ window.stellarVault = (() => {
         // Submit one child write per transaction. The sponsorship operations
         // are atomic with the data write; a failed transaction creates no entry.
         let lastHash = '';
+        if (finalManifestName !== null &&
+            staged.filter(entry => entry.name === finalManifestName && entry.value !== null).length !== 1)
+            throw new Error('Hybrid create requires exactly one final manifest write');
         for (const entry of staged) {
             lastHash = await window.stellarVaultSponsorship.writeSponsoredData({
                 server: session.server,
@@ -521,7 +531,12 @@ window.stellarVault = (() => {
                 baseReserveStroops: reserve.toString(),
                 baseFeeStroops: fee.toString(),
                 name: entry.name,
-                value: entry.value
+                value: entry.value,
+                onSignedTransaction: entry.name === finalManifestName
+                    ? async signedHash => {
+                        await manifestCheckpoint.invokeMethodAsync(
+                            'CheckpointSignedManifestAsync', signedHash);
+                    } : null
             });
         }
         return lastHash;

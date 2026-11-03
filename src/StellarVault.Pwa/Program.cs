@@ -23,6 +23,8 @@ builder.Services.AddScoped<IStellarLedgerRecords>(sp => sp.GetRequiredService<Br
 builder.Services.AddScoped<IVaultLedgerManifestCopyInventory>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<IVaultGuardedLedgerMutations>(
     sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
+builder.Services.AddScoped<IVaultPreparedCreateLedger>(
+    sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
