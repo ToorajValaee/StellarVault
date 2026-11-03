@@ -38,14 +38,74 @@ public static class VaultQueuedCreatePolicy
             draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
             draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
             problems.Add("file-protocol-needs-staged-review");
+        // The serialized FolderId and the durable dependency graph MUST
+        // identify the same pending parent. Otherwise a stale or corrupt child
+        // may appear Ready while its actual parent is still unpublished.
+        if (item.DependsOn is null || item.DependsOn.Length > 1 ||
+            item.DependsOn.Any(x => !Guid.TryParseExact(x, "N", out _)))
+            problems.Add("invalid-parent-dependency");
+
+        VaultPendingMutation? localParent = null;
         if (draft.FolderId is { Length: > 0 } parent)
         {
+            if (parent.Length != 16 || !parent.All(Uri.IsHexDigit))
+                problems.Add("invalid-parent-record-id");
             if (string.Equals(parent, item.EntityId, StringComparison.OrdinalIgnoreCase))
                 problems.Add("self-parent-folder");
-            if (all.Any(x => x.Id != item.Id &&
-                string.Equals(x.EntityId, parent, StringComparison.OrdinalIgnoreCase) &&
-                x.State != VaultSyncState.Confirmed))
+            var matches = all.Where(x => x.Id != item.Id &&
+                string.Equals(x.EntityId, parent, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (matches.Length > 1)
+                problems.Add("ambiguous-local-parent-id");
+            else
+                localParent = matches.SingleOrDefault();
+            if (localParent is not null && localParent.Kind != VaultMutationKind.CreateFolder)
+                problems.Add("local-parent-is-not-folder");
+        }
+        if (localParent is not null && localParent.State != VaultSyncState.Confirmed)
+        {
+            if (localParent.State == VaultSyncState.Failed ||
+                localParent.State == VaultSyncState.Conflict)
+                problems.Add("local-parent-unavailable");
+            else
                 problems.Add("unpublished-local-parent-folder");
+            if (item.DependsOn is not { Length: 1 } requiredEdge ||
+                requiredEdge[0] != localParent.Id)
+                problems.Add("parent-dependency-mismatch");
+        }
+        else if (item.DependsOn is { Length: > 0 } existingEdges &&
+            (localParent is null || existingEdges.Length != 1 ||
+             existingEdges[0] != localParent.Id))
+            problems.Add("orphaned-parent-dependency");
+
+        if (item.DependsOn is { Length: > 0 })
+        {
+            var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+            var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
+            var cursor = item.DependsOn.SingleOrDefault();
+            while (cursor is not null)
+            {
+                if (!seen.Add(cursor))
+                {
+                    problems.Add("local-folder-dependency-cycle");
+                    break;
+                }
+                if (!byId.TryGetValue(cursor, out var ancestor))
+                {
+                    problems.Add("missing-parent-dependency");
+                    break;
+                }
+                if (ancestor.Kind != VaultMutationKind.CreateFolder)
+                {
+                    problems.Add("dependency-target-not-folder");
+                    break;
+                }
+                if (ancestor.DependsOn is not { Length: <= 1 })
+                {
+                    problems.Add("invalid-parent-dependency");
+                    break;
+                }
+                cursor = ancestor.DependsOn.SingleOrDefault();
+            }
         }
         return problems.Distinct(StringComparer.Ordinal).ToArray();
     }

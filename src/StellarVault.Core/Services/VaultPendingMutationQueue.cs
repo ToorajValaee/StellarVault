@@ -119,8 +119,11 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
         var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
         return entries.Where(x => x.State == VaultSyncState.Pending &&
+            x.DependsOn is not null &&
             x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
-                dependency.State == VaultSyncState.Confirmed))
+                dependency.State == VaultSyncState.Confirmed) &&
+            (x.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+             VaultQueuedCreatePolicy.Problems(x, entries).Length == 0))
             .OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
     }
 
@@ -132,13 +135,14 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
         var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
         var ready = new List<VaultPendingMutation>();
-        // Keep remote-dependent drafts blocked when an unpublished local parent exists.
-        var localFolderIds = all.Where(x => x.Kind == VaultMutationKind.CreateFolder && x.State != VaultSyncState.Confirmed).Select(x => x.EntityId).ToHashSet(StringComparer.Ordinal);
+        // Parent edge and FolderId validation is performed by the shared
+        // create policy before any child is declared ready.
         var blocked = new List<VaultSyncBlockedMutation>();
         foreach (var item in all.Where(x => x.State == VaultSyncState.Pending))
         {
-            var missing = item.DependsOn.Where(id => !byId.ContainsKey(id)).ToArray();
-            var waiting = item.DependsOn.Where(id => byId.TryGetValue(id, out var parent) &&
+            var dependencies = item.DependsOn ?? [];
+            var missing = dependencies.Where(id => !byId.ContainsKey(id)).ToArray();
+            var waiting = dependencies.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
             var problems = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
                 ? VaultQueuedCreatePolicy.Problems(item, all) : [];

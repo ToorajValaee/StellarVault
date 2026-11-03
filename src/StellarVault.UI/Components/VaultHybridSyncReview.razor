@@ -157,10 +157,29 @@
                             @onclick="CancelApproval">CANCEL WITHOUT SUBMISSION</button>
                 </section>
             }
-            @foreach (var blocked in _report.Queue.Blocked)
+            @if (_report.Queue.Blocked.Count > 0)
             {
-                <p class="terminal-alert warning" role="status">Blocked mutation @blocked.MutationId:
-                    @string.Join(", ", blocked.MissingDependencies.Concat(blocked.WaitingDependencies))</p>
+                <p class="terminal-alert warning" role="status">
+                    Some encrypted local drafts are blocked. A child of an unpublished folder
+                    can be submitted only after that folder is independently confirmed.
+                    Invalid or obsolete parent references require reopening the local draft
+                    and correcting its parent before requesting a new fee quote.
+                </p>
+                @foreach (var blocked in _report.Queue.Blocked)
+                {
+                    <div class="data-field">
+                        <p><strong>BLOCKED LOCAL MUTATION</strong> <code>@blocked.MutationId</code></p>
+                        @foreach (var cause in blocked.MissingDependencies)
+                        {
+                            <p role="status">@BlockedReason(cause)</p>
+                        }
+                        @foreach (var parent in blocked.WaitingDependencies)
+                        {
+                            <p role="status">Waiting for local folder mutation <code>@parent</code>
+                                to be verified on Stellar. No submission or retry is automatic.</p>
+                        }
+                    </div>
+                }
             }
         }
         @if (!string.IsNullOrWhiteSpace(_error))
@@ -171,6 +190,37 @@
 </section>
 
 @code {
+    private static string BlockedReason(string code) => code switch
+    {
+        "parent-dependency-mismatch" =>
+            "The saved parent folder differs from the queue dependency. Reopen the encrypted draft and choose its intended parent.",
+        "orphaned-parent-dependency" =>
+            "This draft still depends on an obsolete local folder. Reopen it and select its current parent or root.",
+        "local-parent-unavailable" =>
+            "The local parent folder failed or conflicted. Choose another parent or root.",
+        "local-parent-is-not-folder" =>
+            "The selected local parent is not a folder. Reopen the draft and correct it.",
+        "local-folder-dependency-cycle" =>
+            "Folder nesting contains a dependency cycle. Move a pending folder to root or another parent.",
+        "missing-parent-dependency" =>
+            "The parent folder's local mutation is missing. Reopen the draft to repair its parent.",
+        "unpublished-local-parent-folder" =>
+            "The selected parent folder has not yet been independently confirmed on Stellar.",
+        "ambiguous-local-parent-id" or "duplicate-local-record-id" =>
+            "Local record IDs are ambiguous. Resolve duplicate drafts before publication.",
+        "dependency-target-not-folder" =>
+            "A local dependency points to a non-folder record. Correct the parent selection.",
+        "invalid-parent-dependency" =>
+            "Malformed local parent dependency; no publication is allowed.",
+        "invalid-parent-record-id" =>
+            "The parent record identifier is invalid. Reopen the draft.",
+        "self-parent-folder" =>
+            "A folder cannot be its own parent.",
+        _ when Guid.TryParseExact(code, "N", out _) =>
+            "A referenced local mutation is missing: " + code,
+        _ => "Draft requires attention: " + code
+    };
+
     private VaultHybridSyncReviewService.Report? _report;
     private string? _error;
     private bool _busy;

@@ -86,3 +86,7 @@ Local encrypted record and folder drafts can now move among root, pending local 
 ## Offline editor revision isolation (2026-11-03)
 
 Create and remote-update editors now carry their *opened payload SHA-256*, distinct from pinned remote-version fingerprints. Shared Core queue methods refuse stale local saves before durable revision CAS, including folder-dependency changes. Both PWA/MAUI shared editors clear cached local content on vault lock/account switch and reload only for the matching session epoch. This protects against older tabs overwriting newer device-local edits, but does not solve cross-device on-chain concurrency.
+
+## Folder dependency consistency, 2026-11-03
+
+Shared Core now checks that every pending create's serialized parent FolderId matches its durable queue dependency. Missing, stale, ambiguous, failed, non-folder and cyclic local parents cannot appear ready. The shared Sync UI explains blocked reasons and the required manual correction; pending-parent children still wait for independent parent confirmation. No automatic reparenting or transaction retry, and no change to direct on-chain writes.
