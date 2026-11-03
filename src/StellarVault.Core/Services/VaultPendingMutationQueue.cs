@@ -543,7 +543,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// </summary>
     public async Task<VaultPendingMutation> RevisePendingCreateAsync(
         VaultPendingMutation expected, byte[] replacementPayload,
-        string[] replacementDependencies, CancellationToken ct = default)
+        string[] replacementDependencies, string expectedPayloadSha256,
+        CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
@@ -557,7 +558,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var previous = await store.GetAsync(expected.AccountId, expected.NetworkId, expected.Id, ct)
             ?? throw new KeyNotFoundException("Pending local create was removed.");
         RequireScope(previous, expected.AccountId, expected.NetworkId);
-        if (!SameDurableRevision(previous, expected) ||
+        if (expectedPayloadSha256 is not { Length: 64 } ||
+            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            !string.Equals(
+                Convert.ToHexStringLower(SHA256.HashData(previous.EncryptedPayload)),
+                expectedPayloadSha256, StringComparison.Ordinal) ||
+            !SameDurableRevision(previous, expected) ||
             previous.State != VaultSyncState.Pending ||
             previous.TransactionHash is not null ||
             previous.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
@@ -630,6 +636,38 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (!await store.TryReplaceAsync(previous, candidate, ct))
             throw new InvalidOperationException(
                 "Local draft changed while reparenting; reopen it before saving.");
+        return candidate;
+    }
+
+    /// <summary>Revise an existing version-pinned UPDATE only when its
+    /// originally opened payload digest still matches the durable queue.
+    /// A stale tab must never overwrite a newer local update.</summary>
+    public async Task<VaultPendingMutation> RevisePendingUpdateIfUnchangedAsync(
+        string accountId, string networkId, string mutationId,
+        string expectedPayloadSha256, byte[] replacementPayload,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        if (expectedPayloadSha256 is not { Length: 64 } ||
+            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            replacementPayload is not { Length: > 0 } ||
+            replacementPayload.Length > 8 * 1024 * 1024)
+            throw new ArgumentException("Invalid pending update revision.");
+        var previous = await store.GetAsync(accountId, networkId, mutationId, ct)
+            ?? throw new KeyNotFoundException("Local update no longer exists.");
+        RequireScope(previous, accountId, networkId);
+        if (previous.State != VaultSyncState.Pending ||
+            previous.TransactionHash is not null ||
+            previous.Kind is not (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
+            !string.Equals(
+                Convert.ToHexStringLower(SHA256.HashData(previous.EncryptedPayload)),
+                expectedPayloadSha256, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Offline update changed since it was opened. Refresh before editing.");
+        var candidate = previous with { EncryptedPayload = replacementPayload.ToArray() };
+        if (!await store.TryReplaceAsync(previous, candidate, ct))
+            throw new InvalidOperationException(
+                "Offline update was changed by another editor. Refresh before saving.");
         return candidate;
     }
 

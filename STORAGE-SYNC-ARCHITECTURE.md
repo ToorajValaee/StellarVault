@@ -82,3 +82,7 @@ Hybrid deletion fee review now correctly unwraps `VaultDeletionIntent.Original` 
 ## Offline folder move/reparent, 2026-11-03
 
 Local encrypted record and folder drafts can now move among root, pending local folders and already-confirmed parent folders. Shared Core changes payload and queue dependency edge together through one durable per-mutation CAS and rejects stale revisions or dependency cycles. Shared UI in PWA/MAUI offers child creation, folder selection, root move and visible parent IDs. Pending-parent children remain blocked from Stellar publication until confirmed. On-chain atomic multi-device coordination remains an independent release blocker.
+
+## Offline editor revision isolation (2026-11-03)
+
+Create and remote-update editors now carry their *opened payload SHA-256*, distinct from pinned remote-version fingerprints. Shared Core queue methods refuse stale local saves before durable revision CAS, including folder-dependency changes. Both PWA/MAUI shared editors clear cached local content on vault lock/account switch and reload only for the matching session epoch. This protects against older tabs overwriting newer device-local edits, but does not solve cross-device on-chain concurrency.

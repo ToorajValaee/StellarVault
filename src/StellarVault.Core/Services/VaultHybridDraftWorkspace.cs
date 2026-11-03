@@ -16,7 +16,8 @@ public sealed class VaultHybridDraftWorkspace(
 {
     public sealed record DraftItem(
         string MutationId, string EntityId, VaultMutationKind Kind,
-        VaultSyncState State, LedgerRecordDraft Draft, DateTimeOffset CreatedUtc);
+        VaultSyncState State, LedgerRecordDraft Draft, DateTimeOffset CreatedUtc,
+        string PayloadSha256);
 
     public async Task<VaultPendingMutation> CreateAsync(
         LedgerRecordDraft draft, CancellationToken ct = default)
@@ -44,7 +45,8 @@ public sealed class VaultHybridDraftWorkspace(
     }
 
     public async Task<VaultPendingMutation> ReviseAsync(
-        string mutationId, LedgerRecordDraft draft, CancellationToken ct = default)
+        string mutationId, LedgerRecordDraft draft, string expectedPayloadSha256,
+        CancellationToken ct = default)
     {
         var (account, scope) = RequireScope();
         var entries = await queue.ReviewAllAsync(account, scope, ct);
@@ -54,6 +56,13 @@ public sealed class VaultHybridDraftWorkspace(
             current.TransactionHash is not null ||
             current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
             throw new InvalidOperationException("Only unpublished local creates can be revised.");
+        if (expectedPayloadSha256 is not { Length: 64 } ||
+            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            !string.Equals(Convert.ToHexStringLower(
+                SHA256.HashData(current.EncryptedPayload)),
+                expectedPayloadSha256, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "This draft was modified in another tab. Reopen the latest version.");
         ValidateDraft(draft, current.Kind);
         var proposedDependencies = ParentDependencies(draft, entries, current.EntityId);
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
@@ -64,7 +73,8 @@ public sealed class VaultHybridDraftWorkspace(
             // queue dependency out of sync.
             RequireSameScope(account, scope);
             return await queue.RevisePendingCreateAsync(
-                current, payload, proposedDependencies, ct);
+                current, payload, proposedDependencies,
+                expectedPayloadSha256, ct);
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
     }
@@ -98,7 +108,8 @@ public sealed class VaultHybridDraftWorkspace(
                 continue;
             }
             result.Add(new(item.Id, item.EntityId, item.Kind,
-                item.State, draft, item.CreatedUtc));
+                item.State, draft, item.CreatedUtc,
+                Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload))));
         }
         RequireSameScope(account, scope);
         return result.OrderBy(x => x.CreatedUtc).ToArray();

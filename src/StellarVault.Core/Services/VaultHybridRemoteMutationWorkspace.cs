@@ -25,7 +25,7 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     public sealed record StagedItem(
         string MutationId, string EntityId, VaultMutationKind Kind,
         VaultSyncState State, LedgerRecordDraft? UpdatedDraft,
-        string BaselineSha256, DateTimeOffset CreatedUtc);
+        string BaselineSha256, DateTimeOffset CreatedUtc, string PayloadSha256);
 
     private sealed record Scope(string Account, string Network, string SelectedNetwork,
         string? Passphrase, string Horizon, long Epoch);
@@ -174,7 +174,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     }
 
     public async Task<VaultPendingMutation> ReviseUpdateAsync(
-        string mutationId, LedgerRecordDraft proposed, CancellationToken ct = default)
+        string mutationId, LedgerRecordDraft proposed, string expectedPayloadSha256,
+        CancellationToken ct = default)
     {
         var scope = Capture();
         var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
@@ -184,6 +185,13 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             current.State != VaultSyncState.Pending || current.TransactionHash is not null ||
             !ValidDigest(current.ExpectedRemoteVersion))
             throw new InvalidOperationException("Only pending versioned updates can be edited.");
+        if (expectedPayloadSha256 is not { Length: 64 } ||
+            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            !string.Equals(
+                Convert.ToHexStringLower(SHA256.HashData(current.EncryptedPayload)),
+                expectedPayloadSha256, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Offline update changed in another tab. Reopen the latest version.");
         // This operation can work offline. The immutable ExpectedRemoteVersion
         // remains pinned until the user explicitly discards and restages.
         ValidateProposed(proposed, current.Kind == VaultMutationKind.UpdateFolder,
@@ -196,8 +204,9 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         try
         {
             EnsureScope(scope);
-            return await queue.RevisePendingAsync(scope.Account,
-                scope.Network, mutationId, payload, ct);
+            return await queue.RevisePendingUpdateIfUnchangedAsync(
+                scope.Account, scope.Network, mutationId,
+                expectedPayloadSha256, payload, ct);
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
     }
@@ -280,7 +289,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                 catch (JsonException) { /* Corrupt drafts remain in queue for investigation. */ }
             }
             results.Add(new(item.Id, item.EntityId, item.Kind, item.State,
-                draft, item.ExpectedRemoteVersion ?? "", item.CreatedUtc));
+                draft, item.ExpectedRemoteVersion ?? "", item.CreatedUtc,
+                Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload))));
         }
         EnsureScope(scope);
         return results.OrderBy(x => x.CreatedUtc).ToArray();

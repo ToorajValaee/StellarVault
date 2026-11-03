@@ -2,6 +2,7 @@
 @inject VaultHybridDraftWorkspace Drafts
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
+@implements IDisposable
 
 <section class="terminal-panel" aria-label="Offline encrypted record and folder drafts">
     <div class="panel-kicker">HYBRID // DEVICE-ONLY DRAFTS</div>
@@ -94,14 +95,56 @@
 @code {
     private IReadOnlyList<VaultHybridDraftWorkspace.DraftItem> _items = [];
     private bool _busy;
-    private string? _status, _editingId;
+    private string? _status, _editingId, _openedRevision;
+    private long _loadedEpoch = -1;
     private string _title = "", _content = "", _username = "", _url = "",
         _notes = "", _tags = "", _folderId = "";
     private bool _isFolder;
 
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        _ = InvokeAsync(RefreshForSessionAsync);
+    }
+
+    private void OnSessionChanged()
+    {
+        _ = InvokeAsync(RefreshForSessionAsync);
+    }
+
+    private async Task RefreshForSessionAsync()
+    {
+        var epoch = Sessions.Epoch;
+        if (_loadedEpoch == epoch) return;
+        _loadedEpoch = epoch;
+        Reset(false);
+        _items = [];
+        if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
+        {
+            StateHasChanged();
+            return;
+        }
+        try
+        {
+            var current = await Drafts.ListAsync();
+            if (Sessions.IsUnlocked && Retention.AllowsLocalPersistence &&
+                Sessions.Epoch == epoch)
+                _items = current;
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Encrypted local directory unavailable. Use REFRESH DRAFTS.";
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
+
     private void Reset(bool folder)
     {
         _editingId = null;
+        _openedRevision = null;
         _isFolder = folder;
         _title = _content = _username = _url = _notes = _tags = _folderId = "";
         _status = null;
@@ -139,6 +182,7 @@
     {
         if (_busy || item.State != VaultSyncState.Pending) return;
         _editingId = item.MutationId;
+        _openedRevision = item.PayloadSha256;
         _isFolder = item.Draft.IsFolder;
         _title = item.Draft.Title;
         _content = _isFolder ? "" : item.Draft.Content;
@@ -154,7 +198,15 @@
     {
         if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) return;
         _busy = true;
-        try { _items = await Drafts.ListAsync(); _status = "Encrypted local drafts loaded."; }
+        try
+        {
+            var epoch = Sessions.Epoch;
+            var refreshed = await Drafts.ListAsync();
+            if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
+                throw new InvalidOperationException("Vault session changed.");
+            _items = refreshed;
+            _status = "Encrypted local drafts loaded.";
+        }
         catch (Exception) { _items = []; _status = "Cannot read local encrypted drafts."; }
         finally { _busy = false; }
     }
@@ -173,14 +225,16 @@
                 _isFolder, _isFolder ? null : _username,
                 _isFolder ? null : _url, _isFolder ? null : _notes);
             if (_editingId is null) await Drafts.CreateAsync(draft);
-            else await Drafts.ReviseAsync(_editingId, draft);
+            else await Drafts.ReviseAsync(_editingId, draft,
+                _openedRevision ?? throw new InvalidOperationException(
+                    "The opened draft revision is unavailable; reopen the draft."));
             _items = await Drafts.ListAsync();
             Reset(_isFolder);
             _status = "Encrypted draft saved locally. Parent dependencies were revised with the draft. No Stellar transaction occurred.";
         }
         catch (Exception)
         {
-            _status = "Draft could not be saved. Verify the encrypted session, record fields and parent folder.";
+            _status = "Draft could not be saved. It may have changed in another tab. Refresh and reopen before trying again; current editor contents were not submitted.";
         }
         finally { _busy = false; }
     }

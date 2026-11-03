@@ -3,6 +3,7 @@
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
+@implements IDisposable
 
 <section class="terminal-panel" aria-label="Offline changes to existing Stellar records and folders">
     <div class="panel-kicker">HYBRID // VERSIONED REMOTE CHANGES</div>
@@ -149,15 +150,57 @@
     private IReadOnlyDictionary<string, string> _drift =
         new Dictionary<string, string>(StringComparer.Ordinal);
     private VaultHybridRemoteMutationWorkspace.RemoteItem? _editingRemote;
-    private string? _editingMutationId, _editingRecordId, _message;
+    private string? _editingMutationId, _editingRecordId, _openedRevision, _message;
+    private long _loadedEpoch = -1;
     private string _title = "", _content = "", _folderId = "",
         _username = "", _url = "", _notes = "", _tags = "";
     private bool _editingIsFolder, _deleteMode, _busy;
 
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        _ = InvokeAsync(RefreshForSessionAsync);
+    }
+
+    private void OnSessionChanged()
+    {
+        _ = InvokeAsync(RefreshForSessionAsync);
+    }
+
+    private async Task RefreshForSessionAsync()
+    {
+        var epoch = Sessions.Epoch;
+        if (_loadedEpoch == epoch) return;
+        _loadedEpoch = epoch;
+        ResetFields();
+        _remote = [];
+        _local = [];
+        _drift = new Dictionary<string, string>(StringComparer.Ordinal);
+        _message = null;
+        if (Sessions.IsUnlocked && Retention.AllowsLocalPersistence)
+        {
+            try
+            {
+                var local = await Changes.ListAsync();
+                if (Sessions.Epoch == epoch && Sessions.IsUnlocked &&
+                    Retention.AllowsLocalPersistence)
+                    _local = local;
+            }
+            catch (Exception)
+            {
+                if (Sessions.Epoch == epoch)
+                    _message = "Local encrypted changes unavailable; use OPEN LOCAL CHANGE QUEUE.";
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void Dispose() => Sessions.StateChanged -= OnSessionChanged;
+
     private void ResetFields()
     {
         _editingRemote = null;
-        _editingMutationId = _editingRecordId = null;
+        _editingMutationId = _editingRecordId = _openedRevision = null;
         _title = _content = _folderId = _username = _url = _notes = _tags = "";
         _editingIsFolder = _deleteMode = false;
     }
@@ -194,6 +237,7 @@
             item.UpdatedDraft is null) return;
         ResetFields();
         _editingMutationId = item.MutationId;
+        _openedRevision = item.PayloadSha256;
         _editingRecordId = item.EntityId;
         _editingIsFolder = item.UpdatedDraft.IsFolder;
         _title = item.UpdatedDraft.Title;
@@ -222,7 +266,9 @@
         try
         {
             if (_editingMutationId is not null)
-                await Changes.ReviseUpdateAsync(_editingMutationId, Draft());
+                await Changes.ReviseUpdateAsync(_editingMutationId, Draft(),
+                    _openedRevision ?? throw new InvalidOperationException(
+                        "Opened update revision is unavailable; reopen it."));
             else if (_deleteMode)
                 await Changes.StageDeleteAsync(_editingRecordId);
             else
@@ -235,7 +281,7 @@
         }
         catch (Exception)
         {
-            _message = "Could not stage change. Refresh remote records and check account, conflicting drafts and folder rules.";
+            _message = "Change was not saved. An opened update may be stale after another tab edited it. Reopen the local change before saving again.";
         }
         finally { _busy = false; }
     }
