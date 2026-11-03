@@ -66,3 +66,7 @@ Recorded-hash child resolution now also requires seed-derived `inspectHdLineage`
 ## Staged deletion original and all-copy matching (2026-11-03)
 
 New hybrid deletions persist an encrypted `VaultDeletionIntent` containing the full original approved record and seed-authenticated HD manifest-owner child accounts. Core preflight and manual approval revalidate the original SHA-256 record baseline and current owner inventory; recovery compares the tombstone transaction's exact source set with staged owners and reports whether coverage matched. PWA and MAUI reuse the same Core interface and ledger adapter. This is preflight and diagnostic evidence, NOT an atomic on-chain version check or complete historical predecessor proof. Delete confirmation remains disabled, and queued Mainnet/custom remote mutations stay gated.
+
+## Historical deletion predecessor coverage (2026-11-03)
+
+The shared PWA/MAUI deletion investigation can now resolve each tombstone source's nearest preceding historical manifest write and verify its encrypted chunks, registry and decrypted plaintext against the originally staged deletion record. A separate `HistoricalPredecessorMatched` finding is reported alongside source-set coverage and current absence. It remains diagnostic only, not queue confirmation: no atomic remote-version condition exists and concurrent edits/copies may still race. Core remains fail-closed, Mainnet remote writes remain gated.

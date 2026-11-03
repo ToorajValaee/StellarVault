@@ -20,6 +20,8 @@ public sealed class HorizonVaultDeletionInspector(
     private const int MaxResponseBytes = 262144;
     private const int MaxOperations = 200;
 
+    public sealed record TombstoneSource(string AccountId, long OperationId);
+
     public sealed record Finding(
         bool NetworkMatched,
         bool TransactionSucceeded,
@@ -28,7 +30,8 @@ public sealed class HorizonVaultDeletionInspector(
         int ManifestDeletes,
         bool RecordCurrentlyAbsent,
         string Explanation,
-        bool StagedSourcesMatched = false)
+        bool StagedSourcesMatched = false,
+        IReadOnlyList<TombstoneSource>? DeletedManifestOperations = null)
     {
         // Even all true fields do NOT authorize queue confirmation:
         // prior-content provenance and all-copy historical coverage are missing.
@@ -126,6 +129,7 @@ public sealed class HorizonVaultDeletionInspector(
             var expectedName = "svh:" + recordId.ToLowerInvariant();
             var sources = new HashSet<string>(StringComparer.Ordinal);
             var operationIds = new HashSet<long>();
+            var tombstones = new List<TombstoneSource>();
             foreach (var operation in records.EnumerateArray())
             {
                 if (operation.ValueKind != JsonValueKind.Object ||
@@ -147,6 +151,7 @@ public sealed class HorizonVaultDeletionInspector(
                     !sources.Add(source.GetString()!))
                     return new(true, true, false, false, sources.Count, false,
                         "Recorded transaction contains an unexpected, duplicated or non-tombstone operation.");
+                tombstones.Add(new TombstoneSource(source.GetString()!, operationId));
             }
 
             var expectedSources = expectedManifestSources.ToHashSet(StringComparer.Ordinal);
@@ -178,7 +183,8 @@ public sealed class HorizonVaultDeletionInspector(
                 absent
                     ? "Authenticated manifest deletion operations found, and the record is currently absent. Prior-record provenance and all-copy history remain unproven; do not confirm or retry."
                     : "Authenticated manifest deletion operations found, but the record is still present. Investigate other copies or subsequent writes; do not confirm or retry.",
-                StagedSourcesMatched: true);
+                StagedSourcesMatched: true,
+                DeletedManifestOperations: tombstones);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)

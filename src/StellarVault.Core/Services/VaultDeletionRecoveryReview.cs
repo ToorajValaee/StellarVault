@@ -11,7 +11,7 @@ public interface IVaultDeletionTombstoneReader
 {
     Task<VaultDeletionTombstoneFinding> InspectAsync(
         string accountId, string networkId, string transactionHash,
-        string recordId, IReadOnlyList<string> expectedManifestSources,
+        string recordId, VaultDeletionIntent expectedIntent,
         CancellationToken ct = default);
 }
 
@@ -21,7 +21,8 @@ public sealed record VaultDeletionTombstoneFinding(
     bool CurrentRecordAbsent,
     int DeletedManifestCount,
     string Explanation,
-    bool StagedSourcesMatched = false);
+    bool StagedSourcesMatched = false,
+    bool HistoricalPredecessorMatched = false);
 
 public sealed class VaultDeletionRecoveryReview(
     IVaultPendingMutationStore store,
@@ -70,7 +71,7 @@ public sealed class VaultDeletionRecoveryReview(
                         intent.Original.Notes)) != baseline)
                 return Reject("Original staged record or manifest-owner snapshot is missing or does not match the pinned baseline.");
             var finding = await reader.InspectAsync(accountId, scope,
-                hash, original.EntityId, owners, ct);
+                hash, original.EntityId, intent, ct);
             // A network round trip cannot authorize evidence for a stale
             // queue snapshot or a changed unlocked session.
             var after = await store.GetAsync(accountId, scope, mutationId, ct);

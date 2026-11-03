@@ -33,6 +33,7 @@ builder.Services.AddScoped<VaultHybridDraftWorkspace>();
 builder.Services.AddScoped<VaultHybridRemoteMutationWorkspace>();
 builder.Services.AddScoped<HorizonVaultTransactionInspector>();
 builder.Services.AddScoped<HorizonVaultDeletionInspector>();
+builder.Services.AddScoped<HorizonVaultDeletionPredecessorInspector>();
 builder.Services.AddScoped<IVaultDeletionTombstoneReader, HorizonVaultDeletionTombstoneReader>();
 builder.Services.AddScoped<VaultDeletionRecoveryReview>();
 builder.Services.AddScoped<HorizonVaultManifestInspector>();

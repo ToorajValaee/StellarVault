@@ -43,6 +43,7 @@ public static class MauiProgram
         builder.Services.AddScoped<HttpClient>();
         builder.Services.AddScoped<HorizonVaultTransactionInspector>();
         builder.Services.AddScoped<HorizonVaultDeletionInspector>();
+        builder.Services.AddScoped<HorizonVaultDeletionPredecessorInspector>();
         builder.Services.AddScoped<IVaultDeletionTombstoneReader, HorizonVaultDeletionTombstoneReader>();
         builder.Services.AddScoped<VaultDeletionRecoveryReview>();
         builder.Services.AddScoped<HorizonVaultManifestInspector>();

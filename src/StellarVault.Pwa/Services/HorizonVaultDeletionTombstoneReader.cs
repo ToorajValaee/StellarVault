@@ -13,12 +13,16 @@ public sealed class HorizonVaultDeletionTombstoneReader(
     VaultDeviceRetentionGate retention,
     VaultSessionManager sessions,
     IStellarLedgerRecords ledger,
-    HorizonVaultDeletionInspector inspector)
+    HorizonVaultDeletionInspector inspector,
+    HorizonVaultDeletionPredecessorInspector predecessors,
+    HorizonVaultManifestInspector manifests,
+    HorizonVaultPublicationDiagnostic historical,
+    BrowserStellarLedgerRecords connected)
     : IVaultDeletionTombstoneReader
 {
     public async Task<VaultDeletionTombstoneFinding> InspectAsync(
         string accountId, string networkId, string transactionHash,
-        string recordId, IReadOnlyList<string> expectedManifestSources,
+        string recordId, VaultDeletionIntent expectedIntent,
         CancellationToken ct = default)
     {
         static VaultDeletionTombstoneFinding Reject(string explanation) =>
@@ -44,7 +48,54 @@ public sealed class HorizonVaultDeletionTombstoneReader(
                 return Reject("Selected Stellar network does not support historical review.");
             var finding = await inspector.InspectAsync(
                 endpoint, passphrase, accountId, transactionHash, recordId,
-                expectedManifestSources, ct);
+                expectedIntent.ManifestSourceAccounts, ct);
+            var predecessorMatched = false;
+            if (finding.StagedSourcesMatched && finding.SourcesBelongToAuthenticatedHdChain &&
+                finding.DeletedManifestOperations is { Count: > 0 } deletions &&
+                deletions.Count == expectedIntent.ManifestSourceAccounts.Length)
+            {
+                predecessorMatched = true;
+                foreach (var deletion in deletions)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var candidate = await predecessors.FindLatestManifestWriteAsync(
+                        endpoint, deletion.AccountId, recordId, deletion.OperationId, ct);
+                    if (candidate is null ||
+                        string.Equals(candidate.TransactionHash, transactionHash,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        predecessorMatched = false;
+                        break;
+                    }
+                    var manifest = await manifests.InspectManifestAsync(
+                        endpoint, candidate.TransactionHash, recordId, ct);
+                    if (manifest is null ||
+                        manifest.ManifestOperationId != candidate.ManifestOperationId ||
+                        manifest.OperationSourceAccount != deletion.AccountId)
+                    {
+                        predecessorMatched = false;
+                        break;
+                    }
+                    var childIndex = await connected.ResolveAuthenticatedHdChildAsync(
+                        accountId, deletion.AccountId, endpoint, passphrase, ct);
+                    if (childIndex is null)
+                    {
+                        predecessorMatched = false;
+                        break;
+                    }
+                    var match = await historical.InspectHistoricalRecordAsync(
+                        endpoint, passphrase, candidate.TransactionHash, recordId,
+                        accountId, deletion.AccountId, childIndex.Value,
+                        expectedIntent.Original, ct);
+                    if (!match.EndpointNetworkMatches ||
+                        !match.HistoricalChunksAvailable ||
+                        !match.HistoricalRecordMatches)
+                    {
+                        predecessorMatched = false;
+                        break;
+                    }
+                }
+            }
             if (sessions.Epoch != epoch || !sessions.IsUnlocked ||
                 sessions.ActiveAccountId != accountId || !ledger.IsConnected ||
                 networks.Network != selected ||
@@ -56,7 +107,10 @@ public sealed class HorizonVaultDeletionTombstoneReader(
                     finding.AllOperationsAreTargetManifestDeletes,
                 finding.SourcesBelongToAuthenticatedHdChain,
                 finding.RecordCurrentlyAbsent, finding.ManifestDeletes,
-                finding.Explanation, finding.StagedSourcesMatched);
+                predecessorMatched
+                    ? finding.Explanation + " All staged sources had historically authenticated predecessor records matching the encrypted intent. Still not an atomic deletion confirmation."
+                    : finding.Explanation + " Historical predecessor coverage is incomplete or differs from the staged record.",
+                finding.StagedSourcesMatched, predecessorMatched);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return Reject("Historical tombstone inspection failed closed."); }

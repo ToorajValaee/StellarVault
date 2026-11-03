@@ -72,10 +72,12 @@
                                 <p>Target manifest deletes: @tombstone.DeletedManifestCount ·
                                     Authenticated HD sources: @tombstone.AuthenticatedHdSources ·
                                     All staged manifest owners deleted: @tombstone.StagedSourcesMatched ·
+                                    Historical predecessor verified on every staged child: @tombstone.HistoricalPredecessorMatched ·
                                     Currently absent: @tombstone.CurrentRecordAbsent</p>
                                 <p class="terminal-alert warning" role="alert">
-                                    This diagnostic never confirms a deletion. Prior record provenance
-                                    and all-copy history are not verified. Do not retry.
+                                    This diagnostic never confirms a deletion. Even a matched historical
+                                    predecessor is not an atomic ledger version condition; other
+                                    concurrent writes may exist. Do not retry.
                                 </p>
                             }
                         }
