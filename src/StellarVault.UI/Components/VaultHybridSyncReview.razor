@@ -1,5 +1,7 @@
 @using StellarVault.Core.Services
 @inject VaultHybridSyncReviewService HybridReview
+@inject VaultManualSyncCoordinator ManualSync
+@inject VaultNetworkSelection Networks
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
 @inject IStellarLedgerRecords Ledger
@@ -7,10 +9,10 @@
 <section class="terminal-panel" aria-label="Hybrid encrypted device queue">
     <div class="panel-heading">
         <div><div class="panel-kicker">ENCRYPTED DEVICE VAULT // HYBRID SYNC</div>
-        <h3>LOCAL CHANGES — READ-ONLY REVIEW</h3></div>
+        <h3>LOCAL CHANGES — REVIEW AND MANUAL SYNC</h3></div>
     </div>
-    <p>Local drafts are not on Stellar. Sync requires a separate explicit transaction approval.
-       A failed or unknown submission must never be retried automatically.</p>
+    <p>Local drafts stay on this device until you explicitly approve a paid Stellar transaction.
+       Submission is not confirmation. An unknown outcome remains quarantined and must never be retried automatically.</p>
     @if (!Retention.AllowsLocalPersistence)
     {
         <p role="status">Encrypted device retention is not enabled for this session. No queue data will be opened.</p>
@@ -24,7 +26,7 @@
         <button type="button" class="pixel-button compact" disabled="@_busy"
                 @onclick="ReviewAsync">REVIEW LOCAL CHANGES</button>
         <button type="button" class="pixel-button compact" disabled="@(_busy || !Ledger.IsConnected)"
-                @onclick="EstimateAsync">ESTIMATE SYNC COSTS — NO BROADCAST</button>
+                @onclick="EstimateAsync">ESTIMATE STELLAR SYNC COSTS</button>
         @if (_report is not null)
         {
             <p role="status">Ready: @_report.Queue.Ready.Count · Blocked: @_report.Queue.Blocked.Count ·
@@ -40,9 +42,50 @@
                     <p>@item.Kind — @item.Explanation</p>
                     @if (item.Quote is not null)
                     {
-                        <small>Quote is informative only and expires after 5 minutes. No submission has been authorized.</small>
+                        <p>Quote expires after 5 minutes and applies to this exact encrypted draft and network.</p>
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || _report.Queue.NeedsReconciliation != 0 || _report.Queue.Conflicts != 0)"
+                                @onclick="() => SelectQuoteAsync(item)">REVIEW TRANSACTION APPROVAL</button>
                     }
                 </div>
+            }
+            @if (_selectedQuote is not null && _report.Queue.NeedsReconciliation == 0 &&
+                _report.Queue.Conflicts == 0)
+            {
+                <section class="terminal-panel" aria-label="Explicit hybrid sync transaction approval">
+                    <h3>PAID STELLAR TRANSACTION APPROVAL</h3>
+                    <p><strong>@_selectedTitle</strong> · @(_selectedKind == VaultMutationKind.CreateFolder ? "FOLDER" : "RECORD")</p>
+                    <p>Account: <code>@_selectedQuote.AccountId</code></p>
+                    <p>Network: <code>@Networks.Network</code></p>
+                    <p>Record mutation: <code>@_selectedQuote.MutationId</code></p>
+                    <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm XLM</strong></p>
+                    <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm XLM</strong></p>
+                    <p>Draft fingerprint: <code>@(_selectedQuote.DraftSha256[..12])</code></p>
+                    <p class="terminal-alert warning" role="alert">
+                        Submitting may spend real XLM. This action writes the local draft
+                        to Stellar. Even if a transaction hash is returned, the queue will
+                        remain Uncertain until an independently verified reconciliation.
+                        Never repeat an interrupted submission.
+                    </p>
+                    <label class="sv-biometric-choice">
+                        <input type="checkbox" @bind="_explicitApproval" disabled="@_busy" />
+                        I explicitly approve this single paid Stellar transaction, its maximum fee
+                        and reserve, and understand the no-retry recovery rule.
+                    </label>
+                    @if (Networks.Network == "public")
+                    {
+                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend real XLM and is not reversible.</p>
+                        <label class="sv-biometric-choice">
+                            <input type="checkbox" @bind="_mainnetApproved" disabled="@_busy" />
+                            I understand this transaction will be submitted to STELLAR PUBLIC MAINNET.
+                        </label>
+                    }
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !_explicitApproval || (Networks.Network == "public" && !_mainnetApproved) || !Ledger.IsConnected)"
+                            @onclick="PublishSelectedAsync">APPROVE AND SUBMIT ONE MUTATION</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="CancelApproval">CANCEL WITHOUT SUBMISSION</button>
+                </section>
             }
             @foreach (var blocked in _report.Queue.Blocked)
             {
@@ -61,6 +104,85 @@
     private VaultHybridSyncReviewService.Report? _report;
     private string? _error;
     private bool _busy;
+    private VaultSyncApprovalSnapshot? _selectedQuote;
+    private string? _selectedTitle;
+    private VaultMutationKind _selectedKind;
+    private bool _explicitApproval;
+    private bool _mainnetApproved;
+
+    private void CancelApproval()
+    {
+        _selectedQuote = null;
+        _selectedTitle = null;
+        _explicitApproval = false;
+        _mainnetApproved = false;
+    }
+
+    private async Task SelectQuoteAsync(VaultHybridSyncReviewService.Item item)
+    {
+        CancelApproval();
+        if (_busy || item.Quote is null || _report is null ||
+            _report.Queue.NeedsReconciliation != 0 || _report.Queue.Conflicts != 0 ||
+            !Sessions.IsUnlocked || Sessions.ActiveAccountId != _report.AccountId)
+            return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            if (!await ManualSync.CanPublishApprovedCreateAsync(
+                item.Quote, _report.AccountId))
+            {
+                _error = "Queue, signing root, network, remote inventory or fee estimate changed. Review again.";
+                _report = null;
+                return;
+            }
+            _selectedQuote = item.Quote;
+            _selectedTitle = item.Title;
+            _selectedKind = item.Kind;
+        }
+        catch (Exception)
+        {
+            _error = "Transaction eligibility could not be revalidated. No submission occurred.";
+            _report = null;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishSelectedAsync()
+    {
+        if (_busy || !_explicitApproval ||
+            (Networks.Network == "public" && !_mainnetApproved) ||
+            _selectedQuote is null ||
+            _report is null || !Retention.AllowsLocalPersistence ||
+            !Sessions.IsUnlocked || Sessions.ActiveAccountId != _report.AccountId)
+            return;
+        var quote = _selectedQuote;
+        var account = _report.AccountId;
+        CancelApproval(); // Checkbox is consumed even when validation rejects.
+        _busy = true;
+        _error = null;
+        _report = null;
+        try
+        {
+            // Shared Core coordinator repeats all approval checks, fee checks,
+            // signed-root binding and durable CAS reservation. After reservation,
+            // failure is ALWAYS an unknown outcome and must never be retried.
+            var outcome = await ManualSync.PublishApprovedCreateAsync(
+                quote, account, explicitlyApproved: true);
+            _error = "SUBMISSION UNRESOLVED. Mutation " + outcome.MutationId +
+                ". Transaction hash: " + (outcome.TransactionHash ?? "NOT RECORDED") +
+                ". " + outcome.Message +
+                " Do not resubmit. Investigate and reconcile before any other Sync.";
+        }
+        catch (Exception)
+        {
+            // Could have failed AFTER durable reservation or broadcast. Never
+            // label as a failed transaction or offer a retry shortcut.
+            _error = "Submission could not be completed or verified. The mutation may already have reached Stellar. Inspect the durable queue and ledger; DO NOT RETRY.";
+        }
+        finally { _busy = false; }
+    }
+
 
     private Task ReviewAsync() => LoadAsync(false);
     private Task EstimateAsync() => LoadAsync(true);
@@ -70,6 +192,7 @@
         if (_busy || !Retention.AllowsLocalPersistence ||
             !Sessions.IsUnlocked || Sessions.ActiveAccountId is not string account)
             return;
+        CancelApproval();
         _busy = true;
         _error = null;
         _report = null;

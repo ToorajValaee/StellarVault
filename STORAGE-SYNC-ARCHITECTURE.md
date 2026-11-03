@@ -38,3 +38,9 @@ This is platform infrastructure, not a completed hybrid experience. The shared o
 The shared Core workspace now supports local encrypted pending record/folder creation, revision, listing and removal. A shared Razor editor is integrated into PWA and MAUI. Pending child folders/records record local parent mutation dependencies; publishing remains blocked until the parent is confirmed.
 
 On native, device-only encrypted storage can be explicitly opted into and unlocked with a separate local vault passphrase. This uses the same **local-only account namespace** authorizer as PWA; it is not cryptographic Stellar ownership verification and does not authorize transactions. Existing on-chain operations are preserved. The hybrid record/folder milestone is **not done** until reviewed queue publication, confirmation, recovery and native authorization are validated.
+
+## Shared manual hybrid Sync — 2026-11-03
+
+The reusable hybrid Sync UI now has an explicit review/approval/submit action for supported queued creates. Core checks the actual connected HD signing root against the local queue account, the selected network, unlocked session epoch, current remote inventory and fee bounds before any durable reservation; after reservation every attempted submission is quarantined Uncertain pending independent verification. Mainnet requires a second confirmation. PWA and MAUI mount the same component, preserving direct on-chain workflows.
+
+The milestone is **not complete** until independent ledger confirmation enables safe dependency advancement, unsupported mutation classes are handled, and cross-platform release testing is performed. Never retry an Uncertain mutation automatically.

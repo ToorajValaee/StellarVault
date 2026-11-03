@@ -45,54 +45,10 @@ else
             <section class="terminal-panel" aria-label="Encrypted local pending changes" style="padding:1rem;margin:1rem 0">
                 <div class="panel-kicker">DEVICE STORAGE // NOT ON STELLAR</div>
                 <h2>LOCAL PENDING CHANGES</h2>
-                <p class="advanced-help">These encrypted drafts are stored only on this device. Refreshing ledger records does not publish them. Manual transaction review and synchronization are not available yet.</p>
+                <p class="advanced-help">These encrypted drafts are stored only on this device. Refreshing ledger records does not publish them. Each submitted draft requires a separate user-approved transaction and stays unresolved until independently reconciled.</p>
                 <button type="button" class="pixel-button compact" @onclick="LoadPendingAsync" disabled="@_pendingLoading">↻ REFRESH LOCAL QUEUE</button>
                 <button type="button" class="pixel-button compact" @onclick="PrepareLocalSyncReviewAsync" disabled="@_pendingLoading">REVIEW SYNC READINESS</button>
-                @if (_syncReview is not null)
-                {
-                    <div class="terminal-alert" role="status">
-                        <strong>READ-ONLY SYNC REVIEW · NO SUBMISSION</strong>
-                        <span>READY: @_syncReview.Ready.Count · DEPENDENCY BLOCKED: @_syncReview.Blocked.Count · REQUIRES RECONCILIATION: @_syncReview.NeedsReconciliation · CONFLICTS: @_syncReview.Conflicts</span>
-                        @if (_syncReview.NeedsReconciliation > 0)
-                        {
-                            <p class="terminal-alert warning">Previously attempted transactions require independent Stellar verification. Never retry them automatically.</p>
-                            <button type="button" class="pixel-button compact" disabled="@_pendingLoading" @onclick="QuarantineInterruptedAsync">QUARANTINE INTERRUPTED ATTEMPTS</button>
-                        }
-                        <span>No operations have been approved or published. Estimates below are informational, per-change, and not a batch transaction quote.</span>
-                        @if (Ledger.IsConnected)
-                        {
-                            <button type="button" class="pixel-button compact" disabled="@_pendingLoading" @onclick="EstimateReadyDraftsAsync">ESTIMATE READY RECORD COSTS</button>
-                        }
-                        @if (_syncEstimates.Count > 0)
-                        {
-                            @foreach (var estimate in _syncEstimates)
-                            {
-                                <div class="data-field"><span class="field-label">@estimate.Title</span>
-                                    <span>@estimate.Summary</span>
-                                    @if (estimate.Snapshot is not null) { <small>Draft fingerprint: @estimate.Snapshot.DraftSha256.Substring(0, 12) · quote expires after 5 minutes</small>
-                                        <button type="button" class="pixel-button compact" @onclick="() => ReviewApprovalAsync(estimate.Snapshot)">REVALIDATE QUOTE</button> }
-                                </div>
-                            }
-                        }
-                        @if (_syncEstimateNote is not null) { <span>@_syncEstimateNote</span> }
-                        @if (_approvalStatus is not null) { <p role="status">@_approvalStatus</p> }
-                        @if (_reviewedQuote is not null)
-                        {
-                            <section class="terminal-panel" aria-label="Manual sync approval preview">
-                                <strong>SYNC APPROVAL PREVIEW — NO BROADCAST</strong>
-                                <p>Draft: @_reviewedDraftTitle</p>
-                                <p>Mutation: @_reviewedQuote.MutationId</p>
-                                <p>Estimated network fee: @_reviewedQuote.QuotedFeeXlm XLM</p>
-                                <p>Estimated peak reserve: @_reviewedQuote.QuotedPeakReserveXlm XLM</p>
-                                <p>Account: @_reviewedQuote.AccountId</p>
-                                <p>Network scope: @_reviewedQuote.NetworkId</p>
-                                <label><input type="checkbox" @bind="_approvalAcknowledged" /> I understand this is only a review; it does not publish data.</label>
-                                <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged)" @onclick="ConfirmPreviewOnly">ACKNOWLEDGE REVIEW ONLY</button>
-                                <button class="pixel-button compact" type="button" disabled="@(!_approvalAcknowledged || _pendingLoading || !Ledger.IsConnected)" @onclick="CheckApprovedPreflightAsync">CHECK COMPLETE ELIGIBILITY</button>
-                            </section>
-                        }
-                    </div>
-                }
+                <VaultHybridSyncReview />
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
                 @if (_pendingItems.Count > 0)
                 {

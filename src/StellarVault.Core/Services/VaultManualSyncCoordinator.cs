@@ -10,31 +10,77 @@ public sealed class VaultManualSyncCoordinator(
     VaultPendingMutationQueue queue,
     IStellarLedgerRecords ledger,
     VaultDeviceRetentionGate retention,
-    VaultNetworkSelection networks)
+    VaultNetworkSelection networks,
+    VaultSessionManager sessions)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
+
+    private sealed record NetworkContext(string AccountId, string NetworkId,
+        string Network, string? Passphrase, string HorizonUrl, long SessionEpoch);
+
+    private NetworkContext CaptureContext(string accountId)
+    {
+        StellarAccountAddress.Validate(accountId);
+        retention.RequireLocalPersistence();
+        if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId)
+            throw new UnauthorizedAccessException("Unlock the matching device vault before hybrid Sync.");
+        return new NetworkContext(accountId, networks.CredentialKey(accountId),
+            networks.Network, networks.CustomPassphrase, networks.CustomHorizonUrl,
+            sessions.Epoch);
+    }
+
+    private void RequireSameContext(NetworkContext context)
+    {
+        if (!ledger.IsConnected ||
+            !retention.AllowsLocalPersistence ||
+            !sessions.IsUnlocked || sessions.ActiveAccountId != context.AccountId ||
+            sessions.Epoch != context.SessionEpoch ||
+            !string.Equals(networks.CredentialKey(context.AccountId),
+                context.NetworkId, StringComparison.Ordinal) ||
+            networks.Network != context.Network ||
+            networks.CustomPassphrase != context.Passphrase ||
+            networks.CustomHorizonUrl != context.HorizonUrl)
+            throw new InvalidOperationException("Signing network changed; review again.");
+    }
+
+    private async Task RequireConnectedRootAsync(NetworkContext context, CancellationToken ct)
+    {
+        RequireSameContext(context);
+        ct.ThrowIfCancellationRequested();
+        var info = await ledger.InspectAccountInfoAsync();
+        ct.ThrowIfCancellationRequested();
+        RequireSameContext(context);
+        if (!string.Equals(info.RootAccountId, context.AccountId,
+            StringComparison.Ordinal))
+            throw new UnauthorizedAccessException(
+                "Connected HD signing root differs from the unlocked local queue account.");
+    }
+
     public async Task<bool> CanPublishApprovedCreateAsync(
         VaultSyncApprovalSnapshot quote, string accountId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(quote);
         retention.RequireLocalPersistence();
         if (!ledger.IsConnected) return false;
-        var network = networks.CredentialKey(accountId);
-        if (quote.AccountId != accountId || quote.NetworkId != network) return false;
         try
         {
-            var review = await queue.PrepareReviewAsync(accountId, network, ct);
+            var context = CaptureContext(accountId);
+            if (quote.AccountId != accountId || quote.NetworkId != context.NetworkId) return false;
+            await RequireConnectedRootAsync(context, ct);
+            var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
             var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId);
-            if (mutation is null) return false;
-            VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, network,
+            if (mutation is null || review.NeedsReconciliation != 0 || review.Conflicts != 0)
+                return false;
+            VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, context.NetworkId,
                 DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
             var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload);
             if (draft is null) return false;
             var remote = await ledger.ReadAsync();
-            await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
+            await queue.PreflightCreateAsync(quote, accountId, context.NetworkId,
+                remote, DateTimeOffset.UtcNow, ct);
             var cost = await ledger.EstimateAsync(draft, mutation.EntityId);
-            return ledger.IsConnected && networks.CredentialKey(accountId) == network &&
-                cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
+            await RequireConnectedRootAsync(context, ct);
+            return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -50,12 +96,16 @@ public sealed class VaultManualSyncCoordinator(
         retention.RequireLocalPersistence();
         if (!ledger.IsConnected)
             throw new InvalidOperationException("Connect to the selected Stellar ledger first.");
-        var network = networks.CredentialKey(accountId);
+        var context = CaptureContext(accountId);
+        var network = context.NetworkId;
         if (quote.AccountId != accountId || quote.NetworkId != network)
             throw new InvalidOperationException("Approved quote does not belong to this account/network.");
 
         if (!await submissionGate.WaitAsync(0, ct)) throw new InvalidOperationException("Another submission is active.");
         try {
+        // Device-only namespace is NOT a signing authorization. Bind the
+        // connected mnemonic-derived HD root to the exact queue account.
+        await RequireConnectedRootAsync(context, ct);
         // Perform all fallible validation BEFORE recording submission intent.
         var ready = await queue.PrepareReviewAsync(accountId, network, ct);
         var mutation = ready.Ready.SingleOrDefault(x => x.Id == quote.MutationId)
@@ -73,8 +123,7 @@ public sealed class VaultManualSyncCoordinator(
 
         // Durable CAS reservation is the no-replay boundary. No automatic retries
         // are allowed after this point, even when publishing throws.
-        if (!ledger.IsConnected || networks.CredentialKey(accountId) != network)
-            throw new InvalidOperationException("Ledger selection changed; review again.");
+        await RequireConnectedRootAsync(context, ct);
         ct.ThrowIfCancellationRequested();
         var reserved = await queue.ReservePreflightedSubmissionAsync(
             quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
@@ -82,8 +131,7 @@ public sealed class VaultManualSyncCoordinator(
         Exception? submissionError = null;
         try
         {
-            if (!ledger.IsConnected || networks.CredentialKey(accountId) != network)
-                throw new InvalidOperationException("Ledger selection changed after reservation.");
+            await RequireConnectedRootAsync(context, ct);
             ct.ThrowIfCancellationRequested();
             txHash = await ledger.PublishWithIdAsync(reserved.EntityId, draft);
         }
