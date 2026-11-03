@@ -83,6 +83,7 @@ public sealed class VaultQueuedCreateHistoricalReview(
                 return Reject("Unsupported selected Stellar network.");
         }
 
+        var selectedNetwork = selection.Network;
         if (string.IsNullOrWhiteSpace(passphrase) ||
             !Uri.TryCreate(endpoint, UriKind.Absolute, out var address) ||
             address.Scheme != Uri.UriSchemeHttps || address.UserInfo.Length != 0 ||
@@ -121,8 +122,12 @@ public sealed class VaultQueuedCreateHistoricalReview(
             var after = await store.GetAsync(mutation.AccountId, mutation.NetworkId, mutation.Id, ct);
             if (after is null || !SameRevision(durable, after) ||
                 !string.Equals(selection.CredentialKey(mutation.AccountId),
-                    mutation.NetworkId, StringComparison.Ordinal))
-                return Reject("Queue revision or selected network changed during inspection.");
+                    mutation.NetworkId, StringComparison.Ordinal) ||
+                selection.Network != selectedNetwork ||
+                (selectedNetwork == "custom" &&
+                 (!string.Equals(selection.CustomHorizonUrl, endpoint, StringComparison.Ordinal) ||
+                  !string.Equals(selection.CustomPassphrase, passphrase, StringComparison.Ordinal))))
+                return Reject("Queue revision, endpoint or selected network changed during inspection.");
             return new(true, finding.EndpointNetworkMatches &&
                 finding.HistoricalChunksAvailable && finding.HistoricalRecordMatches,
                 finding.Explanation);

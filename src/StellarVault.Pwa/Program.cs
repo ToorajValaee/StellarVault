@@ -34,6 +34,7 @@ builder.Services.AddScoped<HorizonVaultHistoricalRegistryInspector>();
 builder.Services.AddScoped<HorizonVaultNetworkInspector>();
 builder.Services.AddScoped<HorizonVaultPublicationDiagnostic>();
 builder.Services.AddScoped<VaultQueuedCreateHistoricalReview>();
+builder.Services.AddScoped<VaultUnrecordedSubmissionDiagnostic>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
 builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IStellarUploadCheckpointStore, BrowserStellarUploadCheckpointStore>();
