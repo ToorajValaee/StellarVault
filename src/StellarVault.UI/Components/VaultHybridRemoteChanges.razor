@@ -1,0 +1,295 @@
+@using StellarVault.Core.Services
+@inject VaultHybridRemoteMutationWorkspace Changes
+@inject VaultSessionManager Sessions
+@inject VaultDeviceRetentionGate Retention
+@inject IStellarLedgerRecords Ledger
+
+<section class="terminal-panel" aria-label="Offline changes to existing Stellar records and folders">
+    <div class="panel-kicker">HYBRID // VERSIONED REMOTE CHANGES</div>
+    <h3>EDIT OR DELETE PUBLISHED RECORDS OFFLINE</h3>
+    <p>Load published records while connected, then stage an encrypted local update
+       or deletion. No transaction is submitted. Every change is pinned to the
+       original on-chain contents so a later conflicting edit cannot be overwritten silently.</p>
+    @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
+    {
+        <p role="status">Unlock the encrypted local vault and enable local storage to edit published data offline.</p>
+    }
+    else
+    {
+        <div class="sv-access-actions">
+            <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
+                    @onclick="LoadRemoteAsync">LOAD PUBLISHED RECORDS</button>
+            <button class="pixel-button compact" type="button" disabled="@_busy"
+                    @onclick="LoadLocalAsync">OPEN LOCAL CHANGE QUEUE</button>
+            <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
+                    @onclick="InspectVersionsAsync">CHECK REMOTE CONFLICTS — READ ONLY</button>
+        </div>
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <p role="status" class="terminal-alert">@_message</p>
+        }
+        @if (_remote.Count > 0)
+        {
+            <div class="panel-kicker">PUBLISHED RECORDS</div>
+            @foreach (var item in _remote)
+            {
+                <div class="data-field">
+                    <strong>@item.Title</strong>
+                    <p>@(item.IsFolder ? "FOLDER" : "RECORD") · @item.Id</p>
+                    <button class="pixel-button compact" type="button" disabled="@_busy"
+                            @onclick="() => SelectRemote(item)">STAGE LOCAL UPDATE</button>
+                    <button class="pixel-button compact" type="button" disabled="@_busy"
+                            @onclick="() => SelectDelete(item)">STAGE LOCAL DELETION</button>
+                </div>
+            }
+        }
+        @if (_editingRemote is not null || _editingMutationId is not null)
+        {
+            <section class="terminal-panel" aria-label="Versioned local mutation editor">
+                <h3>@(_deleteMode ? "STAGE DELETION" : "STAGE UPDATE")</h3>
+                <p>Record ID: <code>@_editingRecordId</code> ·
+                    @(_editingIsFolder ? "Folder" : "Record")</p>
+                @if (_editingMutationId is not null)
+                {
+                    <p>Original remote fingerprint remains pinned; editing locally does not replace the baseline.</p>
+                }
+                @if (_deleteMode)
+                {
+                    <p class="terminal-alert warning">
+                        This only saves a proposed deletion. No remote records are removed.
+                        A folder with children cannot be staged for deletion.
+                    </p>
+                }
+                else
+                {
+                    <label class="terminal-label" for="hybrid-mod-title">TITLE</label>
+                    <input id="hybrid-mod-title" class="terminal-input" maxlength="256"
+                           @bind="_title" disabled="@_busy" />
+                    <label class="terminal-label" for="hybrid-mod-parent">PARENT FOLDER ID (OPTIONAL)</label>
+                    <input id="hybrid-mod-parent" class="terminal-input" maxlength="16"
+                           @bind="_folderId" disabled="@_busy" />
+                    @if (!_editingIsFolder)
+                    {
+                        <label class="terminal-label" for="hybrid-mod-content">CONTENT</label>
+                        <textarea id="hybrid-mod-content" class="terminal-input terminal-textarea"
+                                  rows="5" @bind="_content" disabled="@_busy"></textarea>
+                        <label class="terminal-label" for="hybrid-mod-username">USERNAME</label>
+                        <input id="hybrid-mod-username" class="terminal-input"
+                               @bind="_username" disabled="@_busy" />
+                        <label class="terminal-label" for="hybrid-mod-url">URL</label>
+                        <input id="hybrid-mod-url" class="terminal-input"
+                               @bind="_url" disabled="@_busy" />
+                        <label class="terminal-label" for="hybrid-mod-notes">NOTES</label>
+                        <textarea id="hybrid-mod-notes" class="terminal-input"
+                                  rows="3" @bind="_notes" disabled="@_busy"></textarea>
+                        <label class="terminal-label" for="hybrid-mod-tags">TAGS</label>
+                        <input id="hybrid-mod-tags" class="terminal-input"
+                               @bind="_tags" disabled="@_busy" />
+                    }
+                }
+                <button class="pixel-button compact" type="button" disabled="@_busy"
+                        @onclick="CancelEdit">CANCEL</button>
+                <button class="pixel-button primary" type="button"
+                        disabled="@(_busy || (!_deleteMode && string.IsNullOrWhiteSpace(_title)))"
+                        @onclick="SaveAsync">
+                    @(_deleteMode ? "SAVE ENCRYPTED DELETION INTENT" : "SAVE ENCRYPTED UPDATE DRAFT")
+                </button>
+            </section>
+        }
+        @if (_local.Count > 0)
+        {
+            <div class="panel-kicker">ENCRYPTED LOCAL UPDATE / DELETE QUEUE</div>
+            @foreach (var item in _local)
+            {
+                <div class="data-field">
+                    <strong>@item.Kind — @item.EntityId</strong>
+                    <p>@item.State · staged @item.CreatedUtc.ToLocalTime().ToString("g")</p>
+                    <p>Original remote version: <code>@(item.BaselineSha256.Length >= 12 ? item.BaselineSha256[..12] : "INVALID")</code></p>
+                    @if (_drift.TryGetValue(item.MutationId, out var detail))
+                    {
+                        <p role="status">@detail</p>
+                    }
+                    @if (item.State == VaultSyncState.Pending)
+                    {
+                        @if (item.UpdatedDraft is not null)
+                        {
+                            <button class="pixel-button compact" type="button" disabled="@_busy"
+                                    @onclick="() => OpenLocalUpdate(item)">EDIT OFFLINE UPDATE</button>
+                        }
+                        <button class="pixel-button compact" type="button" disabled="@_busy"
+                                @onclick="() => DiscardAsync(item.MutationId)">DISCARD LOCAL CHANGE</button>
+                    }
+                    else
+                    {
+                        <p>Non-pending mutation is locked against local revision. Investigate its state before taking action.</p>
+                    }
+                </div>
+            }
+        }
+        <p class="advanced-help">Update/delete publishing and confirmation are deliberately disabled
+           until their transaction-specific conflict and historical verification workflow is complete.
+           Staging never writes to Stellar.</p>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<VaultHybridRemoteMutationWorkspace.RemoteItem> _remote = [];
+    private IReadOnlyList<VaultHybridRemoteMutationWorkspace.StagedItem> _local = [];
+    private IReadOnlyDictionary<string, string> _drift =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+    private VaultHybridRemoteMutationWorkspace.RemoteItem? _editingRemote;
+    private string? _editingMutationId, _editingRecordId, _message;
+    private string _title = "", _content = "", _folderId = "",
+        _username = "", _url = "", _notes = "", _tags = "";
+    private bool _editingIsFolder, _deleteMode, _busy;
+
+    private void ResetFields()
+    {
+        _editingRemote = null;
+        _editingMutationId = _editingRecordId = null;
+        _title = _content = _folderId = _username = _url = _notes = _tags = "";
+        _editingIsFolder = _deleteMode = false;
+    }
+
+    private void CancelEdit() => ResetFields();
+
+    private void SelectRemote(VaultHybridRemoteMutationWorkspace.RemoteItem item)
+    {
+        if (_busy) return;
+        ResetFields();
+        _editingRemote = item;
+        _editingRecordId = item.Id;
+        _editingIsFolder = item.IsFolder;
+        _title = item.Title;
+        _content = item.Content;
+        _folderId = item.FolderId ?? "";
+        _username = item.UserName ?? "";
+        _url = item.Url ?? "";
+        _notes = item.Notes ?? "";
+        _tags = string.Join(", ", item.Tags ?? []);
+        _message = "Editing a device-only draft based on the selected published record.";
+    }
+
+    private void SelectDelete(VaultHybridRemoteMutationWorkspace.RemoteItem item)
+    {
+        SelectRemote(item);
+        _deleteMode = true;
+        _message = "Deletion intent is local-only. Nothing is removed from Stellar.";
+    }
+
+    private void OpenLocalUpdate(VaultHybridRemoteMutationWorkspace.StagedItem item)
+    {
+        if (_busy || item.State != VaultSyncState.Pending ||
+            item.UpdatedDraft is null) return;
+        ResetFields();
+        _editingMutationId = item.MutationId;
+        _editingRecordId = item.EntityId;
+        _editingIsFolder = item.UpdatedDraft.IsFolder;
+        _title = item.UpdatedDraft.Title;
+        _content = item.UpdatedDraft.Content;
+        _folderId = item.UpdatedDraft.FolderId ?? "";
+        _username = item.UpdatedDraft.UserName ?? "";
+        _url = item.UpdatedDraft.Url ?? "";
+        _notes = item.UpdatedDraft.Notes ?? "";
+        _tags = string.Join(", ", item.UpdatedDraft.Tags ?? []);
+        _message = "Editing local update without changing its original remote-version fingerprint.";
+    }
+
+    private LedgerRecordDraft Draft() =>
+        new(_title, _editingIsFolder ? "folder" : _content,
+            string.IsNullOrWhiteSpace(_folderId) ? null : _folderId,
+            _tags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            _editingIsFolder, _editingIsFolder ? null : _username,
+            _editingIsFolder ? null : _url, _editingIsFolder ? null : _notes);
+
+    private async Task SaveAsync()
+    {
+        if (_busy || _editingRecordId is null || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        try
+        {
+            if (_editingMutationId is not null)
+                await Changes.ReviseUpdateAsync(_editingMutationId, Draft());
+            else if (_deleteMode)
+                await Changes.StageDeleteAsync(_editingRecordId);
+            else
+                await Changes.StageUpdateAsync(_editingRecordId, Draft());
+
+            _local = await Changes.ListAsync();
+            _drift = new Dictionary<string, string>(StringComparer.Ordinal);
+            ResetFields();
+            _message = "Encrypted local change saved. No on-chain transaction was submitted.";
+        }
+        catch (Exception)
+        {
+            _message = "Could not stage change. Refresh remote records and check account, conflicting drafts and folder rules.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LoadRemoteAsync()
+    {
+        if (_busy || !Ledger.IsConnected || !Sessions.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            _remote = await Changes.BrowseRemoteAsync();
+            _local = await Changes.ListAsync();
+            _message = "Published records loaded from connected account. No transactions were submitted.";
+        }
+        catch (Exception)
+        {
+            _remote = [];
+            _message = "Cannot verify connected signing root or remote record inventory.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LoadLocalAsync()
+    {
+        if (_busy || !Sessions.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            _local = await Changes.ListAsync();
+            _message = "Encrypted local update/delete queue loaded.";
+        }
+        catch (Exception) { _local = []; _message = "Local queue unavailable."; }
+        finally { _busy = false; }
+    }
+
+    private async Task InspectVersionsAsync()
+    {
+        if (_busy || !Sessions.IsUnlocked || !Ledger.IsConnected) return;
+        _busy = true;
+        try
+        {
+            _drift = await Changes.InspectRemoteVersionsAsync();
+            _local = await Changes.ListAsync();
+            _message = "Read-only baseline comparison complete. No transaction submitted or conflict state changed.";
+        }
+        catch (Exception)
+        {
+            _drift = new Dictionary<string, string>(StringComparer.Ordinal);
+            _message = "Remote version comparison unavailable. Do not publish affected changes.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardAsync(string id)
+    {
+        if (_busy || !Sessions.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            await Changes.DiscardAsync(id);
+            _local = await Changes.ListAsync();
+            _drift = new Dictionary<string, string>(StringComparer.Ordinal);
+            _message = "Unsubmitted local mutation discarded. Nothing was deleted from Stellar.";
+        }
+        catch (Exception) { _message = "Cannot discard a changed or dependent local mutation."; }
+        finally { _busy = false; }
+    }
+}

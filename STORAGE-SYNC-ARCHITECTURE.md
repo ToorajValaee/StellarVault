@@ -48,3 +48,7 @@ The milestone is **not complete** until independent ledger confirmation enables 
 ## Verified hybrid queue confirmation — 2026-11-03
 
 Both hosts now compile the same historical Horizon evidence adapter for the Core evidence verifier. For an already recorded transaction hash, the adapter binds the unlocked local vault and actual connected HD root, resolves the child index from the connected chain, verifies historical manifest, registry, chunk ciphertext and decrypted draft, and gives Core record-to-transaction evidence. Only after successful verification and durable queue CAS does a mutation become Confirmed. The shared UI offers manual recorded-hash verification; unknown-hash entries remain blocked. Confirmed parent folders unblock dependent local children for separate approval. This is pending build, Testnet and security validation, not a production release claim.
+
+## Hybrid remote modifications, 2026-11-03
+
+A shared Core service and Razor component now stage offline encrypted updates/deletes of published records/folders across PWA and MAUI. Proposed mutations pin the full remote record fingerprint and expose read-only divergence checks before future Sync. The user can revise an offline update or discard an unsubmitted change without network access. Actual update/delete hybrid publication and historical confirmation are still disabled until signed version preflight, durable per-entity uniqueness and independent receipt linkage are implemented. Direct on-chain operations remain unchanged.
