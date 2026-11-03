@@ -20,20 +20,36 @@ public sealed class VaultQueuedCreateHistoricalReview(
         bool HistoricalRecordMatched,
         string Explanation);
 
-    public async Task<Finding> InspectAsync(
+    public Task<Finding> InspectAsync(
         VaultPendingMutation mutation, string transactionHash,
         string expectedNodeAccount, int expectedNodeIndex,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        InspectCoreAsync(mutation, transactionHash, expectedNodeAccount,
+            expectedNodeIndex, false, ct);
+
+    public Task<Finding> InspectUnrecordedCandidateAsync(
+        VaultPendingMutation mutation, string candidateHash,
+        string expectedNodeAccount, int expectedNodeIndex,
+        CancellationToken ct = default) =>
+        InspectCoreAsync(mutation, candidateHash, expectedNodeAccount,
+            expectedNodeIndex, true, ct);
+
+    private async Task<Finding> InspectCoreAsync(
+        VaultPendingMutation mutation, string transactionHash,
+        string expectedNodeAccount, int expectedNodeIndex,
+        bool allowUnrecordedCandidate, CancellationToken ct)
     {
         static Finding Reject(string reason) => new(false, false, reason);
 
         if (mutation is null ||
             mutation.State is not (VaultSyncState.Submitting or VaultSyncState.Uncertain) ||
             mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
-            mutation.TransactionHash is not { Length: 64 } storedHash ||
-            !storedHash.All(Uri.IsHexDigit) ||
             transactionHash is not { Length: 64 } || !transactionHash.All(Uri.IsHexDigit) ||
-            !string.Equals(storedHash, transactionHash, StringComparison.OrdinalIgnoreCase) ||
+            (allowUnrecordedCandidate
+                ? mutation.TransactionHash is not null
+                : mutation.TransactionHash is not { Length: 64 } storedHash ||
+                  !storedHash.All(Uri.IsHexDigit) ||
+                  !string.Equals(storedHash, transactionHash, StringComparison.OrdinalIgnoreCase)) ||
             mutation.EntityId is not { Length: 16 } || !mutation.EntityId.All(Uri.IsHexDigit) ||
             mutation.AccountId is not { Length: 56 } || mutation.AccountId[0] != 'G' ||
             !mutation.AccountId.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7') ||
@@ -128,9 +144,13 @@ public sealed class VaultQueuedCreateHistoricalReview(
                  (!string.Equals(selection.CustomHorizonUrl, endpoint, StringComparison.Ordinal) ||
                   !string.Equals(selection.CustomPassphrase, passphrase, StringComparison.Ordinal))))
                 return Reject("Queue revision, endpoint or selected network changed during inspection.");
-            return new(true, finding.EndpointNetworkMatches &&
-                finding.HistoricalChunksAvailable && finding.HistoricalRecordMatches,
-                finding.Explanation);
+            var matched = finding.EndpointNetworkMatches &&
+                finding.HistoricalChunksAvailable && finding.HistoricalRecordMatches;
+            return new(true, matched, allowUnrecordedCandidate
+                ? matched
+                    ? "Matching candidate content is NOT evidence that the interrupted local submission sent this transaction. No queue state or hash was changed."
+                    : "Candidate history did not match. No queue state or hash was changed."
+                : finding.Explanation);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return Reject("Queued-create historical review failed closed."); }

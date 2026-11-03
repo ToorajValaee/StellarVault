@@ -10,6 +10,7 @@
 @inject VaultDeviceRetentionGate Retention
 @inject VaultPendingMutationQueue PendingQueue
 @inject VaultManualSyncCoordinator ManualSync
+@inject VaultUnrecordedSubmissionDiagnostic UnknownHashInvestigation
 @inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
 
@@ -276,7 +277,29 @@ else
                             <p>No transaction hash was durably recorded. This does not prove that submission failed.</p>
                         }
                         <p>Independent ledger reconciliation is required before this change can be marked confirmed.</p>
-                        <button type="button" class="pixel-button compact" disabled="@_pendingDeleting" @onclick="ReconcileSelectedAsync">CHECK LEDGER CONFIRMATION</button>
+                        @if (_selectedPending.TransactionHash is null &&
+                            _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
+                        {
+                            <div class="data-field">
+                                <span class="field-label">READ-ONLY CANDIDATE TRANSACTION INVESTIGATION</span>
+                                <p>This cannot identify the original submission or mark the draft confirmed. Enter a transaction hash found during independent ledger investigation and the expected HD child information.</p>
+                                <label class="terminal-label" for="sv-candidate-hash">CANDIDATE TRANSACTION HASH</label>
+                                <input id="sv-candidate-hash" class="terminal-input" @bind="_candidateHash" maxlength="64" spellcheck="false" autocomplete="off" />
+                                <label class="terminal-label" for="sv-candidate-child">EXPECTED HD CHILD ACCOUNT</label>
+                                <input id="sv-candidate-child" class="terminal-input" @bind="_candidateChildAccount" maxlength="56" spellcheck="false" autocomplete="off" />
+                                <label class="terminal-label" for="sv-candidate-index">EXPECTED CHILD INDEX (1–63)</label>
+                                <input id="sv-candidate-index" class="terminal-input" type="number" min="1" max="63" step="1" @bind="_candidateChildIndex" />
+                                <button type="button" class="pixel-button compact" disabled="@(_pendingDeleting || !Ledger.IsConnected)" @onclick="InspectUnrecordedCandidateAsync">INSPECT CANDIDATE — READ ONLY</button>
+                                @if (_candidateInvestigationStatus is not null)
+                                {
+                                    <p role="status" class="terminal-alert warning">@_candidateInvestigationStatus</p>
+                                }
+                            </div>
+                        }
+                        @if (_selectedPending.TransactionHash is not null)
+                        {
+                            <button type="button" class="pixel-button compact" disabled="@_pendingDeleting" @onclick="ReconcileSelectedAsync">CHECK LEDGER CONFIRMATION</button>
+                        }
                     </div>
                 }
                 else if (_selectedPending.State == VaultSyncState.Confirmed)
@@ -397,6 +420,50 @@ else
         finally { if (data is not null) CryptographicOperations.ZeroMemory(data); }
     }
 
+    private string _candidateHash = "";
+    private string _candidateChildAccount = "";
+    private int _candidateChildIndex = 1;
+    private string? _candidateInvestigationStatus;
+
+    private async Task InspectUnrecordedCandidateAsync()
+    {
+        if (_pendingDeleting || !Ledger.IsConnected ||
+            _selectedPending is not { TransactionHash: null,
+                State: VaultSyncState.Uncertain or VaultSyncState.Submitting } selected ||
+            selected.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            return;
+
+        _candidateInvestigationStatus = null;
+        if (_candidateHash.Length != 64 || !_candidateHash.All(Uri.IsHexDigit) ||
+            _candidateChildAccount.Length != 56 ||
+            _candidateChildAccount[0] != 'G' ||
+            !_candidateChildAccount.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7') ||
+            _candidateChildIndex is <= 0 or >= 64)
+        {
+            _candidateInvestigationStatus = "Enter a 64-character hexadecimal hash, valid G-account and child index from 1 to 63.";
+            return;
+        }
+
+        _pendingDeleting = true;
+        try
+        {
+            var finding = await UnknownHashInvestigation.InspectCandidateAsync(
+                selected.AccountId, selected.Id, _candidateHash,
+                _candidateChildAccount, _candidateChildIndex);
+            _candidateInvestigationStatus = finding.HistoricalRecordMatched
+                ? "CANDIDATE CONTENT MATCHED. This does not establish that your interrupted submission produced this transaction. The draft remains unresolved and MUST NOT be resubmitted automatically."
+                : "CANDIDATE NOT VERIFIED. " + finding.Explanation +
+                  " The submission remains unresolved; do not retry.";
+            await LoadPendingAsync();
+            _selectedPending = _pendingItems.FirstOrDefault(x => x.Id == selected.Id);
+        }
+        catch (Exception)
+        {
+            _candidateInvestigationStatus = "Candidate investigation could not be completed. Submission remains unresolved; do not retry.";
+        }
+        finally { _pendingDeleting = false; }
+    }
+
     private async Task ReconcileSelectedAsync()
     {
         if (_pendingDeleting || _selectedPending is not { State: VaultSyncState.Uncertain or VaultSyncState.Submitting } selected) return;
@@ -470,6 +537,10 @@ else
     private void OpenPending(VaultPendingMutation mutation)
     {
         _selectedPending = mutation;
+        _candidateHash = "";
+        _candidateChildAccount = "";
+        _candidateChildIndex = 1;
+        _candidateInvestigationStatus = null;
         _pendingFileStatus = null;
         _pendingEditTitle = PendingTitle(mutation);
         _pendingEditFolder = "";
