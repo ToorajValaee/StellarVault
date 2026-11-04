@@ -75,6 +75,9 @@ public sealed class HorizonVaultDeletionInspector(
             if (receipt is null)
                 return new(true, false, false, false, 0, false,
                     "Recorded transaction is not a successful Horizon receipt.");
+            if (!string.Equals(receipt.SourceAccount, rootAccount, StringComparison.Ordinal))
+                return new(true, false, false, false, 0, false,
+                    "Successful transaction was funded by a different root account; it cannot be attributed to this HD vault.");
 
             var expected = new Uri(baseUri,
                 "transactions/" + transactionHash.ToLowerInvariant() +

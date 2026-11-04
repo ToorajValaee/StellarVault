@@ -111,7 +111,32 @@
                                     Unresolved owners: @journalReport.Unresolved ·
                                     No signed hash recorded: @journalReport.NotCheckpointed ·
                                     All staged owners historically verified: @journalReport.AllStagedOwnersHistoricallyVerified ·
-                                    Currently absent: @journalReport.CurrentRecordAbsent</p>
+                                    Current snapshot available: @journalReport.CurrentSnapshotAvailable ·
+                                    Currently absent in snapshot: @journalReport.CurrentRecordAbsent</p>
+                                @if (journalReport.CurrentSnapshotAvailable)
+                                {
+                                    <p>Current manifest-owning HD accounts:
+                                        @(journalReport.CurrentManifestOwners?.Count ?? 0)</p>
+                                    @if (journalReport.UnexpectedCurrentOwners is { Count: > 0 } newOwners)
+                                    {
+                                        <p class="terminal-alert warning" role="alert">
+                                            A current inventory contains manifest owners outside the original
+                                            approved deletion set. Another device or later write may have
+                                            changed this record. No retry or confirmation is safe.
+                                        </p>
+                                        @foreach (var owner in newOwners)
+                                        {
+                                            <p>Unexpected current owner: <code>@owner</code></p>
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="terminal-alert warning" role="alert">
+                                        Current ledger state is unknown. Historical receipts alone
+                                        do not establish that the record is absent.
+                                    </p>
+                                }
                                 @foreach (var owner in journalReport.Owners)
                                 {
                                     <div class="data-field">

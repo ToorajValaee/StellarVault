@@ -14,7 +14,9 @@ public sealed class VaultDeletionJournalReview(
     IVaultDeletionTombstoneReader tombstones,
     VaultDeviceRetentionGate retention,
     VaultSessionManager sessions,
-    VaultNetworkSelection networks)
+    VaultNetworkSelection networks,
+    IStellarLedgerRecords ledger,
+    IVaultLedgerManifestCopyInventory manifestCopies)
 {
     public enum OwnerStatus { VerifiedHistoricalTombstone, UnresolvedTransaction, NotCheckpointed }
 
@@ -26,7 +28,10 @@ public sealed class VaultDeletionJournalReview(
     public sealed record Finding(
         IReadOnlyList<OwnerFinding> Owners, int Verified, int Unresolved,
         int NotCheckpointed, bool CurrentRecordAbsent,
-        bool AllStagedOwnersHistoricallyVerified, string Explanation)
+        bool AllStagedOwnersHistoricallyVerified, string Explanation,
+        bool CurrentSnapshotAvailable = false,
+        IReadOnlyList<string>? CurrentManifestOwners = null,
+        IReadOnlyList<string>? UnexpectedCurrentOwners = null)
     {
         // A multi-transaction optimistic delete is never a queue-confirmation proof.
         public bool IsQueueConfirmationProof => false;
@@ -79,13 +84,11 @@ public sealed class VaultDeletionJournalReview(
 
             var entries = journal.ToDictionary(x => x.SourceAccountId, StringComparer.Ordinal);
             var results = new List<OwnerFinding>(stagedOwners.Length);
-            var allAbsent = true;
             foreach (var owner in stagedOwners.Order(StringComparer.Ordinal))
             {
                 ct.ThrowIfCancellationRequested();
                 if (!entries.TryGetValue(owner, out var signed))
                 {
-                    allAbsent = false;
                     results.Add(new(owner, null, OwnerStatus.NotCheckpointed,
                         "No signed tombstone identity was durably recorded for this HD owner. This does not prove the transaction was never sent.",
                         false));
@@ -103,11 +106,48 @@ public sealed class VaultDeletionJournalReview(
                     finding.AuthenticatedHdSources && finding.StagedSourcesMatched &&
                     finding.HistoricalPredecessorMatched &&
                     finding.DeletedManifestCount == 1;
-                if (!finding.CurrentRecordAbsent) allAbsent = false;
                 results.Add(new(owner, signed.TransactionHash,
                     verified ? OwnerStatus.VerifiedHistoricalTombstone :
                         OwnerStatus.UnresolvedTransaction,
                     finding.Explanation, finding.HistoricalPredecessorMatched));
+            }
+
+            // Current inventory is a separate diagnostic observation made
+            // only ONCE after historical checks. Avoid mixing account snapshots
+            // from different per-owner network requests. This observation has
+            // no authority to confirm a deletion or authorize a replay.
+            bool snapshotAvailable = false;
+            bool currentlyAbsent = false;
+            string[] currentOwners = [];
+            string[] unexpectedOwners = [];
+            try
+            {
+                var info = await ledger.InspectAccountInfoAsync();
+                if (info.RootAccountId != accountId)
+                    throw new UnauthorizedAccessException("Connected HD root changed.");
+                var live = await ledger.ReadAsync();
+                var owners = await manifestCopies.InspectOwnersAsync(
+                    accountId, original.EntityId, ct);
+                if (owners.Any(x => !StellarAccountAddress.IsValid(x)) ||
+                    owners.Distinct(StringComparer.Ordinal).Count() != owners.Count)
+                    throw new InvalidDataException("Authenticated manifest inventory is ambiguous.");
+                var latest = await ledger.InspectAccountInfoAsync();
+                if (latest.RootAccountId != accountId)
+                    throw new UnauthorizedAccessException("Connected HD root changed.");
+                currentOwners = owners.Order(StringComparer.Ordinal).ToArray();
+                unexpectedOwners = currentOwners.Except(
+                    stagedOwners, StringComparer.Ordinal).ToArray();
+                currentlyAbsent = !live.Any(x =>
+                    string.Equals(x.Id, original.EntityId, StringComparison.OrdinalIgnoreCase)) &&
+                    currentOwners.Length == 0;
+                snapshotAvailable = true;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception)
+            {
+                // Historical evidence can still be reported when Horizon or
+                // the current HD inventory is unavailable. Never turn an
+                // unknown current state into an "absent" claim.
             }
 
             var after = await store.GetAsync(accountId, scope, mutationId, ct);
@@ -124,11 +164,20 @@ public sealed class VaultDeletionJournalReview(
             var missingCount = results.Count(x => x.Status == OwnerStatus.NotCheckpointed);
             var unresolvedCount = results.Count - verifiedCount - missingCount;
             var allVerified = verifiedCount == stagedOwners.Length;
+            var conclusion = allVerified
+                ? "All staged manifest owners have matching historical tombstones and predecessor records. This does NOT establish atomic deletion or authorize queue confirmation."
+                : "Deletion journal is incomplete or has unresolved historical evidence. No queue state changed.";
+            conclusion += !snapshotAvailable
+                ? " Current ledger inventory could not be authenticated; absence is UNKNOWN."
+                : unexpectedOwners.Length > 0
+                    ? " New manifest owners outside the staged deletion set exist in the current inventory; investigate concurrent or later writes."
+                    : currentlyAbsent
+                        ? " A separate current snapshot found no visible record or manifest owners, but later writes and races are still possible."
+                        : " The current inventory still contains record data or manifest owners; do not treat deletion as complete.";
+            conclusion += " Preserve signed identities and do not retry.";
             return new(results, verifiedCount, unresolvedCount, missingCount,
-                allAbsent && allVerified, allVerified,
-                allVerified
-                    ? "All staged manifest owners have matching authenticated historical tombstone transactions and predecessor records. This is NOT atomic deletion or queue confirmation: concurrent/later writes may exist. Do not retry."
-                    : "Deletion journal is incomplete or has unresolved historical evidence. No queue state changed. Preserve every signed identity; do not retry.");
+                currentlyAbsent, allVerified, conclusion,
+                snapshotAvailable, currentOwners, unexpectedOwners);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)

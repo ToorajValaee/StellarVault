@@ -118,3 +118,7 @@ Hybrid Testnet deletion now checkpoints each HD manifest-owning child account an
 ## Multi-owner deletion journal evidence — 2026-11-04
 
 The signed deletion journal now has a read-only per-owner historical verifier in shared Core, using the existing strict HD-authenticated tombstone/predecessor verifier for each recorded source/hash. Shared PWA/MAUI Sync shows verified, unresolved and uncheckpointed owners, with incomplete historical coverage clearly identified. Even when all historical tombstones match, it does not mark a queued deletion Confirmed or allow any retry: multi-transaction deletion remains non-atomic and cross-device writes can race.
+
+## Deletion historical evidence vs current inventory (2026-11-04)
+
+Strict tombstone history now also binds the successful transaction receipt's root source account. Multi-owner historical verification is separate from a single final time-of-read current ledger/manifest-owner snapshot. The report distinguishes unknown current inventory and unexpected HD owners created after the staged deletion intent; neither historical coverage nor present absence authorizes queue confirmation, replay or Mainnet queued deletion.
