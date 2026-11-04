@@ -15,6 +15,10 @@ public enum VaultSyncState
 
 public enum VaultMutationKind { CreateRecord, UpdateRecord, DeleteRecord, CreateFolder, UpdateFolder, DeleteFolder, UploadFile, DeleteFile }
 
+/// <summary>One signed deletion transaction for one deterministic HD manifest owner.
+/// Stored only within the account/network encrypted queue entry.</summary>
+public sealed record VaultSignedDeletionManifest(string SourceAccountId, string TransactionHash);
+
 /// <summary>
 /// Ciphertext only. Host adapters must encrypt the entire serialized queue at rest,
 /// using authenticated account/network-associated data, before storing any entry.
@@ -30,7 +34,8 @@ public sealed record VaultPendingMutation(
     string[] DependsOn,
     VaultSyncState State,
     string? TransactionHash,
-    DateTimeOffset CreatedUtc)
+    DateTimeOffset CreatedUtc,
+    VaultSignedDeletionManifest[]? SignedDeletionManifests = null)
 {
     public static VaultPendingMutation Create(string accountId, string networkId,
         VaultMutationKind kind, string entityId, byte[] encryptedPayload,
@@ -535,6 +540,60 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>
+    /// Checkpoint one fully signed manifest tombstone before it is broadcast.
+    /// Every owner may be recorded only once, in signed/broadcast order.
+    /// The queue remains Submitting; a checkpoint is NEVER receipt evidence.
+    /// </summary>
+    public async Task<VaultPendingMutation> CheckpointSignedDeletionManifestAsync(
+        VaultPendingMutation expected, string sourceAccount, string signedHash,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) ||
+            expected.State != VaultSyncState.Submitting ||
+            expected.TransactionHash is not null ||
+            !StellarAccountAddress.IsValid(sourceAccount) ||
+            signedHash is not { Length: 64 } ||
+            !signedHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidOperationException("Invalid signed deletion manifest checkpoint.");
+        VaultDeletionIntent? intent;
+        try
+        {
+            intent = System.Text.Json.JsonSerializer.Deserialize<VaultDeletionIntent>(
+                expected.EncryptedPayload);
+        }
+        catch (System.Text.Json.JsonException) { intent = null; }
+        var owners = intent?.ManifestSourceAccounts;
+        if (owners is not { Length: > 0 and <= 63 } ||
+            owners.Distinct(StringComparer.Ordinal).Count() != owners.Length ||
+            !owners.Contains(sourceAccount, StringComparer.Ordinal))
+            throw new InvalidOperationException("Signed tombstone is not from a staged HD manifest owner.");
+        var journal = expected.SignedDeletionManifests ?? [];
+        if (journal.Length >= owners.Length ||
+            journal.Any(x => x.SourceAccountId == sourceAccount ||
+                x.TransactionHash == signedHash) ||
+            journal.Any(x => !owners.Contains(x.SourceAccountId, StringComparer.Ordinal) ||
+                !IsTransactionHash(x.TransactionHash)) ||
+            journal.Select(x => x.SourceAccountId).Distinct(StringComparer.Ordinal).Count() != journal.Length)
+            throw new InvalidOperationException("Deletion manifest checkpoint journal is ambiguous.");
+        var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+            expected.Id, ct) ?? throw new KeyNotFoundException("Reserved deletion is missing.");
+        RequireScope(current, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(current, expected) ||
+            current.State != VaultSyncState.Submitting)
+            throw new InvalidOperationException("Deletion journal was changed; do not broadcast.");
+        var next = current with
+        {
+            SignedDeletionManifests = [..journal,
+                new VaultSignedDeletionManifest(sourceAccount, signedHash)]
+        };
+        if (!await store.TryReplaceAsync(current, next, ct))
+            throw new InvalidOperationException("Deletion checkpoint could not be persisted; do not broadcast.");
+        return next;
+    }
+
     public async Task<VaultPendingMutation> MarkUncertainAsync(
         VaultPendingMutation submitting, string? transactionHash, CancellationToken ct = default)
     {
@@ -834,7 +893,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         a.DependsOn is not null && b.DependsOn is not null &&
         a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
         a.State == b.State && a.TransactionHash == b.TransactionHash &&
-        a.CreatedUtc == b.CreatedUtc;
+        a.CreatedUtc == b.CreatedUtc &&
+        (a.SignedDeletionManifests ?? []).SequenceEqual(
+            b.SignedDeletionManifests ?? []);
 
     private static bool IsTransactionHash(string hash) =>
         hash.Length == 64 && hash.All(Uri.IsHexDigit);

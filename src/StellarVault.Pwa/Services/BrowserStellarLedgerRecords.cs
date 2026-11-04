@@ -9,7 +9,7 @@ namespace StellarVault.Pwa.Services;
 /// format. Never silently falls back to IndexedDB when submission fails.</summary>
 public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory,
     IVaultGuardedLedgerMutations, IVaultPreparedCreateLedger,
-    IVaultPreparedUpdateLedger, IAsyncDisposable
+    IVaultPreparedUpdateLedger, IVaultPreparedDeletionLedger, IAsyncDisposable
 {
     private StellarVaultStore? _store;
     public bool IsConnected => _store is not null;
@@ -480,9 +480,25 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         return DeleteCoreAsync(recordId, expectedVersion, expectedManifestOwners);
     }
 
+    public Task<LedgerMutationResult> DeleteIfUnchangedWithJournalAsync(
+        string recordId, string expectedRemoteVersion,
+        IReadOnlyList<string> expectedManifestOwners,
+        Func<string, string, Task> checkpointSignedTombstone,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(checkpointSignedTombstone);
+        if (expectedRemoteVersion is not { Length: 64 } ||
+            !expectedRemoteVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidDataException("Version-pinned signed deletion journal required.");
+        return DeleteCoreAsync(recordId, expectedRemoteVersion, expectedManifestOwners,
+            checkpointSignedTombstone);
+    }
+
     private async Task<LedgerMutationResult> DeleteCoreAsync(
         string id, string? expectedVersion,
-        IReadOnlyList<string>? expectedManifestOwners)
+        IReadOnlyList<string>? expectedManifestOwners,
+        Func<string, string, Task>? checkpointSignedTombstone = null)
     {
         var snapshot = await RequireStore().ReadAsync();
         if (snapshot.Warnings.Count > 0)
@@ -492,7 +508,8 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (current.Record.IsFolder && snapshot.Records.Any(x => x.Record.FolderId == id))
             throw new InvalidOperationException("Move or delete the folder's contents before deleting the folder.");
         var result = await RequireStore().DeleteAsync(
-            current, expectedVersion, expectedManifestOwners);
+            current, expectedVersion, expectedManifestOwners,
+            checkpointSignedTombstone);
         return LedgerMutationResult.RequireConfirmed(
             result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }

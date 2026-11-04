@@ -110,3 +110,7 @@ The queued CREATE writer now checkpoints the fully signed final-manifest transac
 ## Queued Testnet UPDATE signed hash (2026-11-04)
 
 Hybrid queued updates now checkpoint the signed primary `svh:<id>` commit transaction hash in durable `Submitting` before broadcasting that exact transaction. Direct on-chain updates remain on their previous API. The checkpoint is preserved across unknown receipts and later cleanup writes; independent historical confirmation remains mandatory. Multi-owner deletion still requires its own protocol, and optimistic version checks remain non-atomic across Stellar transactions.
+
+## 2026-11-04: queued deletion signed transaction journal
+
+Hybrid Testnet deletion now checkpoints each HD manifest-owning child account and the hash of its signed tombstone transaction in encrypted queue metadata before each broadcast. Both storage hosts include this journal in durable revision CAS and the shared UI exposes it. A single legacy hash is intentionally not used to represent a multi-owner delete. Signed hashes are not receipts; partial deletion and concurrency races remain possible. No automatic retries or confirmations are enabled.

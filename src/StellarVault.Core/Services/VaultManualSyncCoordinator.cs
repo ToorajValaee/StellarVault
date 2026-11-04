@@ -15,7 +15,8 @@ public sealed class VaultManualSyncCoordinator(
     IVaultLedgerManifestCopyInventory copyInventory,
     IVaultGuardedLedgerMutations guardedLedger,
     IVaultPreparedCreateLedger preparedCreates,
-    IVaultPreparedUpdateLedger preparedUpdates)
+    IVaultPreparedUpdateLedger preparedUpdates,
+    IVaultPreparedDeletionLedger preparedDeletions)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
 
@@ -313,8 +314,14 @@ public sealed class VaultManualSyncCoordinator(
                         ?? throw new InvalidDataException("Reserved deletion intent is missing.");
                     if (intent.ManifestSourceAccounts is not { Length: > 0 })
                         throw new InvalidDataException("Reserved deletion has no authenticated manifest owner list.");
-                    outcome = await guardedLedger.DeleteIfUnchangedAsync(
-                        reserved.EntityId, version, intent.ManifestSourceAccounts, ct);
+                    outcome = await preparedDeletions.DeleteIfUnchangedWithJournalAsync(
+                        reserved.EntityId, version, intent.ManifestSourceAccounts,
+                        async (owner, signedHash) =>
+                        {
+                            RequireSameContext(context);
+                            submissionRevision = await queue.CheckpointSignedDeletionManifestAsync(
+                                submissionRevision, owner, signedHash, CancellationToken.None);
+                        }, ct);
                 }
                 else
                 {
@@ -340,6 +347,12 @@ public sealed class VaultManualSyncCoordinator(
             // before Horizon accepts it or returns a receipt. Never replace it
             // with a cleanup hash or discard it on an unknown outcome.
             hash = submissionRevision.TransactionHash ?? hash;
+            // A multi-owner DELETE has multiple independently signed manifest
+            // transactions. The old single hash is only a legacy hint: use the
+            // exact encrypted per-owner journal for investigation instead.
+            if (reserved.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder &&
+                submissionRevision.SignedDeletionManifests is { Length: > 0 })
+                hash = null;
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
                 hash = null;
             try { await queue.MarkUncertainAsync(submissionRevision, hash, CancellationToken.None); }

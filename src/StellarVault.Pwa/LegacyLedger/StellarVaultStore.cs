@@ -528,7 +528,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
     public async Task<VaultMutationResult> DeleteAsync(
         VaultRecordLocation expectedLocation,
         string? expectedRemoteVersion = null,
-        IReadOnlyList<string>? expectedManifestOwners = null)
+        IReadOnlyList<string>? expectedManifestOwners = null,
+        Func<string, string, Task>? checkpointSignedDeletion = null)
     {
         ThrowIfDisposed();
         ValidateRecordId(expectedLocation.Record.Id);
@@ -569,7 +570,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
         // This receipt deletes the manifest and is authoritative for the
         // record's removal. Later orphan-chunk cleanup has a DIFFERENT hash.
-        var lastHash = await SubmitWritesAsync(headerDeletes);
+        var lastHash = await SubmitWritesAsync(headerDeletes,
+            checkpointSignedDeletion: checkpointSignedDeletion,
+            finalManifestName: checkpointSignedDeletion is null ? null : headerName);
         var manifestDeleteHash = lastHash;
         string? cleanupWarning = null;
 
@@ -701,7 +704,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
     private async Task<string> SubmitWritesAsync(
         IEnumerable<JsManageDataWrite> writes,
         Func<string, Task>? checkpointSignedManifest = null,
-        string? finalManifestName = null)
+        string? finalManifestName = null,
+        Func<string, string, Task>? checkpointSignedDeletion = null)
     {
         var materialized = writes.ToArray();
         if (materialized.Length == 0)
@@ -723,11 +727,16 @@ public sealed class StellarVaultStore : IAsyncDisposable
         string lastTransactionHash = string.Empty;
         // V2 sponsorship submits each ManageData operation in its own atomic
         // transaction; never route writes through the legacy transaction signer.
-        if ((checkpointSignedManifest is null) != (finalManifestName is null))
+        if ((checkpointSignedManifest is null && checkpointSignedDeletion is null) !=
+            (finalManifestName is null) ||
+            (checkpointSignedManifest is not null && checkpointSignedDeletion is not null))
             throw new InvalidOperationException("Signed manifest checkpoint scope is incomplete.");
-        if (finalManifestName is not null &&
+        if (checkpointSignedManifest is not null &&
             materialized.Count(x => x.Name == finalManifestName &&
-                x.ValueBase64 is not null) != 1)
+                x.ValueBase64 is not null) != 1 ||
+            checkpointSignedDeletion is not null &&
+            materialized.Any(x => x.Name != finalManifestName ||
+                x.ValueBase64 is not null))
             throw new InvalidOperationException(
                 "Guarded create must contain exactly one final manifest write.");
 
@@ -744,6 +753,15 @@ public sealed class StellarVaultStore : IAsyncDisposable
                     "stellarVault.stellar.submitHdManageData",
                     _sessionId, batch, _settings.BaseFeeStroops,
                     _settings.BaseReserveStroops, checkpoint, finalManifestName);
+            }
+            else if (checkpointSignedDeletion is not null)
+            {
+                using var checkpoint = DotNetObjectReference.Create(
+                    new SignedDeletionCheckpoint(checkpointSignedDeletion));
+                lastTransactionHash = await _js.InvokeAsync<string>(
+                    "stellarVault.stellar.submitHdManageData",
+                    _sessionId, batch, _settings.BaseFeeStroops,
+                    _settings.BaseReserveStroops, checkpoint, finalManifestName, true);
             }
             else
             {
@@ -770,6 +788,22 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 throw new InvalidOperationException(
                     "Signed final-manifest identity is invalid or already checkpointed.");
             await persist(hash);
+        }
+    }
+
+    public sealed class SignedDeletionCheckpoint(Func<string, string, Task> persist)
+    {
+        private readonly HashSet<string> _checkpointedOwners = new(StringComparer.Ordinal);
+
+        [JSInvokable]
+        public async Task CheckpointSignedDeletionAsync(string sourceAccount, string signedHash)
+        {
+            if (!StellarAccountAddress.IsValid(sourceAccount) ||
+                signedHash is not { Length: 64 } ||
+                !signedHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+                !_checkpointedOwners.Add(sourceAccount))
+                throw new InvalidOperationException("Invalid or duplicate signed deletion.");
+            await persist(sourceAccount, signedHash);
         }
     }
 

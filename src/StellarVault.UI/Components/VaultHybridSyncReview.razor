@@ -83,6 +83,22 @@
                 {
                     <div class="data-field">
                         <p>Mutation <code>@pending.Id</code> · @pending.Kind · @pending.State</p>
+                        @if (pending.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder &&
+                            pending.SignedDeletionManifests is { Length: > 0 } signedDeletes)
+                        {
+                            <p class="terminal-alert warning" role="alert">
+                                Encrypted signed-tombstone journal: @signedDeletes.Length transaction(s) prepared.
+                                Each hash is a signed transaction identity, NOT proof of network inclusion.
+                                Multiple HD owners require separate historical checks. Never retry or
+                                interpret this journal as a complete deletion.
+                            </p>
+                            @foreach (var signed in signedDeletes)
+                            {
+                                <p>HD manifest owner: <code>@signed.SourceAccountId</code> ·
+                                    Signed deletion hash: <code>@signed.TransactionHash</code>
+                                </p>
+                            }
+                        }
                         @if (pending.State == VaultSyncState.Submitting)
                         {
                             <p class="terminal-alert warning" role="alert">
@@ -110,8 +126,19 @@
                         }
                         else if (pending.TransactionHash is null)
                         {
-                            <p role="alert">No transaction hash was recorded. The original submission might have succeeded.
-                                Do not retry. Historical candidate search is read-only and NEVER authorizes confirmation.</p>
+                            @if (pending.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder &&
+                                pending.SignedDeletionManifests is { Length: > 0 })
+                            {
+                                <p role="alert">The deletion uses the signed per-owner journal above.
+                                    A single legacy transaction hash is intentionally not assigned.
+                                    Full multi-owner historical reconciliation is not yet available.</p>
+                            }
+                            else
+                            {
+                                <p role="alert">No transaction hash was recorded. The original submission might have succeeded.</p>
+                            }
+                            <p role="alert">Do not retry. Historical candidate discovery is read-only
+                                and NEVER authorizes confirmation.</p>
                             @if (pending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
                                 VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
                             {

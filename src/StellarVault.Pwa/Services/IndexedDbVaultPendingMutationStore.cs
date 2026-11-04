@@ -154,5 +154,6 @@ public sealed class IndexedDbVaultPendingMutationStore(
         a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
         a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
         a.DependsOn.SequenceEqual(b.DependsOn) && a.State == b.State &&
-        a.TransactionHash == b.TransactionHash && a.CreatedUtc == b.CreatedUtc;
+        a.TransactionHash == b.TransactionHash && a.CreatedUtc == b.CreatedUtc &&
+        (a.SignedDeletionManifests ?? []).SequenceEqual(b.SignedDeletionManifests ?? []);
 }

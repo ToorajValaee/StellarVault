@@ -459,7 +459,7 @@ window.stellarVault = (() => {
     // Each v2 data entry is owned and signed by its deterministic child.
     // The root pays every transaction fee and sponsors reserves for new entries.
     async function submitHdManageData(sessionId, writes, baseFeeStroops, baseReserveStroops,
-                                      manifestCheckpoint = null, finalManifestName = null) {
+                                      manifestCheckpoint = null, finalManifestName = null, deletionJournal = false) {
         const session = requireSession(sessionId);
         if (session.mode !== 'hd-v2' || !session.registry)
             throw new Error('Authenticated v2 session required.');
@@ -486,6 +486,8 @@ window.stellarVault = (() => {
             throw new Error('HD registry changed since unlock; refresh before writing.');
         if ((manifestCheckpoint === null) !== (finalManifestName === null))
             throw new Error('Hybrid manifest checkpoint requires both handler and manifest name');
+        if (deletionJournal && finalManifestName === null)
+            throw new Error('Deletion journaling requires a specific manifest name');
         if (finalManifestName !== null &&
             (!/^svh:[0-9a-f]{16}$/.test(finalManifestName) ||
              typeof manifestCheckpoint?.invokeMethodAsync !== 'function'))
@@ -520,8 +522,12 @@ window.stellarVault = (() => {
         // are atomic with the data write; a failed transaction creates no entry.
         let lastHash = '';
         if (finalManifestName !== null &&
-            staged.filter(entry => entry.name === finalManifestName && entry.value !== null).length !== 1)
-            throw new Error('Hybrid create requires exactly one final manifest write');
+            (deletionJournal
+                ? !staged.length || staged.some(entry =>
+                    entry.name !== finalManifestName || entry.value !== null)
+                : staged.filter(entry => entry.name === finalManifestName &&
+                    entry.value !== null).length !== 1))
+            throw new Error('Signed manifest batch does not match the declared mutation kind');
         for (const entry of staged) {
             lastHash = await window.stellarVaultSponsorship.writeSponsoredData({
                 server: session.server,
@@ -534,8 +540,13 @@ window.stellarVault = (() => {
                 value: entry.value,
                 onSignedTransaction: entry.name === finalManifestName
                     ? async signedHash => {
-                        await manifestCheckpoint.invokeMethodAsync(
-                            'CheckpointSignedManifestAsync', signedHash);
+                        if (deletionJournal)
+                            await manifestCheckpoint.invokeMethodAsync(
+                                'CheckpointSignedDeletionAsync',
+                                entry.child.publicKey(), signedHash);
+                        else
+                            await manifestCheckpoint.invokeMethodAsync(
+                                'CheckpointSignedManifestAsync', signedHash);
                     } : null
             });
         }

@@ -72,5 +72,6 @@ public sealed class VaultUnrecordedSubmissionReview(
         a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
         a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
         a.State == b.State && a.TransactionHash == b.TransactionHash &&
-        a.CreatedUtc == b.CreatedUtc;
+        a.CreatedUtc == b.CreatedUtc &&
+        (a.SignedDeletionManifests ?? []).SequenceEqual(b.SignedDeletionManifests ?? []);
 }
