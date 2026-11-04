@@ -14,7 +14,8 @@ public sealed class VaultManualSyncCoordinator(
     VaultSessionManager sessions,
     IVaultLedgerManifestCopyInventory copyInventory,
     IVaultGuardedLedgerMutations guardedLedger,
-    IVaultPreparedCreateLedger preparedCreates)
+    IVaultPreparedCreateLedger preparedCreates,
+    IVaultPreparedUpdateLedger preparedUpdates)
 {
     private readonly SemaphoreSlim submissionGate = new(1, 1);
 
@@ -293,6 +294,7 @@ public sealed class VaultManualSyncCoordinator(
             await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var reserved = await queue.ReservePreflightedRemoteMutationAsync(
                 quote, accountId, context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
+            var submissionRevision = reserved;
 
             string? hash = null;
             Exception? submissionError = null;
@@ -318,8 +320,14 @@ public sealed class VaultManualSyncCoordinator(
                 {
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(reserved.EncryptedPayload)
                         ?? throw new InvalidDataException("Reserved update draft was invalid.");
-                    outcome = await guardedLedger.UpdateIfUnchangedAsync(
-                        reserved.EntityId, draft, version, ct);
+                    outcome = await preparedUpdates.UpdateIfUnchangedWithPreparedHashAsync(
+                        reserved.EntityId, draft, version, async signedManifestHash =>
+                        {
+                            RequireSameContext(context);
+                            submissionRevision = await queue.CheckpointSignedPrimaryManifestAsync(
+                                submissionRevision, signedManifestHash, CancellationToken.None);
+                            hash = submissionRevision.TransactionHash;
+                        }, ct);
                 }
                 // The mutation's identity is the manifest WRITE for updates
                 // or manifest DELETE for deletions, not a later cleanup tx.
@@ -328,9 +336,13 @@ public sealed class VaultManualSyncCoordinator(
                 hash = outcome.CommitTransactionHash;
             }
             catch (Exception ex) { submissionError = ex; }
+            // A signed update manifest can be committed in the durable queue
+            // before Horizon accepts it or returns a receipt. Never replace it
+            // with a cleanup hash or discard it on an unknown outcome.
+            hash = submissionRevision.TransactionHash ?? hash;
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
                 hash = null;
-            try { await queue.MarkUncertainAsync(reserved, hash, CancellationToken.None); }
+            try { await queue.MarkUncertainAsync(submissionRevision, hash, CancellationToken.None); }
             catch (Exception ex)
             {
                 throw new InvalidOperationException(

@@ -494,18 +494,27 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// The first valid hash wins and the full durable revision must match.
     /// This is not confirmation and does not authorize retransmission.
     /// </summary>
-    public async Task<VaultPendingMutation> CheckpointSignedCreateManifestAsync(
+    public Task<VaultPendingMutation> CheckpointSignedCreateManifestAsync(
+        VaultPendingMutation expectedSubmitting, string signedManifestHash,
+        CancellationToken ct = default) =>
+        CheckpointSignedPrimaryManifestAsync(expectedSubmitting, signedManifestHash, ct);
+
+    /// <summary>Shared create / Testnet update primary manifest signed-hash
+    /// checkpoint. DELETE is excluded because it can require several manifest
+    /// tombstone transactions with distinct hashes.</summary>
+    public async Task<VaultPendingMutation> CheckpointSignedPrimaryManifestAsync(
         VaultPendingMutation expectedSubmitting, string signedManifestHash,
         CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expectedSubmitting);
-        if (expectedSubmitting.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+        if (expectedSubmitting.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
             expectedSubmitting.State != VaultSyncState.Submitting ||
             expectedSubmitting.TransactionHash is not null ||
             !IsTransactionHash(signedManifestHash))
             throw new InvalidOperationException(
-                "Only an exact signed create-manifest transaction may be checkpointed.");
+                "Only an exact signed primary manifest transaction may be checkpointed.");
         var current = await store.GetAsync(
             expectedSubmitting.AccountId, expectedSubmitting.NetworkId,
             expectedSubmitting.Id, ct)

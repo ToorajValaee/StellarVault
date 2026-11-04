@@ -106,3 +106,7 @@ Added a read-only Core+PWA/MAUI investigation for unresolved queued record/folde
 ## Hybrid CREATE signed-manifest checkpoint (2026-11-04)
 
 The queued CREATE writer now checkpoints the fully signed final-manifest transaction hash in the encrypted durable queue's Submitting entry **before** sending that transaction to Horizon. JS awaits a single-use .NET callback and aborts final-manifest broadcast on a persistence error; coordinator continues from the updated exact CAS revision and preserves the hash if Horizon response is lost. Direct on-chain APIs remain unchanged and historical confirmation remains mandatory. Hashless failures before the final manifest is prepared are still possible, and remote UPDATE/DELETE need separate prepared-hash and atomic version work.
+
+## Queued Testnet UPDATE signed hash (2026-11-04)
+
+Hybrid queued updates now checkpoint the signed primary `svh:<id>` commit transaction hash in durable `Submitting` before broadcasting that exact transaction. Direct on-chain updates remain on their previous API. The checkpoint is preserved across unknown receipts and later cleanup writes; independent historical confirmation remains mandatory. Multi-owner deletion still requires its own protocol, and optimistic version checks remain non-atomic across Stellar transactions.

@@ -436,7 +436,8 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     public async Task<VaultMutationResult> UpdateAsync(
         VaultRecordLocation expectedLocation,
-        VaultRecord record, string? expectedRemoteVersion = null)
+        VaultRecord record, string? expectedRemoteVersion = null,
+        Func<string, Task>? checkpointSignedManifest = null)
     {
         ThrowIfDisposed();
         ValidateRecord(record);
@@ -496,7 +497,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 generation);
 
             var commitHash = await SubmitWritesAsync(
-                BuildRecordWrites(target.AccountId, record.Id, chunks, manifest, generation));
+                BuildRecordWrites(target.AccountId, record.Id, chunks, manifest, generation),
+                checkpointSignedManifest,
+                checkpointSignedManifest is null ? null : HeaderName(record.Id));
 
             string? cleanupWarning = null;
             string lastHash = commitHash;

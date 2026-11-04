@@ -8,7 +8,8 @@ namespace StellarVault.Pwa.Services;
 /// <summary>HD-v2 ledger path using the original transaction writer and manifest
 /// format. Never silently falls back to IndexedDB when submission fails.</summary>
 public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerRecords, IVaultLedgerManifestCopyInventory,
-    IVaultGuardedLedgerMutations, IVaultPreparedCreateLedger, IAsyncDisposable
+    IVaultGuardedLedgerMutations, IVaultPreparedCreateLedger,
+    IVaultPreparedUpdateLedger, IAsyncDisposable
 {
     private StellarVaultStore? _store;
     public bool IsConnected => _store is not null;
@@ -402,11 +403,26 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (expectedVersion is not { Length: 64 } ||
             !expectedVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
             throw new InvalidDataException("Guarded update requires an authenticated pinned version.");
-        return UpdateCoreAsync(recordId, draft, expectedVersion);
+        return UpdateCoreAsync(recordId, draft, expectedVersion, null);
+    }
+
+    public Task<LedgerMutationResult> UpdateIfUnchangedWithPreparedHashAsync(
+        string recordId, LedgerRecordDraft draft, string expectedRemoteVersion,
+        Func<string, Task> checkpointSignedManifestHash,
+        CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(checkpointSignedManifestHash);
+        if (expectedRemoteVersion is not { Length: 64 } ||
+            !expectedRemoteVersion.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidDataException("Prepared update requires a pinned remote version.");
+        return UpdateCoreAsync(recordId, draft, expectedRemoteVersion,
+            checkpointSignedManifestHash);
     }
 
     private async Task<LedgerMutationResult> UpdateCoreAsync(
-        string id, LedgerRecordDraft draft, string? expectedVersion)
+        string id, LedgerRecordDraft draft, string? expectedVersion,
+        Func<string, Task>? checkpointSignedManifestHash = null)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var snapshot = await RequireStore().ReadAsync();
@@ -443,7 +459,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
             UpdatedUtc = DateTimeOffset.UtcNow
         };
         var result = await RequireStore().UpdateAsync(
-            current, updated, expectedVersion);
+            current, updated, expectedVersion, checkpointSignedManifestHash);
         return LedgerMutationResult.RequireConfirmed(
             result.TransactionHash, result.Warning, result.CommitTransactionHash);
     }
