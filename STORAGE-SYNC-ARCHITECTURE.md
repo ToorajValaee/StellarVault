@@ -114,3 +114,7 @@ Hybrid queued updates now checkpoint the signed primary `svh:<id>` commit transa
 ## 2026-11-04: queued deletion signed transaction journal
 
 Hybrid Testnet deletion now checkpoints each HD manifest-owning child account and the hash of its signed tombstone transaction in encrypted queue metadata before each broadcast. Both storage hosts include this journal in durable revision CAS and the shared UI exposes it. A single legacy hash is intentionally not used to represent a multi-owner delete. Signed hashes are not receipts; partial deletion and concurrency races remain possible. No automatic retries or confirmations are enabled.
+
+## Multi-owner deletion journal evidence — 2026-11-04
+
+The signed deletion journal now has a read-only per-owner historical verifier in shared Core, using the existing strict HD-authenticated tombstone/predecessor verifier for each recorded source/hash. Shared PWA/MAUI Sync shows verified, unresolved and uncheckpointed owners, with incomplete historical coverage clearly identified. Even when all historical tombstones match, it does not mark a queued deletion Confirmed or allow any retry: multi-transaction deletion remains non-atomic and cross-device writes can race.

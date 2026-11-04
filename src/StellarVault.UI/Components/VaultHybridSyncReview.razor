@@ -4,6 +4,7 @@
 @inject VaultNetworkSelection Networks
 @inject VaultPendingMutationQueue PendingQueue
 @inject VaultDeletionRecoveryReview DeletionReview
+@inject VaultDeletionJournalReview DeletionJournalReview
 @inject VaultUnrecordedSubmissionReview UnrecordedReview
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
@@ -96,6 +97,35 @@
                             {
                                 <p>HD manifest owner: <code>@signed.SourceAccountId</code> ·
                                     Signed deletion hash: <code>@signed.TransactionHash</code>
+                                </p>
+                            }
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || !Ledger.IsConnected)"
+                                    @onclick="() => InspectDeletionJournalAsync(pending)">
+                                VERIFY PER-OWNER DELETION HISTORY — READ ONLY
+                            </button>
+                            @if (_deletionJournalFindings.TryGetValue(pending.Id, out var journalReport))
+                            {
+                                <p role="status">@journalReport.Explanation</p>
+                                <p>Historically verified owners: @journalReport.Verified ·
+                                    Unresolved owners: @journalReport.Unresolved ·
+                                    No signed hash recorded: @journalReport.NotCheckpointed ·
+                                    All staged owners historically verified: @journalReport.AllStagedOwnersHistoricallyVerified ·
+                                    Currently absent: @journalReport.CurrentRecordAbsent</p>
+                                @foreach (var owner in journalReport.Owners)
+                                {
+                                    <div class="data-field">
+                                        <p>Owner: <code>@owner.SourceAccountId</code> · @owner.Status</p>
+                                        @if (owner.SignedTransactionHash is not null)
+                                        {
+                                            <p>Signed hash: <code>@owner.SignedTransactionHash</code></p>
+                                        }
+                                        <p role="status">@owner.Explanation</p>
+                                    </div>
+                                }
+                                <p class="terminal-alert warning" role="alert">
+                                    Historical receipts do NOT establish atomic deletion or authorize
+                                    Confirmed state, a retry, or a second payment.
                                 </p>
                             }
                         }
@@ -313,6 +343,7 @@
             _report = null;
             _unresolved = [];
             _deletionFindings.Clear();
+            _deletionJournalFindings.Clear();
             _unrecordedFindings.Clear();
             _error = null;
             StateHasChanged();
@@ -357,6 +388,8 @@
     private bool _busy;
     private IReadOnlyList<VaultPendingMutation> _unresolved = [];
     private readonly Dictionary<string, VaultDeletionTombstoneFinding> _deletionFindings = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, VaultDeletionJournalReview.Finding> _deletionJournalFindings =
+        new(StringComparer.Ordinal);
     private readonly Dictionary<string, VaultUnrecordedSubmissionFinding> _unrecordedFindings = new(StringComparer.Ordinal);
     private VaultSyncApprovalSnapshot? _selectedQuote;
     private string? _selectedTitle;
@@ -441,6 +474,32 @@
             _report = null;
             _unresolved = [];
             _error = "Could not safely quarantine this submission. Refresh the encrypted queue and inspect the ledger; do not retry.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task InspectDeletionJournalAsync(VaultPendingMutation mutation)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || !Sessions.IsUnlocked ||
+            Sessions.ActiveAccountId != mutation.AccountId ||
+            !Ledger.IsConnected || mutation.SignedDeletionManifests is not { Length: > 0 })
+            return;
+        CancelApproval();
+        var epoch = Sessions.Epoch;
+        _busy = true;
+        _deletionJournalFindings.Remove(mutation.Id);
+        try
+        {
+            var finding = await DeletionJournalReview.InspectAsync(
+                mutation.AccountId, mutation.Id);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch &&
+                Sessions.ActiveAccountId == mutation.AccountId)
+                _deletionJournalFindings[mutation.Id] = finding;
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _error = "Deletion journal inspection unavailable. The queue has not changed; do not retry.";
         }
         finally { _busy = false; }
     }
@@ -608,6 +667,7 @@
         _report = null;
         _unresolved = [];
         _deletionFindings.Clear();
+            _deletionJournalFindings.Clear();
         try
         {
             _report = await HybridReview.ReviewAsync(account, costs);
