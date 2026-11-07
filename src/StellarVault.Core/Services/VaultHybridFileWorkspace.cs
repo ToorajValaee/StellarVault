@@ -26,7 +26,7 @@ public sealed class VaultHybridFileWorkspace(
         VaultSyncState State, DateTimeOffset CreatedUtc,
         string[] DependsOn, bool IsCorrupt = false);
 
-    public async Task<VaultPendingMutation> StageAsync(
+    public async Task<FileDraftItem> StageAsync(
         string fileName, string contentType, Stream content,
         string? folderId = null, CancellationToken ct = default)
     {
@@ -47,42 +47,62 @@ public sealed class VaultHybridFileWorkspace(
         {
             if (bytes.Length == 0) throw new InvalidDataException("Empty files are not supported.");
             var all = await queue.ReviewAllAsync(account, scope, ct);
-            var dependencies = ParentDependencies(folderId, all);
-            var title = fileName.Length <= 256 ? fileName : fileName[..256];
-            var occupied = new HashSet<string>(
-                all.Select(x => x.EntityId), StringComparer.OrdinalIgnoreCase);
-            foreach (var existingFile in all.Where(x => x.Kind == VaultMutationKind.UploadFile))
+            string[] dependencies;
+            HashSet<string> occupied;
+            try
             {
-                var priorIntent = DeserializeAndValidate(existingFile);
-                try
+                dependencies = ParentDependencies(folderId, all);
+                occupied = new HashSet<string>(
+                    all.Select(x => x.EntityId), StringComparer.OrdinalIgnoreCase);
+                foreach (var existingFile in all.Where(x => x.Kind == VaultMutationKind.UploadFile))
                 {
-                    // The last stable ID is the manifest and is already
-                    // represented by the queue entry's EntityId above.
-                    foreach (var id in priorIntent.EntryIds.Take(priorIntent.EntryIds.Length - 1))
-                        if (!occupied.Add(id))
-                            throw new InvalidDataException("Existing file upload IDs collide; investigate the queue before staging another file.");
+                    var priorIntent = DeserializeAndValidate(existingFile);
+                    try
+                    {
+                        // The last stable ID is the manifest and is already
+                        // represented by the queue entry's EntityId above.
+                        foreach (var id in priorIntent.EntryIds.Take(priorIntent.EntryIds.Length - 1))
+                            if (!occupied.Add(id))
+                                throw new InvalidDataException("Existing file upload IDs collide; investigate the queue before staging another file.");
+                    }
+                    finally { CryptographicOperations.ZeroMemory(priorIntent.Content); }
                 }
-                finally { CryptographicOperations.ZeroMemory(priorIntent.Content); }
             }
+            finally
+            {
+                foreach (var queued in all)
+                    CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+            }
+
+            var displayTitle = fileName.Length <= 256 ? fileName : fileName[..256];
             var partCount = bytes.Length <= StellarLedgerFileProtocol.MaxChunkBytes
                 ? 1
                 : (bytes.Length + StellarLedgerFileProtocol.MaxChunkBytes - 1) /
                     StellarLedgerFileProtocol.MaxChunkBytes + 1;
             var ids = CreateUniqueIds(partCount, occupied);
-            var plan = new StellarLedgerUploadPlan(title, fileName, contentType,
-                bytes, folderId, ids);
             var fingerprint = Convert.ToHexString(SHA256.HashData(bytes));
-            var intent = new FileUploadIntent(IntentVersion, title, fileName,
-                contentType, folderId, bytes.ToArray(), fingerprint, ids);
-            payload = JsonSerializer.SerializeToUtf8Bytes(intent);
+            var stagedBytes = bytes.ToArray();
+            try
+            {
+                var intent = new FileUploadIntent(IntentVersion, displayTitle, fileName,
+                    contentType, folderId, stagedBytes, fingerprint, ids);
+                payload = JsonSerializer.SerializeToUtf8Bytes(intent);
+            }
+            finally { CryptographicOperations.ZeroMemory(stagedBytes); }
             if (payload.Length > 8 * 1024 * 1024)
                 throw new InvalidDataException("Encrypted file upload intent exceeds the queue size limit.");
             var mutation = VaultPendingMutation.Create(account, scope,
-                VaultMutationKind.UploadFile, plan.ManifestId, payload,
+                VaultMutationKind.UploadFile, ids[^1], payload,
                 dependsOn: dependencies);
-            var saved = await queue.EnqueueAsync(mutation, ct);
-            RequireSameScope(account, scope);
-            return saved;
+            try
+            {
+                await queue.EnqueueAsync(mutation, ct);
+                RequireSameScope(account, scope);
+                return new(mutation.Id, mutation.EntityId, fileName, contentType,
+                    folderId, bytes.LongLength, ids.Length, fingerprint,
+                    VaultSyncState.Pending, mutation.CreatedUtc, dependencies);
+            }
+            finally { CryptographicOperations.ZeroMemory(mutation.EncryptedPayload); }
         }
         finally
         {
@@ -102,11 +122,14 @@ public sealed class VaultHybridFileWorkspace(
             try
             {
                 var intent = DeserializeAndValidate(entry);
-                result.Add(new(entry.Id, entry.EntityId, intent.FileName,
-                    intent.ContentType, intent.FolderId, intent.Content.LongLength,
-                    intent.EntryIds.Length, intent.Fingerprint, entry.State, entry.CreatedUtc,
-                    entry.DependsOn.ToArray()));
-                CryptographicOperations.ZeroMemory(intent.Content);
+                try
+                {
+                    result.Add(new(entry.Id, entry.EntityId, intent.FileName,
+                        intent.ContentType, intent.FolderId, intent.Content.LongLength,
+                        intent.EntryIds.Length, intent.Fingerprint, entry.State, entry.CreatedUtc,
+                        entry.DependsOn.ToArray()));
+                }
+                finally { CryptographicOperations.ZeroMemory(intent.Content); }
             }
             catch (Exception ex) when (ex is JsonException or InvalidDataException or
                                         ArgumentException or CryptographicException)
@@ -115,6 +138,7 @@ public sealed class VaultHybridFileWorkspace(
                     "application/octet-stream", null, 0, 0, string.Empty,
                     entry.State, entry.CreatedUtc, entry.DependsOn.ToArray(), true));
             }
+            finally { CryptographicOperations.ZeroMemory(entry.EncryptedPayload); }
         }
         RequireSameScope(account, scope);
         return result.OrderBy(x => x.CreatedUtc).ToArray();
@@ -127,20 +151,28 @@ public sealed class VaultHybridFileWorkspace(
     {
         var (account, scope) = RequireScope();
         var entries = await queue.ReviewAllAsync(account, scope, ct);
-        var entry = entries.SingleOrDefault(x =>
-            x.Id == mutationId && x.Kind == VaultMutationKind.UploadFile);
-        if (entry is null) throw new KeyNotFoundException("Staged file upload does not exist.");
-        if (entry.State != VaultSyncState.Pending)
-            throw new InvalidOperationException("Only an unsubmitted file upload can be opened for publication review.");
-        var intent = DeserializeAndValidate(entry);
         try
         {
-            var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
-                intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
-            RequireSameScope(account, scope);
-            return plan;
+            var entry = entries.SingleOrDefault(x =>
+                x.Id == mutationId && x.Kind == VaultMutationKind.UploadFile);
+            if (entry is null) throw new KeyNotFoundException("Staged file upload does not exist.");
+            if (entry.State != VaultSyncState.Pending)
+                throw new InvalidOperationException("Only an unsubmitted file upload can be opened for publication review.");
+            var intent = DeserializeAndValidate(entry);
+            try
+            {
+                var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                    intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                RequireSameScope(account, scope);
+                return plan;
+            }
+            finally { CryptographicOperations.ZeroMemory(intent.Content); }
         }
-        finally { CryptographicOperations.ZeroMemory(intent.Content); }
+        finally
+        {
+            foreach (var queued in entries)
+                CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+        }
     }
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
@@ -177,10 +209,13 @@ public sealed class VaultHybridFileWorkspace(
             var actual = Convert.ToHexString(SHA256.HashData(intent.Content));
             if (!string.Equals(actual, intent.Fingerprint, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Staged file fingerprint does not match its bytes.");
-            var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
-                intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
-            if (plan.ManifestId != entry.EntityId)
-                throw new InvalidDataException("Staged file manifest identity differs from its queue entry.");
+            var expectedEntries = intent.Content.Length <= StellarLedgerFileProtocol.MaxChunkBytes
+                ? 1
+                : (intent.Content.Length + StellarLedgerFileProtocol.MaxChunkBytes - 1) /
+                    StellarLedgerFileProtocol.MaxChunkBytes + 1;
+            if (intent.EntryIds.Length != expectedEntries ||
+                !string.Equals(intent.EntryIds[^1], entry.EntityId, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Staged file part inventory or manifest identity differs from its queue entry.");
             return intent;
         }
         catch

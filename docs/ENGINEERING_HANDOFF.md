@@ -520,3 +520,9 @@ Added shared `VaultHybridFileDraftEditor`. MAUI uses its native `IVaultNativeFil
 Important scope boundary: this is **encrypted offline staging**, not end-to-end file Sync. The review explicitly marks the UploadFile mutation as not yet publishable by the manual coordinator. Remaining: per-part fee estimate and explicit approval, durable signed hash checkpoint for each part before broadcast, manifest-last publication checkpoint, restart/partial-upload reconciliation, authenticated complete-file verification, safe cleanup, and file deletion. Existing old upload checkpoint path remains separate until migrated. 1 MiB cap remains.
 
 No build, tests, browser/MAUI runtime or Testnet transactions were run per standing user instruction. Do not call the file flow production-ready until those are exercised.
+
+## 2026-11-07 — follow-up hardening for encrypted file staging
+
+Reduced transient plaintext copies in `VaultHybridFileWorkspace`. StageAsync now calculates the multipart entry count from the bounded file length, allocates collision-checked IDs directly, and only reconstructs chunk draft strings later when `GetPlanAsync` is explicitly requested. The temporary byte-array copy used to serialize the encrypted queue intent is zeroed immediately; the in-memory mutation payload is cleared after the durable host queue accepts it; queue snapshots used for ID collision checks and plan reconstruction are cleared after use. StageAsync returns only a metadata summary, never the mutation object holding the serialized file bytes. File listing verifies the SHA-256 and exact expected ID count without materializing all part payloads.
+
+No change to the release boundary: hybrid file staging is implemented; per-part approval, signed checkpoints, manifest-last publication, interruption recovery and historical full-file verification remain outstanding. No builds/tests/runtime or Testnet validation run.
