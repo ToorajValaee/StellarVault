@@ -516,7 +516,24 @@ window.stellarVault = (() => {
                 ? null : sdkBufferFromBase64(session, write.valueBase64);
             if (value && value.length > 64)
                 throw new Error('Stellar ManageData values cannot exceed 64 bytes.');
-            staged.push({ child, name, value });
+            // Guard metadata is supplied only by the hybrid prepared-manifest
+            // or per-owner deletion path, never by direct CRUD writes.
+            const guards = write.manifestGuards ?? null;
+            if (guards !== null &&
+                (!Array.isArray(guards) || guards.length < 1 || guards.length > 63 ||
+                 guards.some(g => !g || typeof g.sourceAccountId !== 'string' ||
+                    g.name !== name || typeof g.expectedValueBase64 !== 'string')))
+                throw new Error('Invalid optimistic manifest guard set');
+            if (write.expectedValueBase64 != null &&
+                (typeof write.expectedValueBase64 !== 'string' ||
+                 !/^[A-Za-z0-9+/]+={0,2}$/.test(write.expectedValueBase64)))
+                throw new Error('Invalid expected manifest value');
+            staged.push({
+                child, name, value,
+                manifestGuards: guards,
+                expectedValueBase64: write.expectedValueBase64 ?? null,
+                requireAbsentTarget: write.requireAbsentTarget === true
+            });
         }
         // Submit one child write per transaction. The sponsorship operations
         // are atomic with the data write; a failed transaction creates no entry.
@@ -538,6 +555,12 @@ window.stellarVault = (() => {
                 baseFeeStroops: fee.toString(),
                 name: entry.name,
                 value: entry.value,
+                manifestGuards: entry.name === finalManifestName
+                    ? entry.manifestGuards : null,
+                expectedValueBase64: entry.name === finalManifestName
+                    ? entry.expectedValueBase64 : null,
+                requireAbsentTarget: entry.name === finalManifestName &&
+                    entry.requireAbsentTarget,
                 onSignedTransaction: entry.name === finalManifestName
                     ? async signedHash => {
                         if (deletionJournal)

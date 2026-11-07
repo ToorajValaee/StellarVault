@@ -122,3 +122,7 @@ The signed deletion journal now has a read-only per-owner historical verifier in
 ## Deletion historical evidence vs current inventory (2026-11-04)
 
 Strict tombstone history now also binds the successful transaction receipt's root source account. Multi-owner historical verification is separate from a single final time-of-read current ledger/manifest-owner snapshot. The report distinguishes unknown current inventory and unexpected HD owners created after the staged deletion intent; neither historical coverage nor present absence authorizes queue confirmation, replay or Mainnet queued deletion.
+
+## Last-chance manifest byte guards (2026-11-07)
+
+Queued Testnet update/delete now supplies exact expected HD-v2 manifest ManageData bytes to the signer. Before signing the final update manifest, the JS adapter checks every old manifest owner against Horizon and rejects changes; a new destination must still be empty. Before each deletion tombstone, it checks that owner's expected manifest value. No direct CRUD behavior is changed and no retries are added. The guards narrow but cannot eliminate cross-device races: ledger-level atomic conditions and Testnet validation remain outstanding.

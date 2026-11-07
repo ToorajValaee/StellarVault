@@ -496,9 +496,27 @@ public sealed class StellarVaultStore : IAsyncDisposable
                 updatedSeconds,
                 generation);
 
+            var commitWrites = BuildRecordWrites(
+                target.AccountId, record.Id, chunks, manifest, generation);
+            if (checkpointSignedManifest is not null)
+            {
+                // Each previous manifest is an optimistic byte-identity guard.
+                // Check all known copies immediately before the signed commit,
+                // including when the new manifest moves to a different child.
+                var guards = oldCopies.Select(x => new JsManifestGuard {
+                    SourceAccountId = x.Node.AccountId,
+                    Name = HeaderName(record.Id),
+                    ExpectedValueBase64 = Convert.ToBase64String(
+                        x.Node.Data[HeaderName(record.Id)])
+                }).ToArray();
+                var finalWrite = commitWrites.Single(x =>
+                    x.Name == HeaderName(record.Id));
+                finalWrite.ManifestGuards = guards;
+                finalWrite.RequireAbsentTarget = !target.Data.ContainsKey(
+                    HeaderName(record.Id));
+            }
             var commitHash = await SubmitWritesAsync(
-                BuildRecordWrites(target.AccountId, record.Id, chunks, manifest, generation),
-                checkpointSignedManifest,
+                commitWrites, checkpointSignedManifest,
                 checkpointSignedManifest is null ? null : HeaderName(record.Id));
 
             string? cleanupWarning = null;
@@ -564,7 +582,14 @@ public sealed class StellarVaultStore : IAsyncDisposable
         }
 
         var headerDeletes = headerNodes
-            .Select(node => DeleteWrite(node.AccountId, headerName))
+            .Select(node =>
+            {
+                var write = DeleteWrite(node.AccountId, headerName);
+                if (checkpointSignedDeletion is not null)
+                    write.ExpectedValueBase64 = Convert.ToBase64String(
+                        node.Data[headerName]);
+                return write;
+            })
             .DistinctBy(write => $"{write.SourceAccountId}|{write.Name}", StringComparer.Ordinal)
             .ToArray();
 
@@ -1126,8 +1151,18 @@ public sealed class StellarVaultStore : IAsyncDisposable
         public string? NextAccountId { get; set; }
     }
 
+    private sealed class JsManifestGuard
+    {
+        public string SourceAccountId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string ExpectedValueBase64 { get; set; } = string.Empty;
+    }
+
     private sealed class JsManageDataWrite
     {
+        public JsManifestGuard[]? ManifestGuards { get; set; }
+        public string? ExpectedValueBase64 { get; set; }
+        public bool RequireAbsentTarget { get; set; }
         public int NodeIndex { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? ValueBase64 { get; set; }

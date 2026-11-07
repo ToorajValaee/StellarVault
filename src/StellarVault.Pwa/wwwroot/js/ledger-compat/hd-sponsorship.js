@@ -84,7 +84,9 @@ window.stellarVaultSponsorship = (() => {
   async function writeSponsoredData({
     server, rootKeypair, childKeypair, networkPassphrase,
     baseReserveStroops, baseFeeStroops, name, value,
-    safetyBufferStroops = '0', onSignedTransaction = null
+    safetyBufferStroops = '0', onSignedTransaction = null,
+    manifestGuards = null, expectedValueBase64 = null,
+    requireAbsentTarget = false
   }) {
     const sdk = requireSdk();
     if (rootKeypair.publicKey() === childKeypair.publicKey())
@@ -93,6 +95,37 @@ window.stellarVaultSponsorship = (() => {
       server.loadAccount(rootKeypair.publicKey()),
       server.loadAccount(childKeypair.publicKey())
     ]);
+    // Optimistic defense in depth at the last signing boundary. The guard
+    // compares actual Horizon ManageData bytes, not a caller-supplied claim
+    // about decrypted content. This does not make later ledger writes atomic.
+    if (manifestGuards !== null || expectedValueBase64 !== null || requireAbsentTarget) {
+      if (!name.startsWith('svh:'))
+        throw new Error('Manifest guards cannot apply to non-manifest writes');
+      if (manifestGuards !== null) {
+        if (!Array.isArray(manifestGuards) || manifestGuards.length < 1 ||
+            manifestGuards.length > 63)
+          throw new Error('Invalid manifest guard inventory');
+        const seenOwners = new Set();
+        for (const guard of manifestGuards) {
+          if (!guard || guard.name !== name ||
+              typeof guard.sourceAccountId !== 'string' ||
+              typeof guard.expectedValueBase64 !== 'string' ||
+              seenOwners.has(guard.sourceAccountId))
+            throw new Error('Ambiguous manifest guard');
+          seenOwners.add(guard.sourceAccountId);
+          const account = guard.sourceAccountId === childKeypair.publicKey()
+            ? child : await server.loadAccount(guard.sourceAccountId);
+          if (account.data_attr?.[name] !== guard.expectedValueBase64)
+            throw new Error('An HD manifest changed since the last guarded read; no transaction was signed');
+        }
+      }
+      if (expectedValueBase64 !== null &&
+          child.data_attr?.[name] !== expectedValueBase64)
+        throw new Error('The deletion target manifest changed; no transaction was signed');
+      if (requireAbsentTarget &&
+          Object.prototype.hasOwnProperty.call(child.data_attr || {}, name))
+        throw new Error('The new manifest target has become occupied; no transaction was signed');
+    }
     const exists = Object.prototype.hasOwnProperty.call(child.data_attr || {}, name);
     if (value === null && !exists)
       throw new Error('Data entry was already removed; refresh before deleting');
