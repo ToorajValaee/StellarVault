@@ -126,3 +126,7 @@ Strict tombstone history now also binds the successful transaction receipt's roo
 ## Last-chance manifest byte guards (2026-11-07)
 
 Queued Testnet update/delete now supplies exact expected HD-v2 manifest ManageData bytes to the signer. Before signing the final update manifest, the JS adapter checks every old manifest owner against Horizon and rejects changes; a new destination must still be empty. Before each deletion tombstone, it checks that owner's expected manifest value. No direct CRUD behavior is changed and no retries are added. The guards narrow but cannot eliminate cross-device races: ledger-level atomic conditions and Testnet validation remain outstanding.
+
+## Root sequence ordering fence — 2026-11-07
+
+The HD-v2 sponsored writer now reads the root account and captures its transaction sequence before reading target/guard child accounts. As all standard StellarVault HD-v2 writes are root-sourced transactions, this serializes compliant devices using the same root: a concurrent accepted transaction after the root read invalidates the old sequence, while a prior transaction should be visible in later child reads. This is not universal CAS: direct child-sourced or noncompliant writes can bypass it. No automatic retries; uncertain outcomes remain quarantined.

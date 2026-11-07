@@ -91,10 +91,18 @@ window.stellarVaultSponsorship = (() => {
     const sdk = requireSdk();
     if (rootKeypair.publicKey() === childKeypair.publicKey())
       throw new Error('Root and storage child must be different accounts');
-    const [root, child] = await Promise.all([
-      server.loadAccount(rootKeypair.publicKey()),
-      server.loadAccount(childKeypair.publicKey())
-    ]);
+    // Root-first sequence fence:
+    // Every HD-v2 sponsored mutation is a transaction whose source account is
+    // this root. Capture its sequence BEFORE reading any mutable child data.
+    // If another StellarVault device commits after this read, its transaction
+    // advances the root sequence and this transaction is rejected as stale.
+    // If it committed before this read, the child/guard reads below observe
+    // the post-commit ledger state and the manifest byte checks reject stale
+    // intents. Parallel root/child reads do not provide this ordering.
+    const root = await server.loadAccount(rootKeypair.publicKey());
+    if (root.accountId() !== rootKeypair.publicKey())
+      throw new Error('Horizon returned a different root account');
+    const child = await server.loadAccount(childKeypair.publicKey());
     // Optimistic defense in depth at the last signing boundary. The guard
     // compares actual Horizon ManageData bytes, not a caller-supplied claim
     // about decrypted content. This does not make later ledger writes atomic.
@@ -109,7 +117,9 @@ window.stellarVaultSponsorship = (() => {
         for (const guard of manifestGuards) {
           if (!guard || guard.name !== name ||
               typeof guard.sourceAccountId !== 'string' ||
+              !/^G[A-Z2-7]{55}$/.test(guard.sourceAccountId) ||
               typeof guard.expectedValueBase64 !== 'string' ||
+              guard.expectedValueBase64.length > 88 ||
               seenOwners.has(guard.sourceAccountId))
             throw new Error('Ambiguous manifest guard');
           seenOwners.add(guard.sourceAccountId);
