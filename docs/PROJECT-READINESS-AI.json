@@ -1,9 +1,9 @@
 {
   "schema": "stellarvault.project-readiness.v1",
-  "observed_at": "2026-10-23",
+  "observed_at": "2026-11-07",
   "repository": "ToorajValaee/StellarVault",
-  "branch": "feature/maui-shared-app",
-  "observed_head": "9b3486e2369490a21c26026611e67b5ae549ea95",
+  "branch": "main",
+  "observed_head": "473323f96a333b3c6c2683286d845172e6475fea",
   "production_approved": false,
   "interpretation": "Static source and CI review; estimates are subjective and not verified completeness",
   "maturity_estimates_percent": {
@@ -26,7 +26,8 @@
     "current_paths": [
       "PWA local encrypted vault backed by IndexedDB",
       "Native filesystem encrypted persistence with authorization denied by default",
-      "Browser Stellar HD ledger adapter for on-chain records"
+      "Browser Stellar HD ledger adapter for on-chain records",
+      "Shared Core encrypted hybrid file staging stored in the account/network mutation queue; PWA browser picker and MAUI native picker adapters"
     ],
     "target": "Encrypted Stellar-ledger records and manifests durable across devices; local storage as optional encrypted cache",
     "principles": {
@@ -45,31 +46,32 @@
   "implementation": {
     "shared_core_ui": "implemented, not comprehensively validated",
     "pwa_host": "implemented, unverified",
-    "native_hosts": "scaffolded; native wallet signing, file integration, signing and device tests pending",
+    "native_hosts": "shared UI and Core services; MAUI native picker now feeds shared encrypted hybrid file staging; native signing, device lifecycle and end-to-end file sync remain unverified",
     "managed_aes_gcm": "implemented using Bouncy Castle for browser compatibility; verify vectors",
-    "file_upload": "multi-record protocol, recovery checkpoint safeguards and 16 KiB support reported implemented; Testnet unverified",
+    "file_upload": "SVFILE1/SVFILE2 multipart protocol and legacy manifest-last coordinator exist; hybrid queue staging now integrated, but per-part approval, signed pre-broadcast checkpoints, manifest-last publication, interrupted hybrid recovery and historical verification remain unimplemented; Testnet unverified",
     "on_chain": "BrowserStellarLedgerRecords supports connect, read and publish, but shared application integration incomplete",
     "auth": "PWA local-only namespace; native DenyVaultAccountAuthorizer and UnavailableStellarLedgerRecords",
-    "ci": "latest workflow run 39857649422 failed without usable step logs; compilation status undetermined"
+    "ci": "latest workflow run 39857649422 failed without usable step logs; compilation status undetermined",
+    "hybrid_file_staging": "implemented as encrypted offline queue staging in shared Core; PWA and MAUI UI connected; 1 MiB bounded file intent includes fingerprint and stable chunk/manifest IDs; no file publishing path yet; not build/runtime validated"
   },
   "release_blockers": [
     "End-to-end cryptographic/functional verification",
     "Authenticated wallet ownership for intended operating mode",
     "Unified ledger-backed durable storage with no silent local fallback",
     "Cross-device read/write/delete and interrupted transaction recovery",
-    "Upload checkpoint integrity and encrypted persistence",
     "Native secure adapters, file import/export and signing",
     "PWA HTTPS, CSP, offline upgrades, data backup/eviction checks",
     "Release builds and reproducible CI",
-    "Independent security review"
+    "Independent security review",
+    "Hybrid file publication from encrypted queue: per-part explicit approval, durable signed-hash checkpoints, manifest-last commit, interrupted recovery and complete-file verification",
+    "Cross-device concurrency validation for root-sequence serialization and guarded hybrid writes"
   ],
-  "next_milestone": "On disposable Stellar Testnet account publish encrypted record and multipart file, then recover both from ledger on a clean browser/device without relying on IndexedDB",
+  "next_milestone": "Complete hybrid file publication: preflight the immutable encrypted file intent, approve and checkpoint each part before broadcast, publish the manifest last, reconcile after interruption, and independently verify the reconstructed file on a clean device.",
   "priority": [
-    "Finish shared ledger integration and authentication",
-    "Verify resumable file writes and manifest finality",
-    "Complete native adapters",
-    "Run cross-device Testnet and failure-injection tests",
-    "Security review, packaging and release gates"
+    "Complete encrypted hybrid file publication and recovery in shared Core/UI for PWA and MAUI",
+    "Validate record/folder/file flows on two independent Testnet devices, including interruption and concurrent writes",
+    "Complete native secure adapters, signing and lifecycle behavior",
+    "Run reproducible CI, release builds, cross-platform functional tests and independent security review"
   ],
   "estimates_weeks_indicative": {
     "pwa_testnet_beta": "3-6",
@@ -88,7 +90,7 @@
     "src/StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs",
     "src/StellarVault.Pwa/Services/LedgerFileProtocol.cs"
   ],
-  "change_policy": "Keep main unchanged; progress on feature/maui-shared-app. Validate builds and Testnet before declaring ready.",
+  "change_policy": "Continue on main under the user's explicit code-modification workflow. Keep production_approved false until reproducible builds, tests, Testnet recovery and independent security review pass.",
   "history": [
     {
       "date": "2026-10-23",
@@ -99,6 +101,11 @@
       "date": "2026-10-23",
       "commit": "e6e375554788bca98091de45cdfd2e915b2ec0c5",
       "note": "Multipart checkpoint ID validation tightened; unverified."
+    },
+    {
+      "date": "2026-11-07",
+      "commit": "473323f96a333b3c6c2683286d845172e6475fea",
+      "note": "Added shared encrypted hybrid file staging to the account/network queue, PWA browser picker and MAUI native picker; file publication remains incomplete and unvalidated."
     }
   ]
 }
