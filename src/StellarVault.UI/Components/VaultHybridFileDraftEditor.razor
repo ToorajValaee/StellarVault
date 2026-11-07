@@ -1,0 +1,249 @@
+@using StellarVault.Core.Services
+@inject VaultHybridFileWorkspace Files
+@inject IVaultNativeFileAccess NativeFiles
+@inject VaultSessionManager Sessions
+@inject VaultDeviceRetentionGate Retention
+@implements IDisposable
+
+<section class="terminal-panel" aria-label="Encrypted offline file upload drafts">
+    <div class="panel-kicker">HYBRID // ENCRYPTED FILE STAGING</div>
+    <h3>OFFLINE FILE UPLOADS</h3>
+    <p>File bytes, metadata and stable Stellar chunk IDs are stored inside the encrypted local mutation queue.
+       Staging never submits a transaction. Maximum file size: 1 MiB.</p>
+    @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
+    {
+        <p role="status">Choose encrypted local storage and unlock the vault before staging files.</p>
+    }
+    else
+    {
+        <button type="button" class="pixel-button compact" disabled="@_busy"
+                @onclick="ChooseFileAsync">+ CHOOSE FILE</button>
+        @if (_picked is not null)
+        {
+            <p class="advanced-help">Selected: @_picked.FileName
+                @if (_picked.Stream.CanSeek)
+                {
+                    <span> · @_picked.Stream.Length.ToString("N0") bytes</span>
+                }
+            </p>
+        }
+        <label class="terminal-label" for="hybrid-file-parent">PARENT FOLDER ID (OPTIONAL)</label>
+        <input id="hybrid-file-parent" class="terminal-input" maxlength="16"
+               @bind="_folderId" disabled="@_busy" autocomplete="off" />
+        <button type="button" class="pixel-button primary"
+                disabled="@(_busy || _picked is null)"
+                @onclick="StageAsync">
+            @(_busy ? "STAGING..." : "SAVE ENCRYPTED FILE FOR SYNC")
+        </button>
+        <button type="button" class="pixel-button compact" disabled="@_busy"
+                @onclick="RefreshAsync">REFRESH FILE DRAFTS</button>
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <p class="terminal-alert" role="status">@_status</p>
+        }
+        <div class="panel-kicker">ENCRYPTED LOCAL FILE QUEUE</div>
+        @if (_items.Count == 0)
+        {
+            <p class="advanced-help">No staged file uploads.</p>
+        }
+        @foreach (var item in _items)
+        {
+            <div class="data-field">
+                <strong>@item.FileName</strong>
+                <p>@item.State · @item.Length.ToString("N0") bytes ·
+                    @item.LedgerEntries ledger entries · @item.CreatedUtc.ToLocalTime().ToString("g")</p>
+                <p>Manifest ID: <code>@item.ManifestId</code></p>
+                @if (item.FolderId is not null)
+                {
+                    <p>Parent folder: <code>@item.FolderId</code></p>
+                }
+                @if (item.DependsOn.Length > 0)
+                {
+                    <p class="advanced-help">Waiting for local folder mutation confirmation:
+                        @foreach (var dependency in item.DependsOn)
+                        {
+                            <code>@dependency </code>
+                        }
+                    </p>
+                }
+                @if (item.IsCorrupt)
+                {
+                    <p class="terminal-alert warning" role="alert">
+                        File intent cannot be authenticated or decoded. Do not discard or recreate it
+                        until the encrypted queue is investigated.
+                    </p>
+                }
+                else
+                {
+                    <p class="advanced-help">SHA-256: <code>@item.Fingerprint</code></p>
+                    <p class="advanced-help">Each chunk must be reconciled and approved separately.
+                        The manifest is published last. File publication is not yet enabled in this review.</p>
+                }
+                @if (item.State == VaultSyncState.Pending && !item.IsCorrupt)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => DiscardAsync(item)">DISCARD UNPUBLISHED FILE DRAFT</button>
+                }
+                else
+                {
+                    <small>Submitted, unresolved or damaged entries cannot be edited or replayed here.</small>
+                }
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private VaultNativePickedFile? _picked;
+    private IReadOnlyList<VaultHybridFileWorkspace.FileDraftItem> _items = [];
+    private string _folderId = "";
+    private string? _status;
+    private bool _busy;
+    private long _loadedEpoch = -1;
+
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        _ = InvokeAsync(RefreshForSessionAsync);
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(RefreshForSessionAsync);
+
+    private async Task RefreshForSessionAsync()
+    {
+        var epoch = Sessions.Epoch;
+        if (_loadedEpoch == epoch) return;
+        _loadedEpoch = epoch;
+        DisposePicked();
+        _folderId = "";
+        _items = [];
+        _status = null;
+        if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
+        {
+            StateHasChanged();
+            return;
+        }
+        try
+        {
+            var items = await Files.ListAsync();
+            if (Sessions.Epoch == epoch && Sessions.IsUnlocked)
+                _items = items;
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Encrypted file queue is unavailable. Refresh after reopening the vault.";
+        }
+        StateHasChanged();
+    }
+
+    private async Task ChooseFileAsync()
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        DisposePicked();
+        VaultNativePickedFile? picked = null;
+        try
+        {
+            var epoch = Sessions.Epoch;
+            picked = await NativeFiles.PickAsync();
+            if (picked is null) return;
+            if (picked.Stream.CanSeek &&
+                (picked.Stream.Length <= 0 || picked.Stream.Length > StellarLedgerFileProtocol.MaxFileBytes))
+            {
+                _status = "Select a non-empty file no larger than 1 MiB.";
+                return;
+            }
+            if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
+                throw new InvalidOperationException("Vault session changed during file selection.");
+            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            _picked = picked;
+            picked = null;
+            _status = "File selected. Saving it stages encrypted local data only; it does not submit to Stellar.";
+        }
+        catch (Exception)
+        {
+            _status = "File selection failed or exceeded the supported limit.";
+        }
+        finally
+        {
+            if (picked is not null) await picked.Stream.DisposeAsync();
+            _busy = false;
+        }
+    }
+
+    private async Task StageAsync()
+    {
+        if (_busy || _picked is null || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var picked = _picked;
+        var epoch = Sessions.Epoch;
+        try
+        {
+            await Files.StageAsync(picked.FileName, picked.ContentType,
+                picked.Stream, string.IsNullOrWhiteSpace(_folderId) ? null : _folderId);
+            if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
+                throw new InvalidOperationException("Vault session changed during file staging.");
+            _items = await Files.ListAsync();
+            _status = "File bytes, fingerprint and stable chunk/manifest IDs are saved in the encrypted local queue. No Stellar transaction occurred.";
+        }
+        catch (Exception)
+        {
+            _status = "File staging could not be confirmed. Reopen the same account and refresh the encrypted queue before attempting again; no Stellar transaction was sent.";
+        }
+        finally
+        {
+            await picked.Stream.DisposeAsync();
+            if (ReferenceEquals(_picked, picked)) _picked = null;
+            _busy = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        try
+        {
+            var epoch = Sessions.Epoch;
+            var items = await Files.ListAsync();
+            if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
+                throw new InvalidOperationException("Vault session changed.");
+            _items = items;
+            _status = "Encrypted file queue refreshed.";
+        }
+        catch (Exception) { _status = "Cannot read encrypted file queue. Preserve the local data and investigate."; }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.State != VaultSyncState.Pending || item.IsCorrupt) return;
+        _busy = true;
+        try
+        {
+            await Files.DiscardAsync(item.MutationId);
+            _items = await Files.ListAsync();
+            _status = "Unsubmitted encrypted file draft discarded. No Stellar operation occurred.";
+        }
+        catch (Exception)
+        {
+            _status = "File draft could not be discarded. It may have dependencies or changed in another tab; refresh and investigate.";
+        }
+        finally { _busy = false; }
+    }
+
+    private void DisposePicked()
+    {
+        if (_picked is not { } picked) return;
+        _picked = null;
+        _ = picked.Stream.DisposeAsync();
+    }
+
+    public void Dispose()
+    {
+        Sessions.StateChanged -= OnSessionChanged;
+        DisposePicked();
+    }
+}

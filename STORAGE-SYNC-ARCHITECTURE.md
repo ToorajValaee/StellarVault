@@ -130,3 +130,9 @@ Queued Testnet update/delete now supplies exact expected HD-v2 manifest ManageDa
 ## Root sequence ordering fence — 2026-11-07
 
 The HD-v2 sponsored writer now reads the root account and captures its transaction sequence before reading target/guard child accounts. As all standard StellarVault HD-v2 writes are root-sourced transactions, this serializes compliant devices using the same root: a concurrent accepted transaction after the root read invalidates the old sequence, while a prior transaction should be visible in later child reads. This is not universal CAS: direct child-sourced or noncompliant writes can bypass it. No automatic retries; uncertain outcomes remain quarantined.
+
+## Hybrid file staging parity — 2026-11-07
+
+PWA and MAUI now expose the shared hybrid file staging UI and use the same Core `VaultHybridFileWorkspace`. It stores a bounded 1 MiB file, metadata, SHA-256 fingerprint, optional parent-folder dependency and collision-checked stable part/manifest IDs inside one encrypted `UploadFile` queue entry. The PWA uses a browser picker adapter; MAUI uses its native file picker. The staged immutable SVFILE2 plan can be reconstructed after restart and is not sent to Stellar during staging.
+
+This closes the offline staging gap only. Per-part approval/checkpointing, manifest-last publication in the hybrid coordinator, interrupted upload reconciliation, complete-file historical verification and deletion are still missing. The legacy upload coordinator remains separate. No builds or live validation were run.

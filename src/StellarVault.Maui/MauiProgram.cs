@@ -69,6 +69,7 @@ public static class MauiProgram
         builder.Services.AddScoped<VaultManualSyncCoordinator>();
         builder.Services.AddScoped<VaultHybridSyncReviewService>();
         builder.Services.AddScoped<VaultHybridDraftWorkspace>();
+        builder.Services.AddScoped<VaultHybridFileWorkspace>();
         builder.Services.AddScoped<VaultHybridRemoteMutationWorkspace>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();

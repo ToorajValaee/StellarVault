@@ -201,6 +201,10 @@
                         aria-pressed="@(_workspaceMode == "record")" @onclick='() => SelectWorkspace("record")'>
                     <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>LOCAL ENCRYPTED</small></span>
                 </button>
+                <button class="network-option @(_workspaceMode == "hybrid" ? "active" : "")" type="button"
+                        aria-pressed="@(_workspaceMode == "hybrid")" @onclick='() => SelectWorkspace("hybrid")'>
+                    <span class="network-symbol">H</span><span><strong>HYBRID SYNC</strong><small>OFFLINE QUEUE</small></span>
+                </button>
                 @if (Platform == "WEB PWA")
                 {
                     <button class="network-option @(_workspaceMode == "file" ? "active" : "")" type="button"
@@ -259,6 +263,13 @@
             else if (_workspaceMode == "file" && Platform == "WEB PWA")
             {
                 <VaultBinaryFilesView />
+            }
+            else if (_workspaceMode == "hybrid" && Platform == "WEB PWA")
+            {
+                <VaultHybridDraftEditor />
+                <VaultHybridFileDraftEditor />
+                <VaultHybridRemoteChanges />
+                <VaultHybridSyncReview />
             }
         </section>
     }
@@ -398,7 +409,7 @@
     private void SelectWorkspace(string workspace)
     {
         if (_busy) return;
-        if (workspace is not ("ledger" or "record" or "file"))
+        if (workspace is not ("ledger" or "record" or "file" or "hybrid"))
             throw new ArgumentOutOfRangeException(nameof(workspace));
         if (workspace == "ledger")
         {

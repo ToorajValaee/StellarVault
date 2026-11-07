@@ -10,7 +10,8 @@ public sealed class MauiVaultNativeFileAccess(IFileSaver fileSaver) : IVaultNati
     {
         var file = await FilePicker.Default.PickAsync();
         if (file is null) return null;
-        return new VaultNativePickedFile(file.FileName, await file.OpenReadAsync());
+        return new VaultNativePickedFile(file.FileName, await file.OpenReadAsync(),
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
     }
 
     public async Task<bool> SaveAsync(string fileName, Stream content)
