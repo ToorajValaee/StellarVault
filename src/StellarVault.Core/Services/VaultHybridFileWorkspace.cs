@@ -35,6 +35,7 @@ public sealed class VaultHybridFileWorkspace(
         string fileName, string contentType, Stream content,
         string? folderId = null, CancellationToken ct = default)
     {
+        VaultHybridFilePolicy.RequireEnabled();
         ArgumentNullException.ThrowIfNull(content);
         if (!content.CanRead) throw new ArgumentException("Readable file stream required.", nameof(content));
         var (account, scope) = RequireScope();
@@ -555,6 +556,7 @@ public sealed class VaultHybridFileWorkspace(
     public async Task<FileEntryApproval> QuoteNextFileEntryAsync(
         string mutationId, CancellationToken ct = default)
     {
+        VaultHybridFilePolicy.RequireEnabled();
         var (account, scope) = RequireScope();
         var epoch = sessions.Epoch;
         // Keep new multipart broadcasting on Testnet until integration and
@@ -664,6 +666,7 @@ public sealed class VaultHybridFileWorkspace(
         FileEntryApproval approval, bool explicitlyApproved,
         CancellationToken ct = default)
     {
+        VaultHybridFilePolicy.RequireEnabled();
         ArgumentNullException.ThrowIfNull(approval);
         if (!explicitlyApproved)
             throw new InvalidOperationException("Explicit paid file-part approval required.");
