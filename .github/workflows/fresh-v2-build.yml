@@ -98,6 +98,53 @@ jobs:
         run: |
           set -o pipefail
           dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net10.0-android -c Release -p:AndroidPackageFormat=apk --verbosity normal 2>&1 | tee android-build.log
+      - name: Inspect packaged Android BlazorWebView host assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(find src/StellarVault.Maui/bin/Release/net10.0-android -name '*.apk' -type f | head -n 1)
+          test -n "$apk"
+          unzip -Z1 "$apk" > android-package-entries.txt
+          echo "Checking bundled WebView host assets in $(basename "$apk")"
+          grep -Ei '(^|/)wwwroot/index\.html
+        with:
+          name: stellarvault-maui-android-preview
+          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
+          if-no-files-found: error
+      - name: Upload Android build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android-build.log
+          if-no-files-found: ignore
+ android-package-entries.txt
+          grep -Ei '(^|/)wwwroot/native-app\.css
+        with:
+          name: stellarvault-maui-android-preview
+          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
+          if-no-files-found: error
+      - name: Upload Android build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android-build.log
+          if-no-files-found: ignore
+ android-package-entries.txt
+          grep -Ei '(^|/)wwwroot/js/vendor/stellar-sdk\.min\.js
+        with:
+          name: stellarvault-maui-android-preview
+          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
+          if-no-files-found: error
+      - name: Upload Android build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android-build.log
+          if-no-files-found: ignore
+ android-package-entries.txt
       - name: Package Android MAUI preview APK
         uses: actions/upload-artifact@v4
         with:
