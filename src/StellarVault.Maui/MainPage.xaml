@@ -5,11 +5,32 @@
              xmlns:local="clr-namespace:StellarVault.Maui"
              x:Class="StellarVault.Maui.MainPage"
              BackgroundColor="#07110c">
-    <blazor:BlazorWebView HostPage="wwwroot/index.html">
-        <blazor:BlazorWebView.RootComponents>
-            <blazor:RootComponent Selector="#app"
-                                  ComponentType="{x:Type local:AppRoot}"
-                                  />
-        </blazor:BlazorWebView.RootComponents>
-    </blazor:BlazorWebView>
+    <Grid>
+        <blazor:BlazorWebView HostPage="wwwroot/index.html">
+            <blazor:BlazorWebView.RootComponents>
+                <blazor:RootComponent Selector="#app"
+                                      ComponentType="{x:Type local:AppRoot}" />
+            </blazor:BlazorWebView.RootComponents>
+        </blazor:BlazorWebView>
+        <!-- MAUI-owned fallback: still visible if JavaScript never executes. -->
+        <Grid x:Name="NativeStartupOverlay" BackgroundColor="#08120F"
+              InputTransparent="False" Padding="28">
+            <VerticalStackLayout HorizontalOptions="Center"
+                                 VerticalOptions="Center"
+                                 Spacing="14" MaximumWidthRequest="460">
+                <Label Text="✦  STELLARVAULT" TextColor="#9AFFBC"
+                       FontFamily="monospace" FontSize="25" FontAttributes="Bold"
+                       HorizontalTextAlignment="Center" />
+                <ActivityIndicator x:Name="StartupSpinner" IsRunning="True"
+                                   Color="#83EBA9" />
+                <Label x:Name="NativeStartupMessage"
+                       Text="Opening the encrypted vault interface…"
+                       TextColor="#D7F4E0" FontSize="15"
+                       HorizontalTextAlignment="Center" />
+                <Label Text="NATIVE SHELL  /  SECURE STARTUP"
+                       TextColor="#7EA58C" FontSize="11"
+                       HorizontalTextAlignment="Center" />
+            </VerticalStackLayout>
+        </Grid>
+    </Grid>
 </ContentPage>
