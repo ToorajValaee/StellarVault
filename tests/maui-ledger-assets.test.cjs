@@ -95,3 +95,16 @@ test('Android keyboard resizes WebView instead of obscuring offline editors', ()
     'Platforms/Android/MainActivity.cs'), 'utf8');
   assert.match(activity, /WindowSoftInputMode\s*=\s*SoftInput\.AdjustResize/);
 });
+
+test('Android Back returns to Stellar destination without bypassing the vault', () => {
+  const page = fs.readFileSync(path.join(maui, 'MainPage.xaml.cs'), 'utf8');
+  const app = fs.readFileSync(path.join(maui, 'App.xaml.cs'), 'utf8');
+  const workspace = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(page, /OnBackButtonPressed/);
+  assert.match(page, /_navigation\.TryRequestBack\(\)/);
+  assert.match(app, /new MainPage\(_navigation\)/);
+  assert.match(app, /_navigation\.Clear\(\)/);
+  assert.match(workspace, /NativeNavigation\.BackRequested \+= OnAndroidBackRequested/);
+  assert.match(workspace, /NativeNavigation\.Clear\(\)/);
+});
