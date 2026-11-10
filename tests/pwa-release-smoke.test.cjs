@@ -95,7 +95,7 @@ test('unlocked PWA session redirects from access to canonical vault without dupl
   const index = fs.readFileSync(path.join(root, '..', 'Pages', 'Index.razor'), 'utf8');
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   assert.ok(index.includes('Navigation.NavigateTo("/vault", replace: true)'));
-  assert.ok(index.includes('if (!Sessions.IsUnlocked)'));
+  assert.ok(index.includes('if (!(Sessions.IsUnlocked || Ledger.IsConnected))'));
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
 });
 
@@ -127,7 +127,8 @@ test('offline vault keeps the normal ledger browser layout instead of an alterna
  assert.ok(vault.includes('sv-folder-grid'));
  assert.ok(vault.includes('record-list'));
  assert.ok(vault.includes('STELLAR SIGNING SESSION NOT RESTORED'));
- assert.ok(!vault.includes('else if (!Ledger.IsConnected)'));
+ assert.ok(vault.includes('ON-CHAIN RECORDS NOT LOADED'));
+ assert.ok(vault.includes('Reconnect with your recovery phrase'));
 });
 
 test('refresh without signing credentials is not mislabeled as offline', () => {
@@ -225,7 +226,7 @@ test('on-chain-only access distinguishes unfunded root from connection failure',
 test('offline mutation confirmation requires independent verification and scoped status', () => {
   const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
   assert.ok(queue.includes('interface IVaultLedgerMutationVerifier'));
-  assert.ok(queue.includes('await verifier.IsConfirmedAsync(previous, transactionHash, ct)'));
+  assert.ok(queue.includes('await verifier.IsConfirmedAsync(current, transactionHash, ct)'));
   assert.ok(queue.includes('Queue entry belongs to another account or network.'));
   assert.ok(queue.includes('Task<VaultQueueStatus> StatusAsync'));
   assert.ok(queue.includes('MarkConflictAsync'));
@@ -245,5 +246,5 @@ test('encrypted offline queue stores authenticated envelopes, not readable draft
   assert.ok(adapter.includes('sessions.ActiveAccountId != accountId'));
   assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
   assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
-  assert.ok(program.includes('IVaultLedgerMutationVerifier, DenyVaultLedgerMutationVerifier'));
+  assert.ok(program.includes('IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier'));
 });
