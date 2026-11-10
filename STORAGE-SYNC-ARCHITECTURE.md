@@ -144,3 +144,10 @@ The shared file workspace now allocates stable part IDs from file length without
 ## Multipart file journal foundations (2026-11-10)
 
 Encrypted hybrid UploadFile queue entries now support an ordered SignedFileEntries journal with exact per-part Stellar transaction hashes, verified original stable part/manifest IDs, and atomic host CAS against stale tabs. The shared file UI shows prepared identities and the next ID, warns against replay, and offers a read-only first-part cost/remote-collision/parent preflight. No fee approval, signing or broadcasting is enabled for hybrid files until per-part recovery and independent historical verification are implemented.
+
+
+## Read-only hybrid multipart ledger observation — 2026-11-10
+
+Core VaultHybridFileWorkspace.InspectLedgerProgressAsync reconstructs the immutable encrypted UploadFile plan and compares the **current** connected-root ledger inventory against every expected record payload in order. It rejects duplicate record IDs, mismatching staged content, a visible later stage without an earlier stage, corrupt signed-entry order, changed local queue state and account/session changes. The shared PWA/MAUI file draft editor exposes this inspection and explicitly distinguishes currently matching records from durable signed checkpoints. No queue transitions, signing or broadcasts occur.
+
+This is **not historical receipt verification**: a matching current record does not establish that its corresponding signed hash succeeded or that the local queue produced it; absent records do not establish a failed broadcast. Never resume, mark Confirmed, or retry using these observations. Next: independently authenticate each signed transaction/record link, then implement per-part approval, pre-broadcast checkpointing and manifest-last publishing with a conservative restart policy. No builds, native/browser tests or live Testnet runs were executed for this change.
