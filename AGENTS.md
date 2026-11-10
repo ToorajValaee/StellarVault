@@ -363,3 +363,11 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 - GitHub Actions run 42792765911 on commit ad52b15 passed .NET 10 shared UI/Core build, .NET 10 PWA build, PWA publish, PWA asset validation and JavaScript parsing.
 - The subsequent bundled Node regression-test stage failed with 11 assertions (including legacy MAUI asset-path expectation, PWA navigation/layout snapshots and recent-vault storage expectations). These failures have NOT been triaged as pre-existing versus newly caused, and must not be ignored or bypassed. Since that stage failed, .NET crypto tests and release packaging were skipped in this run. Android preview was skipped by push-event workflow policy.
 - Mainnet hybrid file uploads stay disabled. Full historical Testnet proof, interruption/restart scenarios, multi-device concurrency, native MAUI compilation, integration tests and the Node suite must pass before declaring the feature production ready.
+
+
+### 2026-11-10 verified CI follow-up
+
+- Historical run failures were addressed by fixing the incorrect SEP-53 verifier's canonical prefix+raw-message hashing (official vector now passes), and updating outdated Node test fixtures/expectations to reflect current PWA/MAUI packaging, unlocked session behavior, and authenticated history provider. No production security checks were disabled.
+- GitHub Actions run 42793953386 on commit 114f56d5 completed **successfully**: Core/UI build, PWA restore/build/publish, static asset checks, JS parse, .NET crypto vectors, Node browser/native asset regressions, and PWA release packaging. The shared multipart ID reconciliation now rejects case-aliasing hex IDs.
+- Added multipart Core crypto regression coverage at commit 26f136d5: stable ordered file identities, missing chunks, manifest-last semantics, current payload mismatch, case-alias duplicates. Its newer workflow run is a separate acceptance check.
+- Hybrid manual file publishing implementation is now present end-to-end in source, but **Mainnet is disabled**. The remaining release gates are live Testnet per-part signing and crash recovery (with historical evidence), real PWA/MAUI host interop, native MAUI build, multi-device concurrent writes, browser permission flows, security review and hybrid file deletion. Never conflate green PWA CI with verified production safety.
