@@ -7,19 +7,21 @@ public partial class App : Application
     private readonly VaultSessionManager _sessions;
     private readonly VaultNativeForegroundLifecycle _lifecycle;
     private readonly VaultNativeNavigationState _navigation;
+    private readonly NativeStartupStatus _startup;
 
     public App(VaultSessionManager sessions, VaultNativeForegroundLifecycle lifecycle,
-        VaultNativeNavigationState navigation)
+        VaultNativeNavigationState navigation, NativeStartupStatus startup)
     {
         InitializeComponent();
         _sessions = sessions;
         _lifecycle = lifecycle;
         _navigation = navigation;
+        _startup = startup;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = new Window(new MainPage(_navigation))
+        var window = new Window(new MainPage(_navigation, _startup))
         {
             Title = "StellarVault"
         };
