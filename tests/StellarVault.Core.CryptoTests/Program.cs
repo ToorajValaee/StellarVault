@@ -379,6 +379,56 @@ Console.WriteLine("PASS: reject mismatched content-addressed object keys");
 CryptographicOperations.ZeroMemory(key);
 CryptographicOperations.ZeroMemory(wrongKey);
 
+// Multipart upload recovery accepts only a contiguous prefix of immutable,
+// content-identical entries and never treats an early manifest as complete.
+var multipartBytes = new byte[StellarLedgerFileProtocol.MaxChunkBytes + 17];
+RandomNumberGenerator.Fill(multipartBytes);
+var stableFileIds = new[]
+{
+    "0123456789abcdef", "0123456789abcdee", "0123456789abcded"
+};
+var multipart = new StellarLedgerUploadPlan("sample.bin", "sample.bin",
+    "application/octet-stream", multipartBytes, checkpointIds: stableFileIds);
+Check(multipart.Entries.Count == 3 &&
+      multipart.ManifestId == stableFileIds[2] &&
+      multipart.Entries[0].Id == stableFileIds[0] &&
+      multipart.Entries[1].Id == stableFileIds[1],
+    "Multipart file order or final manifest identity changed");
+LedgerRecordItem AsLedger((string Id, LedgerRecordDraft Draft) entry) =>
+    new(entry.Id, entry.Draft.Title, entry.Draft.Content, entry.Draft.FolderId,
+        entry.Draft.Tags, entry.Draft.IsFolder, entry.Draft.UserName,
+        entry.Draft.Url, entry.Draft.Notes);
+var firstFilePart = AsLedger(multipart.Entries[0]);
+var secondFilePart = AsLedger(multipart.Entries[1]);
+var lastFileManifest = AsLedger(multipart.Entries[2]);
+Check(multipart.Remaining([]).Count == 3, "Empty file must retain all entries");
+Check(multipart.Remaining([firstFilePart]).Count == 2,
+    "First verified file part must leave second part and manifest");
+Check(multipart.Remaining([firstFilePart, secondFilePart]).Count == 1,
+    "Manifest must be the last remaining file entry");
+Check(multipart.Remaining([firstFilePart, secondFilePart, lastFileManifest]).Count == 0,
+    "Complete file should have no missing entries");
+try
+{
+    multipart.Remaining([firstFilePart, lastFileManifest]);
+    throw new Exception("Early file manifest accepted without all chunks");
+}
+catch (InvalidDataException) { }
+try
+{
+    multipart.Remaining([firstFilePart, firstFilePart with { Id = firstFilePart.Id.ToUpperInvariant() }]);
+    throw new Exception("Case-aliasing file part IDs accepted");
+}
+catch (InvalidDataException) { }
+try
+{
+    multipart.Remaining([firstFilePart with { Content = "unexpected" }]);
+    throw new Exception("Mismatched file part contents accepted");
+}
+catch (InvalidDataException) { }
+CryptographicOperations.ZeroMemory(multipartBytes);
+Console.WriteLine("PASS: immutable multipart ordering, manifest-last and alias rejection");
+
 // Official SEP-53 public test vector: verify canonical prefix + SHA-256
 // and reject altered messages, signatures, and signer addresses.
 var sep53Verifier = new Sep53StellarEd25519Verifier(new NsecStellarEd25519Verifier());
