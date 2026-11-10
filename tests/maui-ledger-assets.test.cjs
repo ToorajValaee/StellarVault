@@ -131,3 +131,15 @@ test('native-only styling carries the StellarVault terminal identity', () => {
   assert.match(nativeCss, /\.sv-native-nav/);
   assert.match(nativeCss, /\.sv-native-scroll/);
 });
+
+test('native startup reports WebView initialization stages and isolates first Razor render', () => {
+  const xaml = fs.readFileSync(path.join(maui, 'MainPage.xaml'), 'utf8');
+  const page = fs.readFileSync(path.join(maui, 'MainPage.xaml.cs'), 'utf8');
+  const root = fs.readFileSync(path.join(maui, 'AppRoot.razor'), 'utf8');
+  assert.match(xaml, /BlazorWebViewInitializing="OnWebViewInitializing"/);
+  assert.match(xaml, /BlazorWebViewInitialized="OnWebViewInitialized"/);
+  assert.match(page, /StellarVaultStartup/);
+  assert.match(page, /Startup stopped at:/);
+  assert.match(root, /if \(!_shellReady\)/);
+  assert.match(root, /Startup\.NotifyFirstRender\(\)/);
+});
