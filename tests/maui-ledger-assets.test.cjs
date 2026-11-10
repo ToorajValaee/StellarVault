@@ -11,7 +11,7 @@ const host = fs.readFileSync(path.join(maui, 'wwwroot/index.html'), 'utf8');
 const project = fs.readFileSync(path.join(maui, 'StellarVault.Maui.csproj'), 'utf8');
 
 function scripts() {
-  return [...host.matchAll(/<script\s+src="(js\/[^"]+\.js)"/g)].map(match => match[1]);
+  return [...host.matchAll(/"((?:js\/)[^"]+\.js)"/g)].map(match => match[1]);
 }
 
 test('all WebView ledger scripts exist in the canonical PWA source', () => {
@@ -48,12 +48,15 @@ test('all WebView ledger scripts are included as native MAUI assets', () => {
   }
 });
 
-test('native scripts appear before the Blazor WebView initialization', () => {
-  const bootstrap = host.indexOf('src="_framework/blazor.webview.js"');
-  assert.ok(bootstrap > 0);
-  for (const script of scripts()) {
-    assert.ok(host.indexOf('src="' + script + '"') < bootstrap, 'Late script: ' + script);
-  }
+test('native ledger scripts load on demand after Blazor starts', () => {
+  assert.match(host, /nativeLedgerScripts/);
+  assert.match(host, /stellarVaultNativeRuntime/);
+  assert.match(host, /document\.createElement\('script'\)/);
+  assert.ok(!/<script\s+src="js\/[^"]+\.js"/.test(host),
+    'Blocking ledger scripts must not delay the first native screen');
+  const component = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(component, /InvokeVoidAsync\("stellarVaultNativeRuntime\.load"\)/);
 });
 
 test('native entrypoint mounts the dedicated native workspace with startup fallback', () => {
