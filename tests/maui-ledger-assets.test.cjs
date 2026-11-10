@@ -34,6 +34,10 @@ test('all WebView ledger scripts are included as native MAUI assets', () => {
       for (const file of fs.readdirSync(dir).filter(name => name.endsWith('.js'))) {
         mapped.add(entry.target.replace('%(Filename)%(Extension)', file).replace('wwwroot/', ''));
       }
+    } else if (entry.source.endsWith('/**')) {
+      // MAUI's optional recursive Raw glob is not a concrete script asset.
+      // The raw directory can be empty and absent from Git.
+      continue;
     } else {
       assert.ok(fs.existsSync(path.resolve(maui, entry.source)), 'Missing asset source: ' + entry.source);
       mapped.add(entry.target.replace('wwwroot/', ''));
