@@ -167,7 +167,11 @@
                 <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
                 <VaultRecordWorkspaceView />
                 <VaultHybridDraftEditor />
-                <VaultHybridFileDraftEditor />
+                <p class="advanced-help" role="status">
+                    Hybrid mode supports encrypted offline records and folders only.
+                    File uploads, file deletion and file synchronization are disabled in Hybrid mode.
+                    Use direct on-chain mode for files.
+                </p>
                 <VaultHybridRemoteChanges />
                 <VaultHybridSyncReview />
             }
