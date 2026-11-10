@@ -5,11 +5,13 @@ namespace StellarVault.Maui;
 public partial class App : Application
 {
     private readonly VaultSessionManager _sessions;
+    private readonly VaultNativeForegroundLifecycle _lifecycle;
 
-    public App(VaultSessionManager sessions)
+    public App(VaultSessionManager sessions, VaultNativeForegroundLifecycle lifecycle)
     {
         InitializeComponent();
         _sessions = sessions;
+        _lifecycle = lifecycle;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
@@ -17,8 +19,16 @@ public partial class App : Application
         var window = new Window(new MainPage());
         // Clear the unlocked data key when the native window leaves the foreground.
         // The preview UI remains disabled until end-to-end unlock is verified.
-        window.Stopped += (_, _) => _sessions.Lock();
-        window.Destroying += (_, _) => _sessions.Lock();
+        window.Stopped += (_, _) => RevokeForeground();
+        window.Destroying += (_, _) => RevokeForeground();
         return window;
+    }
+
+    private void RevokeForeground()
+    {
+        // The WebView signer must be revoked even if no local vault was opened.
+        // A backgrounded on-chain-only session also holds live signing keys.
+        _sessions.Lock();
+        _lifecycle.NotifyForegroundLost();
     }
 }
