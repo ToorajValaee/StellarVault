@@ -20,6 +20,12 @@ public enum VaultMutationKind { CreateRecord, UpdateRecord, DeleteRecord, Create
 public sealed record VaultSignedDeletionManifest(string SourceAccountId, string TransactionHash);
 
 /// <summary>
+/// One immutable, fully signed Stellar transaction identity for an SVFILE
+/// part or final manifest. A hash is NOT proof of successful inclusion.
+/// </summary>
+public sealed record VaultSignedFileEntry(string LedgerRecordId, string TransactionHash);
+
+/// <summary>
 /// Ciphertext only. Host adapters must encrypt the entire serialized queue at rest,
 /// using authenticated account/network-associated data, before storing any entry.
 /// </summary>
@@ -35,7 +41,8 @@ public sealed record VaultPendingMutation(
     VaultSyncState State,
     string? TransactionHash,
     DateTimeOffset CreatedUtc,
-    VaultSignedDeletionManifest[]? SignedDeletionManifests = null)
+    VaultSignedDeletionManifest[]? SignedDeletionManifests = null,
+    VaultSignedFileEntry[]? SignedFileEntries = null)
 {
     public static VaultPendingMutation Create(string accountId, string networkId,
         VaultMutationKind kind, string entityId, byte[] encryptedPayload,
@@ -108,7 +115,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> EnqueueAsync(VaultPendingMutation entry, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
-        if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null)
+        if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
+            entry.SignedFileEntries is { Length: > 0 })
             throw new InvalidOperationException("Only new pending drafts can be queued.");
         if (!Guid.TryParseExact(entry.Id, "N", out _) || entry.DependsOn.Contains(entry.Id, StringComparer.Ordinal))
             throw new InvalidOperationException("Mutation ID is invalid or depends on itself.");
@@ -594,6 +602,101 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return next;
     }
 
+    /// <summary>
+    /// The file publisher may checkpoint ONLY the next immutable entry of a
+    /// reserved, encrypted UploadFile intent, in SVFILE publication order.
+    /// The last entry is the manifest. No network write occurs here.
+    /// If durable CAS fails, the signer MUST NOT broadcast that transaction.
+    /// </summary>
+    public async Task<VaultPendingMutation> CheckpointSignedFileEntryAsync(
+        VaultPendingMutation expected, string recordId, string signedHash,
+        CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.Kind != VaultMutationKind.UploadFile ||
+            expected.State != VaultSyncState.Submitting ||
+            expected.TransactionHash is not null ||
+            expected.SignedDeletionManifests is { Length: > 0 } ||
+            recordId is not { Length: 16 } ||
+            !recordId.All(Uri.IsHexDigit) ||
+            signedHash is not { Length: 64 } ||
+            !signedHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new InvalidOperationException("Invalid signed file part checkpoint.");
+
+        VaultHybridFileWorkspace.FileUploadIntent? intent;
+        try
+        {
+            intent = System.Text.Json.JsonSerializer.Deserialize<
+                VaultHybridFileWorkspace.FileUploadIntent>(expected.EncryptedPayload);
+        }
+        catch (System.Text.Json.JsonException) { intent = null; }
+        var ids = intent?.EntryIds;
+        if (intent is null || intent.Version != 1 ||
+            intent.Content is not { Length: > 0 and <= StellarLedgerFileProtocol.MaxFileBytes } ||
+            ids is not { Length: > 0 and <= StellarLedgerFileProtocol.MaxParts + 1 } ||
+            ids.Any(x => x is not { Length: 16 } || !x.All(Uri.IsHexDigit)) ||
+            ids.Distinct(StringComparer.OrdinalIgnoreCase).Count() != ids.Length ||
+            !string.Equals(ids[^1], expected.EntityId, StringComparison.OrdinalIgnoreCase))
+        {
+            if (intent?.Content is { } leaked)
+                CryptographicOperations.ZeroMemory(leaked);
+            throw new InvalidDataException("File upload intent or part identity is invalid.");
+        }
+        try
+        {
+            var expectedCount = intent.Content.Length <= StellarLedgerFileProtocol.MaxChunkBytes
+                ? 1
+                : (intent.Content.Length + StellarLedgerFileProtocol.MaxChunkBytes - 1) /
+                    StellarLedgerFileProtocol.MaxChunkBytes + 1;
+            var expectedFingerprint = Convert.ToHexString(
+                SHA256.HashData(intent.Content));
+            if (ids.Length != expectedCount ||
+                !string.Equals(expectedFingerprint, intent.Fingerprint,
+                    StringComparison.Ordinal))
+                throw new InvalidDataException("File upload bytes or part count have changed.");
+
+            var journal = expected.SignedFileEntries ?? [];
+            if (journal.Length >= ids.Length ||
+                journal.Where((entry, i) =>
+                    entry is null ||
+                    !string.Equals(entry.LedgerRecordId, ids[i],
+                        StringComparison.OrdinalIgnoreCase) ||
+                    entry.TransactionHash is not { Length: 64 } ||
+                    !entry.TransactionHash.All(Uri.IsHexDigit))
+                    .Any() ||
+                journal.Select(x => x.TransactionHash)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.Length ||
+                !string.Equals(ids[journal.Length], recordId,
+                    StringComparison.OrdinalIgnoreCase) ||
+                journal.Any(x => string.Equals(
+                    x.TransactionHash, signedHash, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(
+                    "Signed file journal is out of order or already contains this transaction.");
+
+            var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+                expected.Id, ct) ?? throw new KeyNotFoundException("Reserved file upload is missing.");
+            RequireScope(current, expected.AccountId, expected.NetworkId);
+            if (current.State != VaultSyncState.Submitting ||
+                !SameDurableRevision(current, expected))
+                throw new InvalidOperationException(
+                    "File queue changed before signed hash checkpoint; abort broadcast.");
+            var updated = current with
+            {
+                SignedFileEntries = [..journal, new VaultSignedFileEntry(
+                    ids[journal.Length], signedHash)]
+            };
+            if (!await store.TryReplaceAsync(current, updated, ct))
+                throw new InvalidOperationException(
+                    "Signed file part could not be stored durably; abort broadcast.");
+            return updated;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(intent.Content);
+        }
+    }
+
     public async Task<VaultPendingMutation> MarkUncertainAsync(
         VaultPendingMutation submitting, string? transactionHash, CancellationToken ct = default)
     {
@@ -845,7 +948,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
         var current = entries.SingleOrDefault(x => x.Id == mutationId)
             ?? throw new KeyNotFoundException("Local draft not found.");
-        if (current.State != VaultSyncState.Pending || current.TransactionHash is not null)
+        if (current.State != VaultSyncState.Pending || current.TransactionHash is not null ||
+            current.SignedFileEntries is { Length: > 0 })
             throw new InvalidOperationException("Submitted, uncertain or resolved changes cannot be discarded.");
         if (entries.Any(x => x.Id != mutationId &&
             x.State is not (VaultSyncState.Confirmed or VaultSyncState.Failed) &&
@@ -895,7 +999,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         a.State == b.State && a.TransactionHash == b.TransactionHash &&
         a.CreatedUtc == b.CreatedUtc &&
         (a.SignedDeletionManifests ?? []).SequenceEqual(
-            b.SignedDeletionManifests ?? []);
+            b.SignedDeletionManifests ?? []) &&
+        (a.SignedFileEntries ?? []).SequenceEqual(
+            b.SignedFileEntries ?? []);
 
     private static bool IsTransactionHash(string hash) =>
         hash.Length == 64 && hash.All(Uri.IsHexDigit);

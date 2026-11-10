@@ -1,6 +1,6 @@
 {
   "schema": "stellarvault.project-readiness.v1",
-  "observed_at": "2026-11-07",
+  "observed_at": "2026-11-10",
   "repository": "ToorajValaee/StellarVault",
   "branch": "main",
   "observed_head": "51d4dacc46eafdd2826e59ccb0de787a31be0930",
@@ -48,11 +48,11 @@
     "pwa_host": "implemented, unverified",
     "native_hosts": "shared UI and Core services; MAUI native picker now feeds shared encrypted hybrid file staging; native signing, device lifecycle and end-to-end file sync remain unverified",
     "managed_aes_gcm": "implemented using Bouncy Castle for browser compatibility; verify vectors",
-    "file_upload": "SVFILE1/SVFILE2 multipart protocol and legacy manifest-last coordinator exist; hybrid queue staging now integrated, but per-part approval, signed pre-broadcast checkpoints, manifest-last publication, interrupted hybrid recovery and historical verification remain unimplemented; Testnet unverified",
+    "file_upload": "SVFILE1/SVFILE2 protocol and legacy uploader exist. Hybrid staged files now have per-part immutable-ID journal with encrypted CAS, remote ID/parent preflight and indicative first-part fee estimate. Missing explicit part approval/broadcast, historical verification, manifest-last commit and safe recovery.",
     "on_chain": "BrowserStellarLedgerRecords supports connect, read and publish, but shared application integration incomplete",
     "auth": "PWA local-only namespace; native DenyVaultAccountAuthorizer and UnavailableStellarLedgerRecords",
     "ci": "latest workflow run 39857649422 failed without usable step logs; compilation status undetermined",
-    "hybrid_file_staging": "implemented as encrypted offline queue staging in shared Core; PWA and MAUI UI connected; 1 MiB bounded file intent includes fingerprint and stable chunk/manifest IDs; no file publishing path yet; not build/runtime validated"
+    "hybrid_file_staging": "implemented in encrypted queue for PWA and MAUI; ordered per-file signed-hash checkpoint journal and read-only first-entry preflight newly added; full publication disabled, not runtime validated"
   },
   "release_blockers": [
     "End-to-end cryptographic/functional verification",
@@ -66,7 +66,7 @@
     "Hybrid file publication from encrypted queue: per-part explicit approval, durable signed-hash checkpoints, manifest-last commit, interrupted recovery and complete-file verification",
     "Cross-device concurrency validation for root-sequence serialization and guarded hybrid writes"
   ],
-  "next_milestone": "Complete hybrid file publication: preflight the immutable encrypted file intent, approve and checkpoint each part before broadcast, publish the manifest last, reconcile after interruption, and independently verify the reconstructed file on a clean device.",
+  "next_milestone": "Implement approved, durable, one-part-at-a-time hybrid publication with signed hash before each broadcast and independent historical part verification; publish final manifest only after all parts verified. Validate on Testnet with PWA and MAUI.",
   "priority": [
     "Complete encrypted hybrid file publication and recovery in shared Core/UI for PWA and MAUI",
     "Validate record/folder/file flows on two independent Testnet devices, including interruption and concurrent writes",
@@ -111,6 +111,10 @@
       "date": "2026-11-07",
       "commit": "51d4dacc46eafdd2826e59ccb0de787a31be0930",
       "note": "Reduced plaintext retention in shared hybrid file staging: stable IDs allocated without materializing chunks, temporary file copies and serialized payloads cleared after queue persistence, metadata-only result returned."
+    },
+    {
+      "date": "2026-11-10",
+      "note": "Added file-specific signed transaction journal in durable encrypted queue, host CAS compatibility, and shared read-only first-file-part preflight; no file publication enabled."
     }
   ]
 }

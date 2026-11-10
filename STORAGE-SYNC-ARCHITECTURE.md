@@ -140,3 +140,7 @@ This closes the offline staging gap only. Per-part approval/checkpointing, manif
 ## Hybrid file staging memory hardening (2026-11-07)
 
 The shared file workspace now allocates stable part IDs from file length without constructing all chunk strings during staging. It clears the temporary plaintext copy and serialized queue payload after the encrypted host store accepts the mutation, returns a metadata-only summary to UI, and reconstructs chunk drafts only when explicitly requested for a future publisher. File listing validates the byte fingerprint and part-count/manifest identity without materializing every chunk.
+
+## Multipart file journal foundations (2026-11-10)
+
+Encrypted hybrid UploadFile queue entries now support an ordered SignedFileEntries journal with exact per-part Stellar transaction hashes, verified original stable part/manifest IDs, and atomic host CAS against stale tabs. The shared file UI shows prepared identities and the next ID, warns against replay, and offers a read-only first-part cost/remote-collision/parent preflight. No fee approval, signing or broadcasting is enabled for hybrid files until per-part recovery and independent historical verification are implemented.

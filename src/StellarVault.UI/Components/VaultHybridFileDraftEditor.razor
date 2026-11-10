@@ -76,8 +76,42 @@
                 else
                 {
                     <p class="advanced-help">SHA-256: <code>@item.Fingerprint</code></p>
-                    <p class="advanced-help">Each chunk must be reconciled and approved separately.
-                        The manifest is published last. File publication is not yet enabled in this review.</p>
+                    <p class="advanced-help">Signed checkpoint identities: @(item.SignedEntries?.Count ?? 0)
+                        of @item.LedgerEntries. These are NOT successful Stellar receipts.</p>
+                    @if (item.SignedEntries is { Count: > 0 } signed)
+                    {
+                        @foreach (var checkpoint in signed)
+                        {
+                            <p>Prepared record: <code>@checkpoint.LedgerRecordId</code> ·
+                                Signed transaction: <code>@checkpoint.TransactionHash</code></p>
+                        }
+                        <p class="terminal-alert warning" role="alert">
+                            At least one upload transaction was prepared. The original attempt may
+                            have been broadcast; do not retry. Historical evidence must be
+                            investigated before any continuation.
+                        </p>
+                    }
+                    @if (item.NextEntryId is not null)
+                    {
+                        <p>Next immutable part/manifest ID: <code>@item.NextEntryId</code></p>
+                    }
+                    <p class="advanced-help">Manifest-last publication requires separate
+                        per-part approval, signed-hash checkpoints, and independent verification.
+                        File publication is NOT yet enabled.</p>
+                    @if (item.State == VaultSyncState.Pending && item.SignedEntries is not { Count: > 0 })
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@_busy" @onclick="() => PreviewAsync(item)">
+                            REVIEW FIRST FILE TRANSACTION — NO SUBMISSION
+                        </button>
+                        @if (_previews.TryGetValue(item.MutationId, out var preview))
+                        {
+                            <p role="status">Next transaction record: <code>@preview.NextLedgerRecordId</code> ·
+                                Estimated fee: @preview.Cost.NetworkFeeXlm XLM ·
+                                Estimated peak reserve: @preview.Cost.PeakReserveXlm XLM</p>
+                            <p class="terminal-alert warning" role="status">@preview.Explanation</p>
+                        }
+                    }
                 }
                 @if (item.State == VaultSyncState.Pending && !item.IsCorrupt)
                 {
@@ -96,6 +130,8 @@
 @code {
     private VaultNativePickedFile? _picked;
     private IReadOnlyList<VaultHybridFileWorkspace.FileDraftItem> _items = [];
+    private readonly Dictionary<string, VaultHybridFileWorkspace.PublicationPreview> _previews =
+        new(StringComparer.Ordinal);
     private string _folderId = "";
     private string? _status;
     private bool _busy;
@@ -117,6 +153,7 @@
         DisposePicked();
         _folderId = "";
         _items = [];
+        _previews.Clear();
         _status = null;
         if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
         {
@@ -217,6 +254,32 @@
         finally { _busy = false; }
     }
 
+    private async Task PreviewAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.State != VaultSyncState.Pending || item.IsCorrupt ||
+            !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
+            return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _previews.Remove(item.MutationId);
+        try
+        {
+            var preview = await Files.PreviewFirstEntryAsync(item.MutationId);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch)
+            {
+                _previews[item.MutationId] = preview;
+                _status = "First file transaction was evaluated without signing or broadcasting.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Cannot safely preview this file. Check the connected HD root, " +
+                    "pending parent, queue conflicts, or remote ID collisions. No transaction was sent.";
+        }
+        finally { _busy = false; }
+    }
+
     private async Task DiscardAsync(VaultHybridFileWorkspace.FileDraftItem item)
     {
         if (_busy || item.State != VaultSyncState.Pending || item.IsCorrupt) return;
@@ -225,6 +288,7 @@
         {
             await Files.DiscardAsync(item.MutationId);
             _items = await Files.ListAsync();
+            _previews.Clear();
             _status = "Unsubmitted encrypted file draft discarded. No Stellar operation occurred.";
         }
         catch (Exception)

@@ -196,5 +196,6 @@ public sealed class VaultDeletionJournalReview(
         a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
         a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
         (a.SignedDeletionManifests ?? []).SequenceEqual(
-            b.SignedDeletionManifests ?? []);
+            b.SignedDeletionManifests ?? []) &&
+        (a.SignedFileEntries ?? []).SequenceEqual(b.SignedFileEntries ?? []);
 }

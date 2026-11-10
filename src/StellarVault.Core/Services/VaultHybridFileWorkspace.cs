@@ -12,7 +12,8 @@ public sealed class VaultHybridFileWorkspace(
     VaultPendingMutationQueue queue,
     VaultSessionManager sessions,
     VaultDeviceRetentionGate retention,
-    VaultNetworkSelection networks)
+    VaultNetworkSelection networks,
+    IStellarLedgerRecords ledger)
 {
     private const int IntentVersion = 1;
 
@@ -24,7 +25,9 @@ public sealed class VaultHybridFileWorkspace(
         string MutationId, string ManifestId, string FileName, string ContentType,
         string? FolderId, long Length, int LedgerEntries, string Fingerprint,
         VaultSyncState State, DateTimeOffset CreatedUtc,
-        string[] DependsOn, bool IsCorrupt = false);
+        string[] DependsOn, bool IsCorrupt = false,
+        IReadOnlyList<VaultSignedFileEntry>? SignedEntries = null,
+        string? NextEntryId = null);
 
     public async Task<FileDraftItem> StageAsync(
         string fileName, string contentType, Stream content,
@@ -124,10 +127,25 @@ public sealed class VaultHybridFileWorkspace(
                 var intent = DeserializeAndValidate(entry);
                 try
                 {
+                    var journal = entry.SignedFileEntries ?? [];
+                    if (journal.Length > intent.EntryIds.Length ||
+                        (entry.State == VaultSyncState.Pending && journal.Length > 0) ||
+                        journal.Where((x, index) =>
+                            x is null ||
+                            !string.Equals(x.LedgerRecordId,
+                                intent.EntryIds[index], StringComparison.OrdinalIgnoreCase) ||
+                            x.TransactionHash is not { Length: 64 } ||
+                            !x.TransactionHash.All(Uri.IsHexDigit)).Any() ||
+                        journal.Select(x => x.TransactionHash)
+                            .Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.Length)
+                        throw new InvalidDataException(
+                            "File journal does not match the immutable staged entry order.");
                     result.Add(new(entry.Id, entry.EntityId, intent.FileName,
                         intent.ContentType, intent.FolderId, intent.Content.LongLength,
                         intent.EntryIds.Length, intent.Fingerprint, entry.State, entry.CreatedUtc,
-                        entry.DependsOn.ToArray()));
+                        entry.DependsOn.ToArray(), SignedEntries: journal.ToArray(),
+                        NextEntryId: journal.Length < intent.EntryIds.Length
+                            ? intent.EntryIds[journal.Length] : null));
                 }
                 finally { CryptographicOperations.ZeroMemory(intent.Content); }
             }
@@ -171,6 +189,102 @@ public sealed class VaultHybridFileWorkspace(
         finally
         {
             foreach (var queued in entries)
+                CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+        }
+    }
+
+    /// <summary>
+    /// Read-only eligibility inspection for the FIRST immutable file entry.
+    /// Fee estimates are indicative; they are NOT approval snapshots and
+    /// must never authorize an upload transaction.
+    /// </summary>
+    public sealed record PublicationPreview(
+        string MutationId, string NextLedgerRecordId, bool IsManifest,
+        int EntryCount, int RemainingEntries, LedgerCostPreview Cost,
+        string Explanation);
+
+    public async Task<PublicationPreview> PreviewFirstEntryAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        var (account, scope) = RequireScope();
+        var epoch = sessions.Epoch;
+        if (!ledger.IsConnected)
+            throw new InvalidOperationException("Connect the matching HD Stellar root first.");
+        var info = await ledger.InspectAccountInfoAsync();
+        if (info.RootAccountId != account)
+            throw new UnauthorizedAccessException("The connected HD root differs from this queue.");
+        var queueReview = await queue.PrepareReviewAsync(account, scope, ct);
+        if (queueReview.NeedsReconciliation != 0 || queueReview.Conflicts != 0)
+            throw new InvalidOperationException("Reconcile earlier uncertain submissions first.");
+        var item = queueReview.Ready.SingleOrDefault(x =>
+            x.Id == mutationId && x.Kind == VaultMutationKind.UploadFile);
+        if (item is null || item.State != VaultSyncState.Pending ||
+            item.TransactionHash is not null ||
+            item.SignedFileEntries is { Length: > 0 })
+            throw new InvalidOperationException("File is not an untouched, dependency-ready local upload.");
+
+        var all = await queue.ReviewAllAsync(account, scope, ct);
+        try
+        {
+            var intent = DeserializeAndValidate(item);
+            try
+            {
+                if (intent.FolderId is not null &&
+                    all.Any(x => x.EntityId.Equals(intent.FolderId,
+                        StringComparison.OrdinalIgnoreCase) &&
+                        x.Kind != VaultMutationKind.CreateFolder))
+                    throw new InvalidOperationException("Local parent is not a folder.");
+                var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                    intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                var remote = await ledger.ReadAsync();
+                if (remote.Any(x => x is null || x.Id is not { Length: 16 } ||
+                    !x.Id.All(Uri.IsHexDigit)) ||
+                    remote.GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                        .Any(g => g.Count() != 1))
+                    throw new InvalidDataException("Remote record inventory is ambiguous.");
+                var remoteIds = remote.Select(x => x.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (intent.EntryIds.Any(remoteIds.Contains))
+                    throw new InvalidOperationException("A file part or manifest ID already exists on Stellar.");
+                if (intent.FolderId is not null &&
+                    !remote.Any(x => x.Id.Equals(intent.FolderId,
+                        StringComparison.OrdinalIgnoreCase) && x.IsFolder))
+                    throw new InvalidOperationException("Parent folder is not present on the current ledger.");
+                var first = plan.Entries[0];
+                var cost = await ledger.EstimateAsync(first.Draft, first.Id);
+                var after = await queue.ReviewAllAsync(account, scope, ct);
+                try
+                {
+                    var current = after.SingleOrDefault(x => x.Id == mutationId);
+                    if (current is null || current.State != VaultSyncState.Pending ||
+                        current.TransactionHash is not null ||
+                        current.SignedFileEntries is { Length: > 0 } ||
+                        !item.EncryptedPayload.AsSpan().SequenceEqual(current.EncryptedPayload) ||
+                        !item.DependsOn.SequenceEqual(current.DependsOn, StringComparer.Ordinal) ||
+                        sessions.Epoch != epoch ||
+                        !sessions.IsUnlocked || sessions.ActiveAccountId != account ||
+                        networks.CredentialKey(account) != scope || !ledger.IsConnected)
+                        throw new InvalidOperationException("File, session or network changed during preview.");
+                    var finalInfo = await ledger.InspectAccountInfoAsync();
+                    if (finalInfo.RootAccountId != account)
+                        throw new UnauthorizedAccessException("Connected HD root changed during preview.");
+                    return new(mutationId, first.Id, plan.Entries.Count == 1,
+                        plan.Entries.Count, plan.Entries.Count, cost,
+                        "Read-only estimate for the FIRST file transaction only. " +
+                        "Full multipart fees, durable approval and broadcast are not implemented. " +
+                        "No transaction was submitted.");
+                }
+                finally
+                {
+                    foreach (var queued in after)
+                        CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+                }
+            }
+            finally { CryptographicOperations.ZeroMemory(intent.Content); }
+        }
+        finally
+        {
+            foreach (var queued in all)
                 CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
         }
     }
