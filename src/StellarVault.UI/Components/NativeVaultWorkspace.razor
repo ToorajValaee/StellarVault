@@ -290,9 +290,10 @@ else
                 }
                 else
                 {
-                    <span class="sv-native-command-hint">Connect your Stellar wallet above to browse securely.</span>
-                    <button type="button" class="sv-native-command" disabled="@_ledgerBusy"
-                            @onclick="CheckRuntimeAsync">Check runtime</button>
+                    <span class="sv-native-command-hint">Connect to view your on-chain records.</span>
+                    <button type="button" class="sv-native-command primary"
+                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
+                            @onclick="ConnectLedgerAsync">Connect Stellar</button>
                 }
             }
             else if (Sessions.IsUnlocked)
@@ -311,7 +312,10 @@ else
             }
             else
             {
-                <span class="sv-native-command-hint">Unlock your encrypted device vault above to continue.</span>
+                <span class="sv-native-command-hint">Unlock the device vault to access private records.</span>
+                <button type="button" class="sv-native-command primary"
+                        disabled="@(_busy || !_localConsent || _accountId.Length != 56 || string.IsNullOrWhiteSpace(_passphrase))"
+                        @onclick="UnlockVault">Unlock vault</button>
             }
         </div>
         <footer class="sv-native-footer">Vault content stays private until you approve a transaction.</footer>
