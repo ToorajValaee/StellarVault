@@ -8,6 +8,7 @@
 @inject VaultDeviceRetentionGate Retention
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultNativeForegroundLifecycle ForegroundLifecycle
+@inject VaultNativeNavigationState NativeNavigation
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IVaultNativeFileAccess NativeFiles
 @inject StellarLedgerUploadCoordinator UploadCoordinator
@@ -368,6 +369,16 @@ else
     {
         if (page is not ("stellar" or "local" or "sync")) return;
         _nativePage = page;
+        NativeNavigation.SetSecondaryDestination(page != "stellar");
+    }
+
+    private void OnAndroidBackRequested()
+    {
+        _ = InvokeAsync(() =>
+        {
+            NavigateNative("stellar");
+            StateHasChanged();
+        });
     }
     private void OpenSyncReview()
     {
@@ -1040,6 +1051,8 @@ else
     {
         Sessions.StateChanged += OnSessionChanged;
         ForegroundLifecycle.ForegroundLost += OnForegroundLost;
+        NativeNavigation.BackRequested += OnAndroidBackRequested;
+        NativeNavigation.SetSecondaryDestination(_nativePage != "stellar");
     }
 
     private void OnForegroundLost()
@@ -1047,6 +1060,7 @@ else
         // Immediately hide all native signer and unlocked record controls.
         // Queue reservations are durable: never resubmit an interrupted write.
         _foregroundRevoked = true;
+        NativeNavigation.Clear();
         _ = InvokeAsync(RevokeForegroundAsync);
     }
 
@@ -1134,6 +1148,8 @@ else
     {
         Sessions.StateChanged -= OnSessionChanged;
         ForegroundLifecycle.ForegroundLost -= OnForegroundLost;
+        NativeNavigation.BackRequested -= OnAndroidBackRequested;
+        NativeNavigation.Clear();
         StorageMode.Reset();
         Retention.Reset();
         _ledgerMnemonic = string.Empty;
