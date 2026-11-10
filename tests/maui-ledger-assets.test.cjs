@@ -55,3 +55,15 @@ test('native scripts appear before the Blazor WebView initialization', () => {
     assert.ok(host.indexOf('src="' + script + '"') < bootstrap, 'Late script: ' + script);
   }
 });
+
+test('native entrypoint mounts the dedicated native workspace with startup fallback', () => {
+  const root = fs.readFileSync(path.join(maui, 'AppRoot.razor'), 'utf8');
+  const page = fs.readFileSync(path.join(maui, 'MainPage.xaml'), 'utf8');
+  assert.match(root, /<NativeVaultWorkspace\s*\/>/);
+  assert.doesNotMatch(root, /<VaultHome\b/);
+  assert.match(page, /Selector="#app"/);
+  assert.match(page, /ComponentType="\{x:Type local:AppRoot\}"/);
+  assert.match(host, /_framework\/blazor\.webview\.js/);
+  assert.match(host, /data-startup-detail/);
+  assert.match(host, /stellarVaultShowStartupFailure/);
+});
