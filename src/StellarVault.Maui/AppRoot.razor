@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using StellarVault.UI.Components
 @using Microsoft.Maui.Devices
+@inject NativeStartupStatus Startup
 
 <ErrorBoundary>
     <ChildContent>
@@ -16,6 +17,11 @@
 </ErrorBoundary>
 
 @code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) Startup.NotifyFirstRender();
+    }
+
     private static string NativePlatform => DeviceInfo.Platform == DevicePlatform.WinUI ? "windows" :
         DeviceInfo.Platform == DevicePlatform.iOS ? "ios" :
         DeviceInfo.Platform == DevicePlatform.MacCatalyst ? "maccatalyst" : "android";
