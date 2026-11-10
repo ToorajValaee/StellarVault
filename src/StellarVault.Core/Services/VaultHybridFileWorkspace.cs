@@ -13,7 +13,8 @@ public sealed class VaultHybridFileWorkspace(
     VaultSessionManager sessions,
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
-    IStellarLedgerRecords ledger)
+    IStellarLedgerRecords ledger,
+    IVaultLedgerEvidenceProvider evidenceProvider)
 {
     private const int IntentVersion = 1;
 
@@ -378,6 +379,156 @@ public sealed class VaultHybridFileWorkspace(
         {
             foreach (var queued in entries)
                 CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+        }
+    }
+
+    /// <summary>
+    /// Authenticates each durable signed upload checkpoint through the existing
+    /// root/HD-bound historical ciphertext and transaction verifier. No state
+    /// transitions, fee approvals, signing or retransmissions are permitted.
+    /// A missing checkpoint is UNKNOWN, never evidence of failed broadcast.
+    /// </summary>
+    public sealed record FileHistoricalEntryEvidence(
+        string LedgerRecordId, string? TransactionHash, bool Verified,
+        string Explanation);
+
+    public sealed record FileHistoricalReview(
+        string MutationId, int TotalEntries, int VerifiedEntries,
+        bool AllEntriesVerified, IReadOnlyList<FileHistoricalEntryEvidence> Entries,
+        string Explanation);
+
+    public async Task<FileHistoricalReview> ReviewHistoricalReceiptsAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        var (account, scope) = RequireScope();
+        var epoch = sessions.Epoch;
+        if (!ledger.IsConnected)
+            throw new InvalidOperationException("Connect the matching HD Stellar root first.");
+        var info = await ledger.InspectAccountInfoAsync();
+        RequireSameScope(account, scope);
+        if (sessions.Epoch != epoch || info.RootAccountId != account)
+            throw new UnauthorizedAccessException("Connected root or vault session changed.");
+
+        var queued = await queue.ReviewAllAsync(account, scope, ct);
+        try
+        {
+            var entry = queued.SingleOrDefault(x =>
+                x.Id == mutationId && x.Kind == VaultMutationKind.UploadFile)
+                ?? throw new KeyNotFoundException("Staged file upload does not exist.");
+            var intent = DeserializeAndValidate(entry);
+            try
+            {
+                var journal = entry.SignedFileEntries ?? [];
+                if (journal.Length > intent.EntryIds.Length ||
+                    (entry.State == VaultSyncState.Pending && journal.Length > 0) ||
+                    journal.Where((x, index) => x is null ||
+                        !string.Equals(x.LedgerRecordId, intent.EntryIds[index],
+                            StringComparison.OrdinalIgnoreCase) ||
+                        x.TransactionHash is not { Length: 64 } ||
+                        !x.TransactionHash.All(Uri.IsHexDigit)).Any() ||
+                    journal.Select(x => x.TransactionHash)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.Length)
+                    throw new InvalidDataException("Signed upload journal identity or ordering is invalid.");
+
+                var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                    intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                var evidence = new List<FileHistoricalEntryEvidence>(plan.Entries.Count);
+                for (int index = 0; index < plan.Entries.Count; index++)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var part = plan.Entries[index];
+                    if (index >= journal.Length)
+                    {
+                        evidence.Add(new(part.Id, null, false,
+                            "No signed checkpoint. Submission status is unknown; do not retry."));
+                        continue;
+                    }
+
+                    var signed = journal[index];
+                    byte[] payload = JsonSerializer.SerializeToUtf8Bytes(part.Draft);
+                    try
+                    {
+                        // This temporary CREATE-shaped proof request is read-only.
+                        // The provider authenticates historical ciphertext, the
+                        // HD source lineage and the exact draft against this hash.
+                        // It is never inserted into the queue or marked Confirmed.
+                        var proofRequest = entry with
+                        {
+                            Kind = VaultMutationKind.CreateRecord,
+                            EntityId = part.Id,
+                            EncryptedPayload = payload,
+                            State = VaultSyncState.Uncertain,
+                            TransactionHash = signed.TransactionHash,
+                            SignedFileEntries = null
+                        };
+                        VaultLedgerEvidence? proof;
+                        try
+                        {
+                            proof = await evidenceProvider.InspectAsync(
+                                proofRequest, signed.TransactionHash, ct);
+                        }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                        catch (Exception) { proof = null; }
+                        var verified = proof is not null &&
+                            proof.TransactionSucceeded && proof.RecordLinkedToTransaction &&
+                            proof.AccountId == account && proof.NetworkId == scope &&
+                            string.Equals(proof.TransactionHash, signed.TransactionHash,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(proof.RecordId, part.Id,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            proof.Record is { } record &&
+                            string.Equals(record.Id, part.Id, StringComparison.OrdinalIgnoreCase) &&
+                            record.Title == part.Draft.Title &&
+                            record.Content == part.Draft.Content &&
+                            record.FolderId == part.Draft.FolderId &&
+                            record.IsFolder == part.Draft.IsFolder &&
+                            record.UserName == part.Draft.UserName &&
+                            record.Url == part.Draft.Url &&
+                            record.Notes == part.Draft.Notes &&
+                            (record.Tags ?? []).SequenceEqual(part.Draft.Tags ?? [], StringComparer.Ordinal);
+                        evidence.Add(new(part.Id, signed.TransactionHash, verified,
+                            verified
+                                ? "Signed transaction and exact record payload authenticated historically."
+                                : "Historical signed transaction/record proof unavailable or mismatched. Do not retry."));
+                    }
+                    finally { CryptographicOperations.ZeroMemory(payload); }
+                }
+
+                var latest = await queue.ReviewAllAsync(account, scope, ct);
+                try
+                {
+                    var current = latest.SingleOrDefault(x => x.Id == mutationId);
+                    if (current is null || current.State != entry.State ||
+                        !current.EncryptedPayload.AsSpan().SequenceEqual(entry.EncryptedPayload) ||
+                        !(current.SignedFileEntries ?? []).SequenceEqual(journal) ||
+                        !current.DependsOn.SequenceEqual(entry.DependsOn, StringComparer.Ordinal) ||
+                        sessions.Epoch != epoch)
+                        throw new InvalidOperationException("File journal or vault session changed during historical review.");
+                    RequireSameScope(account, scope);
+                    var finalInfo = await ledger.InspectAccountInfoAsync();
+                    if (finalInfo.RootAccountId != account)
+                        throw new UnauthorizedAccessException("Connected HD root changed during review.");
+                    var verifiedCount = evidence.Count(x => x.Verified);
+                    var allVerified = journal.Length == plan.Entries.Count &&
+                        verifiedCount == plan.Entries.Count;
+                    return new FileHistoricalReview(mutationId, plan.Entries.Count,
+                        verifiedCount, allVerified, evidence,
+                        allVerified
+                            ? "All signed upload entries have independent historical evidence. This review does NOT confirm the queue or authorize another transaction."
+                            : "Incomplete historical evidence. Preserve the encrypted queue; do not retry or resume publishing.");
+                }
+                finally
+                {
+                    foreach (var item in latest)
+                        CryptographicOperations.ZeroMemory(item.EncryptedPayload);
+                }
+            }
+            finally { CryptographicOperations.ZeroMemory(intent.Content); }
+        }
+        finally
+        {
+            foreach (var item in queued)
+                CryptographicOperations.ZeroMemory(item.EncryptedPayload);
         }
     }
 
