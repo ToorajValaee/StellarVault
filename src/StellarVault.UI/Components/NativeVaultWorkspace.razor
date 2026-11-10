@@ -329,7 +329,7 @@ else
                 @if (_nativePage == "local")
                 {
                     <button type="button" class="sv-native-command primary"
-                            @onclick='() => NavigateNative("sync")'>Review sync queue</button>
+                            @onclick="OpenSyncReview">Review sync queue</button>
                 }
                 else
                 {
@@ -360,6 +360,11 @@ else
     {
         if (page is not ("stellar" or "local" or "sync")) return;
         _nativePage = page;
+    }
+    private void OpenSyncReview()
+    {
+        _syncMode = "review";
+        NavigateNative("sync");
     }
 
     private string _nativeMode = "browse";
