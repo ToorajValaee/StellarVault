@@ -278,6 +278,42 @@ else
     </section>
           </div>
         </main>
+        <div class="sv-native-commandbar" aria-label="Quick actions">
+            @if (_nativePage == "stellar")
+            {
+                @if (Ledger.IsConnected)
+                {
+                    <button type="button" class="sv-native-command primary"
+                            disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect</button>
+                }
+                else
+                {
+                    <span class="sv-native-command-hint">Connect your Stellar wallet above to browse securely.</span>
+                    <button type="button" class="sv-native-command" disabled="@_ledgerBusy"
+                            @onclick="CheckRuntimeAsync">Check runtime</button>
+                }
+            }
+            else if (Sessions.IsUnlocked)
+            {
+                @if (_nativePage == "local")
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("sync")'>Review sync queue</button>
+                }
+                else
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("local")'>Open local vault</button>
+                }
+                <button type="button" class="sv-native-command" @onclick="LockVault">Lock</button>
+            }
+            else
+            {
+                <span class="sv-native-command-hint">Unlock your encrypted device vault above to continue.</span>
+            }
+        </div>
         <footer class="sv-native-footer">Vault content stays private until you approve a transaction.</footer>
     </div>
 }
