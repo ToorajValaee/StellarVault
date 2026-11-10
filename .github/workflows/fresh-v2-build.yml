@@ -92,7 +92,7 @@ jobs:
           sudo rm -rf /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
           df -h /
       - name: Install Android MAUI workload
-        run: dotnet workload install maui-android --skip-manifest-update
+        run: dotnet workload install maui-android
       - name: Compile native Android preview
         shell: bash
         run: |
