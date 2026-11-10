@@ -9,9 +9,10 @@ The installed app should never look like a vertically concatenated website. It p
 - Top app title and current connection state, with secure-looking modern cards and sensible spacing
 - A **real independently scrollable content viewport** between the header, sticky quick-action strip, and persistent bottom navigation
 - 44–48 px or larger touch targets; 16 px text inputs to reduce WebView zoom
-- Keyboard-open long forms must scroll to their active field; navigation and quick actions must not cover inputs
+- Keyboard-open long forms must scroll to their active field; the Android activity explicitly requests `SoftInput.AdjustResize` so the WebView gets a resized viewport
 - Unlock and connect are available as bottom shortcuts, but disabled until explicit prerequisites exist
 - Quick actions never sign/publish without the existing transaction approval flow
+- Android system Back returns from My vault / Sync to Stellar; it never approves a transaction
 - Account switch and app background events clear sensitive state; failed signer disconnect remains locked
 - Landscape and 1024px+ tablets use the available width and a left navigation rail
 
@@ -23,6 +24,7 @@ The installed app should never look like a vertically concatenated website. It p
 
 ### Windows
 - The app opens in a resizable ~1180×800 desktop-sized window with 720×540 minimum
+- The Windows-only CI pipeline publishes an unpackaged preview folder and archives it for desktop visual testing; distribution signing is separate
 - A left navigation rail, full-height independently scrollable content, desktop card density and bottom command strip
 - Keyboard tab sequence, scrolling wheel, resizing, scaling at 125–200%, and screen reader semantics must be tested on a Windows build
 - No WinUI-native controls or Windows WebView2 runtime behavior can be certified by Linux Android CI
@@ -42,6 +44,7 @@ The installed app should never look like a vertically concatenated website. It p
 - [ ] Switch between record/draft and staging/review segments; only one task editor visible
 - [ ] Foreground loss locks both local data key and WebView signer
 - [ ] Validate safe-area padding on cutout/gesture-navigation devices
+- [ ] Android system Back returns to Stellar without dropping the app or changing queue/submission state
 - [ ] Windows: window resizing and DPI scaling retain sidebar/scroll access
 - [ ] Testnet manual review, fee approvals, interrupts and historical verification still behave as before
 - [ ] Accessibility: focus outlines, contrast and screen reader labeling verified on each platform
