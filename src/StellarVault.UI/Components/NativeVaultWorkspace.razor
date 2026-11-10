@@ -223,15 +223,43 @@ else
                 <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
                 @if (_nativePage == "local")
                 {
-                    <VaultRecordWorkspaceView />
-                    <VaultHybridDraftEditor />
+                    <nav class="sv-native-segments" aria-label="Local vault views">
+                        <button type="button" class="@(_localMode == "records" ? "selected" : "")"
+                                aria-pressed="@(_localMode == "records")"
+                                @onclick='() => _localMode = "records"'>Device records</button>
+                        <button type="button" class="@(_localMode == "drafts" ? "selected" : "")"
+                                aria-pressed="@(_localMode == "drafts")"
+                                @onclick='() => _localMode = "drafts"'>Offline drafts</button>
+                    </nav>
+                    @if (_localMode == "records")
+                    {
+                        <VaultRecordWorkspaceView />
+                    }
+                    else
+                    {
+                        <VaultHybridDraftEditor />
+                    }
                 }
                 else
                 {
                     <p class="advanced-help">Hybrid Sync includes encrypted records and folders.
                         File synchronization is intentionally unavailable.</p>
-                    <VaultHybridRemoteChanges />
-                    <VaultHybridSyncReview />
+                    <nav class="sv-native-segments" aria-label="Hybrid sync views">
+                        <button type="button" class="@(_syncMode == "changes" ? "selected" : "")"
+                                aria-pressed="@(_syncMode == "changes")"
+                                @onclick='() => _syncMode = "changes"'>Stage changes</button>
+                        <button type="button" class="@(_syncMode == "review" ? "selected" : "")"
+                                aria-pressed="@(_syncMode == "review")"
+                                @onclick='() => _syncMode = "review"'>Review &amp; sync</button>
+                    </nav>
+                    @if (_syncMode == "changes")
+                    {
+                        <VaultHybridRemoteChanges />
+                    }
+                    else
+                    {
+                        <VaultHybridSyncReview />
+                    }
                 }
             }
             else
@@ -325,6 +353,8 @@ else
 @code {
     [Parameter] public string HostPlatform { get; set; } = "Android";
     private string _nativePage = "stellar";
+    private string _localMode = "records";
+    private string _syncMode = "changes";
 
     private void NavigateNative(string page)
     {
