@@ -8,6 +8,22 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public static class VaultQueuedCreatePolicy
 {
+    /// <summary>
+    /// Resolve a folder referenced by a local child. A confirmed original
+    /// CreateFolder remains a valid dependency target for children created
+    /// before it was published. Later confirmed UPDATE/DELETE entries for
+    /// that same entity are historical mutations, not second parent folders.
+    /// Unresolved changes still participate and block ambiguous publishing.
+    /// </summary>
+    public static VaultPendingMutation[] ParentCandidates(
+        IReadOnlyList<VaultPendingMutation> all, string parentEntityId,
+        string? excludedMutationId = null) =>
+        all.Where(x => x.Id != excludedMutationId &&
+            x.EntityId.Equals(parentEntityId, StringComparison.OrdinalIgnoreCase) &&
+            (x.State is not (VaultSyncState.Confirmed or VaultSyncState.Failed) ||
+             x.Kind == VaultMutationKind.CreateFolder &&
+             x.State == VaultSyncState.Confirmed)).ToArray();
+
     public static string[] Problems(VaultPendingMutation item,
         IReadOnlyList<VaultPendingMutation> all)
     {
@@ -52,8 +68,7 @@ public static class VaultQueuedCreatePolicy
                 problems.Add("invalid-parent-record-id");
             if (string.Equals(parent, item.EntityId, StringComparison.OrdinalIgnoreCase))
                 problems.Add("self-parent-folder");
-            var matches = all.Where(x => x.Id != item.Id &&
-                string.Equals(x.EntityId, parent, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var matches = ParentCandidates(all, parent, item.Id);
             if (matches.Length > 1)
                 problems.Add("ambiguous-local-parent-id");
             else
