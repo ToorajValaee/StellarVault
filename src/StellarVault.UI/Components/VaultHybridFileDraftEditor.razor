@@ -126,9 +126,40 @@
                         }
                         <p class="terminal-alert warning" role="status">@observation.Explanation</p>
                     }
-                    <p class="advanced-help">Manifest-last publication requires separate
-                        per-part approval, signed-hash checkpoints, and independent verification.
-                        File publication is NOT yet enabled.</p>
+                    <p class="advanced-help">Each upload entry needs a separate fee approval.
+                        Earlier entries must have matching ledger contents and independently
+                        authenticated historical transaction evidence before the next entry
+                        can be approved. Never resubmit an unresolved entry.</p>
+                    @if (item.NextEntryId is not null &&
+                        item.State is VaultSyncState.Pending or VaultSyncState.Uncertain)
+                    {
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="() => QuoteNextAsync(item)">
+                            REVIEW NEXT PAID FILE ENTRY
+                        </button>
+                    }
+                    @if (_fileApproval is { } fileQuote &&
+                        fileQuote.MutationId == item.MutationId)
+                    {
+                        <p role="status">
+                            @(fileQuote.IsManifest ? "FINAL FILE MANIFEST" : "FILE PART") ·
+                            <code>@fileQuote.LedgerRecordId</code> ·
+                            Fee ceiling: @fileQuote.FeeXlm XLM ·
+                            Peak reserve ceiling: @fileQuote.PeakReserveXlm XLM
+                        </p>
+                        <label class="terminal-label">
+                            <input type="checkbox" @bind="_fileExplicitApproval" disabled="@_busy" />
+                            I approve this ONE paid Stellar transaction and understand
+                            that an uncertain outcome must not be retried.
+                        </label>
+                        <button type="button" class="pixel-button primary"
+                                disabled="@(_busy || !_fileExplicitApproval)"
+                                @onclick="PublishNextAsync">
+                            SIGN AND SUBMIT THIS FILE ENTRY
+                        </button>
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="ClearFileApproval">CANCEL APPROVAL</button>
+                    }
                     @if (item.State == VaultSyncState.Pending && item.SignedEntries is not { Count: > 0 })
                     {
                         <button type="button" class="pixel-button compact"
@@ -167,6 +198,13 @@
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, VaultHybridFileWorkspace.FileHistoricalReview> _histories =
         new(StringComparer.Ordinal);
+    private VaultHybridFileWorkspace.FileEntryApproval? _fileApproval;
+    private bool _fileExplicitApproval;
+    private void ClearFileApproval()
+    {
+        _fileApproval = null;
+        _fileExplicitApproval = false;
+    }
     private string _folderId = "";
     private string? _status;
     private bool _busy;
@@ -191,6 +229,7 @@
         _previews.Clear();
         _observations.Clear();
         _histories.Clear();
+        ClearFileApproval();
         _status = null;
         if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
         {
@@ -288,6 +327,7 @@
             _previews.Clear();
             _observations.Clear();
             _histories.Clear();
+        ClearFileApproval();
             _status = "Encrypted file queue refreshed.";
         }
         catch (Exception) { _status = "Cannot read encrypted file queue. Preserve the local data and investigate."; }
@@ -318,6 +358,60 @@
                     "pending parent, queue conflicts, or remote ID collisions. No transaction was sent.";
         }
         finally { _busy = false; }
+    }
+
+    private async Task QuoteNextAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.IsCorrupt || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        ClearFileApproval();
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        try
+        {
+            var quote = await Files.QuoteNextFileEntryAsync(item.MutationId);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch)
+            {
+                _fileApproval = quote;
+                _status = "Only the displayed file entry is quoted. Confirm to submit one paid transaction.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Cannot quote next file entry. Verify earlier signed receipts, current ledger contents, local dependencies and queue conflicts. No transaction sent.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishNextAsync()
+    {
+        if (_busy || !_fileExplicitApproval || _fileApproval is null ||
+            !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        var quote = _fileApproval;
+        ClearFileApproval();
+        _busy = true;
+        _status = null;
+        _previews.Clear();
+        _observations.Clear();
+        _histories.Clear();
+        try
+        {
+            var outcome = await Files.PublishApprovedFileEntryAsync(quote, true);
+            _status = outcome.Explanation +
+                " Durable signed hash: " + (outcome.TransactionHash ?? "NOT RECORDED") +
+                ". Refresh and independently verify before considering another entry.";
+        }
+        catch (Exception)
+        {
+            _status = "File upload may have been reserved, signed or broadcast. Inspect the encrypted queue and historical ledger evidence. DO NOT RETRY.";
+        }
+        finally
+        {
+            try { _items = await Files.ListAsync(); }
+            catch { _items = []; _status += " Encrypted queue could not be read; preserve local storage."; }
+            _busy = false;
+        }
     }
 
     private async Task ReviewHistoryAsync(VaultHybridFileWorkspace.FileDraftItem item)
@@ -377,8 +471,9 @@
             await Files.DiscardAsync(item.MutationId);
             _items = await Files.ListAsync();
             _previews.Clear();
-        _observations.Clear();
-        _histories.Clear();
+            _observations.Clear();
+            _histories.Clear();
+            ClearFileApproval();
             _status = "Unsubmitted encrypted file draft discarded. No Stellar operation occurred.";
         }
         catch (Exception)
