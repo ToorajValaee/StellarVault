@@ -7,12 +7,23 @@
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
 @inject VaultNetworkSelection NetworkSelection
+@inject VaultNativeForegroundLifecycle ForegroundLifecycle
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IVaultNativeFileAccess NativeFiles
 @inject StellarLedgerUploadCoordinator UploadCoordinator
 @inject IStellarUploadCheckpointStore UploadCheckpoints
 @implements IAsyncDisposable
 
+@if (_foregroundRevoked)
+{
+    <section class="terminal-panel" role="alert">
+        <h2>NATIVE SESSION LOCKED</h2>
+        <p>StellarVault left the foreground. Encryption and signing credentials are being
+           cleared. If this screen remains, close and reopen the app before reconnecting.</p>
+    </section>
+}
+else
+{
     <section class="native-preview sv-vault-data" aria-labelledby="native-preview-title">
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
             <div class="panel-heading"><div><div class="panel-kicker">SECURE ACCESS // STELLAR IDENTITY</div><h2>OPEN YOUR VAULT</h2></div><span class="step-led">01</span></div>
@@ -216,7 +227,7 @@
             <p role="status" aria-live="polite">@_message</p>
         }
     </section>
-
+}
 
 @code {
     private string _nativeMode = "browse";
@@ -878,7 +889,51 @@
     private string? _message;
     private bool _busy;
 
-    protected override void OnInitialized() => Sessions.StateChanged += OnSessionChanged;
+    private bool _foregroundRevoked;
+
+    protected override void OnInitialized()
+    {
+        Sessions.StateChanged += OnSessionChanged;
+        ForegroundLifecycle.ForegroundLost += OnForegroundLost;
+    }
+
+    private void OnForegroundLost()
+    {
+        // Immediately hide all native signer and unlocked record controls.
+        // Queue reservations are durable: never resubmit an interrupted write.
+        _foregroundRevoked = true;
+        _ = InvokeAsync(RevokeForegroundAsync);
+    }
+
+    private async Task RevokeForegroundAsync()
+    {
+        _ledgerMnemonic = string.Empty;
+        _passphrase = string.Empty;
+        _localConsent = false;
+        StorageMode.Reset();
+        Retention.Reset();
+        Workflow.Lock();
+        ClearLedgerView();
+        var disconnected = !Ledger.IsConnected;
+        try
+        {
+            if (!disconnected) await Ledger.DisconnectAsync();
+            disconnected = true;
+        }
+        catch
+        {
+            // A failed JS cleanup is not an unlocked state: leave a fail-closed
+            // screen requiring full native restart instead of offering signing.
+        }
+        finally
+        {
+            _runtimeReady = null;
+            _ledgerMessage = disconnected ? "Signing session cleared." :
+                "Signer cleanup failed. Restart the application.";
+            _foregroundRevoked = !disconnected;
+            StateHasChanged();
+        }
+    }
 
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
 
@@ -933,6 +988,7 @@
     public async ValueTask DisposeAsync()
     {
         Sessions.StateChanged -= OnSessionChanged;
+        ForegroundLifecycle.ForegroundLost -= OnForegroundLost;
         StorageMode.Reset();
         Retention.Reset();
         _ledgerMnemonic = string.Empty;
