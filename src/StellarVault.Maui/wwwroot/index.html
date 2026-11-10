@@ -18,27 +18,50 @@
     <a href="." style="color:#fff">RELOAD</a>
     <button type="button" class="dismiss" aria-label="Dismiss error">×</button>
   </div>
-  <!-- Shared PWA Stellar ledger runtime. Signing remains disabled in MAUI until
-       a verified .NET adapter and native session lifecycle are implemented. -->
-  <script src="js/vendor/stellar-sdk.min.js"></script>
-  <script src="js/bip39-english.js"></script>
-  <script src="js/hd-keys.js"></script>
-  <script src="js/vault-v2-mnemonic.js"></script>
-  <script src="js/vault-v2-network.js"></script>
-  <script src="js/hd-registry.js"></script>
-  <script src="js/vault-v2-chain.js"></script>
-  <script src="js/ledger-compat/hd-encryption.js"></script>
-  <script src="js/ledger-compat/hd-allocation-preflight.js"></script>
-  <script src="js/ledger-compat/hd-allocator.js"></script>
-  <script src="js/ledger-compat/hd-sponsorship.js"></script>
-  <script src="js/ledger-compat/hd-treasury.js"></script>
-  <script src="js/ledger-compat/hd-fee-bump.js"></script>
-  <script src="js/ledger-compat/hd-discovery.js"></script>
-  <script src="js/ledger-compat/hd-bootstrap.js"></script>
-  <script src="js/ledger-compat/app.js"></script>
+  <!-- The native interface starts independently of ledger assets.
+       No BIP-39 or signer code is required to display the first screen. -->
   <script>
-    // A credential-free preflight. Never derive keys, sign or submit here.
+    // Native-first startup: the hosted Blazor UI must render before the heavy
+    // Stellar SDK / HD runtime. These scripts are loaded only on demand,
+    // sequentially, so a missing runtime asset never blocks the whole app.
+    // This list is local, packaged with the APK; no remote code is fetched.
+    const nativeLedgerScripts = [
+      "js/vendor/stellar-sdk.min.js",
+      "js/bip39-english.js",
+      "js/hd-keys.js",
+      "js/vault-v2-mnemonic.js",
+      "js/vault-v2-network.js",
+      "js/hd-registry.js",
+      "js/vault-v2-chain.js",
+      "js/ledger-compat/hd-encryption.js",
+      "js/ledger-compat/hd-allocation-preflight.js",
+      "js/ledger-compat/hd-allocator.js",
+      "js/ledger-compat/hd-sponsorship.js",
+      "js/ledger-compat/hd-treasury.js",
+      "js/ledger-compat/hd-fee-bump.js",
+      "js/ledger-compat/hd-discovery.js",
+      "js/ledger-compat/hd-bootstrap.js",
+      "js/ledger-compat/app.js"
+];
+    let nativeLedgerLoad = null;
     window.stellarVaultNativeRuntime = Object.freeze({
+      load() {
+        if (nativeLedgerLoad) return nativeLedgerLoad;
+        nativeLedgerLoad = (async () => {
+          for (const source of nativeLedgerScripts) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = source;
+              script.async = false;
+              script.onload = resolve;
+              script.onerror = () => reject(new Error('Bundled native ledger resource unavailable'));
+              document.body.appendChild(script);
+            });
+          }
+          return true;
+        })();
+        return nativeLedgerLoad;
+      },
       async inspect() {
         const sdk = window.StellarSdk;
         let cryptoReady = false;
