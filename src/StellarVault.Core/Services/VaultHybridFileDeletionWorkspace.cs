@@ -189,10 +189,14 @@ public sealed class VaultHybridFileDeletionWorkspace(
     {
         var (account, scope, epoch) = RequireScope();
         var remote = await ReadBoundAsync(account, scope, epoch, ct);
+        // Return only complete, independently decodable file manifests.
+        // Never offer a malformed, missing or shared chunk collection for deletion.
         return remote.Where(x => !x.IsFolder && StellarLedgerFileProtocol.IsFile(x))
-            .Select(x => new RemoteFile(x.Id, StellarLedgerFileProtocol.FileName(x),
-                x.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
-                    StringComparison.Ordinal) ? 1 : -1))
+            .Select(x =>
+            {
+                var snapshot = CaptureIntent(x, remote);
+                return new RemoteFile(x.Id, snapshot.FileName, snapshot.Entries.Length);
+            })
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -227,9 +231,22 @@ public sealed class VaultHybridFileDeletionWorkspace(
             if (payload.Length > 8 * 1024 * 1024)
                 throw new InvalidDataException("File deletion intent exceeds encrypted queue limit.");
             var latestRemote = await ReadBoundAsync(account, scope, epoch, ct);
+            // Re-capture the whole file relationship, not just previously
+            // known IDs: a new manifest may begin sharing one of these parts.
+            var latestFile = latestRemote.SingleOrDefault(x =>
+                x.Id.Equals(manifestId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("File was removed while staging deletion.");
+            var latestIntent = CaptureIntent(latestFile, latestRemote);
             var same = latestRemote.Count == remote.Count &&
+                latestIntent.Entries.Length == intent.Entries.Length &&
+                latestIntent.FileName == intent.FileName &&
+                latestIntent.Sha256 == intent.Sha256 &&
+                intent.Entries.Select(x => x.RecordId).SequenceEqual(
+                    latestIntent.Entries.Select(x => x.RecordId),
+                    StringComparer.OrdinalIgnoreCase) &&
                 intent.Entries.All(expected => latestRemote.Any(x => SameRecord(x, expected)));
-            if (!same) throw new InvalidOperationException("File changed while staging its deletion.");
+            if (!same) throw new InvalidOperationException(
+                "File, chunk ownership or ledger inventory changed while staging deletion.");
             var latestQueue = await queue.ReviewAllAsync(account, scope, ct);
             try
             {
@@ -298,10 +315,32 @@ public sealed class VaultHybridFileDeletionWorkspace(
                 ?? throw new KeyNotFoundException("File deletion draft not found.");
             var intent = ReadIntent(mutation);
             var remote = await ReadBoundAsync(account, scope, epoch, ct);
+            var latestManifest = remote.SingleOrDefault(x =>
+                x.Id.Equals(mutation.EntityId, StringComparison.OrdinalIgnoreCase));
+            // The ownership graph must remain exclusive, not merely each old
+            // record's content. A newly shared chunk makes deletion unsafe.
+            var ownershipUnchanged = false;
+            if (latestManifest is not null)
+            {
+                try
+                {
+                    var liveIntent = CaptureIntent(latestManifest, remote);
+                    ownershipUnchanged = liveIntent.FileName == intent.FileName &&
+                        liveIntent.Sha256 == intent.Sha256 &&
+                        liveIntent.Entries.Select(x => x.RecordId).SequenceEqual(
+                            intent.Entries.Select(x => x.RecordId),
+                            StringComparer.OrdinalIgnoreCase);
+                }
+                catch (Exception ex) when (ex is JsonException or InvalidDataException or
+                                           InvalidOperationException or FormatException)
+                {
+                    ownershipUnchanged = false;
+                }
+            }
             var matches = intent.Entries.Count(x => remote.Any(y => SameRecord(y, x)));
             var present = intent.Entries.Count(x => remote.Any(y =>
                 y.Id.Equals(x.RecordId, StringComparison.OrdinalIgnoreCase)));
-            var stillSafe = matches == intent.Entries.Length && present == matches;
+            var stillSafe = ownershipUnchanged && matches == intent.Entries.Length && present == matches;
             var latest = await queue.ReviewAllAsync(account, scope, ct);
             try
             {
