@@ -1,0 +1,38 @@
+name: MAUI Windows native preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/maui-windows-preview.yml'
+      - 'src/StellarVault.Maui/**'
+      - 'src/StellarVault.UI/**'
+      - 'src/StellarVault.Core/**'
+      - 'src/StellarVault.Pwa/LegacyLedger/**'
+      - 'src/StellarVault.Pwa/Services/**'
+      - 'src/StellarVault.Pwa/wwwroot/css/app.css'
+      - 'src/StellarVault.Pwa/wwwroot/js/**'
+
+jobs:
+  windows-preview:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Windows MAUI workload
+        shell: pwsh
+        run: dotnet workload install maui-windows
+      - name: Compile native Windows workspace
+        shell: pwsh
+        run: |
+          dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net10.0-windows10.0.19041.0 -c Release -p:WindowsPackageType=None -p:RuntimeIdentifierOverride=win-x64 --verbosity minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify unpackaged Windows executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem 'src/StellarVault.Maui/bin/Release/net10.0-windows10.0.19041.0' -Recurse -Filter 'StellarVault.Maui.exe' | Select-Object -First 1
+          if ($null -eq $exe) { throw 'The Windows MAUI executable was not generated.' }
+          Write-Host "Windows preview: $($exe.FullName)"
