@@ -67,3 +67,25 @@ test('native entrypoint mounts the dedicated native workspace with startup fallb
   assert.match(host, /data-startup-detail/);
   assert.match(host, /stellarVaultShowStartupFailure/);
 });
+
+test('MAUI renders platform-adaptive native shell with scrollable content and fixed actions', () => {
+  const workspace = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const appRoot = fs.readFileSync(path.join(maui, 'AppRoot.razor'), 'utf8');
+  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+  assert.match(appRoot, /HostPlatform="@NativePlatform"/);
+  assert.match(workspace, /class="sv-native-nav"/);
+  assert.match(workspace, /class="sv-native-scroll"/);
+  assert.match(workspace, /class="sv-native-commandbar"/);
+  for (const page of ['stellar', 'local', 'sync']) {
+    assert.ok(workspace.includes('NavigateNative("' + page + '")'),
+      'Missing navigation destination ' + page);
+  }
+  assert.ok(host.indexOf('href="native-app.css"') > host.indexOf('href="css/app.css"'),
+    'Native override must be loaded after web styling');
+  assert.match(nativeCss, /overflow-y:\s*auto/);
+  assert.match(nativeCss, /minmax\(0,\s*1fr\)/);
+  assert.match(nativeCss, /native-windows \.sv-native-nav/);
+  assert.match(nativeCss, /env\(safe-area-inset-bottom/);
+  assert.match(nativeCss, /\.sv-native-commandbar/);
+});
