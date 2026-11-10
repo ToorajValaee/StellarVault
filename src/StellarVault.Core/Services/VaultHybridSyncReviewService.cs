@@ -72,9 +72,9 @@ public sealed class VaultHybridSyncReviewService(
             if (!isCreate && !isRemote)
             {
                 details.Add(new(mutation.Id, mutation.Kind, mutation.Kind.ToString(),
-                    mutation.Kind == VaultMutationKind.UploadFile
-                        ? "Encrypted file intent is staged in the hybrid queue. Per-part approval, durable transaction checkpoints and manifest-last publication are not yet connected to this Sync coordinator."
-                        : "Requires a dedicated file deletion workflow; generic record mutation cannot be used."));
+                    mutation.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile
+                        ? "Hybrid files are disabled by product policy. Legacy file intents remain encrypted for read-only recovery; no publication is authorized."
+                        : "Unsupported mutation kind. No publication is authorized."));
                 continue;
             }
 
