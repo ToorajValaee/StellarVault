@@ -11,7 +11,8 @@ public sealed class VaultHybridSyncReviewService(
     VaultPendingMutationQueue queue,
     IStellarLedgerRecords ledger,
     VaultNetworkSelection networks,
-    VaultDeviceRetentionGate retention)
+    VaultDeviceRetentionGate retention,
+    VaultSessionManager sessions)
 {
     public sealed record Item(string MutationId, VaultMutationKind Kind, string Title,
         string Explanation, VaultSyncApprovalSnapshot? Quote = null);
@@ -25,6 +26,10 @@ public sealed class VaultHybridSyncReviewService(
         CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId)
+            throw new UnauthorizedAccessException(
+                "Unlock the matching encrypted vault before reviewing Hybrid Sync.");
+        var sessionEpoch = sessions.Epoch;
         var networkId = networks.CredentialKey(accountId);
         var selectedNetwork = networks.Network;
         var selectedPassphrase = networks.CustomPassphrase;
@@ -40,9 +45,21 @@ public sealed class VaultHybridSyncReviewService(
         IReadOnlyList<LedgerRecordItem>? remote = null;
         if (canEstimate)
         {
-            try { remote = await ledger.ReadAsync(); }
+            try
+            {
+                // A connected network is not sufficient: fee quoting requires
+                // the exact mnemonic-derived root corresponding to this queue.
+                var root = await ledger.InspectAccountInfoAsync();
+                if (root.RootAccountId != accountId)
+                    throw new UnauthorizedAccessException(
+                        "Signing HD root differs from the unlocked encrypted queue.");
+                remote = await ledger.ReadAsync();
+                var afterReadRoot = await ledger.InspectAccountInfoAsync();
+                if (afterReadRoot.RootAccountId != accountId)
+                    throw new UnauthorizedAccessException("Connected HD root changed during review.");
+            }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception) { canEstimate = false; }
+            catch (Exception) { canEstimate = false; remote = null; }
         }
         var all = await queue.ReviewAllAsync(accountId, networkId, ct);
 
@@ -142,7 +159,9 @@ public sealed class VaultHybridSyncReviewService(
                 var cost = mutation.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
                     ? await ledger.EstimateDeleteAsync(mutation.EntityId)
                     : await ledger.EstimateAsync(draft, isCreate ? null : mutation.EntityId);
-                if (networks.Network != selectedNetwork ||
+                if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId ||
+                    sessions.Epoch != sessionEpoch ||
+                    networks.Network != selectedNetwork ||
                     networks.CredentialKey(accountId) != networkId ||
                     networks.CustomPassphrase != selectedPassphrase ||
                     networks.CustomHorizonUrl != selectedEndpoint ||
@@ -167,11 +186,14 @@ public sealed class VaultHybridSyncReviewService(
 
         // A review never returns usable quotes after account/network context
         // changes, even if the selected network changed during a network call.
-        if (networks.Network != selectedNetwork ||
+        if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId ||
+            sessions.Epoch != sessionEpoch ||
+            networks.Network != selectedNetwork ||
             networks.CredentialKey(accountId) != networkId ||
             networks.CustomPassphrase != selectedPassphrase ||
             networks.CustomHorizonUrl != selectedEndpoint)
-            throw new InvalidOperationException("Selected network changed during hybrid review.");
+            throw new InvalidOperationException(
+                "Unlocked vault session or selected network changed during hybrid review.");
 
         return new(accountId, networkId, review, details, ledger.IsConnected,
             VaultHybridFolderSyncPlan.Build(all, review));
