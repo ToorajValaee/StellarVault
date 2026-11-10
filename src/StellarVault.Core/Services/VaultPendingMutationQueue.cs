@@ -132,6 +132,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
         var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
         return entries.Where(x => x.State == VaultSyncState.Pending &&
+            // DeleteFile is staged only until a dedicated multi-record
+            // tombstone journal and verifier are implemented.
+            x.Kind != VaultMutationKind.DeleteFile &&
             x.DependsOn is not null &&
             x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
                 dependency.State == VaultSyncState.Confirmed) &&
@@ -157,8 +160,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             var missing = dependencies.Where(id => !byId.ContainsKey(id)).ToArray();
             var waiting = dependencies.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
-            var problems = item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
-                ? VaultQueuedCreatePolicy.Problems(item, all) : [];
+            var problems = item.Kind == VaultMutationKind.DeleteFile
+                ? new[] { "File deletion publication requires a complete signed tombstone journal and recovery verifier." }
+                : item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                    ? VaultQueuedCreatePolicy.Problems(item, all) : [];
             if (problems.Length == 0 && missing.Length == 0 && waiting.Length == 0)
                 ready.Add(item);
             else
