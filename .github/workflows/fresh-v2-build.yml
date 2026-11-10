@@ -90,6 +90,12 @@ jobs:
         run: |
           set -o pipefail
           dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net10.0-android -c Release -p:AndroidPackageFormat=apk --verbosity normal 2>&1 | tee android-build.log
+      - name: Package Android MAUI preview APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellarvault-maui-android-preview
+          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
+          if-no-files-found: error
       - name: Upload Android build diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
