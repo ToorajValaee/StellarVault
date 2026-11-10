@@ -603,6 +603,65 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     }
 
     /// <summary>
+    /// CAS-reserve a pristine hybrid file upload. This does not sign or broadcast.
+    /// A reserved upload without a durable signed hash is still uncertain after
+    /// interruption; it must never be automatically retried.
+    /// </summary>
+    public async Task<VaultPendingMutation> ReserveFileUploadAsync(
+        VaultPendingMutation expected, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.Kind != VaultMutationKind.UploadFile ||
+            expected.State != VaultSyncState.Pending ||
+            expected.TransactionHash is not null ||
+            expected.SignedFileEntries is { Length: > 0 })
+            throw new InvalidOperationException("Only a pristine file draft may be reserved.");
+        var review = await PrepareReviewAsync(expected.AccountId, expected.NetworkId, ct);
+        if (review.NeedsReconciliation != 0 || review.Conflicts != 0 ||
+            !review.Ready.Any(x => x.Id == expected.Id))
+            throw new InvalidOperationException("File upload dependencies or earlier submissions are unresolved.");
+        var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+            expected.Id, ct) ?? throw new KeyNotFoundException("File upload missing.");
+        RequireScope(current, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(current, expected) ||
+            current.Kind != VaultMutationKind.UploadFile ||
+            current.State != VaultSyncState.Pending)
+            throw new InvalidOperationException("File upload changed before reservation.");
+        var reserved = current with { State = VaultSyncState.Submitting };
+        if (!await store.TryReplaceAsync(current, reserved, ct))
+            throw new InvalidOperationException("File reservation lost the durable CAS race.");
+        return reserved;
+    }
+
+    /// <summary>
+    /// An explicitly approved, independently verified file step can advance
+    /// from Uncertain to Submitting. This method never verifies receipts itself:
+    /// its caller MUST verify every existing signed hash and the current ledger
+    /// snapshot before invoking it. CAS prevents stale devices from advancing.
+    /// </summary>
+    public async Task<VaultPendingMutation> ReserveVerifiedNextFileEntryAsync(
+        VaultPendingMutation expected, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.Kind != VaultMutationKind.UploadFile ||
+            expected.State != VaultSyncState.Uncertain ||
+            expected.TransactionHash is not null ||
+            expected.SignedFileEntries is not { Length: > 0 } journal)
+            throw new InvalidOperationException("No prior signed file entry to continue.");
+        var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+            expected.Id, ct) ?? throw new KeyNotFoundException("File upload missing.");
+        RequireScope(current, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(current, expected))
+            throw new InvalidOperationException("File journal changed before continuation.");
+        var reserved = current with { State = VaultSyncState.Submitting };
+        if (!await store.TryReplaceAsync(current, reserved, ct))
+            throw new InvalidOperationException("File continuation lost durable CAS.");
+        return reserved;
+    }
+
+    /// <summary>
     /// The file publisher may checkpoint ONLY the next immutable entry of a
     /// reserved, encrypted UploadFile intent, in SVFILE publication order.
     /// The last entry is the manifest. No network write occurs here.
