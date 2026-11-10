@@ -183,19 +183,22 @@ html, body {
     .sv-native-shell .panel-heading { gap:8px; }
     .sv-native-shell .step-led { display:none; }
 }
-@media (min-width: 900px) {
+@media (min-width: 720px) {
     .sv-native-shell.native-windows,
     .sv-native-shell.native-winui,
-    .sv-native-shell.native-maccatalyst {
+    .sv-native-shell.native-maccatalyst,
+    .sv-native-shell.native-ios {
         grid-template-columns:224px minmax(0,1fr);
         grid-template-rows:64px minmax(0,1fr) auto 34px;
     }
     .native-windows .sv-native-topbar, .native-winui .sv-native-topbar,
-    .native-maccatalyst .sv-native-topbar {
+    .native-maccatalyst .sv-native-topbar,
+    .native-ios .sv-native-topbar {
         grid-column:1 / -1; grid-row:1; padding-left:23px;
     }
     .native-windows .sv-native-nav, .native-winui .sv-native-nav,
-    .native-maccatalyst .sv-native-nav {
+    .native-maccatalyst .sv-native-nav,
+    .native-ios .sv-native-nav {
         grid-column:1; grid-row:2 / 5;
         flex-direction:column; justify-content:flex-start; align-items:stretch;
         gap:5px; padding:20px 12px;
@@ -203,18 +206,23 @@ html, body {
         background:#101b28;
     }
     .native-windows .sv-native-nav button, .native-winui .sv-native-nav button,
-    .native-maccatalyst .sv-native-nav button {
+    .native-maccatalyst .sv-native-nav button,
+    .native-ios .sv-native-nav button {
         flex:0 0 auto; flex-direction:row; justify-content:flex-start;
         gap:14px; min-height:46px; font-size:14px; padding:12px 16px;
     }
     .native-windows .sv-native-nav-icon, .native-winui .sv-native-nav-icon,
-    .native-maccatalyst .sv-native-nav-icon { font-size:22px; width:24px; text-align:center; }
+    .native-maccatalyst .sv-native-nav-icon,
+    .native-ios .sv-native-nav-icon { font-size:22px; width:24px; text-align:center; }
     .native-windows .sv-native-scroll, .native-winui .sv-native-scroll,
-    .native-maccatalyst .sv-native-scroll { grid-column:2; grid-row:2; }
+    .native-maccatalyst .sv-native-scroll,
+    .native-ios .sv-native-scroll { grid-column:2; grid-row:2; }
     .native-windows .sv-native-commandbar, .native-winui .sv-native-commandbar,
-    .native-maccatalyst .sv-native-commandbar { grid-column:2; grid-row:3; }
+    .native-maccatalyst .sv-native-commandbar,
+    .native-ios .sv-native-commandbar { grid-column:2; grid-row:3; }
     .native-windows .sv-native-footer, .native-winui .sv-native-footer,
-    .native-maccatalyst .sv-native-footer {
+    .native-maccatalyst .sv-native-footer,
+    .native-ios .sv-native-footer {
         display:flex; align-items:center; grid-column:2; grid-row:4;
         border-top:1px solid var(--sv-native-line);
         padding:0 24px; color:var(--sv-native-muted); font-size:11px;
@@ -222,4 +230,25 @@ html, body {
 }
 @media (prefers-reduced-motion:reduce) {
     .sv-native-shell * { transition-duration:0s !important; animation-duration:0s !important; }
+}
+
+/* Android tablets use the same split navigation pattern as desktop, with
+   touch-sized targets and no hover-only commands. */
+@media (min-width: 1024px) and (pointer: coarse) {
+    .sv-native-shell.native-android {
+        grid-template-columns: 208px minmax(0,1fr);
+        grid-template-rows: 64px minmax(0,1fr) auto;
+    }
+    .native-android .sv-native-topbar { grid-row:1; grid-column:1 / -1; }
+    .native-android .sv-native-nav {
+        grid-row:2 / 4; grid-column:1; flex-direction:column;
+        justify-content:flex-start; padding:16px 12px;
+        border-top:0; border-right:1px solid var(--sv-native-line);
+    }
+    .native-android .sv-native-nav button {
+        flex:0 0 auto; flex-direction:row; justify-content:flex-start;
+        min-height:52px; font-size:14px; padding:12px 16px;
+    }
+    .native-android .sv-native-scroll { grid-column:2; grid-row:2; }
+    .native-android .sv-native-commandbar { grid-column:2; grid-row:3; }
 }
