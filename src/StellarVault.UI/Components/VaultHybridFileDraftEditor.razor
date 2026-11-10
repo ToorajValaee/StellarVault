@@ -1,5 +1,6 @@
 @using StellarVault.Core.Services
 @inject VaultHybridFileWorkspace Files
+@inject VaultHybridFileDeletionWorkspace FileDeletions
 @inject IVaultNativeFileAccess NativeFiles
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
@@ -194,10 +195,66 @@
                 }
             </div>
         }
+        <div class="panel-kicker">HYBRID // COMPLETE FILE DELETION DRAFTS</div>
+        <h3>STAGE PUBLISHED FILE DELETION</h3>
+        <p class="advanced-help">A deletion draft pins the original file manifest
+           and all referenced chunk records in encrypted local storage. Staging and
+           inspection never broadcast. Deletion signing is not enabled until
+           independently verifiable multipart tombstone recovery is implemented.</p>
+        <button type="button" class="pixel-button compact" disabled="@_busy"
+                @onclick="LoadPublishedFilesAsync">BROWSE PUBLISHED FILES</button>
+        @foreach (var remote in _remoteFiles)
+        {
+            <div class="data-field">
+                <strong>@remote.Name</strong>
+                <p>On-chain manifest: <code>@remote.ManifestId</code></p>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="() => StageDeletionAsync(remote)">
+                    STAGE ENCRYPTED FILE DELETION — NO TRANSACTION
+                </button>
+            </div>
+        }
+        @foreach (var deletion in _deletions)
+        {
+            <div class="data-field">
+                <strong>@deletion.FileName</strong>
+                <p>Local deletion draft · @deletion.State · @deletion.RecordCount ledger records</p>
+                <p>File manifest: <code>@deletion.ManifestId</code></p>
+                @if (deletion.IsCorrupt)
+                {
+                    <p class="terminal-alert warning">Deletion intent is corrupt. Preserve encrypted
+                        queue contents; do not delete or re-stage.</p>
+                }
+                else
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => InspectDeletionAsync(deletion)">
+                        INSPECT PINNED FILE DELETION — READ ONLY
+                    </button>
+                    @if (_deletionInspections.TryGetValue(deletion.MutationId, out var result))
+                    {
+                        <p role="status">Unchanged remote records: @result.PresentEntries
+                            / @result.TotalEntries</p>
+                        <p class="advanced-help">@result.Explanation</p>
+                    }
+                    @if (deletion.State == VaultSyncState.Pending)
+                    {
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="() => DiscardDeletionAsync(deletion)">
+                            DISCARD LOCAL DELETION DRAFT
+                        </button>
+                    }
+                }
+            </div>
+        }
     }
 </section>
 
 @code {
+    private IReadOnlyList<VaultHybridFileDeletionWorkspace.RemoteFile> _remoteFiles = [];
+    private IReadOnlyList<VaultHybridFileDeletionWorkspace.DeletionDraft> _deletions = [];
+    private readonly Dictionary<string, VaultHybridFileDeletionWorkspace.DeletionInspection>
+        _deletionInspections = new(StringComparer.Ordinal);
     private VaultNativePickedFile? _picked;
     private IReadOnlyList<VaultHybridFileWorkspace.FileDraftItem> _items = [];
     private readonly Dictionary<string, VaultHybridFileWorkspace.PublicationPreview> _previews =
@@ -234,6 +291,9 @@
         DisposePicked();
         _folderId = "";
         _items = [];
+        _remoteFiles = [];
+        _deletions = [];
+        _deletionInspections.Clear();
         _previews.Clear();
         _observations.Clear();
         _histories.Clear();
@@ -247,8 +307,12 @@
         try
         {
             var items = await Files.ListAsync();
+            var deletions = await FileDeletions.ListAsync();
             if (Sessions.Epoch == epoch && Sessions.IsUnlocked)
+            {
                 _items = items;
+                _deletions = deletions;
+            }
         }
         catch (Exception)
         {
@@ -256,6 +320,90 @@
                 _status = "Encrypted file queue is unavailable. Refresh after reopening the vault.";
         }
         StateHasChanged();
+    }
+
+    private async Task LoadPublishedFilesAsync()
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _remoteFiles = [];
+        try
+        {
+            var files = await FileDeletions.BrowseAsync();
+            if (Sessions.Epoch == epoch && Sessions.IsUnlocked)
+            {
+                _remoteFiles = files;
+                _status = "Read-only published file inventory loaded. No transaction submitted.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Cannot inspect published files. Connect the matching root and refresh ledger.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task StageDeletionAsync(VaultHybridFileDeletionWorkspace.RemoteFile file)
+    {
+        if (_busy || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        try
+        {
+            await FileDeletions.StageDeleteAsync(file.ManifestId);
+            if (Sessions.Epoch == epoch && Sessions.IsUnlocked)
+            {
+                _deletions = await FileDeletions.ListAsync();
+                _remoteFiles = [];
+                _status = "Complete file manifest and chunk deletion intent staged encrypted locally. No Stellar transaction sent.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Cannot stage deletion: file parts, manifests or local mutation conflicts require inspection. No transaction sent.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task InspectDeletionAsync(VaultHybridFileDeletionWorkspace.DeletionDraft item)
+    {
+        if (_busy || item.IsCorrupt || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _deletionInspections.Remove(item.MutationId);
+        try
+        {
+            var inspection = await FileDeletions.InspectAsync(item.MutationId);
+            if (Sessions.Epoch == epoch && Sessions.IsUnlocked)
+                _deletionInspections[item.MutationId] = inspection;
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Deletion inspection unavailable or original contents changed. No transaction sent.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardDeletionAsync(VaultHybridFileDeletionWorkspace.DeletionDraft item)
+    {
+        if (_busy || item.IsCorrupt || item.State != VaultSyncState.Pending) return;
+        _busy = true;
+        try
+        {
+            await FileDeletions.DiscardAsync(item.MutationId);
+            _deletions = await FileDeletions.ListAsync();
+            _deletionInspections.Clear();
+            _status = "Unsubmitted encrypted file deletion draft discarded; no ledger transaction.";
+        }
+        catch (Exception)
+        {
+            _status = "Deletion draft could not be discarded. Preserve local queue and refresh.";
+        }
+        finally { _busy = false; }
     }
 
     private async Task ChooseFileAsync()
@@ -332,6 +480,9 @@
             if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
                 throw new InvalidOperationException("Vault session changed.");
             _items = items;
+            _deletions = await FileDeletions.ListAsync();
+            _remoteFiles = [];
+            _deletionInspections.Clear();
             _previews.Clear();
             _observations.Clear();
             _histories.Clear();
