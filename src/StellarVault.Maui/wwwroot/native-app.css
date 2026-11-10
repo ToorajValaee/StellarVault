@@ -275,3 +275,105 @@ html, body {
     .sv-native-segments { max-width:none; margin:10px 0 15px; }
     .sv-native-segments button { font-size:12px; }
 }
+
+/* StellarVault visual DNA, adapted to native platform ergonomics.
+   Keep fluent/cuprtino/material hit areas, navigation and scrolling, while
+   retaining the PWA's phosphor identity and information hierarchy. */
+:root {
+    --sv-native-bg: #08120f;
+    --sv-native-surface: #101e19;
+    --sv-native-elevated: #172921;
+    --sv-native-text: #e4f6e9;
+    --sv-native-muted: #a0bba8;
+    --sv-native-accent: #7ef6a4;
+    --sv-native-line: rgba(126, 246, 164, .23);
+    --phosphor: #86f9a8;
+    --phosphor-strong: #c7ffd7;
+    --phosphor-dim: #549e6e;
+    --phosphor-faint: rgba(126,246,164,.09);
+    --border: rgba(126,246,164,.27);
+    --accent: #f0cc7a;
+    --muted: #a0bba8;
+}
+.sv-native-shell {
+    background:
+        radial-gradient(ellipse at 85% 0%, rgba(126,246,164,.055), transparent 50%),
+        var(--sv-native-bg);
+}
+.sv-native-topbar {
+    background: #0d1b16;
+    border-bottom-color: var(--sv-native-line);
+}
+.sv-native-brandmark {
+    border: 1px solid rgba(135,255,174,.6);
+    border-radius: 11px;
+    background: #11291d;
+    color: #a1ffc0;
+    box-shadow: inset 0 0 12px rgba(126,246,164,.15);
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+.sv-native-brand strong { color: #d8ffe3; letter-spacing: .025em; }
+.sv-native-brand small, .sv-native-eyebrow, .sv-native-shell .panel-kicker {
+    font-family: "Cascadia Code", "SFMono-Regular", "Roboto Mono", Consolas, monospace;
+    font-weight: 600;
+    letter-spacing: .095em;
+}
+.sv-native-eyebrow, .sv-native-shell .panel-kicker { color: #8afbb0; }
+.sv-native-shell .terminal-panel {
+    background:
+        linear-gradient(90deg, rgba(126,246,164,.025), transparent 42%),
+        var(--sv-native-surface);
+    border-color: var(--sv-native-line);
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+}
+.sv-native-shell .terminal-panel::before {
+    display: block;
+    position: absolute;
+    width: 18px;
+    height: 2px;
+    border: 0;
+    border-radius: 0;
+    background: #85faaa;
+    top: 0;
+    left: 20px;
+}
+.sv-native-shell .terminal-panel::after { display: none; }
+.sv-native-shell :is(.panel-kicker, .step-led, code, pre, .data-field code) {
+    font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+.sv-native-shell .terminal-input {
+    background: #091810;
+    border-color: rgba(134,249,168,.3);
+    color: #ebfff1;
+}
+.sv-native-shell .terminal-input:focus {
+    border-color: #96ffc0;
+    outline: 2px solid rgba(126,246,164,.25);
+    outline-offset: 1px;
+}
+.sv-native-shell .pixel-button.primary,
+.sv-native-command.primary {
+    background: #82ecaa;
+    color: #092314;
+    border-color: #82ecaa;
+    text-shadow: none;
+}
+.sv-native-shell .pixel-button:not(.primary),
+.sv-native-command:not(.primary),
+.sv-native-outline-action { color: #d0f6dc; border-color: rgba(126,246,164,.28); }
+.sv-native-shell .network-option.active,
+.sv-native-segments button.selected,
+.sv-native-nav button.selected {
+    background: rgba(126,246,164,.12);
+    color: #baffd0;
+}
+.sv-native-nav, .sv-native-commandbar { background: #102019; }
+.sv-native-shell .step-led { background: rgba(126,246,164,.12); color: #8dffb4; }
+.sv-native-status-dot.connected { background: #7efdac; box-shadow: 0 0 0 3px rgba(126,246,164,.12); }
+.sv-native-shell :is(.terminal-alert, .notice) { overflow-wrap: anywhere; }
+@media (min-width: 720px) {
+    .native-windows .sv-native-nav,
+    .native-winui .sv-native-nav,
+    .native-maccatalyst .sv-native-nav,
+    .native-ios .sv-native-nav { background: #0b1a13; }
+}
