@@ -116,8 +116,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         if (entry.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile)
-            throw new NotSupportedException(
-                "Files are disabled in Hybrid mode. Use direct on-chain file operations instead.");
+            VaultHybridFilePolicy.RequireEnabled();
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
             entry.SignedFileEntries is { Length: > 0 })
             throw new InvalidOperationException("Only new pending drafts can be queued.");
@@ -618,8 +617,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> ReserveFileUploadAsync(
         VaultPendingMutation expected, CancellationToken ct = default)
     {
-        throw new NotSupportedException(
-            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
+        VaultHybridFilePolicy.RequireEnabled();
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
@@ -653,8 +651,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> ReserveVerifiedNextFileEntryAsync(
         VaultPendingMutation expected, CancellationToken ct = default)
     {
-        throw new NotSupportedException(
-            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
+        VaultHybridFilePolicy.RequireEnabled();
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
@@ -709,8 +706,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         VaultPendingMutation expected, string recordId, string signedHash,
         CancellationToken ct = default)
     {
-        throw new NotSupportedException(
-            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
+        VaultHybridFilePolicy.RequireEnabled();
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
