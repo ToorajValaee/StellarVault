@@ -96,6 +96,22 @@
                         <p>Next immutable part/manifest ID: <code>@item.NextEntryId</code></p>
                     }
                     <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => ReviewHistoryAsync(item)">
+                        VERIFY SIGNED FILE HISTORY — READ ONLY
+                    </button>
+                    @if (_histories.TryGetValue(item.MutationId, out var history))
+                    {
+                        <p role="status">Historically verified entries: @history.VerifiedEntries
+                            / @history.TotalEntries</p>
+                        @foreach (var proof in history.Entries)
+                        {
+                            <p><code>@proof.LedgerRecordId</code> ·
+                                @(proof.Verified ? "HISTORICALLY VERIFIED" : "UNRESOLVED") ·
+                                @proof.Explanation</p>
+                        }
+                        <p class="terminal-alert warning" role="status">@history.Explanation</p>
+                    }
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
                             @onclick="() => InspectLedgerAsync(item)">
                         INSPECT LEDGER FILE PROGRESS — READ ONLY
                     </button>
@@ -149,6 +165,8 @@
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, VaultHybridFileWorkspace.FileLedgerObservation> _observations =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, VaultHybridFileWorkspace.FileHistoricalReview> _histories =
+        new(StringComparer.Ordinal);
     private string _folderId = "";
     private string? _status;
     private bool _busy;
@@ -172,6 +190,7 @@
         _items = [];
         _previews.Clear();
         _observations.Clear();
+        _histories.Clear();
         _status = null;
         if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
         {
@@ -298,6 +317,30 @@
         finally { _busy = false; }
     }
 
+    private async Task ReviewHistoryAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.IsCorrupt || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _histories.Remove(item.MutationId);
+        try
+        {
+            var review = await Files.ReviewHistoricalReceiptsAsync(item.MutationId);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch)
+            {
+                _histories[item.MutationId] = review;
+                _status = "Signed file history inspected without signing, submitting or changing the queue.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "Signed file historical verification was unavailable or inconsistent. Preserve the queue and do not retry.";
+        }
+        finally { _busy = false; }
+    }
+
     private async Task InspectLedgerAsync(VaultHybridFileWorkspace.FileDraftItem item)
     {
         if (_busy || item.IsCorrupt || !Sessions.IsUnlocked ||
@@ -332,6 +375,7 @@
             _items = await Files.ListAsync();
             _previews.Clear();
         _observations.Clear();
+        _histories.Clear();
             _status = "Unsubmitted encrypted file draft discarded. No Stellar operation occurred.";
         }
         catch (Exception)
