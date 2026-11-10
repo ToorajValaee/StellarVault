@@ -183,11 +183,7 @@ public sealed class VaultHybridDraftWorkspace(
             string.Equals(editingEntityId, draft.FolderId, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Folder cannot be its own parent.");
 
-        var parents = VaultQueuedCreatePolicy.ParentCandidates(
-            entries, draft.FolderId, editingEntityId is null ? null :
-                entries.FirstOrDefault(x => x.EntityId.Equals(editingEntityId,
-                    StringComparison.OrdinalIgnoreCase) &&
-                    x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)?.Id);
+        var parents = VaultQueuedCreatePolicy.ParentCandidates(entries, draft.FolderId);
         if (parents.Length > 1)
             throw new InvalidOperationException("Parent folder ID is ambiguous.");
         if (parents.Length == 0 || parents[0].State == VaultSyncState.Confirmed)
