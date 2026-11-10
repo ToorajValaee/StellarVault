@@ -106,7 +106,7 @@ test('Android Back returns to Stellar destination without bypassing the vault', 
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   assert.match(page, /OnBackButtonPressed/);
   assert.match(page, /_navigation\.TryRequestBack\(\)/);
-  assert.match(app, /new MainPage\(_navigation\)/);
+  assert.match(app, /new MainPage\(_navigation, _startup\)/);
   assert.match(app, /_navigation\.Clear\(\)/);
   assert.match(workspace, /NativeNavigation\.BackRequested \+= OnAndroidBackRequested/);
   assert.match(workspace, /NativeNavigation\.Clear\(\)/);
