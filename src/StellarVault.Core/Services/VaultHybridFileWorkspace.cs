@@ -307,7 +307,7 @@ public sealed class VaultHybridFileWorkspace(
             intent.Fingerprint is not { Length: 64 } ||
             !intent.Fingerprint.All(Uri.IsHexDigit) ||
             intent.EntryIds.Any(x => x is null || x.Length != 16 || !x.All(Uri.IsHexDigit)) ||
-            intent.EntryIds.Distinct(StringComparer.Ordinal).Count() != intent.EntryIds.Length ||
+            intent.EntryIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != intent.EntryIds.Length ||
             (intent.FolderId is not null &&
                 (intent.FolderId.Length != 16 || !intent.FolderId.All(Uri.IsHexDigit))))
         {
