@@ -596,3 +596,14 @@ Android `MainActivity` uses `WindowSoftInputMode = SoftInput.AdjustResize` to gi
 Added `.github/workflows/maui-windows-preview.yml`: build the .NET 10 Windows target on a Windows runner after native/shared changes, installing `maui-windows` and verifying an unpackaged native EXE. An Android APK build **does not** test the Windows navigation rail or WinUI runtime. iOS still requires an Apple runner and interactive device/simulator checks.
 
 See `docs/NATIVE_UX_ACCEPTANCE.md` for Windows/Android/iOS behavior and device acceptance. The native UI is host-adaptive BlazorWebView, not independent XAML/UIKit/Compose implementations; preserve this distinction in release statements.
+
+
+## 2026-11-10 — Android still hangs on 'Initializing StellarVault…'; native-first startup and terminal identity
+
+Android device feedback confirmed the earlier AppRoot wiring fix did **not** resolve the startup hang. Do not call the incident fixed solely because CI builds APKs. The native host previously had about seventeen synchronous blocking script tags loading the bundled Stellar SDK, BIP39/HD logic and compatibility runtime **before** `_framework/blazor.webview.js`. That makes first render dependent on unrelated signing logic and can strand the placeholder if the WebView's script execution stalls.
+
+Current fix: `src/StellarVault.Maui/wwwroot/index.html` exposes `stellarVaultNativeRuntime.load()` to load the same bundled, ordered JavaScript files on demand after the first Blazor render. The native `NativeVaultWorkspace.CheckRuntimeAsync()` calls this loader, then checks readiness. Ledger connect stays blocked unless readiness succeeds; the first navigation shell has no dependency on HD signing scripts. `MainPage.xaml` now contains an independent **MAUI XAML** startup layer with no JS dependency. `AppRoot.OnAfterRender` signals `NativeStartupStatus` to hide the layer. If nothing renders after 12 seconds, the XAML layer displays an actionable nonsecret native startup diagnostic. That diagnostic is intentionally broad, not a claim of the specific underlying failure. Native asset tests assert the lazy load, XAML signal, and rendered-root lifecycle.
+
+The native-only `native-app.css` now carries the same StellarVault identity as PWA — phosphor green/copper accents, monospace technical microcopy, glowing vault marks, dark secure surfaces and diagnostic-style labels — but keeps independent mobile scroll, bottom navigation, touch-friendly controls and Windows/iPad desktop rail. Do not revert to the PWA stacked long page.
+
+**Outstanding:** The Android hang still needs confirmation on a real device by installing the new successful APK artifact. If XAML timeout appears, inspect Android logcat around WebView asset loading/renderer crashes, MAUI exceptions and JS bridge creation, without printing mnemonic/keys. Build success does not prove render or runtime readiness.
