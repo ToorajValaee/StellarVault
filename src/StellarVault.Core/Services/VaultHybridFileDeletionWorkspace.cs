@@ -202,6 +202,7 @@ public sealed class VaultHybridFileDeletionWorkspace(
 
     public async Task<DeletionDraft> StageDeleteAsync(string manifestId, CancellationToken ct = default)
     {
+        VaultHybridFilePolicy.RequireEnabled();
         if (manifestId is not { Length: 16 } || !manifestId.All(Uri.IsHexDigit))
             throw new ArgumentException("Select a valid file manifest ID.", nameof(manifestId));
         var (account, scope, epoch) = RequireScope();
