@@ -157,7 +157,7 @@ public sealed class VaultHybridDraftWorkspace(
                 "Vault session, account or network changed during the offline operation.");
     }
 
-    private static void ValidateDraft(LedgerRecordDraft draft, VaultMutationKind kind)
+    private static void ValidateDraft(LedgerRecordDraft? draft, VaultMutationKind kind)
     {
         ArgumentNullException.ThrowIfNull(draft);
         if (kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
