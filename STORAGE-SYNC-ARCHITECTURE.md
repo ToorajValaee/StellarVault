@@ -172,3 +172,14 @@ After all signed file entries exist, an explicit read-only final reconciliation 
 A shared Core/PWA/MAUI file-deletion workspace now stages published SVFILE1/SVFILE2 deletion as a complete, immutable encrypted DeleteFile queue intent, preserving the original manifest, all referenced chunk record drafts, filename and decoded SHA-256 fingerprint. It rejects ambiguous IDs, missing/invalid chunks, shared chunk references, conflicting queued mutations and remotely changed file ownership. The shared file editor lists remote files, stages an encrypted local deletion, inspects whether the pinned records are still intact and discards an untouched draft. This is **offline staging only**, not paid deletion or remote confirmation.
 
 The remaining implementation step is a protocol-specific, journaled multipart file deletion publisher with per-record HD manifest-owner snapshots and strict historical tombstone verification. The existing generic remote DELETE path must not be reused blindly for file manifests/chunks. No build, automated tests, CI or Testnet runs were performed in this step, as requested.
+
+
+## 2026-11-10 — Product scope decision: Hybrid files DISABLED
+
+Per product owner direction, **Hybrid mode is records/folders only**. Direct on-chain SVFILE functionality is unchanged. File selection, encrypted staging, multipart upload, paid file-part quoting/broadcast and remote-file deletion staging are unavailable in Hybrid mode, on both PWA and MAUI. Shared UI removes the hybrid file editor and explains that file storage belongs to the direct on-chain path.
+
+Shared Core `VaultHybridFilePolicy.RequireEnabled()` is called at the queue enqueue/reservation/file-hash-checkpoint boundary, upload Stage/Quote/Publish and file-deletion staging. Queue Ready/PrepareReview explicitly blocks UploadFile and DeleteFile, so no generic Sync coordinator can accidentally treat a legacy file mutation as publishable.
+
+**Recovery of old drafts:** Existing encrypted UploadFile/DeleteFile queue entries are retained, never silently discarded/migrated. Historical read-only inspection and already signed upload confirmation remain available in Core for deliberate recovery, but fresh file publishing and automatic replay are blocked. The ordinary on-chain file path is NOT blocked.
+
+**Scope/release:** Existing experimental hybrid file implementation stays in code behind a hard-disabled product policy rather than being removed, to protect old journals and enable an explicit future decision. Do not enable by local setting. This change deliberately was not built or tested per current user instruction. Continue implementing hybrid records/folders and host interop; reserve validation until implementation is finished.
