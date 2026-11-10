@@ -22,15 +22,19 @@ public sealed class VaultHybridDraftWorkspace(
     public async Task<VaultPendingMutation> CreateAsync(
         LedgerRecordDraft draft, CancellationToken ct = default)
     {
-        var (account, scope) = RequireScope();
+        var context = RequireScope();
+        var account = context.Account;
+        var scope = context.NetworkId;
         var kind = draft?.IsFolder == true
             ? VaultMutationKind.CreateFolder : VaultMutationKind.CreateRecord;
         ValidateDraft(draft, kind);
         var entries = await queue.ReviewAllAsync(account, scope, ct);
+        RequireSameScope(context);
         var dependencies = ParentDependencies(draft, entries, null);
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
         try
         {
+            RequireSameScope(context);
             var recordId = NewUnusedRecordId(entries);
             var item = VaultPendingMutation.Create(
                 account, scope, kind, recordId, payload,
@@ -38,7 +42,7 @@ public sealed class VaultHybridDraftWorkspace(
             // Local dependencies intentionally remain pending. The separate
             // preflight policy blocks them until their parent is published.
             var saved = await queue.EnqueueAsync(item, ct);
-            RequireSameScope(account, scope);
+            RequireSameScope(context);
             return saved;
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
@@ -48,8 +52,11 @@ public sealed class VaultHybridDraftWorkspace(
         string mutationId, LedgerRecordDraft draft, string expectedPayloadSha256,
         CancellationToken ct = default)
     {
-        var (account, scope) = RequireScope();
+        var context = RequireScope();
+        var account = context.Account;
+        var scope = context.NetworkId;
         var entries = await queue.ReviewAllAsync(account, scope, ct);
+        RequireSameScope(context);
         var current = entries.SingleOrDefault(x => x.Id == mutationId)
             ?? throw new KeyNotFoundException("Local draft does not exist.");
         if (current.State != VaultSyncState.Pending ||
@@ -71,7 +78,7 @@ public sealed class VaultHybridDraftWorkspace(
             // The encrypted payload and dependency edge must be committed in
             // the SAME durable CAS revision; never leave the parent pointer and
             // queue dependency out of sync.
-            RequireSameScope(account, scope);
+            RequireSameScope(context);
             return await queue.RevisePendingCreateAsync(
                 current, payload, proposedDependencies,
                 expectedPayloadSha256, ct);
@@ -81,15 +88,20 @@ public sealed class VaultHybridDraftWorkspace(
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
     {
-        var (account, scope) = RequireScope();
+        var context = RequireScope();
+        var account = context.Account;
+        var scope = context.NetworkId;
         await queue.DiscardPendingAsync(account, scope, mutationId, ct);
-        RequireSameScope(account, scope);
+        RequireSameScope(context);
     }
 
     public async Task<IReadOnlyList<DraftItem>> ListAsync(CancellationToken ct = default)
     {
-        var (account, scope) = RequireScope();
+        var context = RequireScope();
+        var account = context.Account;
+        var scope = context.NetworkId;
         var entries = await queue.ReviewAllAsync(account, scope, ct);
+        RequireSameScope(context);
         var result = new List<DraftItem>();
         foreach (var item in entries.Where(x =>
             x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
@@ -111,23 +123,34 @@ public sealed class VaultHybridDraftWorkspace(
                 item.State, draft, item.CreatedUtc,
                 Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload))));
         }
-        RequireSameScope(account, scope);
+        RequireSameScope(context);
         return result.OrderBy(x => x.CreatedUtc).ToArray();
     }
 
-    private (string Account, string Network) RequireScope()
+    private sealed record DraftScope(string Account, string NetworkId,
+        long Epoch, string SelectedNetwork, string? CustomPassphrase,
+        string CustomHorizonUrl);
+
+    private DraftScope RequireScope()
     {
         retention.RequireLocalPersistence();
-        var account = sessions.ActiveAccountId
-            ?? throw new InvalidOperationException("Unlock the encrypted local vault.");
-        return (account, networks.CredentialKey(account));
+        if (!sessions.IsUnlocked || sessions.ActiveAccountId is not string account)
+            throw new InvalidOperationException("Unlock the encrypted local vault.");
+        return new(account, networks.CredentialKey(account), sessions.Epoch,
+            networks.Network, networks.CustomPassphrase, networks.CustomHorizonUrl);
     }
 
-    private void RequireSameScope(string account, string scope)
+    private void RequireSameScope(DraftScope scope)
     {
-        if (sessions.ActiveAccountId != account ||
-            networks.CredentialKey(account) != scope)
-            throw new InvalidOperationException("Vault account or network changed during the operation.");
+        retention.RequireLocalPersistence();
+        if (!sessions.IsUnlocked || sessions.ActiveAccountId != scope.Account ||
+            sessions.Epoch != scope.Epoch ||
+            networks.CredentialKey(scope.Account) != scope.NetworkId ||
+            networks.Network != scope.SelectedNetwork ||
+            networks.CustomPassphrase != scope.CustomPassphrase ||
+            networks.CustomHorizonUrl != scope.CustomHorizonUrl)
+            throw new InvalidOperationException(
+                "Vault session, account or network changed during the offline operation.");
     }
 
     private static void ValidateDraft(LedgerRecordDraft draft, VaultMutationKind kind)
