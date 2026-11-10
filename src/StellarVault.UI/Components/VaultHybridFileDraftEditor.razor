@@ -285,6 +285,9 @@
             if (Sessions.Epoch != epoch || !Sessions.IsUnlocked)
                 throw new InvalidOperationException("Vault session changed.");
             _items = items;
+            _previews.Clear();
+            _observations.Clear();
+            _histories.Clear();
             _status = "Encrypted file queue refreshed.";
         }
         catch (Exception) { _status = "Cannot read encrypted file queue. Preserve the local data and investigate."; }
