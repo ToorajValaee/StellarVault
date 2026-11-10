@@ -252,3 +252,26 @@ html, body {
     .native-android .sv-native-scroll { grid-column:2; grid-row:2; }
     .native-android .sv-native-commandbar { grid-column:2; grid-row:3; }
 }
+
+/* A single task at a time: records vs offline drafts, and stage vs review.
+   These are not authorization controls, only visible subviews. */
+.sv-native-segments {
+    display:flex; gap:4px; width:100%; max-width:540px;
+    padding:4px; margin:14px 0 20px;
+    background:#0a1523; border-radius:12px;
+    border:1px solid var(--sv-native-line);
+}
+.sv-native-segments button {
+    flex:1; border:0; border-radius:9px;
+    min-height:44px; background:transparent; color:var(--sv-native-muted);
+    font-family:inherit; font-size:13px; font-weight:600; line-height:1.2; cursor:pointer; padding:10px;
+}
+.sv-native-segments button.selected {
+    background:var(--sv-native-elevated); color:var(--sv-native-text);
+    box-shadow:0 1px 4px rgba(0,0,0,.18);
+}
+.sv-native-segments button:focus-visible { outline:2px solid var(--sv-native-accent); }
+@media(max-width:699px) {
+    .sv-native-segments { max-width:none; margin:10px 0 15px; }
+    .sv-native-segments button { font-size:12px; }
+}
