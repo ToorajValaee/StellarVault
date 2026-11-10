@@ -662,6 +662,32 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     }
 
     /// <summary>
+    /// CAS-confirm an upload only after the caller has independently verified
+    /// EVERY signed file part and final manifest against historical receipts
+    /// and fresh current contents. This method NEVER submits a transaction.
+    /// </summary>
+    public async Task<VaultPendingMutation> ConfirmVerifiedFileUploadAsync(
+        VaultPendingMutation expected, CancellationToken ct = default)
+    {
+        retention.RequireLocalPersistence();
+        ArgumentNullException.ThrowIfNull(expected);
+        if (expected.Kind != VaultMutationKind.UploadFile ||
+            expected.State != VaultSyncState.Uncertain ||
+            expected.TransactionHash is not null ||
+            expected.SignedFileEntries is not { Length: > 0 })
+            throw new InvalidOperationException("File upload is not awaiting final verification.");
+        var current = await store.GetAsync(expected.AccountId, expected.NetworkId,
+            expected.Id, ct) ?? throw new KeyNotFoundException("File upload missing.");
+        RequireScope(current, expected.AccountId, expected.NetworkId);
+        if (!SameDurableRevision(current, expected))
+            throw new InvalidOperationException("File upload changed during final reconciliation.");
+        var confirmed = current with { State = VaultSyncState.Confirmed };
+        if (!await store.TryReplaceAsync(current, confirmed, ct))
+            throw new InvalidOperationException("File confirmation lost the durable CAS race.");
+        return confirmed;
+    }
+
+    /// <summary>
     /// The file publisher may checkpoint ONLY the next immutable entry of a
     /// reserved, encrypted UploadFile intent, in SVFILE publication order.
     /// The last entry is the manifest. No network write occurs here.
