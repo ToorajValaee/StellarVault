@@ -421,6 +421,9 @@ else
         _ledgerBusy = true;
         try
         {
+            // The native UI must render independently of the large Stellar
+            // runtime. Load packaged JS only after the first Blazor render.
+            await JS.InvokeVoidAsync("stellarVaultNativeRuntime.load");
             var status = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
             _runtimeReady = status.Ready;
             if (!status.Ready) _ledgerMnemonic = string.Empty;
