@@ -50,7 +50,7 @@ else
                 <span class="sv-native-nav-icon" aria-hidden="true">⇅</span><span>Sync</span>
             </button>
         </nav>
-        <main class="sv-native-scroll" id="native-content" tabindex="-1">
+        <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
             <div class="sv-native-page-heading">
                 <div><span class="sv-native-eyebrow">@HostPlatform · PRIVATE STORAGE</span>
@@ -355,6 +355,14 @@ else
     private string _nativePage = "stellar";
     private string _localMode = "records";
     private string _syncMode = "changes";
+    // Recreate only the content scroller when the selected screen changes;
+    // don't carry a deep scroll offset into a different native destination.
+    private string NativeContentKey => _nativePage switch
+    {
+        "local" => "local:" + _localMode,
+        "sync" => "sync:" + _syncMode,
+        _ => "stellar:" + _nativeMode
+    };
 
     private void NavigateNative(string page)
     {
