@@ -749,6 +749,65 @@ public sealed class VaultHybridFileWorkspace(
         finally { filePublicationGate.Release(); }
     }
 
+    /// <summary>
+    /// Explicit final reconciliation of a completed encrypted file upload.
+    /// Requires ALL journal entries historically authenticated and ALL planned
+    /// parts (including final manifest) currently matching ledger contents.
+    /// This never signs, broadcasts or attempts to repair missing entries.
+    /// </summary>
+    public async Task<bool> ConfirmCompletedFileAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        if (!await filePublicationGate.WaitAsync(0, ct))
+            throw new InvalidOperationException("Another file operation is active.");
+        try
+        {
+            var (account, scope) = RequireScope();
+            var epoch = sessions.Epoch;
+            if (!ledger.IsConnected ||
+                (await ledger.InspectAccountInfoAsync()).RootAccountId != account)
+                throw new UnauthorizedAccessException("Connect the matching HD signing root.");
+            var entries = await queue.ReviewAllAsync(account, scope, ct);
+            try
+            {
+                var current = entries.SingleOrDefault(x => x.Id == mutationId &&
+                    x.Kind == VaultMutationKind.UploadFile)
+                    ?? throw new KeyNotFoundException("File upload missing.");
+                if (current.State != VaultSyncState.Uncertain ||
+                    current.TransactionHash is not null)
+                    throw new InvalidOperationException("File upload is not awaiting final reconciliation.");
+                var intent = DeserializeAndValidate(current);
+                try
+                {
+                    var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                        intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                    var journal = current.SignedFileEntries ?? [];
+                    if (journal.Length != plan.Entries.Count)
+                        throw new InvalidOperationException("Not every file entry has a durable signed checkpoint.");
+                    var history = await ReviewHistoricalReceiptsAsync(mutationId, ct);
+                    if (!history.AllEntriesVerified || history.VerifiedEntries != plan.Entries.Count)
+                        throw new InvalidOperationException("Not all file entry receipts are historically verified.");
+                    var remote = await ledger.ReadAsync();
+                    if (plan.Remaining(remote).Count != 0)
+                        throw new InvalidOperationException("File parts or manifest are missing from current ledger.");
+                    RequireSameScope(account, scope);
+                    if (sessions.Epoch != epoch ||
+                        (await ledger.InspectAccountInfoAsync()).RootAccountId != account)
+                        throw new InvalidOperationException("Vault session or connected root changed.");
+                    await queue.ConfirmVerifiedFileUploadAsync(current, ct);
+                    return true;
+                }
+                finally { CryptographicOperations.ZeroMemory(intent.Content); }
+            }
+            finally
+            {
+                foreach (var entry in entries)
+                    CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
+        }
+        finally { filePublicationGate.Release(); }
+    }
+
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
     {
         var (account, scope) = RequireScope();
