@@ -927,8 +927,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         VaultPendingMutation? localParent = null;
         if (!string.IsNullOrEmpty(draft.FolderId))
         {
-            var matches = all.Where(x => x.Id != previous.Id &&
-                x.EntityId.Equals(draft.FolderId, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var matches = VaultQueuedCreatePolicy.ParentCandidates(
+                all, draft.FolderId, previous.Id);
             if (matches.Length > 1)
                 throw new InvalidOperationException("Parent record ID is ambiguous.");
             localParent = matches.SingleOrDefault();
