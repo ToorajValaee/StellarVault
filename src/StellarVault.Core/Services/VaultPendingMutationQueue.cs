@@ -363,8 +363,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             if (draft.IsFolder != remote.IsFolder || string.IsNullOrWhiteSpace(draft.Title) ||
                 draft.Title.Length > 256 || string.IsNullOrEmpty(draft.Content) ||
                 draft.Tags is { Length: > 24 } ||
-                draft.Tags?.Any(x => x is null || x.Length > 64) == true)
-                throw new InvalidDataException("Update draft is malformed or changes record kind.");
+                draft.Tags?.Any(x => x is null || x.Length > 64) == true ||
+                draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
+                draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
+                draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    "Update draft is malformed, changes record kind, or embeds disabled file protocol data.");
             if (!string.IsNullOrEmpty(draft.FolderId))
             {
                 if (draft.FolderId.Length != 16 || !draft.FolderId.All(Uri.IsHexDigit) ||
