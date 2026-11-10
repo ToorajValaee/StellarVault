@@ -16,7 +16,18 @@ public partial class App : Application
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = new Window(new MainPage());
+        var window = new Window(new MainPage())
+        {
+            Title = "StellarVault"
+        };
+#if WINDOWS
+        // Start the Windows host as a genuine desktop workspace with room for
+        // the navigation rail and independent content pane.
+        window.Width = 1180;
+        window.Height = 800;
+        window.MinimumWidth = 720;
+        window.MinimumHeight = 540;
+#endif
         // Clear the unlocked data key when the native window leaves the foreground.
         // The preview UI remains disabled until end-to-end unlock is verified.
         window.Stopped += (_, _) => RevokeForeground();
