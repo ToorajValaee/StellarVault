@@ -26,7 +26,7 @@ public sealed class StellarLedgerUploadPlan
         IReadOnlyList<LedgerRecordItem> ledgerSnapshot)
     {
         ArgumentNullException.ThrowIfNull(ledgerSnapshot);
-        var byId = new Dictionary<string, LedgerRecordItem>(StringComparer.Ordinal);
+        var byId = new Dictionary<string, LedgerRecordItem>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in ledgerSnapshot)
         {
             if (item is null || !byId.TryAdd(item.Id, item))
