@@ -289,6 +289,98 @@ public sealed class VaultHybridFileWorkspace(
         }
     }
 
+    /// <summary>
+    /// Read-only current-ledger observation for an encrypted queued upload.
+    /// Matching record content is NOT historical transaction proof and MUST NOT
+    /// authorize confirmation, resumed broadcasting or automatic retries.
+    /// </summary>
+    public sealed record FileLedgerObservation(
+        string MutationId, int TotalEntries, int VisibleMatchingEntries,
+        int SignedCheckpointEntries, string? NextMissingEntryId,
+        bool ManifestVisible, string Explanation);
+
+    public async Task<FileLedgerObservation> InspectLedgerProgressAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        var (account, scope) = RequireScope();
+        var epoch = sessions.Epoch;
+        if (!ledger.IsConnected)
+            throw new InvalidOperationException("Connect the matching HD Stellar root first.");
+        var info = await ledger.InspectAccountInfoAsync();
+        RequireSameScope(account, scope);
+        if (sessions.Epoch != epoch || info.RootAccountId != account)
+            throw new UnauthorizedAccessException("Connected HD root or vault session changed.");
+
+        var entries = await queue.ReviewAllAsync(account, scope, ct);
+        try
+        {
+            var entry = entries.SingleOrDefault(x =>
+                x.Id == mutationId && x.Kind == VaultMutationKind.UploadFile)
+                ?? throw new KeyNotFoundException("Staged file upload does not exist.");
+            var intent = DeserializeAndValidate(entry);
+            try
+            {
+                var journal = entry.SignedFileEntries ?? [];
+                if (journal.Length > intent.EntryIds.Length ||
+                    (entry.State == VaultSyncState.Pending && journal.Length != 0) ||
+                    journal.Where((checkpoint, index) =>
+                        checkpoint is null ||
+                        !string.Equals(checkpoint.LedgerRecordId, intent.EntryIds[index],
+                            StringComparison.OrdinalIgnoreCase) ||
+                        checkpoint.TransactionHash is not { Length: 64 } ||
+                        !checkpoint.TransactionHash.All(Uri.IsHexDigit)).Any() ||
+                    journal.Select(x => x.TransactionHash)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.Length)
+                    throw new InvalidDataException("File journal order or identity is corrupt.");
+
+                var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                    intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                var remote = await ledger.ReadAsync();
+                // Remaining rejects duplicate IDs, unexpected content and
+                // manifest visibility before all referenced file parts.
+                var remaining = plan.Remaining(remote);
+                var visible = plan.Entries.Count - remaining.Count;
+                var current = await queue.ReviewAllAsync(account, scope, ct);
+                try
+                {
+                    var now = current.SingleOrDefault(x => x.Id == mutationId);
+                    if (now is null || now.State != entry.State ||
+                        !now.EncryptedPayload.AsSpan().SequenceEqual(entry.EncryptedPayload) ||
+                        !(now.SignedFileEntries ?? []).SequenceEqual(journal) ||
+                        sessions.Epoch != epoch)
+                        throw new InvalidOperationException("Queued file changed during ledger inspection.");
+                    RequireSameScope(account, scope);
+                    var lastInfo = await ledger.InspectAccountInfoAsync();
+                    if (lastInfo.RootAccountId != account)
+                        throw new UnauthorizedAccessException("Connected signing root changed.");
+
+                    string explanation = visible > journal.Length
+                        ? "Matching ledger entries exceed the signed local journal. Investigate external writes or a lost checkpoint; do not publish."
+                        : visible == plan.Entries.Count
+                            ? "All staged entry contents are currently visible. Historical signed-receipt verification is still required; do not mark confirmed."
+                            : journal.Length > visible
+                                ? "Some signed checkpoints are not currently visible. Their broadcasts may have succeeded or remain unresolved; never retry."
+                                : "Only a time-of-read content observation. Missing entries are not proof of failed transactions; no publish authorization.";
+                    return new FileLedgerObservation(mutationId, plan.Entries.Count,
+                        visible, journal.Length,
+                        remaining.Count == 0 ? null : remaining[0].Id,
+                        visible == plan.Entries.Count, explanation);
+                }
+                finally
+                {
+                    foreach (var queued in current)
+                        CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+                }
+            }
+            finally { CryptographicOperations.ZeroMemory(intent.Content); }
+        }
+        finally
+        {
+            foreach (var queued in entries)
+                CryptographicOperations.ZeroMemory(queued.EncryptedPayload);
+        }
+    }
+
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
     {
         var (account, scope) = RequireScope();
