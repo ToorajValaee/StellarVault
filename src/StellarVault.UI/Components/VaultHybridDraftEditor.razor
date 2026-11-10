@@ -67,7 +67,15 @@
                 {
                     <p class="advanced-help">Parent folder: @draft.Draft.FolderId</p>
                 }
-                @if (draft.State == VaultSyncState.Pending)
+                @if (draft.IsCorrupt)
+                {
+                    <p class="terminal-alert warning" role="alert">
+                        The encrypted draft is invalid or damaged. It is preserved in the
+                        local queue and cannot be edited or used as a folder parent.
+                        Inspect the queue before attempting recovery.
+                    </p>
+                }
+                else if (draft.State == VaultSyncState.Pending)
                 {
                     <button type="button" class="pixel-button compact" disabled="@_busy"
                             @onclick="() => Open(draft)">EDIT LOCAL DRAFT</button>
@@ -76,7 +84,8 @@
                 {
                     <small>Submitted or unresolved. Cannot be edited or replayed.</small>
                 }
-                @if (draft.Kind == VaultMutationKind.CreateFolder &&
+                @if (!draft.IsCorrupt &&
+                    draft.Kind == VaultMutationKind.CreateFolder &&
                     draft.State is VaultSyncState.Pending or VaultSyncState.Confirmed)
                 {
                     <button type="button" class="pixel-button compact" disabled="@_busy"
