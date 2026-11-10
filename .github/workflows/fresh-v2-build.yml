@@ -83,8 +83,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Reclaim unused hosted-runner disk space
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Android preview does not require Swift, CodeQL or PowerShell."
+          df -h /
+          sudo rm -rf /usr/share/swift /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
+          df -h /
       - name: Install Android MAUI workload
-        run: dotnet workload install maui-android
+        run: dotnet workload install maui-android --skip-manifest-update
       - name: Compile native Android preview
         shell: bash
         run: |
