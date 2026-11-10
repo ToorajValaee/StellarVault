@@ -607,3 +607,15 @@ Current fix: `src/StellarVault.Maui/wwwroot/index.html` exposes `stellarVaultNat
 The native-only `native-app.css` now carries the same StellarVault identity as PWA — phosphor green/copper accents, monospace technical microcopy, glowing vault marks, dark secure surfaces and diagnostic-style labels — but keeps independent mobile scroll, bottom navigation, touch-friendly controls and Windows/iPad desktop rail. Do not revert to the PWA stacked long page.
 
 **Outstanding:** The Android hang still needs confirmation on a real device by installing the new successful APK artifact. If XAML timeout appears, inspect Android logcat around WebView asset loading/renderer crashes, MAUI exceptions and JS bridge creation, without printing mnemonic/keys. Build success does not prove render or runtime readiness.
+
+
+## 2026-11-10 — Android startup second remediation / native visual continuity
+
+User confirmed **Android still hung on "Initializing StellarVault…" after first AppRoot fix**. The earlier guess was not verified; subsequent source work isolates the startup path:
+
+- Native host HTML no longer synchronously loads the Stellar SDK, BIP39/HD and full compatibility scripts before `blazor.webview.js`. `stellarVaultNativeRuntime.load()` loads the same packaged scripts only after the first Razor render; `NativeVaultWorkspace.CheckRuntimeAsync()` awaits load and then inspects readiness, gating signer connection on a complete runtime. This isolates visual shell startup from ledger runtime availability. Keep script ordering and preserve local-only bundled asset policy.
+- `MainPage.xaml` overlays the WebView with a MAUI-owned, credential-free XAML loading panel. `NativeStartupStatus` is a singleton shared between `AppRoot.OnAfterRender(firstRender)` and `MainPage`. First render hides the XAML panel; after 12 seconds without it, the host displays a non-secret error. This diagnostic works even when the JS error handler cannot run.
+- Native-only CSS now uses StellarVault phosphor green, terminal-style monospace micro-labels and vault marquees while retaining platform-responsive navigation, touch targets, safe areas and independent scrolling. Native shell is not a clone of PWA layout.
+- Updated `tests/maui-ledger-assets.test.cjs` to assert lazy script loading, first-render startup signal, terminal style, and MAUI fallback. Constructor signature was changed to `new MainPage(_navigation, _startup)`; test matcher reflects both arguments.
+
+**Important:** a passing Android APK compile is still insufficient. Install the artifact from a successful workflow on/after these changes, and observe whether the XAML panel disappears and the navigation renders. If it times out, collect filtered `adb logcat` messages around MAUI BlazorWebView resource resolution/renderer exception; do not request or print mnemonic or keys.
