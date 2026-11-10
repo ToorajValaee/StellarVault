@@ -17,7 +17,7 @@ public sealed class VaultHybridDraftWorkspace(
     public sealed record DraftItem(
         string MutationId, string EntityId, VaultMutationKind Kind,
         VaultSyncState State, LedgerRecordDraft Draft, DateTimeOffset CreatedUtc,
-        string PayloadSha256);
+        string PayloadSha256, bool IsCorrupt = false);
 
     public async Task<VaultPendingMutation> CreateAsync(
         LedgerRecordDraft draft, CancellationToken ct = default)
@@ -108,20 +108,24 @@ public sealed class VaultHybridDraftWorkspace(
         {
             ct.ThrowIfCancellationRequested();
             LedgerRecordDraft draft;
+            var corrupt = false;
             try
             {
                 draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
                     ?? throw new JsonException("Draft is empty.");
+                ValidateDraft(draft, item.Kind);
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException or ArgumentException
+                                       or InvalidOperationException)
             {
-                // Do not hide corrupt queue entries; they remain available to
-                // the underlying recovery inspector without deserializing here.
-                continue;
+                // Keep the damaged mutation visible with its stable identity.
+                // Never offer an edit/parent action for untrusted draft content.
+                corrupt = true;
+                draft = new LedgerRecordDraft("UNREADABLE ENCRYPTED DRAFT", "");
             }
             result.Add(new(item.Id, item.EntityId, item.Kind,
                 item.State, draft, item.CreatedUtc,
-                Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload))));
+                Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload)), corrupt));
         }
         RequireSameScope(context);
         return result.OrderBy(x => x.CreatedUtc).ToArray();
