@@ -3,23 +3,42 @@
 @using Microsoft.Maui.Devices
 @inject NativeStartupStatus Startup
 
-<ErrorBoundary>
-    <ChildContent>
-        <NativeVaultWorkspace HostPlatform="@NativePlatform" />
-    </ChildContent>
-    <ErrorContent>
-        <section class="terminal-panel" role="alert">
-            <h2>STELLARVAULT COULD NOT LOAD</h2>
-            <p>The native interface encountered an error. No ledger transaction was submitted by this screen.</p>
-            <p>Restart the application and inspect the Android/Windows debug output if the issue persists.</p>
-        </section>
-    </ErrorContent>
-</ErrorBoundary>
+@if (!_shellReady)
+{
+    <!-- An intentionally dependency-free first render. If this never appears,
+         diagnose WebView bootstrap and packaged assets, not the vault editor. -->
+    <div class="sv-native-first-render" role="status">
+        <strong>STELLARVAULT</strong>
+        <p>Preparing secure workspace…</p>
+    </div>
+}
+else
+{
+    <ErrorBoundary>
+        <ChildContent>
+            <NativeVaultWorkspace HostPlatform="@NativePlatform" />
+        </ChildContent>
+        <ErrorContent>
+            <section class="terminal-panel" role="alert">
+                <h2>SECURE WORKSPACE UNAVAILABLE</h2>
+                <p>The Blazor host started, but the vault workspace could not load.
+                   Signing remains disabled. Restart and inspect the native diagnostics.</p>
+            </section>
+        </ErrorContent>
+    </ErrorBoundary>
+}
 
 @code {
+    private bool _shellReady;
+
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender) Startup.NotifyFirstRender();
+        if (!firstRender) return;
+        // The XAML overlay is released after this minimal, host-only render,
+        // before any ledger adapters or vault components are instantiated.
+        Startup.NotifyFirstRender();
+        _shellReady = true;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private static string NativePlatform => DeviceInfo.Platform == DevicePlatform.WinUI ? "windows" :
