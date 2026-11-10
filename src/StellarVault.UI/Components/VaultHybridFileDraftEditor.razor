@@ -130,6 +130,14 @@
                         Earlier entries must have matching ledger contents and independently
                         authenticated historical transaction evidence before the next entry
                         can be approved. Never resubmit an unresolved entry.</p>
+                    @if (item.State == VaultSyncState.Uncertain &&
+                        item.NextEntryId is null && item.SignedEntries?.Count == item.LedgerEntries)
+                    {
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="() => ConfirmCompleteAsync(item)">
+                            VERIFY COMPLETE FILE AND CONFIRM QUEUE — NO TRANSACTION
+                        </button>
+                    }
                     @if (item.NextEntryId is not null &&
                         item.State is VaultSyncState.Pending or VaultSyncState.Uncertain)
                     {
@@ -358,6 +366,36 @@
                     "pending parent, queue conflicts, or remote ID collisions. No transaction was sent.";
         }
         finally { _busy = false; }
+    }
+
+    private async Task ConfirmCompleteAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.IsCorrupt || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        ClearFileApproval();
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        try
+        {
+            await Files.ConfirmCompletedFileAsync(item.MutationId);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch)
+            {
+                _items = await Files.ListAsync();
+                _status = "All signed file receipts and current manifest verified. File queue confirmed; no transaction submitted.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "File confirmation blocked: historical receipts, current parts or queue revision are unresolved. Do not replay.";
+        }
+        finally
+        {
+            _previews.Clear();
+            _observations.Clear();
+            _histories.Clear();
+            _busy = false;
+        }
     }
 
     private async Task QuoteNextAsync(VaultHybridFileWorkspace.FileDraftItem item)
