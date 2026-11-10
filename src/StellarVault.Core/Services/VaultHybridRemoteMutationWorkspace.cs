@@ -316,7 +316,7 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                     : item.Kind == VaultMutationKind.DeleteFolder &&
                       remote.Any(x => x.FolderId == item.EntityId)
                         ? "Folder has children: cannot delete."
-                        : "Remote version matches staged baseline. Publishing is not enabled.";
+                        : "Remote baseline matches. Review a fresh fee quote and explicitly approve a manual Testnet Sync; Mainnet remote updates/deletes remain blocked.";
         }
         EnsureScope(scope);
         return states;
