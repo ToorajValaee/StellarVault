@@ -6,17 +6,20 @@ public partial class App : Application
 {
     private readonly VaultSessionManager _sessions;
     private readonly VaultNativeForegroundLifecycle _lifecycle;
+    private readonly VaultNativeNavigationState _navigation;
 
-    public App(VaultSessionManager sessions, VaultNativeForegroundLifecycle lifecycle)
+    public App(VaultSessionManager sessions, VaultNativeForegroundLifecycle lifecycle,
+        VaultNativeNavigationState navigation)
     {
         InitializeComponent();
         _sessions = sessions;
         _lifecycle = lifecycle;
+        _navigation = navigation;
     }
 
     protected override Window CreateWindow(IActivationState? activationState)
     {
-        var window = new Window(new MainPage())
+        var window = new Window(new MainPage(_navigation))
         {
             Title = "StellarVault"
         };
@@ -40,6 +43,7 @@ public partial class App : Application
         // The WebView signer must be revoked even if no local vault was opened.
         // A backgrounded on-chain-only session also holds live signing keys.
         _sessions.Lock();
+        _navigation.Clear();
         _lifecycle.NotifyForegroundLost();
     }
 }
