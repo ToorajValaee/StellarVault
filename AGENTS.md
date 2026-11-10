@@ -393,3 +393,12 @@ Shared Core `VaultHybridFilePolicy.RequireEnabled()` is called at the queue enqu
 **Recovery of old drafts:** Existing encrypted UploadFile/DeleteFile queue entries are retained, never silently discarded/migrated. Historical read-only inspection and already signed upload confirmation remain available in Core for deliberate recovery, but fresh file publishing and automatic replay are blocked. The ordinary on-chain file path is NOT blocked.
 
 **Scope/release:** Existing experimental hybrid file implementation stays in code behind a hard-disabled product policy rather than being removed, to protect old journals and enable an explicit future decision. Do not enable by local setting. This change deliberately was not built or tested per current user instruction. Continue implementing hybrid records/folders and host interop; reserve validation until implementation is finished.
+
+
+## 2026-11-10 — Records/folders Hybrid implementation freeze candidate
+
+Product scope and deliberate restrictions: see `docs/HYBRID_RECORD_FOLDER_RELEASE_SCOPE.md`. Hybrid files are disabled in both hosts/Core. Mainnet-capable Hybrid Sync covers explicit CREATE record/folder; staged UPDATE/DELETE signing is still Testnet-only due lack of a Stellar-enforced optimistic version CAS; multi-owner DELETE does not have a safe confirmation transition.
+
+This implementation-only pass added: strict unlocked-session epoch/network binding in `VaultHybridDraftWorkspace` across create/revise/list/discard; corrupt local create drafts now appear as noneditable warnings in the shared editor instead of disappearing; `VaultHybridSyncReviewService` requires a matching unlocked session and connected HD root before fee quoting; `VaultQueuedCreatePolicy.ParentCandidates` aligns create/revise dependency resolution and ignores stale confirmed non-create mutations without dropping the original confirmed folder dependency; generic remote update preflight rejects reserved SVFILE payloads; remote conflict review and Sync messaging now describe the real Testnet-only policy rather than stale 'not enabled' text.
+
+No manual builds, tests, CI inspection, device runs, or Testnet writes were performed for this pass, per user direction. Repository push triggers may independently run existing GitHub Actions. Do not call this production-ready; handoff is for focused validation of the scoped feature set. If results identify errors, return to implementation.
