@@ -18,6 +18,7 @@ public static class MauiProgram
         builder.Services.AddTransient<IVaultNativeFileAccess, MauiVaultNativeFileAccess>();
         // One application-owned session; never register an unlocked key as a scoped UI service.
         builder.Services.AddSingleton<VaultSessionManager>();
+        builder.Services.AddSingleton<VaultNativeForegroundLifecycle>();
         builder.Services.AddSingleton<VaultNetworkSelection>();
         // BlazorWebView provides IJSRuntime within its component scope. Keep
         // the signing session, gate and upload services in that same scope.
