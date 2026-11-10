@@ -6,7 +6,9 @@
              x:Class="StellarVault.Maui.MainPage"
              BackgroundColor="#07110c">
     <Grid>
-        <blazor:BlazorWebView HostPage="wwwroot/index.html">
+        <blazor:BlazorWebView x:Name="VaultWebView" HostPage="wwwroot/index.html"
+                              BlazorWebViewInitializing="OnWebViewInitializing"
+                              BlazorWebViewInitialized="OnWebViewInitialized">
             <blazor:BlazorWebView.RootComponents>
                 <blazor:RootComponent Selector="#app"
                                       ComponentType="{x:Type local:AppRoot}" />
