@@ -95,6 +95,21 @@
                     {
                         <p>Next immutable part/manifest ID: <code>@item.NextEntryId</code></p>
                     }
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="() => InspectLedgerAsync(item)">
+                        INSPECT LEDGER FILE PROGRESS — READ ONLY
+                    </button>
+                    @if (_observations.TryGetValue(item.MutationId, out var observation))
+                    {
+                        <p role="status">Matching ledger entries: @observation.VisibleMatchingEntries
+                            / @observation.TotalEntries · Signed local checkpoints:
+                            @observation.SignedCheckpointEntries</p>
+                        @if (observation.NextMissingEntryId is not null)
+                        {
+                            <p>First unobserved ID: <code>@observation.NextMissingEntryId</code></p>
+                        }
+                        <p class="terminal-alert warning" role="status">@observation.Explanation</p>
+                    }
                     <p class="advanced-help">Manifest-last publication requires separate
                         per-part approval, signed-hash checkpoints, and independent verification.
                         File publication is NOT yet enabled.</p>
@@ -132,6 +147,8 @@
     private IReadOnlyList<VaultHybridFileWorkspace.FileDraftItem> _items = [];
     private readonly Dictionary<string, VaultHybridFileWorkspace.PublicationPreview> _previews =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, VaultHybridFileWorkspace.FileLedgerObservation> _observations =
+        new(StringComparer.Ordinal);
     private string _folderId = "";
     private string? _status;
     private bool _busy;
@@ -154,6 +171,7 @@
         _folderId = "";
         _items = [];
         _previews.Clear();
+        _observations.Clear();
         _status = null;
         if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
         {
@@ -280,6 +298,30 @@
         finally { _busy = false; }
     }
 
+    private async Task InspectLedgerAsync(VaultHybridFileWorkspace.FileDraftItem item)
+    {
+        if (_busy || item.IsCorrupt || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        var epoch = Sessions.Epoch;
+        _observations.Remove(item.MutationId);
+        try
+        {
+            var observation = await Files.InspectLedgerProgressAsync(item.MutationId);
+            if (Sessions.IsUnlocked && Sessions.Epoch == epoch)
+            {
+                _observations[item.MutationId] = observation;
+                _status = "Current ledger contents inspected. No transaction was signed or sent.";
+            }
+        }
+        catch (Exception)
+        {
+            if (Sessions.Epoch == epoch)
+                _status = "File ledger inspection unavailable or inconsistent. Do not retry any signed upload; investigate the encrypted queue and Stellar history.";
+        }
+        finally { _busy = false; }
+    }
+
     private async Task DiscardAsync(VaultHybridFileWorkspace.FileDraftItem item)
     {
         if (_busy || item.State != VaultSyncState.Pending || item.IsCorrupt) return;
@@ -289,6 +331,7 @@
             await Files.DiscardAsync(item.MutationId);
             _items = await Files.ListAsync();
             _previews.Clear();
+        _observations.Clear();
             _status = "Unsubmitted encrypted file draft discarded. No Stellar operation occurred.";
         }
         catch (Exception)
