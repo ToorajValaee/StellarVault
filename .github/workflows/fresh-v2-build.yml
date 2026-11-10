@@ -105,46 +105,10 @@ jobs:
           apk=$(find src/StellarVault.Maui/bin/Release/net10.0-android -name '*.apk' -type f | head -n 1)
           test -n "$apk"
           unzip -Z1 "$apk" > android-package-entries.txt
-          echo "Checking bundled WebView host assets in $(basename "$apk")"
-          grep -Ei '(^|/)wwwroot/index\.html
-        with:
-          name: stellarvault-maui-android-preview
-          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
-          if-no-files-found: error
-      - name: Upload Android build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: android-build.log
-          if-no-files-found: ignore
- android-package-entries.txt
-          grep -Ei '(^|/)wwwroot/native-app\.css
-        with:
-          name: stellarvault-maui-android-preview
-          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
-          if-no-files-found: error
-      - name: Upload Android build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: android-build.log
-          if-no-files-found: ignore
- android-package-entries.txt
-          grep -Ei '(^|/)wwwroot/js/vendor/stellar-sdk\.min\.js
-        with:
-          name: stellarvault-maui-android-preview
-          path: src/StellarVault.Maui/bin/Release/net10.0-android/**/*.apk
-          if-no-files-found: error
-      - name: Upload Android build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-log
-          path: android-build.log
-          if-no-files-found: ignore
- android-package-entries.txt
+          echo "Checking bundled WebView host assets"
+          grep -E 'wwwroot/index[.]html' android-package-entries.txt
+          grep -E 'wwwroot/native-app[.]css' android-package-entries.txt
+          grep -E 'wwwroot/js/vendor/stellar-sdk[.]min[.]js' android-package-entries.txt
       - name: Package Android MAUI preview APK
         uses: actions/upload-artifact@v4
         with:
