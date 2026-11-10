@@ -382,3 +382,14 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 
 
 - The generic PendingMutationQueue.ReviewReadyAsync/PrepareReviewAsync now explicitly blocks DeleteFile as an unsupported paid Sync action. It remains present for encrypted staging and read-only checks, but cannot appear as a ready generic mutation. This prevents accidental routing through the ordinary record/folder publish coordinator while the multi-record tombstone journal is unfinished. Commit f281a974.
+
+
+## 2026-11-10 — Product scope decision: Hybrid files DISABLED
+
+Per product owner direction, **Hybrid mode is records/folders only**. Direct on-chain SVFILE functionality is unchanged. File selection, encrypted staging, multipart upload, paid file-part quoting/broadcast and remote-file deletion staging are unavailable in Hybrid mode, on both PWA and MAUI. Shared UI removes the hybrid file editor and explains that file storage belongs to the direct on-chain path.
+
+Shared Core `VaultHybridFilePolicy.RequireEnabled()` is called at the queue enqueue/reservation/file-hash-checkpoint boundary, upload Stage/Quote/Publish and file-deletion staging. Queue Ready/PrepareReview explicitly blocks UploadFile and DeleteFile, so no generic Sync coordinator can accidentally treat a legacy file mutation as publishable.
+
+**Recovery of old drafts:** Existing encrypted UploadFile/DeleteFile queue entries are retained, never silently discarded/migrated. Historical read-only inspection and already signed upload confirmation remain available in Core for deliberate recovery, but fresh file publishing and automatic replay are blocked. The ordinary on-chain file path is NOT blocked.
+
+**Scope/release:** Existing experimental hybrid file implementation stays in code behind a hard-disabled product policy rather than being removed, to protect old journals and enable an explicit future decision. Do not enable by local setting. This change deliberately was not built or tested per current user instruction. Continue implementing hybrid records/folders and host interop; reserve validation until implementation is finished.
