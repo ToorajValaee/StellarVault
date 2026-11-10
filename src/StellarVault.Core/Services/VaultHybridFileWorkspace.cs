@@ -557,6 +557,10 @@ public sealed class VaultHybridFileWorkspace(
     {
         var (account, scope) = RequireScope();
         var epoch = sessions.Epoch;
+        // Keep new multipart broadcasting on Testnet until integration and
+        // failure-injection acceptance establish Mainnet release safety.
+        if (networks.Network != "testnet")
+            throw new NotSupportedException("Hybrid file publication is Testnet-only pending release validation.");
         if (!ledger.IsConnected) throw new InvalidOperationException("Connect the matching HD root.");
         var accountInfo = await ledger.InspectAccountInfoAsync();
         if (accountInfo.RootAccountId != account)
