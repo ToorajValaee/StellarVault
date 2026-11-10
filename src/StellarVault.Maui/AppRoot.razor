@@ -1,9 +1,10 @@
 @using Microsoft.AspNetCore.Components.Web
 @using StellarVault.UI.Components
+@using Microsoft.Maui.Devices
 
 <ErrorBoundary>
     <ChildContent>
-        <NativeVaultWorkspace />
+        <NativeVaultWorkspace HostPlatform="@NativePlatform" />
     </ChildContent>
     <ErrorContent>
         <section class="terminal-panel" role="alert">
@@ -13,3 +14,9 @@
         </section>
     </ErrorContent>
 </ErrorBoundary>
+
+@code {
+    private static string NativePlatform => DeviceInfo.Platform == DevicePlatform.WinUI ? "windows" :
+        DeviceInfo.Platform == DevicePlatform.iOS ? "ios" :
+        DeviceInfo.Platform == DevicePlatform.MacCatalyst ? "maccatalyst" : "android";
+}
