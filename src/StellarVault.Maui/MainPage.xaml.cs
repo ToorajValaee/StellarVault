@@ -1,4 +1,5 @@
 using StellarVault.Core.Services;
+using Microsoft.AspNetCore.Components.WebView;
 
 namespace StellarVault.Maui;
 
@@ -7,6 +8,7 @@ public partial class MainPage : ContentPage
     private readonly VaultNativeNavigationState _navigation;
     private readonly NativeStartupStatus _startup;
     private bool _firstRenderReceived;
+    private string _startupStage = "MAUI page created; waiting for WebView";
     private CancellationTokenSource? _startupWatchdog;
 
     public MainPage(VaultNativeNavigationState navigation, NativeStartupStatus startup)
@@ -15,6 +17,37 @@ public partial class MainPage : ContentPage
         _startup = startup;
         InitializeComponent();
         _startup.FirstRenderCompleted += OnFirstRenderCompleted;
+        LogStartupStage(_startupStage);
+    }
+
+    private void OnWebViewInitializing(object? sender, BlazorWebViewInitializingEventArgs e)
+    {
+        SetStartupStage("Initializing native WebView engine");
+    }
+
+    private void OnWebViewInitialized(object? sender, BlazorWebViewInitializedEventArgs e)
+    {
+        SetStartupStage("WebView initialized; waiting for Blazor bridge");
+    }
+
+    private void SetStartupStage(string stage)
+    {
+        _startupStage = stage;
+        LogStartupStage(stage);
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (!_firstRenderReceived)
+                NativeStartupMessage.Text = stage + "…";
+        });
+    }
+
+    private static void LogStartupStage(string stage)
+    {
+        // Only fixed, credential-free startup stages are ever logged.
+        System.Diagnostics.Debug.WriteLine("StellarVaultStartup: " + stage);
+#if ANDROID
+        Android.Util.Log.Info("StellarVaultStartup", stage);
+#endif
     }
 
     protected override void OnAppearing()
@@ -41,9 +74,9 @@ public partial class MainPage : ContentPage
                     if (_firstRenderReceived) return;
                     StartupSpinner.IsRunning = false;
                     NativeStartupMessage.Text =
-                        "The secure interface did not start. Close and reopen StellarVault. " +
-                        "If this persists, capture the Android app log: " +
-                        "the native WebView may be missing a resource or failed to render.";
+                        "Startup stopped at: " + _startupStage + ". " +
+                        "No vault transaction was submitted. In the emulator, capture " +
+                        "logcat for StellarVaultStartup and BlazorWebView.";
                 });
             }
         }
@@ -53,6 +86,7 @@ public partial class MainPage : ContentPage
     private void OnFirstRenderCompleted()
     {
         _firstRenderReceived = true;
+        LogStartupStage("First Razor render completed");
         _startupWatchdog?.Cancel();
         MainThread.BeginInvokeOnMainThread(() =>
         {
