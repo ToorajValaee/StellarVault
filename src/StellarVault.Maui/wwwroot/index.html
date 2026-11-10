@@ -13,6 +13,7 @@
   <div id="app">Initializing StellarVault…</div>
   <div id="blazor-error-ui" hidden role="alert" style="position:fixed;inset:auto 1rem 1rem;z-index:9999;padding:1rem;background:#311e19;color:#fff;border:1px solid #ffb38a">
     StellarVault could not start its native interface. Check the device debug log and restart the application.
+    <p data-startup-detail style="margin:.5rem 0">The native renderer did not initialize.</p>
     <a href="." style="color:#fff">RELOAD</a>
     <button type="button" class="dismiss" aria-label="Dismiss error">×</button>
   </div>
@@ -76,6 +77,33 @@
       }
     });
   </script>
-  <script src="_framework/blazor.webview.js"></script>
+  <script>
+    // The BlazorWebView bridge can fail without emitting a window error.
+    // Show a safe actionable message rather than an endless splash label.
+    // Never print user inputs, mnemonic, cryptographic keys, or runtime objects.
+    (function () {
+      const initialText = 'Initializing StellarVault';
+      let startupFailureShown = false;
+      function showStartupFailure(message) {
+        if (startupFailureShown) return;
+        const root = document.getElementById('app');
+        if (!root || !root.textContent.includes(initialText)) return;
+        startupFailureShown = true;
+        const alert = document.getElementById('blazor-error-ui');
+        if (alert) {
+          alert.hidden = false;
+          const note = alert.querySelector('[data-startup-detail]');
+          if (note) note.textContent = message;
+        }
+      }
+      window.stellarVaultShowStartupFailure = showStartupFailure;
+      window.addEventListener('load', () => {
+        window.setTimeout(() => showStartupFailure(
+          'The native BlazorWebView did not render its first screen. Check the Android app log for BlazorWebView startup errors and reinstall the latest APK.'
+        ), 12000);
+      }, { once: true });
+    })();
+  </script>
+  <script src="_framework/blazor.webview.js" onerror="window.stellarVaultShowStartupFailure && window.stellarVaultShowStartupFailure('BlazorWebView bootstrap script is missing from the packaged Android app.')"></script>
 </body>
 </html>
