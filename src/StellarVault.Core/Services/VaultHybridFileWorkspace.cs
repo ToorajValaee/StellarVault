@@ -14,7 +14,8 @@ public sealed class VaultHybridFileWorkspace(
     VaultDeviceRetentionGate retention,
     VaultNetworkSelection networks,
     IStellarLedgerRecords ledger,
-    IVaultLedgerEvidenceProvider evidenceProvider)
+    IVaultLedgerEvidenceProvider evidenceProvider,
+    IVaultPreparedCreateLedger preparedCreates)
 {
     private const int IntentVersion = 1;
 
@@ -530,6 +531,222 @@ public sealed class VaultHybridFileWorkspace(
             foreach (var item in queued)
                 CryptographicOperations.ZeroMemory(item.EncryptedPayload);
         }
+    }
+
+    private readonly SemaphoreSlim filePublicationGate = new(1, 1);
+
+    /// <summary>A single file-entry fee approval. Each part requires a fresh
+    /// independent quote; approval never carries forward to another part.</summary>
+    public sealed record FileEntryApproval(
+        string MutationId, string AccountId, string NetworkId,
+        string LedgerRecordId, int SignedEntriesBefore, string PayloadSha256,
+        decimal FeeXlm, decimal PeakReserveXlm, DateTimeOffset QuotedUtc,
+        long SessionEpoch, bool IsManifest);
+
+    public sealed record FileEntryAttempt(
+        string MutationId, string LedgerRecordId, string? TransactionHash,
+        bool IsManifest, string Explanation);
+
+    /// <summary>
+    /// Read-only preview for the exact NEXT entry. Existing signed entries
+    /// require independent historical proof and present ledger visibility;
+    /// missing or ambiguous receipts do not authorize continuation.
+    /// </summary>
+    public async Task<FileEntryApproval> QuoteNextFileEntryAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        var (account, scope) = RequireScope();
+        var epoch = sessions.Epoch;
+        if (!ledger.IsConnected) throw new InvalidOperationException("Connect the matching HD root.");
+        var accountInfo = await ledger.InspectAccountInfoAsync();
+        if (accountInfo.RootAccountId != account)
+            throw new UnauthorizedAccessException("Connected HD root differs from the file queue.");
+
+        var all = await queue.ReviewAllAsync(account, scope, ct);
+        try
+        {
+            var current = all.SingleOrDefault(x => x.Id == mutationId &&
+                x.Kind == VaultMutationKind.UploadFile)
+                ?? throw new KeyNotFoundException("File upload not found.");
+            var journal = current.SignedFileEntries ?? [];
+            if (current.TransactionHash is not null ||
+                current.State != (journal.Length == 0 ? VaultSyncState.Pending : VaultSyncState.Uncertain))
+                throw new InvalidOperationException("File has an unresolved reservation or unsupported queue state.");
+            if (all.Any(x => x.Id != mutationId &&
+                x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain or VaultSyncState.Conflict))
+                throw new InvalidOperationException("Other unresolved queue mutations block file approval.");
+            if (current.DependsOn.Any(id => !all.Any(x => x.Id == id &&
+                x.State == VaultSyncState.Confirmed)))
+                throw new InvalidOperationException("Local parent folder has not been confirmed.");
+            var intent = DeserializeAndValidate(current);
+            try
+            {
+                var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                    intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                if (journal.Length >= plan.Entries.Count ||
+                    journal.Where((x, i) => x is null ||
+                        !string.Equals(x.LedgerRecordId, plan.Entries[i].Id,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        x.TransactionHash is not { Length: 64 } ||
+                        !x.TransactionHash.All(Uri.IsHexDigit)).Any() ||
+                    journal.Select(x => x.TransactionHash)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.Length)
+                    throw new InvalidDataException("Invalid signed multipart upload journal.");
+
+                var remote = await ledger.ReadAsync();
+                var remaining = plan.Remaining(remote);
+                if (remaining.Count == 0 || remaining[0].Id != plan.Entries[journal.Length].Id ||
+                    plan.Entries.Count - remaining.Count != journal.Length)
+                    throw new InvalidOperationException(
+                        "Current on-chain file entries differ from the signed journal; investigate before publishing.");
+                if (intent.FolderId is not null &&
+                    !remote.Any(x => string.Equals(x.Id, intent.FolderId,
+                        StringComparison.OrdinalIgnoreCase) && x.IsFolder))
+                    throw new InvalidOperationException("Parent folder is absent from Stellar.");
+                if (journal.Length > 0)
+                {
+                    // Historical transaction evidence is independent of present
+                    // ledger contents and must be complete before any new part.
+                    var previous = await ReviewHistoricalReceiptsAsync(mutationId, ct);
+                    if (previous.VerifiedEntries != journal.Length)
+                        throw new InvalidOperationException(
+                            "Earlier signed entries are not independently verified.");
+                }
+                var next = plan.Entries[journal.Length];
+                var cost = await ledger.EstimateAsync(next.Draft, next.Id);
+                if (cost.NetworkFeeXlm < 0 || cost.PeakReserveXlm < 0)
+                    throw new InvalidDataException("Invalid ledger fee/reserve estimate.");
+                RequireSameScope(account, scope);
+                if (sessions.Epoch != epoch)
+                    throw new InvalidOperationException("Vault session changed during file review.");
+                var latestInfo = await ledger.InspectAccountInfoAsync();
+                if (latestInfo.RootAccountId != account)
+                    throw new UnauthorizedAccessException("Connected root changed during file review.");
+                var latest = await queue.ReviewAllAsync(account, scope, ct);
+                try
+                {
+                    var now = latest.SingleOrDefault(x => x.Id == mutationId);
+                    if (now is null || now.State != current.State ||
+                        !now.EncryptedPayload.AsSpan().SequenceEqual(current.EncryptedPayload) ||
+                        !(now.SignedFileEntries ?? []).SequenceEqual(journal) ||
+                        !now.DependsOn.SequenceEqual(current.DependsOn, StringComparer.Ordinal))
+                        throw new InvalidOperationException("File draft changed during cost review.");
+                }
+                finally
+                {
+                    foreach (var x in latest)
+                        CryptographicOperations.ZeroMemory(x.EncryptedPayload);
+                }
+                return new(mutationId, account, scope, next.Id, journal.Length,
+                    Convert.ToHexString(SHA256.HashData(current.EncryptedPayload)),
+                    cost.NetworkFeeXlm, cost.PeakReserveXlm,
+                    DateTimeOffset.UtcNow, epoch, journal.Length == plan.Entries.Count - 1);
+            }
+            finally { CryptographicOperations.ZeroMemory(intent.Content); }
+        }
+        finally
+        {
+            foreach (var x in all)
+                CryptographicOperations.ZeroMemory(x.EncryptedPayload);
+        }
+    }
+
+    /// <summary>
+    /// Explicit single-entry upload. Never retries. Durable reservation is
+    /// saved before calling the signer, and the signed hash is saved before
+    /// broadcasting. Every outcome after reservation remains Uncertain.
+    /// </summary>
+    public async Task<FileEntryAttempt> PublishApprovedFileEntryAsync(
+        FileEntryApproval approval, bool explicitlyApproved,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(approval);
+        if (!explicitlyApproved)
+            throw new InvalidOperationException("Explicit paid file-part approval required.");
+        if (!await filePublicationGate.WaitAsync(0, ct))
+            throw new InvalidOperationException("Another file publication is active.");
+        try
+        {
+            var (account, scope) = RequireScope();
+            if (approval.AccountId != account || approval.NetworkId != scope ||
+                approval.SessionEpoch != sessions.Epoch ||
+                DateTimeOffset.UtcNow < approval.QuotedUtc ||
+                DateTimeOffset.UtcNow - approval.QuotedUtc > TimeSpan.FromMinutes(5))
+                throw new InvalidOperationException("File approval expired or changed scope.");
+            // Re-run the complete remote/journal/HD proof and cost preflight.
+            var refreshed = await QuoteNextFileEntryAsync(approval.MutationId, ct);
+            if (refreshed.LedgerRecordId != approval.LedgerRecordId ||
+                refreshed.SignedEntriesBefore != approval.SignedEntriesBefore ||
+                refreshed.PayloadSha256 != approval.PayloadSha256 ||
+                refreshed.FeeXlm > approval.FeeXlm ||
+                refreshed.PeakReserveXlm > approval.PeakReserveXlm ||
+                refreshed.IsManifest != approval.IsManifest)
+                throw new InvalidOperationException("File entry, remote state or cost changed; approve again.");
+
+            var entries = await queue.ReviewAllAsync(account, scope, ct);
+            try
+            {
+                var current = entries.Single(x => x.Id == approval.MutationId);
+                if (Convert.ToHexString(SHA256.HashData(current.EncryptedPayload)) != approval.PayloadSha256 ||
+                    (current.SignedFileEntries?.Length ?? 0) != approval.SignedEntriesBefore)
+                    throw new InvalidOperationException("Approved file revision changed.");
+                var intent = DeserializeAndValidate(current);
+                LedgerRecordDraft draft;
+                try
+                {
+                    var plan = new StellarLedgerUploadPlan(intent.Title, intent.FileName,
+                        intent.ContentType, intent.Content, intent.FolderId, intent.EntryIds);
+                    draft = plan.Entries[approval.SignedEntriesBefore].Draft;
+                }
+                finally { CryptographicOperations.ZeroMemory(intent.Content); }
+
+                // CAS boundary: after reservation, the only safe default is
+                // Uncertain, including when signer work fails before callback.
+                var reserved = approval.SignedEntriesBefore == 0
+                    ? await queue.ReserveFileUploadAsync(current, ct)
+                    : await queue.ReserveVerifiedNextFileEntryAsync(current, ct);
+                var revision = reserved;
+                string? hash = null;
+                Exception? failure = null;
+                try
+                {
+                    RequireSameScope(account, scope);
+                    if (sessions.Epoch != approval.SessionEpoch ||
+                        (await ledger.InspectAccountInfoAsync()).RootAccountId != account)
+                        throw new InvalidOperationException("Connected root/session changed.");
+                    hash = await preparedCreates.PublishWithPreparedHashAsync(
+                        approval.LedgerRecordId, draft, async signedHash =>
+                        {
+                            RequireSameScope(account, scope);
+                            if (sessions.Epoch != approval.SessionEpoch)
+                                throw new InvalidOperationException("Vault changed before signed checkpoint.");
+                            revision = await queue.CheckpointSignedFileEntryAsync(
+                                revision, approval.LedgerRecordId,
+                                signedHash.ToLowerInvariant(), CancellationToken.None);
+                            hash = signedHash.ToLowerInvariant();
+                        });
+                }
+                catch (Exception ex) { failure = ex; }
+                // Always leave a durable no-replay quarantine after this attempt.
+                try { await queue.MarkUncertainAsync(revision, null, CancellationToken.None); }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        "Cannot quarantine reserved upload. Preserve queue; NEVER retry.", ex);
+                }
+                return new(approval.MutationId, approval.LedgerRecordId,
+                    revision.SignedFileEntries?.LastOrDefault()?.TransactionHash,
+                    approval.IsManifest, failure is null
+                        ? "Submission attempted. Independently verify history before another file entry."
+                        : "Submission outcome unknown. Preserve the journal and investigate; do not retry.");
+            }
+            finally
+            {
+                foreach (var entry in entries)
+                    CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
+        }
+        finally { filePublicationGate.Release(); }
     }
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
