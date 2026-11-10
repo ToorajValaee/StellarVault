@@ -24,7 +24,49 @@
 }
 else
 {
-    <section class="native-preview sv-vault-data" aria-labelledby="native-preview-title">
+    <div class="sv-native-shell native-@HostPlatform.ToLowerInvariant()">
+        <header class="sv-native-topbar">
+            <div class="sv-native-brand"><span class="sv-native-brandmark" aria-hidden="true">✦</span>
+                <span><strong>StellarVault</strong><small>Private account vault</small></span></div>
+            <div class="sv-native-session">
+                <span class="sv-native-status-dot @(Ledger.IsConnected ? "connected" : "")" aria-hidden="true"></span>
+                @(Ledger.IsConnected ? "Stellar connected" : "Offline")
+            </div>
+        </header>
+        <nav class="sv-native-nav" aria-label="Primary navigation">
+            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")"
+                    aria-current="@(_nativePage == "stellar" ? "page" : null)"
+                    @onclick='() => NavigateNative("stellar")'>
+                <span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Stellar</span>
+            </button>
+            <button type="button" class="@(_nativePage == "local" ? "selected" : "")"
+                    aria-current="@(_nativePage == "local" ? "page" : null)"
+                    @onclick='() => NavigateNative("local")'>
+                <span class="sv-native-nav-icon" aria-hidden="true">▣</span><span>My vault</span>
+            </button>
+            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")"
+                    aria-current="@(_nativePage == "sync" ? "page" : null)"
+                    @onclick='() => NavigateNative("sync")'>
+                <span class="sv-native-nav-icon" aria-hidden="true">⇅</span><span>Sync</span>
+            </button>
+        </nav>
+        <main class="sv-native-scroll" id="native-content" tabindex="-1">
+          <div class="sv-native-content">
+            <div class="sv-native-page-heading">
+                <div><span class="sv-native-eyebrow">@HostPlatform · PRIVATE STORAGE</span>
+                    <h1>@(_nativePage == "stellar" ? "Stellar storage" :
+                          _nativePage == "local" ? "My vault" : "Hybrid sync")</h1>
+                    <p>@(_nativePage == "stellar" ? "Browse your on-chain records and files" :
+                         _nativePage == "local" ? "Encrypted storage on this device" :
+                         "Review local changes before paid publication")</p></div>
+                @if (Sessions.IsUnlocked && _nativePage != "stellar")
+                {
+                    <button type="button" class="sv-native-outline-action" @onclick="LockVault">Lock vault</button>
+                }
+            </div>
+    <section class="native-preview sv-vault-data" aria-label="Native vault workspace">
+        @if (_nativePage == "stellar")
+        {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
             <div class="panel-heading"><div><div class="panel-kicker">SECURE ACCESS // STELLAR IDENTITY</div><h2>OPEN YOUR VAULT</h2></div><span class="step-led">01</span></div>
             @if (!Ledger.IsConnected)
@@ -169,6 +211,9 @@ else
             }
             <p class="advanced-help">Local encrypted records and Stellar ledger writes are separate storage destinations. Publishing requires explicit transaction approval.</p>
         </section>
+        }
+        @if (_nativePage is "local" or "sync")
+        {
         <section class="terminal-panel" aria-label="Local encrypted vault status">
             <div class="panel-kicker">LOCAL STORAGE // SESSION SECURITY</div>
             <h3>LOCAL ENCRYPTED VAULT</h3>
@@ -176,15 +221,18 @@ else
             {
                 <p class="advanced-help">Local session unlocked for account <code>@Sessions.ActiveAccountId</code>.</p>
                 <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
-                <VaultRecordWorkspaceView />
-                <VaultHybridDraftEditor />
-                <p class="advanced-help" role="status">
-                    Hybrid mode supports encrypted offline records and folders only.
-                    File uploads, file deletion and file synchronization are disabled in Hybrid mode.
-                    Use direct on-chain mode for files.
-                </p>
-                <VaultHybridRemoteChanges />
-                <VaultHybridSyncReview />
+                @if (_nativePage == "local")
+                {
+                    <VaultRecordWorkspaceView />
+                    <VaultHybridDraftEditor />
+                }
+                else
+                {
+                    <p class="advanced-help">Hybrid Sync includes encrypted records and folders.
+                        File synchronization is intentionally unavailable.</p>
+                    <VaultHybridRemoteChanges />
+                    <VaultHybridSyncReview />
+                }
             }
             else
             {
@@ -226,10 +274,24 @@ else
         {
             <p role="status" aria-live="polite">@_message</p>
         }
+        }
     </section>
+          </div>
+        </main>
+        <footer class="sv-native-footer">Vault content stays private until you approve a transaction.</footer>
+    </div>
 }
 
 @code {
+    [Parameter] public string HostPlatform { get; set; } = "Android";
+    private string _nativePage = "stellar";
+
+    private void NavigateNative(string page)
+    {
+        if (page is not ("stellar" or "local" or "sync")) return;
+        _nativePage = page;
+    }
+
     private string _nativeMode = "browse";
 
     private void SetNativeMode(string mode)
