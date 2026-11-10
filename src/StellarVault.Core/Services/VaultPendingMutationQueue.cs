@@ -115,6 +115,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> EnqueueAsync(VaultPendingMutation entry, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        if (entry.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile)
+            throw new NotSupportedException(
+                "Files are disabled in Hybrid mode. Use direct on-chain file operations instead.");
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
             entry.SignedFileEntries is { Length: > 0 })
             throw new InvalidOperationException("Only new pending drafts can be queued.");
@@ -134,7 +137,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return entries.Where(x => x.State == VaultSyncState.Pending &&
             // DeleteFile is staged only until a dedicated multi-record
             // tombstone journal and verifier are implemented.
-            x.Kind != VaultMutationKind.DeleteFile &&
+            x.Kind is not (VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile) &&
             x.DependsOn is not null &&
             x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
                 dependency.State == VaultSyncState.Confirmed) &&
@@ -160,8 +163,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             var missing = dependencies.Where(id => !byId.ContainsKey(id)).ToArray();
             var waiting = dependencies.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
-            var problems = item.Kind == VaultMutationKind.DeleteFile
-                ? new[] { "File deletion publication requires a complete signed tombstone journal and recovery verifier." }
+            var problems = item.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile
+                ? new[] { "Hybrid file operations are disabled. Keep any existing signed journal for read-only reconciliation; use direct on-chain files for new work." }
                 : item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
                     ? VaultQueuedCreatePolicy.Problems(item, all) : [];
             if (problems.Length == 0 && missing.Length == 0 && waiting.Length == 0)
@@ -615,6 +618,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> ReserveFileUploadAsync(
         VaultPendingMutation expected, CancellationToken ct = default)
     {
+        throw new NotSupportedException(
+            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
@@ -648,6 +653,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> ReserveVerifiedNextFileEntryAsync(
         VaultPendingMutation expected, CancellationToken ct = default)
     {
+        throw new NotSupportedException(
+            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
@@ -702,6 +709,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         VaultPendingMutation expected, string recordId, string signedHash,
         CancellationToken ct = default)
     {
+        throw new NotSupportedException(
+            "Hybrid file publication is disabled. Preserve previous signed checkpoints for reconciliation.");
         retention.RequireLocalPersistence();
         ArgumentNullException.ThrowIfNull(expected);
         if (expected.Kind != VaultMutationKind.UploadFile ||
