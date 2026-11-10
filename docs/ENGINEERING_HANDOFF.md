@@ -619,3 +619,14 @@ User confirmed **Android still hung on "Initializing StellarVault…" after firs
 - Updated `tests/maui-ledger-assets.test.cjs` to assert lazy script loading, first-render startup signal, terminal style, and MAUI fallback. Constructor signature was changed to `new MainPage(_navigation, _startup)`; test matcher reflects both arguments.
 
 **Important:** a passing Android APK compile is still insufficient. Install the artifact from a successful workflow on/after these changes, and observe whether the XAML panel disappears and the navigation renders. If it times out, collect filtered `adb logcat` messages around MAUI BlazorWebView resource resolution/renderer exception; do not request or print mnemonic or keys.
+
+
+## 2026-11-10 — Android emulator timeout evidence and startup stage diagnostics
+
+User-supplied Android emulator screenshot confirms the **MAUI XAML startup overlay reaches its 12-second timeout**. This proves `MainPage` was instantiated and the watchdog ran; it does **not** prove whether the native WebView was initialized, static assets resolved, the Blazor bridge attached or the large workspace instantiated. The screenshot itself contains no exception detail.
+
+Changes on `main`: `AppRoot.razor` now performs an intentionally minimal, dependency-free first render. Only after signaling `NativeStartupStatus.NotifyFirstRender` does it mount `NativeVaultWorkspace`. This splits bridge/bootstrap failure from complex Razor workspace/DI failures. `MainPage.xaml` now wires the documented `BlazorWebViewInitializing` and `BlazorWebViewInitialized` events, and `MainPage.xaml.cs` shows a fixed, credential-free startup stage on the XAML overlay and logs it via `StellarVaultStartup` Android logcat tag. The timeout includes the last reached stage, instead of a blanket WebView guess. It does not log mnemonics, user content or exceptions. Native startup regression tests cover first render isolation and event wiring.
+
+The Android CI workflow now inspects the APK ZIP entries to require bundled `wwwroot/index.html`, `wwwroot/native-app.css` and the locally packaged Stellar SDK. This catches missing build assets but **not** bridge execution failures. When testing the next successful artifact, report which stage the emulator displays, and (if still stuck) capture: `adb logcat -d -s StellarVaultStartup BlazorWebView chromium AndroidRuntime` (do not include mnemonic or vault data). Emulator system WebView must be installed and updated.
+
+Do not call this fixed until successful **interactive emulator startup**, followed by Android offline vault and manual Testnet acceptance.
