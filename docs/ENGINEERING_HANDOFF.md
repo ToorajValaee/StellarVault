@@ -585,3 +585,14 @@ After Windows device feedback that the UI looked like a web page and Android/mob
 - Extended native assets regression coverage asserts the startup component, native-only CSS ordering, scroll region, navigation and quick-action strip. An intermediate CI revision failed the old root element matcher; that test was updated to permit `HostPlatform`.
 
 **Validation limitation:** The MAUI renderer remains BlazorWebView, not platform-native XAML/WinUI/UIKit/Compose components. The new presentation is deliberately host-adaptive, but a physical device/emulator must still verify touch scrolling, keyboard resizing, safe areas, orientation, native Windows DPI resizing and VoiceOver/TalkBack interactions. Continue from the newest Android/PWA pipeline result; do not claim visual/device acceptance solely from compilation.
+
+
+## 2026-11-10 — Native task-focused UX additions and platform build gates
+
+The original mobile/desktop layout redesign is extended with in-screen segmented navigation: My vault shows only **Device records** or **Offline drafts**; Sync shows only **Stage changes** or **Review & sync**. The persistent quick action "Review sync queue" selects the review segment explicitly, not the staging segment. A bottom command strip offers accessible Connect Stellar/Unlock vault (only when their ordinary prerequisites are met), Refresh/Disconnect, Lock and safe navigation; all existing explicit paid approval checkpoints remain in the shared UI.
+
+Android `MainActivity` uses `WindowSoftInputMode = SoftInput.AdjustResize` to give the scrollable BlazorWebView space when the keyboard opens. A native static regression asserts the activity mode. Device testing remains necessary because Android OEM keyboard/window-inset behavior varies.
+
+Added `.github/workflows/maui-windows-preview.yml`: build the .NET 10 Windows target on a Windows runner after native/shared changes, installing `maui-windows` and verifying an unpackaged native EXE. An Android APK build **does not** test the Windows navigation rail or WinUI runtime. iOS still requires an Apple runner and interactive device/simulator checks.
+
+See `docs/NATIVE_UX_ACCEPTANCE.md` for Windows/Android/iOS behavior and device acceptance. The native UI is host-adaptive BlazorWebView, not independent XAML/UIKit/Compose implementations; preserve this distinction in release statements.
