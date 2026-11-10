@@ -111,3 +111,23 @@ test('Android Back returns to Stellar destination without bypassing the vault', 
   assert.match(workspace, /NativeNavigation\.BackRequested \+= OnAndroidBackRequested/);
   assert.match(workspace, /NativeNavigation\.Clear\(\)/);
 });
+
+test('native startup fallback is independent of JavaScript and first render reports ready', () => {
+  const xaml = fs.readFileSync(path.join(maui, 'MainPage.xaml'), 'utf8');
+  const codeBehind = fs.readFileSync(path.join(maui, 'MainPage.xaml.cs'), 'utf8');
+  const root = fs.readFileSync(path.join(maui, 'AppRoot.razor'), 'utf8');
+  assert.match(xaml, /x:Name="NativeStartupOverlay"/);
+  assert.match(xaml, /x:Name="NativeStartupMessage"/);
+  assert.match(codeBehind, /ReportUnresponsiveStartupAsync/);
+  assert.match(codeBehind, /OnFirstRenderCompleted/);
+  assert.match(codeBehind, /NativeStartupOverlay\.IsVisible = false/);
+  assert.match(root, /Startup\.NotifyFirstRender\(\)/);
+});
+
+test('native-only styling carries the StellarVault terminal identity', () => {
+  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+  assert.match(nativeCss, /--sv-native-accent:\s*#7ef6a4/);
+  assert.match(nativeCss, /Cascadia Code/);
+  assert.match(nativeCss, /\.sv-native-nav/);
+  assert.match(nativeCss, /\.sv-native-scroll/);
+});
