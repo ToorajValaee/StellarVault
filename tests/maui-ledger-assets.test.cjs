@@ -89,3 +89,9 @@ test('MAUI renders platform-adaptive native shell with scrollable content and fi
   assert.match(nativeCss, /env\(safe-area-inset-bottom/);
   assert.match(nativeCss, /\.sv-native-commandbar/);
 });
+
+test('Android keyboard resizes WebView instead of obscuring offline editors', () => {
+  const activity = fs.readFileSync(path.join(maui,
+    'Platforms/Android/MainActivity.cs'), 'utf8');
+  assert.match(activity, /WindowSoftInputMode\s*=\s*SoftInput\.AdjustResize/);
+});
