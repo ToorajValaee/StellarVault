@@ -602,3 +602,149 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
   .sv-modern-entry .sv-mnemonic-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
   .sv-modern-entry .sv-mnemonic-grid .terminal-input {font-size:13px;}
 }
+
+
+/* Unified 2026 application design: remove remaining terminal control styles.
+   This is the authoritative PWA component layer, loaded after scoped Razor styles. */
+.sv-web-shell {--sv-primary:#087e59;--sv-primary-hover:#056b4b;--sv-ink:#1c323b;
+ --sv-outline:#dce6e6;--sv-focus:rgba(7,128,89,.2);}
+.sv-web-shell .sv-adaptive-header {
+  height:74px;min-height:74px;padding:0 clamp(16px,2.4vw,36px)!important;
+  background:#fff!important;background-image:none!important;border-bottom:1px solid #e2eaea!important;
+  box-shadow:0 1px 5px rgba(15,53,46,.035)!important;position:relative;
+  display:flex;gap:20px;align-items:center;
+}
+.sv-web-shell .sv-brand {display:flex;align-items:center;gap:12px;min-width:0;}
+.sv-web-shell .sv-mark {display:grid!important;place-items:center;flex:0 0 43px!important;
+ width:43px!important;height:43px!important;border:0!important;border-radius:13px!important;
+ color:#eafff5!important;font-size:27px!important;line-height:1;
+ background:linear-gradient(145deg,#22c58c,#067957)!important;
+ box-shadow:0 5px 13px rgba(0,107,74,.17)!important;}
+.sv-web-shell .sv-brand-name {display:flex;flex-direction:column;gap:2px;min-width:0;}
+.sv-web-shell .sv-brand-name strong {font:750 19px/1.1 Inter,"Segoe UI",Arial,sans-serif!important;
+ text-transform:none!important;letter-spacing:-.04em!important;color:#183831!important;white-space:nowrap;}
+.sv-web-shell .sv-brand-name small {display:block!important;font:500 10px/1.2 Inter,"Segoe UI",Arial,sans-serif!important;
+ color:#79928b!important;letter-spacing:.02em;}
+.sv-web-shell .sv-header-actions {display:flex;align-items:center;gap:11px;}
+.sv-web-shell .sv-header-privacy {display:inline-flex;align-items:center;gap:8px;
+ font:650 12px Inter,"Segoe UI",Arial,sans-serif;color:#38745e;
+ padding:9px 13px;border-radius:25px;background:#f0f8f4;}
+.sv-web-shell .sv-header-privacy > span {font-size:9px;color:#18a77b;}
+.sv-web-shell .sv-network-menu > summary.sv-network-icon-trigger,
+.sv-web-shell .sv-theme-toggle {display:grid;place-items:center;width:42px!important;height:42px!important;
+ min-width:42px!important;min-height:42px!important;padding:0!important;
+ background:#f6f9f8!important;border:1px solid #dce7e3!important;
+ color:#145f49!important;border-radius:12px!important;box-shadow:none!important;
+ text-shadow:none!important;cursor:pointer;}
+.sv-web-shell .sv-network-menu > summary.sv-network-icon-trigger:hover,
+.sv-web-shell .sv-theme-toggle:hover {background:#e8f5ef!important;border-color:#b8dacc!important;}
+.sv-web-shell .sv-network-menu > summary.sv-network-icon-trigger > span:first-child {font-size:21px;}
+.sv-web-shell .sv-network-popover {background:#fff!important;color:#213e40!important;
+ border:1px solid #dfe9e7!important;border-radius:15px!important;box-shadow:0 15px 50px rgba(15,50,43,.16)!important;}
+/* All PWA interactive controls, including Add and approval dialogs, use one geometry. */
+.sv-web-shell :is(.pixel-button,.mini-button,.access-button,.network-option,
+ .sv-file-picker-button,.sv-access-actions button,.sv-pwa-task-tabs button,
+ .sv-pwa-editor-modes a,.sv-pwa-editor-breadcrumb a) {
+ appearance:none;border-radius:11px!important;border:1px solid #d4e1df!important;
+ background:#fff!important;background-image:none!important;color:#23594b!important;
+ box-shadow:none!important;text-shadow:none!important;transform:none!important;
+ font:650 13px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+ letter-spacing:0!important;text-transform:none!important;text-decoration:none!important;
+ display:inline-flex;align-items:center;justify-content:center;gap:8px;
+ min-height:42px;max-width:100%;padding:10px 15px;
+ transition:background-color .12s,border-color .12s,box-shadow .12s;}
+.sv-web-shell :is(.pixel-button,.mini-button,.access-button,.network-option,
+ .sv-file-picker-button,.sv-pwa-task-tabs button):hover:not(:disabled) {
+ background:#ecf8f2!important;border-color:#a7d8c2!important;color:#075c43!important;}
+.sv-web-shell :is(.pixel-button,.access-button).primary {
+ background:linear-gradient(180deg,#129b70,#047653)!important;
+ border-color:#06825b!important;color:#fff!important;
+ box-shadow:0 4px 12px rgba(6,120,85,.14)!important;}
+.sv-web-shell :is(.pixel-button,.access-button).primary:hover:not(:disabled) {
+ background:linear-gradient(180deg,#108d65,#056547)!important;color:#fff!important;}
+.sv-web-shell :is(.pixel-button,.mini-button,.access-button):disabled {
+ opacity:.5;cursor:not-allowed;filter:none!important;transform:none!important;}
+.sv-web-shell :is(.pixel-button,.mini-button,.icon-button,.sv-theme-toggle,
+ .sv-network-icon-trigger,a,button,input,select,textarea):focus-visible {
+ outline:3px solid var(--sv-focus)!important;outline-offset:2px!important;}
+.sv-web-shell :is(.terminal-input,select.terminal-input,textarea.terminal-input) {
+ background:#fff!important;background-image:none!important;color:#203c42!important;
+ border:1px solid #d2e0de!important;border-radius:11px!important;
+ box-shadow:none!important;text-shadow:none!important;
+ font:500 14px/1.45 Inter,"Segoe UI",Arial,sans-serif!important;}
+.sv-web-shell :is(.terminal-panel,.credential-form,.record-card,.data-field,
+ .commit-preview,.approval-modal,.record-modal) {background-image:none!important;
+ text-shadow:none;}
+.sv-web-shell .form-section-title,
+.sv-web-shell .panel-kicker,
+.sv-web-shell .terminal-label {font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+ text-transform:none!important;letter-spacing:0!important;text-shadow:none!important;}
+.sv-web-shell .sv-pwa-secondary-stage .sv-pwa-editor-breadcrumb a {
+ min-height:34px!important;padding:6px 8px!important;
+ background:transparent!important;border-color:transparent!important;}
+.sv-web-shell .sv-pwa-secondary-stage .sv-pwa-editor-modes a.selected,
+.sv-web-shell .sv-pwa-task-tabs button.selected {
+ background:#def5e9!important;color:#075e45!important;border-color:#9ed8bd!important;}
+.sv-web-shell .sv-pwa-secondary-stage .credential-form > .pixel-button {
+ align-self:flex-start;}
+.sv-web-shell .sv-pwa-secondary-stage .credential-form .pixel-button.primary {
+ min-height:47px;padding-inline:20px;}
+/* Entry: remove the inherited grid min-sizes and spacing responsible for scroll.
+   Natural overflow is preserved for 24-word phrases, errors and high browser zoom. */
+.sv-web-shell:has(.sv-modern-entry) .sv-adaptive-main {width:100%;max-width:none;
+ margin:0;padding:0!important;overflow:visible;}
+.sv-web-shell .sv-modern-entry {min-height:calc(100dvh - 74px);height:auto;align-items:stretch;
+ grid-template-columns:minmax(300px,.78fr) minmax(0,1.22fr)!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-showcase {min-height:0!important;
+ padding:clamp(22px,3vw,48px)!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-showcase-content {padding:20px 0!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-showcase h1 {
+ font-size:clamp(30px,3vw,46px)!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-showcase-content > p {margin-bottom:24px!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-feature {margin:12px 0!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-main {justify-content:center;
+ padding:clamp(18px,2.6vw,38px)!important;min-width:0;}
+.sv-web-shell .sv-modern-entry .sv-entry-intro {margin-bottom:14px!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-intro h1 {font-size:clamp(26px,2.5vw,35px)!important;}
+.sv-web-shell .sv-modern-entry > .sv-entry-main > .access-form {
+ gap:6px!important;padding:clamp(16px,1.8vw,27px)!important;
+ border-radius:16px!important;box-shadow:0 10px 35px rgba(18,60,49,.045)!important;}
+.sv-web-shell .sv-modern-entry .sv-mnemonic-grid {gap:7px!important;margin:6px 0 10px!important;}
+.sv-web-shell .sv-modern-entry .sv-mnemonic-grid .terminal-input {min-height:39px!important;padding:7px 9px!important;}
+.sv-web-shell .sv-modern-entry .sv-access-storage-settings {margin:6px 0!important;padding:10px 12px!important;}
+.sv-web-shell .sv-modern-entry .sv-biometric-choice {padding:9px!important;}
+.sv-web-shell .sv-modern-entry .sv-access-actions {margin:8px 0 5px!important;}
+.sv-web-shell .sv-modern-entry .terminal-alert.warning {padding:10px 12px!important;margin:5px 0!important;}
+.sv-web-shell .sv-modern-entry .sv-entry-privacy {margin:12px auto 0;}
+@media(min-width:1021px) and (max-height:850px) {
+ .sv-web-shell .sv-modern-entry .sv-entry-main {justify-content:flex-start;}
+ .sv-web-shell .sv-modern-entry .sv-entry-showcase-content {padding:12px 0!important;}
+ .sv-web-shell .sv-modern-entry .sv-entry-feature {margin:8px 0!important;}
+}
+@media(max-width:1020px) {
+ .sv-web-shell .sv-modern-entry {display:block!important;min-height:calc(100dvh - 74px);}
+ .sv-web-shell .sv-modern-entry .sv-entry-main {min-height:calc(100dvh - 74px);
+  justify-content:center;padding:22px 16px!important;}
+}
+@media(max-width:560px) {
+ .sv-web-shell .sv-adaptive-header {min-height:62px;height:62px;padding:0 12px!important;}
+ .sv-web-shell .sv-mark {display:grid!important;flex-basis:35px!important;
+  width:35px!important;height:35px!important;font-size:22px!important;border-radius:10px!important;}
+ .sv-web-shell .sv-brand-name strong {font-size:16px!important;}
+ .sv-web-shell .sv-brand-name small {display:none!important;}
+ .sv-web-shell .sv-header-privacy {display:none;}
+ .sv-web-shell .sv-header-actions {gap:7px;}
+ .sv-web-shell .sv-network-menu > summary.sv-network-icon-trigger,
+ .sv-web-shell .sv-theme-toggle {width:37px!important;height:37px!important;
+ min-width:37px!important;min-height:37px!important;}
+ .sv-web-shell .sv-modern-entry {min-height:calc(100dvh - 62px);}
+ .sv-web-shell .sv-modern-entry .sv-entry-main {min-height:calc(100dvh - 62px);
+  padding:16px 12px calc(20px + env(safe-area-inset-bottom,0px))!important;justify-content:flex-start;}
+ .sv-web-shell .sv-modern-entry .sv-entry-intro {margin-bottom:12px!important;}
+ .sv-web-shell .sv-modern-entry > .sv-entry-main > .access-form {padding:15px 13px!important;}
+ .sv-web-shell .sv-modern-entry .sv-mnemonic-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+ .sv-web-shell .sv-pwa-secondary-stage .credential-form .pixel-button.primary {width:100%;}
+}
+@media(prefers-reduced-motion:reduce) {
+ .sv-web-shell :is(.pixel-button,.mini-button,.network-option) {transition:none!important;}
+}
