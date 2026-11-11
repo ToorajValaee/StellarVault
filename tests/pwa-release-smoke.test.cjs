@@ -432,7 +432,7 @@ test('Network preference contains only non-secret metadata and custom network mu
   assert.match(js, /stellarVaultNetworkPreference/);
   assert.match(js, /stellar-vault-v2-network-preference/);
   assert.match(js, /horizonUrl/);
-  assert.match(js, /localStorage\\.setItem\\(key, JSON\\.stringify\\(\\{ version: 1, network, horizonUrl: url \\}\\)\\)/);
+  assert.ok(js.includes("localStorage.setItem(key, JSON.stringify({ version: 1, network, horizonUrl: url }))"));
   assert.match(home, /stellarVaultNetworkPreference\.load/);
   assert.match(home, /stellarVaultNetworkPreference\.save/);
   assert.match(home, /NetworkSelection\.ResetCustom\(\)/);
