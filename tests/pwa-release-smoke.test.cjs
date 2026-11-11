@@ -497,3 +497,10 @@ test('Product Help stays inside the Vault layout and attribution is a thin foote
   assert.match(shell, /sv-network-symbol/);
   assert.match(shell, /sv-brand-shield/);
 });
+
+test('Vault query navigation uses one combined OnParametersSet override', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.equal((vault.match(/protected override void OnParametersSet\s*\(/g) || []).length, 1);
+  assert.match(vault, /if \(!string\.IsNullOrEmpty\(InitialFolder\)\) _folder = InitialFolder/);
+  assert.match(vault, /if \(RequestedView == "help"\) _appView = "help"/);
+});
