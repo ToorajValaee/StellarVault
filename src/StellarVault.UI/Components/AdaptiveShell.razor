@@ -3,13 +3,14 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject VaultNetworkSelection NetworkSelection
 
-<div class="sv-adaptive-shell">
+<div class="sv-adaptive-shell @(PlatformName == "WEB PWA" ? "sv-web-shell" : "sv-native-shell")">
     <header class="sv-adaptive-header">
         <div class="sv-brand">
-            <span class="sv-mark" aria-hidden="true">SV</span>
-            <span><strong>STELLARVAULT</strong></span>
+            <span class="sv-mark" aria-hidden="true">✦</span>
+            <span class="sv-brand-name"><strong>StellarVault</strong><small>Secure digital vault</small></span>
         </div>
         <div class="sv-header-actions">
+            <span class="sv-header-privacy"><span aria-hidden="true">●</span> Encrypted vault</span>
             @if (HeaderActions is not null)
             {
                 @HeaderActions
@@ -27,7 +28,7 @@
                     </div>
                 </details>
             }
-            <button class="icon-button sv-theme-toggle" type="button" title="Switch green / amber theme" aria-label="Change phosphor theme" @onclick="ToggleThemeAsync"><span aria-hidden="true">◐</span></button>
+            <button class="icon-button sv-theme-toggle" type="button" title="Switch color theme" aria-label="Change color theme" @onclick="ToggleThemeAsync"><span aria-hidden="true">◐</span></button>
         </div>
     </header>
     <main class="sv-adaptive-main" id="main-content">
