@@ -11,10 +11,10 @@
 @inject IStellarLedgerRecords Ledger
 @implements IDisposable
 
-<section class="terminal-panel" aria-label="Hybrid encrypted device queue">
-    <div class="panel-heading">
-        <div><div class="panel-kicker">ENCRYPTED DEVICE VAULT // HYBRID SYNC</div>
-        <h3>LOCAL CHANGES — REVIEW AND MANUAL SYNC</h3></div>
+<section class="terminal-panel sv-hybrid-panel sv-hybrid-sync-panel" aria-label="Hybrid encrypted device queue">
+    <div class="panel-heading sv-hybrid-heading">
+        <div><div class="panel-kicker">Encrypted device vault</div>
+        <h3>Review local changes</h3></div>
     </div>
     <p>Local drafts stay on this device until you explicitly approve a paid Stellar transaction.
        Submission is not confirmation. An unknown outcome remains quarantined and must never be retried automatically.</p>
@@ -29,16 +29,16 @@
     else
     {
         <button type="button" class="pixel-button compact" disabled="@_busy"
-                @onclick="ReviewAsync">REVIEW LOCAL CHANGES</button>
+                @onclick="ReviewAsync">Review local changes</button>
         <button type="button" class="pixel-button compact" disabled="@(_busy || !Ledger.IsConnected)"
-                @onclick="EstimateAsync">ESTIMATE STELLAR SYNC COSTS</button>
+                @onclick="EstimateAsync">Estimate Stellar fees</button>
         @if (_report is not null)
         {
             <p role="status">Ready: @_report.Queue.Ready.Count · Blocked: @_report.Queue.Blocked.Count ·
                 Uncertain: @_report.Queue.NeedsReconciliation · Conflicts: @_report.Queue.Conflicts</p>
             @if (_report.FolderPlan.Steps.Count > 0)
             {
-                <section class="terminal-panel" aria-label="Offline folder and record synchronization order">
+                <section class="terminal-panel sv-hybrid-subsection" aria-label="Offline folder and record synchronization order">
                     <div class="panel-kicker">OFFLINE FOLDER TREE // SYNC ORDER</div>
                     <p>Ready for review: @_report.FolderPlan.Ready ·
                         Waiting for parent: @_report.FolderPlan.Waiting ·
@@ -50,7 +50,7 @@
                        Each submission needs its own fee quote and explicit approval.</p>
                     @foreach (var step in _report.FolderPlan.Steps)
                     {
-                        <div class="data-field">
+                        <div class="data-field sv-hybrid-item">
                             <strong>@step.Label</strong>
                             <p>@(step.IsFolder ? "FOLDER" : "RECORD") ·
                                 @step.Status · ID <code>@step.EntityId</code></p>
