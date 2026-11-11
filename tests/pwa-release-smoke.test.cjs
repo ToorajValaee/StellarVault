@@ -167,7 +167,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   assert.ok(access.includes('Stellar only — nothing saved on this device'));
   assert.ok(access.includes('checked="@(!_enableLocalStorage)"'));
   assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
@@ -178,7 +178,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
 });
 
 test('on-chain-only file review never requires a local vault checkpoint', () => {
-  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
   assert.ok(add.includes('if (Retention.AllowsLocalPersistence)\n                    {'));
@@ -269,7 +269,7 @@ test('PWA exposes independent record, offline draft and manual sync views', () =
 });
 
 test('PWA item editor offers one focused task with app navigation', () => {
-  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.ok(add.includes('sv-pwa-editor-breadcrumb'));
   assert.ok(add.includes('sv-pwa-editor-modes'));
@@ -381,7 +381,7 @@ test('Explorer rows expose individual action menus and the inspector never cente
 
 test('Vault desktop explorer uses a genuine third-column inspector and nested folder tree', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.match(vault, /sv-tree-node/);
   assert.match(vault, /ToggleTreeFolder\(folder.Id\)/);
@@ -389,7 +389,7 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(vault, /sv-explorer-list-head/);
   assert.match(vault, /sv-layout-switch/);
   assert.match(vault, /_explorerLayout == "grid"/);
-  assert.match(vault, /<Add @key="_editorKey" @ref="_inlineEditor" Embedded="true"/);
+  assert.match(vault, /<VaultItemEditor @key="_editorKey" @ref="_inlineEditor" Embedded="true"/);
   assert.match(vault, /sv-inspector-tabs/);
   assert.match(vault, /sv-inspector-more/);
   assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _uncertainStage/);
@@ -400,7 +400,7 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
 
 
 test('Embedded Add/Edit renders without a nested app grid; create actions stay out of left rail', () => {
-  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   const shell = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'AdaptiveShell.razor'), 'utf8');
@@ -410,8 +410,18 @@ test('Embedded Add/Edit renders without a nested app grid; create actions stay o
   assert.match(shell, /@if \(Embedded\)/);
   const rail = vault.slice(vault.indexOf('<nav class="sv-pwa-rail"'), vault.indexOf('</nav>') + 6);
   assert.doesNotMatch(rail, /OpenEditor\(/);
-  assert.match(vault, /<Add @key="_editorKey"/);
+  assert.match(vault, /<VaultItemEditor @key="_editorKey"/);
   assert.match(css, /\.sv-editor-sidecar \.sv-inline-editor-layout/);
   assert.match(css, /\.sv-folder-tile \.sv-folder-open > span:last-child/);
   assert.match(css, /text-align:left!important/);
+});
+
+test('Add/Edit route only forwards navigation parameters to a reusable editor', () => {
+  const wrapper = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const reusable = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  assert.match(wrapper, /@page "\/add"/);
+  assert.match(wrapper, /@page "\/edit\/\{RecordId\}"/);
+  assert.match(wrapper, /<VaultItemEditor RecordId="@RecordId" InitialFolder="@InitialFolder" Kind="@Kind"\s*\/>/);
+  assert.doesNotMatch(reusable, /@page/);
+  assert.match(reusable, /OnSaved.InvokeAsync/);
 });
