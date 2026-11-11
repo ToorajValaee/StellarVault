@@ -180,13 +180,24 @@ else
                     @onclick='() => _folder = null'><span aria-hidden="true">▣</span> My vault</button>
             @foreach (var folder in Folders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase))
             {
-                <button type="button" class="sv-tree-item @(_folder == folder.Id ? "selected" : "")"
-                        style="--sv-tree-depth:@FolderDepth(folder.Id)"
-                        aria-current="@(_folder == folder.Id ? "location" : null)"
-                        @onclick="() => OpenFolder(folder.Id)">
-                    <span aria-hidden="true">▸</span><span class="sv-tree-folder-icon" aria-hidden="true">▣</span>
-                    <span class="sv-tree-label">@folder.Title</span>
-                </button>
+                @if (IsTreeFolderVisible(folder))
+                {
+                    <div class="sv-tree-node" style="--sv-tree-depth:@FolderDepth(folder.Id)">
+                        @if (HasTreeChildren(folder.Id))
+                        {
+                            <button class="sv-tree-expander" type="button" aria-label="@($"Toggle {folder.Title} children")"
+                                    aria-expanded="@(!_collapsedFolders.Contains(folder.Id))" @onclick="() => ToggleTreeFolder(folder.Id)">
+                                <span aria-hidden="true">@(_collapsedFolders.Contains(folder.Id) ? "▸" : "▾")</span>
+                            </button>
+                        }
+                        else { <span class="sv-tree-expander-placeholder" aria-hidden="true"></span> }
+                        <button type="button" class="sv-tree-item @(_folder == folder.Id ? "selected" : "")"
+                                aria-current="@(_folder == folder.Id ? "location" : null)" @onclick="() => OpenFolder(folder.Id)">
+                            <span class="sv-tree-folder-icon" aria-hidden="true">📁</span>
+                            <span class="sv-tree-label">@folder.Title</span>
+                        </button>
+                    </div>
+                }
             }
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
@@ -200,7 +211,7 @@ else
                 }
             }
         </aside>
-        <div class="sv-explorer-main">
+        <div class="sv-explorer-main @(_explorerLayout == "grid" ? "sv-view-grid" : "sv-view-list")">
         <section class="terminal-panel sv-explorer-folder-panel">
             <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
 
@@ -215,12 +226,32 @@ else
                     <span>/</span><strong>📁 @PendingTitle(PendingLocalFolders.First(x => x.EntityId == _folder)) (LOCAL)</strong>
                 }
             </nav>
+            <div class="sv-current-folder">
+                <span class="sv-current-folder-icon" aria-hidden="true">📁</span>
+                <div class="sv-current-folder-name"><h2>@(Breadcrumbs.LastOrDefault()?.Title ?? "My vault")</h2>
+                    <small>@(Folders.Count(x => x.FolderId == _folder) + Filtered.Count) items</small></div>
+                <div class="sv-layout-switch" role="group" aria-label="Explorer layout">
+                    <button type="button" class="@(_explorerLayout == "list" ? "selected" : "")"
+                            aria-label="List view" aria-pressed="@(_explorerLayout == "list")"
+                            @onclick='() => _explorerLayout = "list"'>☷</button>
+                    <button type="button" class="@(_explorerLayout == "grid" ? "selected" : "")"
+                            aria-label="Grid view" aria-pressed="@(_explorerLayout == "grid")"
+                            @onclick='() => _explorerLayout = "grid"'>▦</button>
+                </div>
+            </div>
             <div class="sv-explorer-toolbar"><label><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>Include subfolders</span></label><span class="sv-explorer-toolbar-count">@Filtered.Count records</span></div>
+            <div class="sv-access-actions">
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("record")'>New record</button>
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("folder")'>New folder</button>
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("file")'>Add file</button>
+            </div>
+            <div class="sv-explorer-list-head" aria-hidden="true"><span>Name</span><span>Type</span><span>Storage</span><span></span></div>
             <div class="sv-folder-grid">
             @foreach (var item in Folders.Where(f => f.FolderId == _folder))
             {
                 <div class="sv-folder-tile">
                     <button class="pixel-button compact sv-folder-open" @onclick="() => OpenFolder(item.Id)"><span aria-hidden="true">📁</span><span>@item.Title</span></button>
+                    <span class="sv-object-type">Folder</span><span class="sv-object-storage">Stellar</span>
                     <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
                         <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
                         <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
@@ -234,7 +265,9 @@ else
                     {
                         <div class="sv-folder-tile">
                             <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)"><span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span></button>
-                            <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
+                            <span class="sv-object-type">Folder</span><span class="sv-object-storage">Local</span>
+                            <span class="sv-object-type">Draft</span><span class="sv-object-storage">Local</span>
+                        <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
                                 <div class="sv-object-menu">
                                     <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
                                     <button type="button" @onclick="() => OpenPending(draft)">Edit local draft</button>
@@ -261,12 +294,7 @@ else
                     </div>
                 }
             }
-            <div class="sv-access-actions">
-                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("record")'>New record</button>
-                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("folder")'>New folder</button>
-                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("file")'>Add file</button>
-            </div>
-        </section>
+
         @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
         <section class="record-list">
             @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
@@ -284,6 +312,8 @@ else
                             @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
                             </span>
                         </button>
+                        <span class="sv-object-type">@(IsLedgerFile(item) ? "File" : "Record")</span>
+                        <span class="sv-object-storage">Stellar</span>
                         <details class="sv-object-actions">
                             <summary aria-label="@($"Actions for {item.Title}")" title="More actions">⋯</summary>
                             <div class="sv-object-menu">
@@ -295,6 +325,7 @@ else
                     </div>
                 }
             }
+        </section>
         </section>
         </div>
         </div>
