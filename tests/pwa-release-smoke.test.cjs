@@ -561,3 +561,10 @@ test('Offline ledger refresh leaves last verified records and gives short status
   assert.match(refresh, /Stellar network is unavailable/);
   assert.doesNotMatch(refresh, /"Ledger synchronization failed: " \+ ex\.Message/);
 });
+
+test('Unreachable registry never redirects an unlocked local vault to initialization', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.match(vault, /else if \(Ledger\.IsConnected && _registryReady == false\)/);
+  assert.match(vault, /Stellar cannot be reached right now\. You can continue working with encrypted local drafts/);
+  assert.doesNotMatch(vault, /Ledger setup check failed: " \+ ex\.Message/);
+});
