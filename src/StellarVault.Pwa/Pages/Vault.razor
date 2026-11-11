@@ -358,7 +358,7 @@ else
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
         </nav>
-        <a href="/add" class="sv-modern-fab" aria-label="Create a new vault item" title="New item"><span aria-hidden="true">＋</span></a>
+        <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
         @if (_editorOpen)
         {
             <aside class="sv-editor-sidecar" aria-label="Vault item editor">
@@ -655,7 +655,9 @@ else
     {
         if (view is not ("records" or "drafts" or "sync" or "settings")) return;
         if ((view is "drafts" or "sync") && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
+        if (_inlineEditor?.BlocksDismissal == true) return;
         _appView = view;
+        if (view != "records") { _selected = null; _editorOpen = false; _editorRecordId = null; _inlineEditor = null; }
         if (view == "sync") _ = InvokeAsync(LoadPendingAsync);
     }
 
