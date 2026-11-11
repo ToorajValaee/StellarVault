@@ -103,3 +103,12 @@ A remembered custom Horizon URL is the **selected preference**, not a verified s
 - Added a direct `https://github.com/ToorajValaee/StellarVault` source link and a `Powered by badje.ir` attribution badge in the sidebar. The help page explicitly avoids claiming that open source code alone guarantees security. The existing independent security review warning remains appropriate.
 
 **Status:** Committed and checked structurally, but **not browser-rendered or device-tested in this tool session**. Important acceptance checks: pending ledger approval on desktop while a record menu is open, account modal background blur, Tab focus loop and restored focus, approval Busy blocking, light/dark mode across Vault/entry/help/native, external-link destinations, narrow mobile help layout.
+
+
+## 2026-11-11 — Integrated Help navigation and restrained footer
+
+- The primary sidebar's Vault item now uses a compact line-art vault lock, rather than a chess-pawn glyph. The product shield brand stays distinct.
+- Documentation & Help uses `SelectAppView("help")` just like the other workspace views, rendering the new `VaultHelpContent.razor` inside the same content stage and shared sidebar. Mobile Help also switches content in place. The duplicated dedicated Help sidebar and its redundant app links have been removed from the rendered help content.
+- Legacy `/help` deep links redirect to `/vault?view=help`, so direct links still work for unlocked users. A locked user must first unlock to access the Vault workspace.
+- Source transparency via GitHub remains in the left navigation. `Powered by badje.ir` is now a small text-only attribution beneath the sidebar connection status, without a large badge, border, or promotion block.
+- Static checks required: verify no second Help sidebar, active Help state in desktop/mobile navigation, no accidental create/actions when Help is active, and footer contrast at narrow heights. Actual screenshot/build validation is outstanding.
