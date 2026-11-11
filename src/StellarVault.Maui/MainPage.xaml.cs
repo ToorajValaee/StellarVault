@@ -9,6 +9,7 @@ public partial class MainPage : ContentPage
     private readonly NativeStartupStatus _startup;
     private bool _firstRenderReceived;
     private string _startupStage = "MAUI page created; waiting for WebView";
+    private string _androidWebViewInfo = string.Empty;
     private CancellationTokenSource? _startupWatchdog;
 
     public MainPage(VaultNativeNavigationState navigation, NativeStartupStatus startup)
@@ -28,6 +29,21 @@ public partial class MainPage : ContentPage
     private void OnWebViewInitialized(object? sender, BlazorWebViewInitializedEventArgs e)
     {
         SetStartupStage("WebView initialized; waiting for Blazor bridge");
+#if ANDROID
+        try
+        {
+            var api = (int)Android.OS.Build.VERSION.SdkInt;
+            var webview = Android.Webkit.WebView.CurrentWebViewPackage;
+            // Android API level / WebView version are public OS metadata,
+            // never account identifiers or captured JavaScript messages.
+            _androidWebViewInfo = $"Android API {api} / WebView {webview?.VersionName ?? "not found"}";
+            LogStartupStage(_androidWebViewInfo);
+        }
+        catch (Exception)
+        {
+            _androidWebViewInfo = "Android WebView version unavailable";
+        }
+#endif
     }
 
     private void SetStartupStage(string stage)
@@ -75,8 +91,9 @@ public partial class MainPage : ContentPage
                     StartupSpinner.IsRunning = false;
                     NativeStartupMessage.Text =
                         "Startup stopped at: " + _startupStage + ". " +
-                        "No vault transaction was submitted. In the emulator, capture " +
-                        "logcat for StellarVaultStartup and BlazorWebView.";
+                        _androidWebViewInfo + ". " +
+                        "If Blazor did not load, check the emulator's Android System WebView " +
+                        "and capture logcat for StellarVaultStartup, chromium and AndroidRuntime.";
                 });
             }
         }
