@@ -126,8 +126,8 @@ test('native startup fallback is independent of JavaScript and first render repo
 
 test('native styling retains structural components under the modern theme', () => {
   const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
-  assert.match(nativeCss, /--sv-native-accent:\s*#7ef6a4/);
-  assert.match(nativeCss, /Cascadia Code/);
+  assert.match(nativeCss, /--sv-native-accent:#168568/);
+  assert.doesNotMatch(nativeCss, /Cascadia Code/);
   assert.match(nativeCss, /\.sv-native-nav/);
   assert.match(nativeCss, /\.sv-native-scroll/);
 });
