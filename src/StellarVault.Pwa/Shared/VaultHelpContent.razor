@@ -1,0 +1,36 @@
+        <article class="sv-help-main sv-help-embedded" id="help-content">
+            <div class="sv-help-kicker">DOCUMENTATION &amp; SUPPORT</div>
+            <h1>StellarVault Help</h1>
+            <p class="sv-help-intro">Learn how to organize encrypted records, choose storage, understand Stellar approvals, and protect access to your vault.</p>
+            <section id="getting-started" class="sv-help-section">
+                <h2>Getting started</h2>
+                <p>Choose the Stellar network and enter the BIP-39 recovery phrase for your intended test account. For custom networks, StellarVault detects the Horizon network identity before unlocking; selecting a URL alone is not verification.</p>
+                <p>Use the Vault explorer to browse folders and records. The New Record and New Folder actions open the editor on the right on desktop and in a focused view on mobile.</p>
+            </section>
+            <section id="records" class="sv-help-section">
+                <h2>Records, folders and files</h2>
+                <p>Choose a folder in the tree, use breadcrumbs to navigate, and open a record to review its details. Each row has a three-dot menu for the actions available to that item. The right inspector can be resized on desktop.</p>
+                <p>Encrypted file uploads and record writes may involve multiple ledger steps. Do not resubmit an uncertain operation without checking its status.</p>
+            </section>
+            <section id="storage" class="sv-help-section">
+                <h2>Device storage and synchronization</h2>
+                <p><strong>Stellar-only</strong> avoids storing a local encrypted vault on the device. <strong>Encrypted device storage</strong> is optional and requires explicit consent and a vault passphrase. Local content is not automatically backed up or synchronized just because it was saved.</p>
+                <p>Review pending changes and initiate synchronization explicitly where the corresponding workflow is available. A saved network preference contains only the selected network and optional Horizon URL, not your recovery phrase.</p>
+            </section>
+            <section id="ledger" class="sv-help-section">
+                <h2>Stellar fees and approval</h2>
+                <p>Before a signed write, the approval dialog shows its estimated network fee and any additional reserve. The fee is spent; a reserve remains held in the Stellar account subject to network rules. Review the operation and approve or cancel explicitly.</p>
+                <p>Network connectivity is separate from authorization. A successful connection does not authorize publishing or spending.</p>
+            </section>
+            <section id="security" class="sv-help-section">
+                <h2>Security and recovery</h2>
+                <p>Never share your recovery phrase or vault passphrase. Avoid using real funds or production secrets while StellarVault's independent security audit and release requirements remain incomplete. Lock the vault when you finish, and retain an independent recovery method.</p>
+                <p>Opening a public source repository supports transparency, but it does not by itself prove that the deployed build is secure or that its cryptography has been audited.</p>
+            </section>
+            <section id="source" class="sv-help-section">
+                <h2>Open source and transparency</h2>
+                <p>Inspect the code, review implementation details, and report problems through the project's GitHub repository. You can read the project release and security guidance in the repository before using sensitive information.</p>
+                <a class="sv-help-primary-link" href="https://github.com/ToorajValaee/StellarVault" target="_blank" rel="noopener noreferrer">Explore the StellarVault source ↗</a>
+            </section>
+            
+        </article>
