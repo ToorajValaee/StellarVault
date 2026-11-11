@@ -2665,3 +2665,14 @@ html.ios-device.standalone-app .terminal-footer {
  .sv-explorer-main .record-chevron{display:none;}
  .sv-explorer-folder-panel{padding:10px;}
 }
+
+/* Adapt to the actual workspace pane, not only physical screen width.
+   Container-query capable PWAs can shift at narrower split-window sizes. */
+.sv-pwa-stage {container-type:inline-size;}
+@container (max-width: 760px) {
+  .sv-explorer-layout {grid-template-columns:minmax(0,1fr);}
+  .sv-explorer-tree {display:none;}
+  .sv-explorer-main .record-list {grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+  .sv-explorer-main .record-card {grid-template-columns:minmax(0,1fr) auto;min-height:92px;padding:12px;}
+  .sv-explorer-main .record-index {display:none;}
+}
