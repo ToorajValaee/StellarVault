@@ -29,9 +29,7 @@ else
             <span>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit item" : "New " + (_kind == "folder" ? "folder" : _kind == "file" ? "file" : "record"))</span>
         </nav>
         <header class="page-command-header sv-pwa-editor-heading">
-            <div><div class="panel-kicker">STELLARVAULT // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING" : "NEW ITEM")</div>
-                <h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit your record" : _kind == "folder" ? "New folder" : _kind == "file" ? "Add a file" : "New record")</h1>
-                <p class="page-subtitle">@(_kind == "file" ? "Files are encrypted and published in individually approved Stellar transactions." : "Create an encrypted item. Review network costs before any on-chain write.")</p></div>
+            <div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit record" : _kind == "folder" ? "New folder" : _kind == "file" ? "Add file" : "New record")</h1></div>
         </header>
         @if (string.IsNullOrWhiteSpace(RecordId))
         {
@@ -45,7 +43,7 @@ else
         @if (_kind == "file")
         {
             <div class="terminal-panel credential-form">
-                <div class="form-section-title"><span>01</span> FILE SELECTION</div>
+                <div class="form-section-title">Choose file</div>
                 <label class="terminal-label" for="sv-ledger-file">FILE *</label>
                 <div class="sv-file-picker">
                     <label class="pixel-button compact sv-file-picker-button" for="sv-ledger-file">+ CHOOSE FILE</label>
@@ -57,17 +55,17 @@ else
                 @if (_filePlan is not null) { <p class="advanced-help">CONFIRMED STAGES: @_fileStep / @_filePlan.Count. Each requires approval.</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
                 <input id="sv-ledger-file-title" class="terminal-input" maxlength="256" @bind="_title" @bind:event="oninput" disabled="@(_busy || _loading)" />
-                <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
+                <details class="sv-access-learn"><summary>About file publishing</summary><p>Files are encrypted and published to Stellar. Each transaction needs your approval and may cost XLM.</p></details>
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
                 <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="ReviewAsync">REVIEW FILE COST AND APPROVE</button>
-                <p class="advanced-help">Hybrid file drafts are disabled. You may publish this file directly on-chain after reviewing each transaction, or cancel.</p>
+                 
             </div>
         }
         else
         {
             <div class="terminal-panel credential-form">
-                <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
+                <div class="form-section-title">Details</div>
                 <label class="terminal-label" for="sv-title">TITLE *</label>
                 <input id="sv-title" class="terminal-input" @bind="_title" @bind:event="oninput" autocomplete="off" maxlength="256"/>
                 <label class="terminal-label" for="sv-folder">FOLDER</label>
