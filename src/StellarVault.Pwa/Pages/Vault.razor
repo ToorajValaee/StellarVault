@@ -35,7 +35,7 @@ else
         <nav class="sv-pwa-rail" aria-label="Vault navigation">
             <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark sv-rail-shield" aria-hidden="true"><svg viewBox="0 0 32 36" width="27" height="30" fill="none"><path d="M16 2 29 7v11c0 8-6.2 13.5-13 16C9.2 31.5 3 26 3 18V7L16 2Z" fill="currentColor"/><path d="m16 9 2.7 6.3L25 18l-6.3 2.7L16 27l-2.7-6.3L7 18l6.3-2.7L16 9Z" fill="#084839"/></svg></span><span><strong>StellarVault</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
-                    @onclick='() => SelectAppView("records")'><span aria-hidden="true">♙</span> Vault</button>
+                    @onclick='() => SelectAppView("records")'><span class="sv-nav-vault-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1"/></svg></span> Vault</button>
             <button type="button" class="sv-sidebar-folder-link"
                     @onclick='() => { SelectAppView("records"); _folder = null; }'><span aria-hidden="true">▱</span> Folders</button>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
@@ -48,7 +48,7 @@ else
             <button type="button" class="@(_appView == "settings" ? "selected" : "")"
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
-            <a class="sv-rail-link" href="/help"><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</a>
+            <button type="button" class="sv-rail-link sv-inline-help-nav @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</button>
             <div class="sv-pwa-rail-divider"></div>
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
@@ -65,15 +65,16 @@ else
             </div>
             <div class="sv-rail-trust">
                 <a href="https://github.com/ToorajValaee/StellarVault" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌘</span> View source on GitHub <span aria-hidden="true">↗</span></a>
-                <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer" class="sv-powered-by">Powered by <strong>badje.ir</strong> <span aria-hidden="true">↗</span></a>
+
             </div>
             <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Not connected")</div>
+            <div class="sv-rail-attribution">Powered by <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer">badje.ir</a></div>
         </nav>
         <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="_appView">
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
-                    <h1>@(_appView == "records" ? "Vault" : _appView == "drafts" ? "Drafts" : _appView == "settings" ? "Settings" : "Sync")</h1>
+                    <h1>@(_appView == "records" ? "Vault" : _appView == "drafts" ? "Drafts" : _appView == "settings" ? "Settings" : _appView == "help" ? "Documentation & Help" : "Sync")</h1>
                     @if (_appView == "records") { <p class="sv-vault-subtitle">Your secure records, organized and always in your control.</p> }
                     
                 </div>
@@ -93,6 +94,10 @@ else
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
             }
+        @if (_appView == "help")
+        {
+            <VaultHelpContent />
+        }
         @if (_appView == "settings")
         {
             <section class="sv-modern-settings" aria-label="Vault settings">
@@ -360,7 +365,7 @@ else
             <button type="button" class="@(_appView == "settings" ? "selected" : "")"
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
-            <a href="/help" class="sv-pwa-mobile-help"><span aria-hidden="true">ⓘ</span>Help</a>
+            <button type="button" class="sv-pwa-mobile-help @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span aria-hidden="true">ⓘ</span>Help</button>
         </nav>
         <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
         @if (_editorOpen)
@@ -622,6 +627,12 @@ else
         return depth;
     }
 
+    [SupplyParameterFromQuery(Name = "view")] public string? RequestedView { get; set; }
+    protected override void OnParametersSet()
+    {
+        if (RequestedView == "help" && _appView == "records")
+            _appView = "help";
+    }
     private string _appView = "records";
     private VaultItemEditor? _inlineEditor;
     private bool _editorOpen;
@@ -669,7 +680,7 @@ else
     private string _syncTask = "review";
     private void SelectAppView(string view)
     {
-        if (view is not ("records" or "drafts" or "sync" or "settings")) return;
+        if (view is not ("records" or "drafts" or "sync" or "settings" or "help")) return;
         if ((view is "drafts" or "sync") && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
         if (_inlineEditor?.BlocksDismissal == true) return;
         _appView = view;
