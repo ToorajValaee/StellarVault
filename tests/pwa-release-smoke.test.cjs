@@ -529,3 +529,35 @@ test('Vault inspector, Settings, Drafts and Sync use the unified light-dark work
   assert.match(css, /\.sv-record-inspector:has\(#sv-record-title\)/);
   assert.match(css, /\.sv-record-inspector \.sv-inspector-tabs button\.selected/);
 });
+
+test('Local draft create/save never requires Stellar discovery or ledger refresh', () => {
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const init = editor.slice(editor.indexOf('protected override async Task OnParametersSetAsync()'),
+    editor.indexOf('private LedgerRecordDraft Draft()'));
+  const save = editor.slice(editor.indexOf('private async Task SaveOfflineDraftAsync()'),
+    editor.indexOf('private static bool SameDraft('));
+  const localCallback = vault.slice(vault.indexOf('private async Task OnLocalDraftSavedAsync()'),
+    vault.indexOf('private string _syncTask', vault.indexOf('private async Task OnLocalDraftSavedAsync()')));
+  assert.match(editor, /\[Parameter\] public EventCallback OnDraftSaved/);
+  assert.match(editor, /\[Parameter\] public IReadOnlyList<LedgerRecordItem>\? CachedFolders/);
+  assert.match(init, /if \(string\.IsNullOrWhiteSpace\(RecordId\)\)/);
+  assert.ok(init.indexOf('if (string.IsNullOrWhiteSpace(RecordId))') < init.indexOf('await Ledger.ReadAsync()'));
+  assert.match(init, /_folders = CachedFolders \?\? \[\]/);
+  assert.match(save, /await PendingQueue\.EnqueueAsync\(mutation\)/);
+  assert.match(save, /CompleteEditorAsync\(savedLocally: true\)/);
+  assert.doesNotMatch(save, /Ledger\.ReadAsync\(|Ledger\.EstimateAsync\(|RefreshAsync\(/);
+  assert.match(vault, /OnDraftSaved="OnLocalDraftSavedAsync"/);
+  assert.match(vault, /CachedFolders="@Folders"/);
+  assert.match(localCallback, /_appView = "drafts"/);
+  assert.match(localCallback, /await LoadPendingAsync\(\)/);
+  assert.doesNotMatch(localCallback, /RefreshAsync\(|Ledger\.ReadAsync\(/);
+});
+test('Offline ledger refresh leaves last verified records and gives short status', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const refresh = vault.slice(vault.indexOf('private async Task RefreshAsync()'),
+    vault.indexOf('private async Task ReconnectAsync()', vault.indexOf('private async Task RefreshAsync()')));
+  assert.match(refresh, /_records = await Ledger\.ReadAsync\(\)/);
+  assert.match(refresh, /Stellar network is unavailable/);
+  assert.doesNotMatch(refresh, /"Ledger synchronization failed: " \+ ex\.Message/);
+});
