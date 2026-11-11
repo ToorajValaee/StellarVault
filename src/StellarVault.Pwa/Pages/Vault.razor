@@ -649,6 +649,8 @@ else
         _editorRecordId = null;
         _inlineEditor = null;
         await RefreshAsync();
+        if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            await LoadPendingAsync();
     }
     private string _syncTask = "review";
     private void SelectAppView(string view)
