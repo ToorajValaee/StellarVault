@@ -3833,3 +3833,249 @@ html .sv-web-shell .sv-editor-embedded .sv-adaptive-main {min-height:0!important
 .sv-web-shell .sv-modern-entry .sv-access-security-notice strong {
   color:#7a5b34;font-weight:650;
 }
+
+
+/* 2026-11-11 — dialog layering, actual theme contrast, navigation and help.
+   Signed approval is modal; desktop record inspector remains nonmodal. */
+html:has(.approval-modal-backdrop),
+html:has(.sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop)),
+body:has(.approval-modal-backdrop),
+body:has(.sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop)) {
+  overflow:hidden!important;
+}
+.sv-web-shell:has(.approval-modal-backdrop) .sv-pwa-stage,
+.sv-web-shell:has(.approval-modal-backdrop) > .sv-adaptive-header,
+.sv-web-shell:has(.approval-modal-backdrop) .sv-pwa-rail {
+  pointer-events:none!important;
+}
+.sv-web-shell .sv-editor-sidecar:has(.approval-modal-backdrop) {
+  z-index:6500!important;overflow:visible!important;
+  isolation:auto!important;transform:none!important;
+}
+.sv-web-shell:has(.approval-modal-backdrop) .sv-editor-host,
+.sv-web-shell:has(.approval-modal-backdrop) .sv-inline-editor-layout,
+.sv-web-shell:has(.approval-modal-backdrop) .sv-inline-editor-stage {
+  overflow:visible!important;transform:none!important;
+}
+html .sv-web-shell .approval-modal-backdrop,
+html .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) {
+  position:fixed!important;inset:0!important;
+  width:100vw!important;height:100dvh!important;
+  min-width:0!important;max-width:none!important;
+  z-index:8000!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  background:rgba(7,24,26,.50)!important;
+  backdrop-filter:blur(7px)!important;
+  -webkit-backdrop-filter:blur(7px)!important;
+  pointer-events:auto!important;
+  padding:clamp(12px,3vw,26px)!important;
+  overflow-y:auto!important;overscroll-behavior:contain;
+}
+html .sv-web-shell .approval-modal-backdrop > .approval-modal,
+html .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) > .record-modal {
+  position:relative!important;z-index:1!important;
+  width:min(100%,640px)!important;max-width:640px!important;
+  height:auto!important;max-height:calc(100dvh - 38px)!important;
+  margin:auto!important;
+  overflow-y:auto!important;
+  background:#fff!important;border:1px solid #e0e8e8!important;
+  border-radius:15px!important;box-shadow:0 26px 85px rgba(4,26,19,.26)!important;
+  color:#1b353b!important;
+}
+html .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) .sv-account-info-modal {
+  width:min(100%,640px)!important;
+}
+html .sv-web-shell .approval-modal .stats-strip {
+  display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px!important;background:#f6faf8!important;
+  padding:16px!important;border:1px solid #e1eae7!important;border-radius:11px!important;
+  box-shadow:none!important;
+}
+html .sv-web-shell .approval-modal .stats-strip > div {
+  min-width:0!important;text-align:left!important;
+  border:0!important;padding:4px 8px!important;
+}
+html .sv-web-shell .approval-modal .stats-strip span {
+  display:block;color:#607b77!important;font-size:11px!important;
+  font-weight:650!important;letter-spacing:0!important;
+}
+html .sv-web-shell .approval-modal .stats-strip strong {
+  display:block;margin-top:6px;color:#0e6f51!important;
+  font:750 17px/1.3 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+/* Uniform, borderless close buttons including account, approval and detail. */
+.sv-web-shell :is(.approval-modal,.record-modal,.sv-account-info-modal) .close-button,
+.sv-web-shell .sv-editor-sidecar .sv-sidecar-close {
+  display:grid!important;place-items:center!important;
+  flex:0 0 36px!important;width:36px!important;height:36px!important;
+  min-width:36px!important;min-height:36px!important;
+  margin:0!important;padding:0!important;
+  border:0!important;outline:0!important;border-radius:8px!important;
+  background:transparent!important;background-image:none!important;
+  box-shadow:none!important;color:#657982!important;
+  font:500 23px/1 Inter,"Segoe UI",Arial,sans-serif!important;
+  cursor:pointer;
+}
+.sv-web-shell :is(.approval-modal,.record-modal,.sv-account-info-modal) .close-button:hover:not(:disabled),
+.sv-web-shell .sv-editor-sidecar .sv-sidecar-close:hover {
+  background:rgba(66,119,104,.10)!important;color:#075b43!important;
+}
+.sv-web-shell :is(.approval-modal,.record-modal,.sv-account-info-modal) .close-button:focus-visible,
+.sv-web-shell .sv-editor-sidecar .sv-sidecar-close:focus-visible {
+  outline:3px solid rgba(35,166,125,.3)!important;outline-offset:2px!important;
+}
+.sv-web-shell .sv-rail-shield svg,
+.sv-web-shell .sv-brand-shield svg {display:block;}
+.sv-web-shell .sv-network-symbol {display:block;overflow:visible;}
+.sv-web-shell .sv-pwa-rail-heading {
+  display:flex;align-items:center;gap:10px;
+  padding:13px 10px 19px!important;color:#fff!important;
+  font:750 19px/1.2 Inter,"Segoe UI",Arial,sans-serif!important;
+  text-transform:none!important;letter-spacing:-.035em!important;
+}
+.sv-web-shell .sv-pwa-rail-heading strong {
+  color:#fff!important;font:750 19px Inter,"Segoe UI",Arial,sans-serif!important;
+  letter-spacing:-.035em!important;
+}
+.sv-web-shell .sv-pwa-rail-mark.sv-rail-shield {
+  display:grid;place-items:center;flex:0 0 40px;
+  width:40px;height:40px;border-radius:11px;
+  background:linear-gradient(145deg,#5df4b3,#0da477);
+  color:#d8fff0!important;box-shadow:0 5px 16px rgba(4,29,23,.25);
+}
+.sv-web-shell .sv-rail-link {
+  display:flex!important;align-items:center!important;gap:13px!important;
+  padding:11px 14px!important;min-height:45px!important;
+  border:1px solid transparent!important;border-radius:9px!important;
+  color:#e4f7ef!important;text-decoration:none!important;
+  font:600 13px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-rail-link:hover {background:rgba(161,247,211,.12)!important;}
+.sv-web-shell .sv-rail-link .sv-rail-icon {font-size:18px!important;color:#b3edcf!important;}
+.sv-web-shell .sv-rail-trust {
+  display:flex;flex-direction:column;gap:6px;
+  margin:auto 4px 12px;padding:15px 4px 0;
+  border-top:1px solid rgba(231,255,244,.15);
+}
+.sv-web-shell .sv-rail-trust a {
+  display:flex;align-items:center;justify-content:flex-start;
+  gap:8px;min-height:34px;padding:6px 8px;
+  border:0!important;background:transparent!important;
+  border-radius:7px!important;color:#ccede1!important;
+  text-decoration:none!important;font:550 11px/1.35 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-rail-trust a:hover {background:rgba(255,255,255,.10)!important;color:#fff!important;}
+.sv-web-shell .sv-rail-trust a.sv-powered-by {color:#a4dbc5!important;}
+.sv-web-shell .sv-rail-trust a.sv-powered-by strong {color:#fff!important;}
+.sv-web-shell .sv-pwa-rail .sv-pwa-rail-foot {margin-top:0!important;}
+/* Help route: dedicated, easily scanned documentation. */
+.sv-help-layout {display:grid;grid-template-columns:245px minmax(0,1fr);
+  width:100%;min-height:calc(100dvh - 74px);background:#f7faf9;}
+.sv-help-sidebar {position:sticky;top:0;height:calc(100dvh - 74px);overflow:auto;
+  display:flex;flex-direction:column;gap:7px;
+  padding:26px 16px;background:linear-gradient(160deg,#054838,#032d29);color:white;}
+.sv-help-brand {display:flex;align-items:center;gap:11px;color:#fff!important;
+  font-size:21px!important;font-weight:750;text-decoration:none!important;padding:5px 8px 25px;}
+.sv-help-shield {display:grid;place-items:center;width:35px;height:35px;
+  background:#16ae7e;border-radius:10px;color:#eafff2;}
+.sv-help-back,.sv-help-toc a,.sv-help-sidebar-bottom a {
+  display:flex;align-items:center;min-height:38px;padding:8px 12px;
+  border-radius:8px;color:#d2f2e5!important;text-decoration:none!important;
+  font-size:13px!important;font-weight:550;}
+.sv-help-sidebar a:hover {background:rgba(255,255,255,.12)!important;}
+.sv-help-toc {display:flex;flex-direction:column;gap:2px;margin-top:20px;}
+.sv-help-sidebar-bottom {margin-top:auto;padding-top:20px;border-top:1px solid rgba(255,255,255,.18);}
+.sv-help-sidebar-bottom a {font-size:12px!important;}
+.sv-help-main {padding:clamp(24px,4vw,60px);width:100%;max-width:1050px;min-width:0;margin:0 auto;}
+.sv-help-kicker {color:#087955!important;font-size:11px;font-weight:750;letter-spacing:.13em;}
+.sv-help-main h1 {font:750 clamp(30px,3.5vw,42px)/1.2 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#18352f;letter-spacing:-.04em;margin:9px 0 13px;}
+.sv-help-intro {font:400 15px/1.65 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#657c78;max-width:680px;margin:0 0 33px;}
+.sv-help-section {scroll-margin-top:25px;background:#fff;
+  border:1px solid #e0e9e5;border-radius:12px;
+  padding:clamp(20px,2.3vw,30px);margin:0 0 13px;}
+.sv-help-section h2 {font-size:19px!important;letter-spacing:-.025em!important;
+  color:#1d3d34;margin:0 0 13px;}
+.sv-help-section p {font:400 13px/1.8 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#536f65;margin:10px 0 0;}
+.sv-help-primary-link {display:inline-flex;align-items:center;min-height:39px;
+  margin-top:18px;padding:9px 14px;border-radius:8px;background:#087a56;
+  text-decoration:none!important;color:#fff!important;font-size:13px;font-weight:650;}
+.sv-help-footer {padding:20px 0;font-size:12px;color:#789188;}
+.sv-help-footer a {color:#087a56;}
+@media(max-width:840px) {
+  .sv-help-layout {display:block;}
+  .sv-help-sidebar {position:relative;top:auto;width:100%;height:auto;
+    min-height:0!important;padding:15px;gap:2px;}
+  .sv-help-brand {padding:5px 8px 8px;}
+  .sv-help-toc {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin-top:6px;}
+  .sv-help-sidebar-bottom {display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;padding-top:8px;}
+  .sv-help-main {padding:20px 13px 50px;}
+}
+@media(max-width:560px) {
+  html .sv-web-shell .approval-modal-backdrop,
+  html .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) {
+    align-items:flex-end!important;padding:0!important;}
+  html .sv-web-shell .approval-modal-backdrop > .approval-modal,
+  html .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) > .record-modal {
+    margin:auto 0 0!important;max-width:none!important;width:100%!important;
+    max-height:calc(100dvh - env(safe-area-inset-top,0px) - 10px)!important;
+    border-radius:16px 16px 0 0!important;}
+  .sv-help-toc a {padding:8px;font-size:12px!important;}
+}
+/* The toggle controls a real product-wide dark palette, not obsolete CRT tokens. */
+:root[data-theme="dark"] {
+ color-scheme:dark;
+ --bg-0:#0f1d20;--bg-1:#152428;--panel:#1a292e;--panel-soft:#1d3033;
+ --border:#33494b;--sv-text:#e2efeb;--muted:#abc5bd;
+ --phosphor:#5ce0aa;--phosphor-strong:#93f3c8;
+}
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .sv-web-shell {background:#0f1d20!important;color:#e2efeb!important;}
+:root[data-theme="dark"] .sv-web-shell :is(.sv-adaptive-header,.sv-pwa-stage,
+ .sv-explorer-layout,.sv-explorer-main,.sv-explorer-folder-panel,.sv-explorer-breadcrumbs,
+ .sv-current-folder,.sv-object-row,.sv-folder-tile,.record-list,.sv-explorer-list-head,
+ .sv-explorer-toolbar,.sv-help-main,.sv-entry-main,.sv-pwa-secondary-stage,
+ .sv-entry-intro,.sv-vault-overview) {
+ background:#152428!important;color:#e2efeb!important;
+ border-color:#31494b!important;
+}
+:root[data-theme="dark"] .sv-web-shell :is(.sv-explorer-tree,.sv-help-section,
+ .credential-form,.sv-record-inspector,.sv-editor-sidecar,.sv-modern-search,
+ .sv-network-popover,.sv-access-form,.sv-access-storage-settings,
+ .sv-access-security-notice,.sv-current-folder,.sv-help-layout,
+ .sv-rail-link,.data-field,.field-value-row,.stats-strip,
+ .sv-access-learn,.sv-record-activity dl) {
+ background:#1b2c30!important;color:#e2efeb!important;
+ border-color:#395052!important;box-shadow:none!important;
+}
+:root[data-theme="dark"] .sv-web-shell :is(h1,h2,h3,h4,strong,.sv-vault-subtitle,
+ .sv-current-folder-name h2,.sv-explorer-list-head,.sv-tree-label,.sv-object-type,
+ .sv-object-storage,.sv-entry-intro p,.sv-help-intro,.sv-help-section p,
+ .sv-record-inspector .field-label,.sv-pwa-screen-header p,.sv-explorer-toolbar,
+ .sv-account-info-modal .field-label,.sv-explorer-tree-title,.sv-help-main h1,
+ .sv-help-section h2) {color:#d5eae3!important;}
+:root[data-theme="dark"] .sv-web-shell :is(input,select,textarea,
+ .terminal-input,.pixel-button:not(.primary),.mini-button,
+ .sv-layout-switch button,.sv-object-menu,.sv-object-menu button) {
+ background:#21363a!important;color:#e8f4f0!important;
+ border-color:#416164!important;box-shadow:none!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row.is-selected,
+:root[data-theme="dark"] .sv-web-shell .sv-explorer-tree .sv-tree-item.selected {
+ background:#204c40!important;color:#b7ffdc!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-record-inspector :is(.data-field,.field-value-row),
+:root[data-theme="dark"] .sv-web-shell .approval-modal-backdrop > .approval-modal,
+:root[data-theme="dark"] .sv-web-shell .modal-backdrop:not(.sv-record-inspector-backdrop) > .record-modal {
+ background:#1b2b2f!important;color:#eaf5f1!important;border-color:#416164!important;}
+:root[data-theme="dark"] .sv-web-shell .approval-modal .stats-strip,
+:root[data-theme="dark"] .sv-web-shell .sv-account-info-modal .stats-strip {
+ background:#203538!important;border-color:#416164!important;}
+:root[data-theme="dark"] .sv-web-shell .approval-modal .stats-strip strong {color:#73e2b1!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-pwa-rail,
+:root[data-theme="dark"] .sv-web-shell .sv-help-sidebar {background:#032b27!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-help-main {background:#0f1d20!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-help-section {background:#192c2e!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-modern-entry .sv-entry-main {background:#132426!important;}
+:root[data-theme="dark"] .sv-web-shell .sv-modern-entry > .sv-entry-main > .access-form {
+ background:#1b2c30!important;color:#e4f2ee!important;border-color:#385458!important;}
