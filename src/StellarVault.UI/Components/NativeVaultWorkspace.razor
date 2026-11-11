@@ -235,6 +235,7 @@ else
                         <button type="button" class="@(_nativeCollection == "folders" ? "selected" : "")" @onclick='() => _nativeCollection = "folders"'>▱ Folders</button>
                         <button type="button" class="@(_nativeCollection == "records" ? "selected" : "")" @onclick='() => _nativeCollection = "records"'>◷ Records</button>
                     </div>
+                    <label class="sv-native-mobile-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Search vault items" placeholder="Search your vault…" @bind="_nativeSearch" @bind:event="oninput" /></label>
                     @if (_ledgerRecords.Any(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)) && string.IsNullOrEmpty(_selectedFolderId))
                     {
                         <section class="sv-native-folder-shortcuts" aria-label="Folder shortcuts">
@@ -275,7 +276,9 @@ else
                             <div class="sv-native-object-grid">
                             @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
                                 !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
-                                (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)))
+                                (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)) &&
+                                (string.IsNullOrWhiteSpace(_nativeSearch) || x.Title.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase) ||
+                                    (x.Tags is not null && x.Tags.Any(tag => tag.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase)))))
                                 .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
                             {
                                 <div class="sv-native-object-row @(_selectedRecord?.Id == item.Id ? "is-selected" : "")">
@@ -532,6 +535,7 @@ else
 
     private string _nativeMode = "browse";
     private string _nativeCollection = "all";
+    private string _nativeSearch = "";
     private bool _nativeGrid;
 
     private void OpenNativeFolder(string id)
