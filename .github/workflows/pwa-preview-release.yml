@@ -54,7 +54,7 @@ jobs:
           test -s "$root/service-worker.js"
           test -s "$root/service-worker-assets.js"
           test -s "$root/manifest.webmanifest"
-          test -s "$root/css/app.css"
+          test -s "$root/css/modern-app.css"
           test -s "$root/js/vault-v2-keywrap.js"
           test -s "$root/js/vault-v2-indexeddb.js"
           test -s "$root/js/ledger-compat/app.js"
