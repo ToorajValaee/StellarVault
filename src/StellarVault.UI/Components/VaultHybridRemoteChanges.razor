@@ -5,8 +5,8 @@
 @inject IStellarLedgerRecords Ledger
 @implements IDisposable
 
-<section class="terminal-panel" aria-label="Offline changes to existing Stellar records and folders">
-    <h3>@(_editingRemote is not null || _editingMutationId is not null ? "Edit change" : "Published records")</h3>
+<section class="terminal-panel sv-hybrid-panel sv-hybrid-remote-panel" aria-label="Offline changes to existing Stellar records and folders">
+    <div class="sv-hybrid-heading"><div class="panel-kicker">Stellar records</div><h3>@(_editingRemote is not null || _editingMutationId is not null ? "Edit change" : "Published records")</h3></div>
     @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
     {
         <p role="status">Unlock the encrypted local vault and enable local storage to edit published data offline.</p>
@@ -19,9 +19,9 @@
             <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
                     @onclick="LoadRemoteAsync">Load records</button>
             <button class="pixel-button compact" type="button" disabled="@_busy"
-                    @onclick="LoadLocalAsync">OPEN LOCAL CHANGE QUEUE</button>
+                    @onclick="LoadLocalAsync">Local change queue</button>
             <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
-                    @onclick="InspectVersionsAsync">CHECK REMOTE CONFLICTS — READ ONLY</button>
+                    @onclick="InspectVersionsAsync">Check conflicts (read-only)</button>
         </div>
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -32,13 +32,13 @@
             <div class="panel-kicker">PUBLISHED RECORDS</div>
             @foreach (var item in _remote)
             {
-                <div class="data-field">
+                <div class="data-field sv-hybrid-item">
                     <strong>@item.Title</strong>
                     <p>@(item.IsFolder ? "FOLDER" : "RECORD") · @item.Id</p>
                     <button class="pixel-button compact" type="button" disabled="@_busy"
-                            @onclick="() => SelectRemote(item)">STAGE LOCAL UPDATE</button>
+                            @onclick="() => SelectRemote(item)">Stage update</button>
                     <button class="pixel-button compact" type="button" disabled="@_busy"
-                            @onclick="() => SelectDelete(item)">STAGE LOCAL DELETION</button>
+                            @onclick="() => SelectDelete(item)">Stage deletion</button>
                 </div>
             }
         }
