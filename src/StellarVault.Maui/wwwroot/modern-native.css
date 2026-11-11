@@ -1325,3 +1325,31 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
    background:#245541!important;color:#c7ffdf!important;
  }
 }
+
+
+/* Mobile-only affordances must not leak into MAUI Windows / large tablet layout. */
+.sv-native-shell .sv-native-mobile-collections,
+.sv-native-shell .sv-native-mobile-search,
+.sv-native-shell .sv-native-folder-shortcuts,
+.sv-native-shell .sv-native-list-toolbar,
+.sv-native-shell .sv-native-mobile-fab {display:none;}
+@media(min-width:700px) {
+  .sv-native-shell .sv-native-object-row {
+    display:flex;align-items:stretch;min-width:0;
+  }
+  .sv-native-shell .sv-native-object-row > .sv-native-object-card {
+    flex:1;min-width:0;
+  }
+  .sv-native-shell .sv-native-row-more {display:none;}
+  .sv-native-shell .sv-native-sheet-tabs {
+    display:flex;gap:12px;margin:12px 0;border-bottom:1px solid #dce8e2;
+  }
+  .sv-native-shell .sv-native-sheet-tabs button {
+    padding:10px;border:0;border-bottom:2px solid transparent;
+    background:transparent;color:#6e827a;cursor:pointer;
+  }
+  .sv-native-shell .sv-native-sheet-tabs button.selected {
+    border-bottom-color:#0b9569;color:#087a57;font-weight:700;
+  }
+}
+/* Phone rules above intentionally have greater specificity and win. */
