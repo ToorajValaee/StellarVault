@@ -953,3 +953,285 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
 :root[data-theme="dark"] .sv-native-shell :is(.modal-header,.approval-modal,.record-modal) .close-button {
   color:#c2e7d8!important;
 }
+
+
+/* Native mobile reference parity with the PWA object-storage workspace.
+   Data, network actions and approved transaction flows stay in the shared services. */
+@media(max-width:699px) {
+ html .sv-native-shell {
+   grid-template-columns:minmax(0,1fr)!important;
+   grid-template-rows:auto minmax(0,1fr) auto!important;
+   background:#edf4f3!important;overflow:hidden!important;
+ }
+ html .sv-native-shell .sv-native-topbar {
+   grid-column:1!important;grid-row:1!important;position:relative!important;
+   display:flex!important;align-items:center!important;justify-content:space-between!important;
+   min-height:106px!important;padding:calc(17px + env(safe-area-inset-top,0px)) 17px 28px!important;
+   border:0!important;border-radius:0!important;
+   background:linear-gradient(135deg,#034438,#07614e 60%,#03382f)!important;color:#fff!important;
+   box-shadow:none!important;
+ }
+ html .sv-native-shell .sv-native-brand {gap:10px!important;color:#fff!important;}
+ html .sv-native-shell .sv-native-brand strong {
+   color:#fff!important;font:750 19px/1.25 "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-brandmark {
+   display:grid!important;place-items:center!important;flex:0 0 36px!important;
+   width:36px!important;height:36px!important;
+   background:linear-gradient(145deg,#5cf3b5,#0da174)!important;
+   color:#ddfff1!important;border-radius:10px!important;
+   font-size:25px!important;
+ }
+ html .sv-native-shell .sv-native-online-pill {
+   display:flex!important;align-items:center!important;gap:5px;white-space:nowrap;
+   color:#e6fff4!important;background:rgba(255,255,255,.12)!important;
+   border:1px solid rgba(231,255,246,.14)!important;
+   border-radius:99px!important;padding:7px 9px!important;
+   font:550 10px/1.2 "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-online-pill > span {font-size:12px;color:#74eeb3!important;}
+ html .sv-native-shell .sv-native-header-network summary {
+   display:grid!important;place-items:center!important;
+   min-height:35px!important;min-width:35px!important;
+   border:1px solid rgba(255,255,255,.2)!important;border-radius:11px!important;
+   background:rgba(255,255,255,.10)!important;color:#fff!important;
+ }
+ html .sv-native-shell .sv-native-scroll {
+   grid-row:2!important;grid-column:1!important;min-height:0!important;
+   margin-top:-13px!important;z-index:2!important;
+   border-radius:25px 25px 0 0!important;background:#fff!important;
+   overflow-y:auto!important;overscroll-behavior:contain!important;
+ }
+ html .sv-native-shell .sv-native-content {
+   display:block!important;min-width:0!important;max-width:none!important;
+   padding:16px 13px calc(90px + env(safe-area-inset-bottom,0px))!important;
+   background:#fff!important;
+ }
+ html .sv-native-shell .sv-native-page-heading {display:none!important;}
+ html .sv-native-shell .sv-native-mobile-collections {
+   display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+   gap:4px!important;padding:4px!important;margin:0 0 13px!important;
+   border:1px solid #e1e8ec!important;border-radius:13px!important;background:#eef1f5!important;
+ }
+ html .sv-native-shell .sv-native-mobile-collections button {
+   display:flex;align-items:center;justify-content:center;
+   min-width:0!important;min-height:42px!important;padding:9px 3px!important;
+   border:1px solid transparent!important;border-radius:10px!important;
+   background:transparent!important;color:#304952!important;
+   font:650 12px "Segoe UI",Arial,sans-serif!important;white-space:nowrap;
+ }
+ html .sv-native-shell .sv-native-mobile-collections button.selected {
+   background:linear-gradient(105deg,#bff6df,#e1fff1)!important;
+   border-color:#37d7a2!important;color:#075e45!important;
+   box-shadow:0 3px 12px rgba(10,115,80,.08)!important;
+ }
+ html .sv-native-shell .sv-native-mobile-search {
+   display:flex!important;align-items:center;gap:10px;
+   min-height:46px;padding:0 14px!important;
+   background:#f1f4f7!important;border:1px solid #dfe5eb!important;
+   border-radius:12px!important;margin:0 0 17px!important;
+ }
+ html .sv-native-shell .sv-native-mobile-search span {color:#506570;font-size:22px;}
+ html .sv-native-shell .sv-native-mobile-search input {
+   display:block!important;flex:1!important;width:100%!important;
+   min-width:0!important;border:0!important;outline:none!important;
+   background:transparent!important;color:#263c46!important;
+   padding:9px 0!important;font:500 14px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-folder-shortcuts {display:block;margin:0 0 19px!important;}
+ html .sv-native-shell .sv-native-section-title,
+ html .sv-native-shell .sv-native-list-toolbar {
+   display:flex!important;justify-content:space-between;align-items:center;gap:8px;
+   padding:0!important;margin:0 0 10px!important;
+ }
+ html .sv-native-shell .sv-native-section-title h2,
+ html .sv-native-shell .sv-native-list-toolbar h2 {
+   color:#152a33!important;margin:0!important;
+   font:750 17px/1.3 "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-section-title > button {
+   color:#087b56!important;border:0!important;background:transparent!important;
+   padding:5px!important;font:650 12px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-shortcut-grid {
+   display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+   gap:7px!important;
+ }
+ html .sv-native-shell .sv-native-shortcut-grid > button {
+   display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+   gap:4px;min-height:98px!important;min-width:0!important;padding:7px 3px!important;
+   background:linear-gradient(#fff,#f6f8fa)!important;
+   border:1px solid #e2e7ed!important;border-radius:13px!important;
+   box-shadow:0 5px 13px rgba(14,45,65,.045)!important;
+ }
+ html .sv-native-shell .sv-native-shortcut-grid > button > span {font-size:29px!important;}
+ html .sv-native-shell .sv-native-shortcut-grid > button > strong {
+   color:#192e38!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+   font:700 12px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-shortcut-grid > button > small {
+   color:#8293a0!important;font:500 10px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-list-toolbar > button {
+   display:grid;place-items:center;
+   width:36px;height:36px;border:1px solid #dbe5e8!important;
+   border-radius:10px!important;background:#fff!important;
+   color:#47636b!important;font-size:20px!important;box-shadow:none!important;
+ }
+ html .sv-native-shell .sv-native-explorer,
+ html .sv-native-shell .sv-native-object-storage,
+ html .sv-native-shell .sv-native-object-grid {
+   display:block!important;min-width:0!important;width:100%!important;
+   max-width:none!important;margin:0!important;padding:0!important;
+   border:0!important;border-radius:0!important;
+   box-shadow:none!important;background:transparent!important;
+ }
+ html .sv-native-shell .sv-native-folder-tree,
+ html .sv-native-shell .sv-native-mobile-folder,
+ html .sv-native-shell label[for="native-ledger-folder"] {display:none!important;}
+ html .sv-native-shell .sv-native-object-row {
+   display:flex!important;align-items:center;gap:5px;
+   min-height:69px!important;padding:7px 4px!important;margin:0!important;
+   background:#fff!important;border:0!important;
+   border-bottom:1px solid #e6ecef!important;border-radius:0!important;
+   box-shadow:none!important;
+ }
+ html .sv-native-shell .sv-native-object-row.is-selected {
+   border:1px solid #56d7a6!important;border-radius:10px!important;
+   background:linear-gradient(100deg,#d6f9e9,#ccefe4)!important;
+ }
+ html .sv-native-shell .sv-native-object-row .sv-native-object-card {
+   display:flex!important;flex-direction:row!important;align-items:center;
+   justify-content:flex-start;gap:12px!important;min-height:48px!important;
+   flex:1 1 auto!important;width:auto!important;min-width:0!important;
+   padding:0 4px!important;margin:0!important;
+   border:0!important;background:transparent!important;box-shadow:none!important;text-align:left!important;
+ }
+ html .sv-native-shell .sv-native-object-row .sv-native-object-icon {
+   flex:0 0 43px!important;display:grid!important;place-items:center!important;
+   width:43px!important;height:43px!important;border-radius:10px!important;
+   background:#e5f5ec!important;color:#0a875f!important;font-size:22px!important;
+ }
+ html .sv-native-shell .sv-native-object-description {
+   display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+   min-width:0;overflow:hidden;
+ }
+ html .sv-native-shell .sv-native-object-description strong {
+   max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+   color:#192d36!important;font:700 13px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-object-description small {
+   color:#7b8d95!important;font:500 11px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-row-more {
+   display:grid!important;place-items:center!important;
+   flex:0 0 38px!important;width:38px!important;height:38px!important;
+   margin-left:auto!important;border:0!important;border-radius:9px!important;
+   box-shadow:none!important;background:transparent!important;
+   color:#4e6770!important;font-size:23px!important;
+ }
+ html .sv-native-shell .sv-native-collection-folders .sv-native-object-row:has(.sv-native-object-icon:not(:first-child)) {display:flex!important;}
+ html .sv-native-shell .sv-native-grid-mode .sv-native-object-grid {
+   display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+   gap:8px!important;
+ }
+ html .sv-native-shell .sv-native-grid-mode .sv-native-object-row {
+   flex-direction:column!important;min-height:113px!important;
+   border:1px solid #e3eaf0!important;border-radius:11px!important;padding:12px!important;
+ }
+ html .sv-native-shell .sv-native-grid-mode .sv-native-object-card {
+   flex-direction:column!important;align-items:flex-start!important;
+ }
+ /* Bottom record details are a sheet over the same item list. */
+ html .sv-native-shell .sv-native-detail-screen {
+   position:fixed!important;bottom:calc(69px + env(safe-area-inset-bottom,0px))!important;
+   left:0!important;right:0!important;top:auto!important;
+   z-index:300!important;min-height:0!important;max-height:60dvh!important;
+   display:block!important;width:100%!important;overflow-y:auto!important;
+   border:1px solid #e1e9e9!important;border-radius:25px 25px 0 0!important;
+   background:#fff!important;color:#203943!important;
+   box-shadow:0 -12px 32px rgba(16,42,46,.16)!important;
+   padding:26px 18px 18px!important;
+ }
+ html .sv-native-shell .sv-native-detail-screen::before {
+   content:"";display:block;position:absolute;top:9px;left:calc(50% - 26px);
+   width:52px;height:5px;border-radius:5px;background:#b9c5cb;
+ }
+ html .sv-native-shell .sv-native-detail-screen h3 {
+   margin:0 43px 14px 0!important;color:#142e38!important;
+   font:750 21px/1.35 "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-detail-screen p {
+   background:#f5f8fa!important;border:1px solid #dde6e9!important;
+   border-radius:10px!important;padding:10px 11px!important;margin:7px 0!important;
+   color:#304e56!important;font:500 12px/1.55 "Segoe UI",Arial,sans-serif!important;
+   overflow-wrap:anywhere;
+ }
+ html .sv-native-shell .sv-native-detail-screen .sv-native-sheet-close {
+   float:right!important;display:grid!important;place-items:center!important;
+   width:34px;height:34px;border:0!important;border-radius:9px!important;
+   padding:0!important;background:transparent!important;box-shadow:none!important;
+   color:#55737c!important;font-size:24px!important;
+ }
+ html .sv-native-shell .sv-native-mobile-fab {
+   position:fixed!important;right:19px!important;
+   bottom:calc(89px + env(safe-area-inset-bottom,0px))!important;
+   z-index:260!important;display:grid!important;place-items:center!important;
+   width:58px!important;height:58px!important;border:0!important;
+   border-radius:19px!important;
+   background:linear-gradient(150deg,#10aa77,#005c41)!important;color:#fff!important;
+   box-shadow:0 12px 25px rgba(2,104,71,.28)!important;font-size:37px!important;
+ }
+ html .sv-native-shell .sv-native-commandbar {display:none!important;}
+ html .sv-native-shell .sv-native-footer {display:none!important;}
+ html .sv-native-shell .sv-native-nav {
+   display:grid!important;grid-row:3!important;grid-column:1!important;
+   grid-template-columns:repeat(4,minmax(0,1fr))!important;
+   position:relative!important;z-index:350!important;
+   gap:4px!important;min-height:69px!important;
+   padding:7px 13px calc(7px + env(safe-area-inset-bottom,0px))!important;
+   border-top:1px solid #e4ecee!important;border-radius:0!important;
+   background:#fff!important;box-shadow:0 -5px 18px rgba(12,44,41,.05)!important;
+ }
+ html .sv-native-shell .sv-native-nav button {
+   display:flex!important;flex-direction:column;align-items:center;justify-content:center;
+   gap:2px!important;min-height:53px!important;padding:5px 3px!important;
+   border:0!important;border-radius:15px!important;background:transparent!important;
+   color:#4f626d!important;font:500 12px "Segoe UI",Arial,sans-serif!important;
+ }
+ html .sv-native-shell .sv-native-nav button.selected {
+   background:#dff5eb!important;color:#075e40!important;font-weight:750!important;
+ }
+ html .sv-native-shell .sv-native-nav .sv-native-nav-icon {
+   color:inherit!important;font-size:26px!important;line-height:1.15!important;
+ }
+}
+@media(max-width:380px) {
+ html .sv-native-shell .sv-native-shortcut-grid {gap:5px!important;}
+ html .sv-native-shell .sv-native-shortcut-grid > button {min-height:89px!important;}
+}
+@media(max-width:699px) {
+ html[data-theme="dark"] .sv-native-shell .sv-native-scroll,
+ html[data-theme="dark"] .sv-native-shell .sv-native-content,
+ html[data-theme="dark"] .sv-native-shell .sv-native-nav,
+ html[data-theme="dark"] .sv-native-shell .sv-native-object-row,
+ html[data-theme="dark"] .sv-native-shell .sv-native-detail-screen {
+   background:#1b2d30!important;color:#e8f2ee!important;border-color:#395456!important;
+ }
+ html[data-theme="dark"] .sv-native-shell :is(.sv-native-shortcut-grid > button,
+ .sv-native-mobile-collections,.sv-native-mobile-search) {
+   background:#233a3d!important;border-color:#496366!important;color:#e4f4ed!important;
+ }
+ html[data-theme="dark"] .sv-native-shell :is(.sv-native-section-title h2,
+ .sv-native-list-toolbar h2,.sv-native-object-description strong,
+ .sv-native-detail-screen h3,.sv-native-shortcut-grid strong) {color:#e7f4ef!important;}
+ html[data-theme="dark"] .sv-native-shell .sv-native-object-row.is-selected {
+   background:#245444!important;border-color:#51af86!important;
+ }
+ html[data-theme="dark"] .sv-native-shell .sv-native-nav button.selected {
+   background:#245544!important;color:#c6fce0!important;
+ }
+ html[data-theme="dark"] .sv-native-shell .sv-native-detail-screen p {
+   background:#284146!important;color:#e2f2ee!important;border-color:#426062!important;
+ }
+}
