@@ -4,6 +4,7 @@
 @using System.Security.Cryptography
 @using StellarVault.Pwa.Services
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Web
 @inject IStellarLedgerRecords Ledger
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
@@ -363,8 +364,18 @@ else
                     <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
                     <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
                 </div>
-                <VaultItemEditor @key="_editorKey" @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
-                     Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
+                <ErrorBoundary @key="_editorKey">
+                    <ChildContent>
+                        <VaultItemEditor @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
+                                         Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
+                    </ChildContent>
+                    <ErrorContent>
+                        <div class="terminal-alert warning" role="alert">
+                            The editor could not be loaded. Close this pane and try again.
+                            If the problem continues, use the standalone Add/Edit route.
+                        </div>
+                    </ErrorContent>
+                </ErrorBoundary>
             </aside>
         }
         else
