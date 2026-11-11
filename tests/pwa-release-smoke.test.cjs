@@ -346,3 +346,19 @@ test('PWA modern destinations expose usable settings and mobile new action', () 
   assert.match(vault, /sv-modern-record-icon/);
   assert.match(vault, /sv-modern-search/);
 });
+
+
+test('Screenshot regressions: inspector uses one width reservation and entry has four-column desktop mnemonic', () => {
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.match(css, /width:calc\(100% - var\(--sv-record-inspector-width\)\)/);
+  assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.sv-web-shell \.sv-access-storage-choices/);
+  assert.match(css, /\.sv-web-shell \.sv-account-info-modal h2/);
+  assert.match(css, /\.sv-web-shell \.sv-pwa-app > nav\.sv-pwa-rail/);
+  assert.match(vault, /sv-inspector-resize-handle/);
+  assert.match(home, /sv-modern-entry/);
+  assert.doesNotMatch(css, /--bg-0:\s*#020604/);
+  assert.doesNotMatch(css, /font-family:\s*"Courier New"/);
+});
