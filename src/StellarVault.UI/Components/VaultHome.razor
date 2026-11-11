@@ -587,8 +587,13 @@
     private async Task SelectNetwork(string value)
     {
         if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || (value != "testnet" && value != "public" && value != "custom")) return;
+        // Re-entering a custom endpoint always requires fresh detection.
+        // A previous custom passphrase must never authorize a new selection.
+        NetworkSelection.ResetCustom();
         NetworkSelection.ChoosePreset(value);
         _network = value;
+        _customPassphrase = null;
+        _detectedHorizon = null;
         _confirmMainnetAccess = false;
         _networkStatus = null;
         _childAccounts = null;
