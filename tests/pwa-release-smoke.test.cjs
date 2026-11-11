@@ -397,3 +397,21 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(css, /grid-template-columns:245px minmax\(0,1fr\) var\(--sv-record-inspector-width\)/);
   assert.match(css, /\.sv-editor-embedded/);
 });
+
+
+test('Embedded Add/Edit renders without a nested app grid; create actions stay out of left rail', () => {
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'AdaptiveShell.razor'), 'utf8');
+  assert.match(editor, /Embedded \? "sv-inline-editor-layout" : "sv-pwa-app sv-pwa-secondary-app"/);
+  assert.match(editor, /Embedded \? "sv-inline-editor-stage" : "sv-pwa-stage sv-pwa-secondary-stage"/);
+  assert.match(editor, /@if \(!Embedded\)/);
+  assert.match(shell, /@if \(Embedded\)/);
+  const rail = vault.slice(vault.indexOf('<nav class="sv-pwa-rail"'), vault.indexOf('</nav>') + 6);
+  assert.doesNotMatch(rail, /OpenEditor\(/);
+  assert.match(vault, /<Add @key="_editorKey"/);
+  assert.match(css, /\.sv-editor-sidecar \.sv-inline-editor-layout/);
+  assert.match(css, /\.sv-folder-tile \.sv-folder-open > span:last-child/);
+  assert.match(css, /text-align:left!important/);
+});
