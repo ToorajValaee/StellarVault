@@ -250,3 +250,16 @@ test('MAUI loads final native-modern presentation while preserving first-render 
   assert.match(css, /\.sv-native-network-popover/);
   assert.match(css, /prefers-reduced-motion/);
 });
+
+test('native modern layout includes functional four-tab navigation and Settings', () => {
+  const source = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(maui,'wwwroot/modern-native.css'), 'utf8');
+  assert.match(source, /NavigateNative\("settings"\)/);
+  assert.match(source, /_nativePage == "settings"/);
+  assert.match(source, /class="sv-native-settings"/);
+  assert.match(source, /DisconnectLedgerAsync/);
+  assert.match(source, /LockVault/);
+  assert.match(css, /\.sv-native-settings/);
+  assert.match(css, /\.sv-native-nav button\.selected/);
+});
