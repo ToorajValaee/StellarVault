@@ -172,7 +172,7 @@ test('native entry screen is task-first with no developer runtime button', () =>
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   assert.doesNotMatch(component, />Check native runtime</);
   assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
-  assert.match(component, />Connect your vault</);
+  assert.match(component, /"Connect your vault"/);
   assert.match(component, />Recovery phrase</);
   assert.match(component, /OnAfterRenderAsync\(bool firstRender\)/);
   assert.match(component, /await CheckRuntimeAsync\(\)/);
