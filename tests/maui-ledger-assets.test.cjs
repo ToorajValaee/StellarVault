@@ -194,3 +194,30 @@ test('native header network menu discovers a verified custom Horizon passphrase'
   assert.doesNotMatch(component, /class="sv-native-network-settings"/);
   assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
 });
+
+test('native record editor matches PWA record metadata and preserves full review fingerprint', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  for (const field of ['_publishTitle', '_publishFolder', '_publishContent',
+    '_publishUsername', '_publishUrl', '_publishNotes', '_publishTags']) {
+    assert.ok(native.includes(field), 'Missing native record field: ' + field);
+  }
+  assert.match(native, /private LedgerRecordDraft CurrentPublishDraft/);
+  assert.match(native, /private string CurrentPublishFingerprint/);
+  assert.match(native, /_publishFingerprint != CurrentPublishFingerprint\(\)/);
+  assert.match(native, /@onclick='\(\) => SetNativeMode\("folder"\)'/);
+  assert.match(native, /_nativeMode is "record" or "folder"/);
+  assert.match(native, /CurrentPublishDraft\(\)/);
+});
+
+test('native explorer has mobile object tiles, desktop folder tree and back navigation', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const styles = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+  assert.match(native, /sv-native-folder-tree/);
+  assert.match(native, /sv-native-object-grid/);
+  assert.match(native, /sv-native-detail-screen/);
+  assert.match(native, /Back to folder/);
+  assert.match(styles, /\.sv-native-folder-tree/);
+  assert.match(styles, /\.sv-native-object-card/);
+});
