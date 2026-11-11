@@ -4779,3 +4779,13 @@ html[data-theme="dark"] .sv-web-shell .sv-workspace-surface .sv-hybrid-panel .sv
    background:#235342!important;color:#c7fce2!important;
  }
 }
+
+@media(max-width:840px) {
+ .sv-web-shell .sv-mobile-folder-back {
+   flex:0 0 28px;display:grid;place-items:center;
+   min-width:28px;min-height:35px;padding:0 5px!important;
+   color:#087454!important;background:transparent!important;
+   border:0!important;box-shadow:none!important;font-size:29px!important;
+ }
+ html[data-theme="dark"] .sv-web-shell .sv-mobile-folder-back {color:#a8f2cf!important;}
+}
