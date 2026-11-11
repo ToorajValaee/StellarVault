@@ -372,7 +372,7 @@ else
                     <ErrorContent>
                         <div class="terminal-alert warning" role="alert">
                             The editor could not be loaded. Close this pane and try again.
-                            If the problem continues, use the standalone Add/Edit route.
+                            <a class="pixel-button compact" href="@(_editorRecordId is null ? "/add?kind=" + _editorKind : "/edit/" + Uri.EscapeDataString(_editorRecordId))">Open full editor</a>
                         </div>
                     </ErrorContent>
                 </ErrorBoundary>
