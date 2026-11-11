@@ -42,6 +42,9 @@ else
                 <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)"
                         @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⇅</span> Sync</button>
             }
+            <button type="button" class="@(_appView == "settings" ? "selected" : "")"
+                    aria-current="@(_appView == "settings" ? "page" : null)"
+                    @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <div class="sv-pwa-rail-divider"></div>
             <a href="/add" class="sv-pwa-rail-action"><span aria-hidden="true">＋</span> New record</a>
             <a href="/add?kind=folder" class="sv-pwa-rail-action"><span aria-hidden="true">▣</span> New folder</a>
@@ -52,7 +55,7 @@ else
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
-                    <h1>@(_appView == "records" ? "Records" : _appView == "drafts" ? "Drafts" : "Sync")</h1>
+                    <h1>@(_appView == "records" ? "Records" : _appView == "drafts" ? "Drafts" : _appView == "settings" ? "Settings" : "Sync")</h1>
                     
                 </div>
                 <div class="sv-pwa-screen-tools">
@@ -66,6 +69,31 @@ else
             {
                 <div class="stats-strip sv-pwa-summary"><div><span>Records</span><strong>@Records.Count</strong></div><div><span>Folders</span><strong>@Folders.Count</strong></div></div>
             }
+        @if (_appView == "settings")
+        {
+            <section class="sv-modern-settings" aria-label="Vault settings">
+                <div class="terminal-panel sv-modern-settings-section">
+                    <h2>Connection</h2>
+                    <div class="sv-modern-setting-row">
+                        <div><strong>Network</strong><p>@(Networks.SelectedPreset == "public" ? "Stellar Mainnet" : Networks.SelectedPreset == "custom" ? "Custom Stellar network" : "Stellar Testnet")</p></div>
+                        <span class="sv-modern-setting-status">@(Ledger.IsConnected ? "Connected" : "Not connected")</span>
+                    </div>
+                    <div class="sv-modern-setting-row">
+                        <div><strong>Account details</strong><p>View the active Stellar account and ledger information.</p></div>
+                        <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" @onclick="OpenAccountInfoAsync">View</button>
+                    </div>
+                </div>
+                <div class="terminal-panel sv-modern-settings-section">
+                    <h2>Privacy &amp; storage</h2>
+                    <div class="sv-modern-setting-row">
+                        <div><strong>Local encrypted vault</strong>
+                        <p>@(Retention.AllowsLocalPersistence ? "Device storage allowed" : "Stellar-only session")</p></div>
+                    </div>
+                    <p class="advanced-help">Offline data stays on this device until you explicitly approve synchronization. Keep your own backup.</p>
+                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock vault</button>
+                </div>
+            </section>
+        }
         @if (_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
             
@@ -253,8 +281,11 @@ else
                 <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)" @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span>Drafts</button>
                 <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)" @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⇅</span>Sync</button>
             }
-            <a href="/add"><span aria-hidden="true">＋</span>New</a>
+            <button type="button" class="@(_appView == "settings" ? "selected" : "")"
+                    aria-current="@(_appView == "settings" ? "page" : null)"
+                    @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
         </nav>
+        <a href="/add" class="sv-modern-fab" aria-label="Create a new vault item" title="New item"><span aria-hidden="true">＋</span></a>
     </div>
     @if (_selectedPending is not null)
     {
@@ -461,8 +492,8 @@ else
     private string _syncTask = "review";
     private void SelectAppView(string view)
     {
-        if (view is not ("records" or "drafts" or "sync")) return;
-        if (view != "records" && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
+        if (view is not ("records" or "drafts" or "sync" or "settings")) return;
+        if (view is "drafts" or "sync" && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
         _appView = view;
         if (view == "sync") _ = InvokeAsync(LoadPendingAsync);
     }
