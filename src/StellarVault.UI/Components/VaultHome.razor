@@ -586,9 +586,12 @@
             _detectedHorizon = requestedHorizon;
             _networkStatus = "Network detected.";
         }
-        catch (JSException)
+        catch (Exception ex) when (ex is JSException or ArgumentException or InvalidOperationException)
         {
-            _message = "Private network detection failed. Check Horizon URL, HTTPS and browser CORS permissions.";
+            NetworkSelection.ResetCustom();
+            _customPassphrase = null;
+            _detectedHorizon = null;
+            _message = "Could not detect this network. Check the Horizon URL and try again.";
         }
         finally { _busy = false; }
     }
