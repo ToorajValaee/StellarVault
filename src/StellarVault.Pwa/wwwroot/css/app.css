@@ -2485,3 +2485,60 @@ html.ios-device.standalone-app .terminal-footer {
     -webkit-overflow-scrolling:touch;
   }
 }
+
+/* Task-first entry, with optional explanation rather than a marketing console.
+   Applies only to the browser access route, not native BlazorWebView. */
+.sv-pwa-access-grid {
+    width:min(100%, 68rem);
+    margin-inline:auto;
+    grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);
+    align-items:start;
+    gap:clamp(1rem,3vw,2rem);
+    padding:clamp(1rem,3vw,2rem);
+}
+.sv-access-welcome {
+    padding:clamp(1.1rem,3vw,1.9rem);
+    border-radius:16px;
+}
+.sv-access-welcome .sv-access-welcome-mark {
+    display:inline-grid;place-items:center;
+    width:44px;height:44px;
+    border-radius:13px;
+    border:1px solid var(--border);
+    background:var(--phosphor-faint);
+    font-size:25px;
+}
+.sv-access-welcome h1 { margin:1rem 0 .65rem;line-height:1.2;
+    font-size:clamp(1.8rem,3vw,2.7rem);
+    text-transform:none;letter-spacing:-.035em;
+    text-shadow:none;
+}
+.sv-access-welcome .hero-copy {font-size:clamp(.88rem,1.35vw,1rem);line-height:1.6;}
+.sv-access-learn,.sv-native-help {
+    margin:.85rem 0;
+    padding:.75rem .85rem;
+    border:1px solid rgba(113,255,155,.22);
+    border-radius:10px;
+    background:rgba(113,255,155,.04);
+    font-size:.78rem;
+    line-height:1.6;
+}
+.sv-access-learn summary,.sv-native-help summary {cursor:pointer;color:var(--phosphor-strong);font-weight:700;}
+.sv-access-learn p,.sv-native-help p {margin:.65rem 0 0;color:var(--muted);}
+.sv-pwa-access-grid > .access-form {
+    max-width:100%;width:100%;border-radius:16px;
+    padding:clamp(1rem,2.5vw,1.7rem);
+}
+.sv-pwa-access-grid .access-form h2 {letter-spacing:-.02em;text-transform:none;text-shadow:none;font-size:1.5rem;}
+.sv-pwa-access-grid .access-form .step-led {display:none;}
+.sv-pwa-access-grid .access-form .terminal-input {min-height:46px;border-radius:9px;}
+.sv-pwa-access-grid .access-form .sv-access-actions .pixel-button {min-height:48px;border-radius:9px;}
+.sv-pwa-access-grid .access-form .terminal-alert {border-radius:10px;}
+.sv-pwa-access-grid .sv-biometric-choice {border-radius:9px;}
+@media(max-width:760px) {
+  .sv-pwa-access-grid {grid-template-columns:minmax(0,1fr);padding:.85rem;gap:.6rem;}
+  .sv-access-welcome {padding:1rem;border-radius:12px;}
+  .sv-access-welcome h1 {font-size:1.5rem;margin:.5rem 0;}
+  .sv-access-welcome .hero-copy {font-size:.84rem;margin:.4rem 0;}
+  .sv-pwa-access-grid > .access-form {padding:1rem;border-radius:12px;}
+}
