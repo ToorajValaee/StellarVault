@@ -408,14 +408,16 @@ else
     }
     @if (_selected is not null)
     {
-        <div class="modal-backdrop" @onclick="CloseRecord">
-            <section class="record-modal terminal-panel" role="dialog" aria-modal="true"
+        <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
+            <section class="record-modal terminal-panel sv-record-inspector" role="dialog" aria-modal="true"
                      aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
-                <header class="modal-header">
-                    <div><div class="panel-kicker">RECORD // @_selected.Id</div><h2 id="sv-record-title">@_selected.Title</h2></div>
+                <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
+                     tabindex="0" title="Drag to adjust preview width"></div>
+                <header class="modal-header sv-inspector-heading">
+                    <div class="sv-inspector-title"><span class="sv-inspector-record-icon" aria-hidden="true">▦</span><div><div class="panel-kicker">Record details</div><h2 id="sv-record-title">@_selected.Title</h2><p class="sv-inspector-subtitle">@FolderPath(_selected.FolderId)</p></div></div>
                     <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
                 </header>
-                <div class="data-field"><span class="field-label">FOLDER PATH</span><div class="field-value-row"><code>@FolderPath(_selected.FolderId)</code></div></div>
+                <div class="sv-inspector-section-label">Details</div>
                 @if (IsLedgerFile(_selected))
                 {
                     <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
