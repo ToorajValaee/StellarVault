@@ -315,3 +315,18 @@ test('PWA terminal surfaces share squared pixel geometry and a faint dotted text
   assert.match(css, /\.sv-adaptive-shell :is\(\.terminal-panel, \.record-card/);
   assert.match(css, /background-image:var\(--sv-crt-grid\) !important/);
 });
+
+test('PWA loads the final modern design after legacy and scoped styles', () => {
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const base = html.indexOf('href="css/app.css"');
+  const scoped = html.indexOf('href="StellarVault.Pwa.styles.css"');
+  const modern = html.indexOf('href="css/modern-app.css"');
+  assert.ok(base >= 0 && scoped > base && modern > scoped);
+  assert.match(css, /--sv-radius:16px/);
+  assert.match(css, /\.screen-noise,\.scanlines \{display:none!important;/);
+  assert.match(css, /sv-explorer-layout/);
+  assert.match(css, /sv-pwa-mobile-tabs/);
+  assert.match(css, /modal-backdrop:has\(#sv-record-title\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
