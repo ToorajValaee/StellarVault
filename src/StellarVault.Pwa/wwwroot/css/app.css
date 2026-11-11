@@ -2542,3 +2542,18 @@ html.ios-device.standalone-app .terminal-footer {
   .sv-access-welcome .hero-copy {font-size:.84rem;margin:.4rem 0;}
   .sv-pwa-access-grid > .access-form {padding:1rem;border-radius:12px;}
 }
+
+/* Login is a single, focused app screen, not a two-column landing page. */
+.sv-pwa-access-grid {
+    width:min(100%, 46rem);
+    grid-template-columns:minmax(0,1fr);
+    justify-content:center;
+    padding-block:clamp(1rem,4vh,3.5rem);
+}
+.sv-pwa-access-grid > .access-form {
+    width:100%;
+    max-width:100%;
+}
+@media(max-width:760px) {
+    .sv-pwa-access-grid {padding-block:.75rem 1.5rem;}
+}
