@@ -23,11 +23,24 @@
 }
 else
 {
-    <section class="form-page">
-        <header class="page-command-header">
-            <div><div class="panel-kicker">WRITE OPERATION // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT" : "NEW") @(_kind == "folder" ? "FOLDER" : _kind == "file" ? "FILE" : "RECORD")</div><h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING RECORD" : _kind == "folder" ? "CREATE FOLDER" : _kind == "file" ? "ADD FILE" : "ADD RECORD")</h1><p class="page-subtitle">@(_kind == "file" ? "Publish an encrypted file to the Stellar ledger with fee approval." : "Encrypted Stellar ledger operation. Network fees and account reserves apply.")</p></div>
-            <a class="pixel-button compact" href="@ReturnUrl">← CANCEL</a>
+    <section class="form-page sv-pwa-editor">
+        <nav class="sv-pwa-editor-breadcrumb" aria-label="Edit workflow navigation">
+            <a href="@ReturnUrl">← Back to vault</a><span aria-hidden="true">/</span>
+            <span>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit item" : "New " + (_kind == "folder" ? "folder" : _kind == "file" ? "file" : "record"))</span>
+        </nav>
+        <header class="page-command-header sv-pwa-editor-heading">
+            <div><div class="panel-kicker">STELLARVAULT // @(!string.IsNullOrWhiteSpace(RecordId) ? "EDIT EXISTING" : "NEW ITEM")</div>
+                <h1>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit your record" : _kind == "folder" ? "New folder" : _kind == "file" ? "Add a file" : "New record")</h1>
+                <p class="page-subtitle">@(_kind == "file" ? "Files are encrypted and published in individually approved Stellar transactions." : "Create an encrypted item. Review network costs before any on-chain write.")</p></div>
         </header>
+        @if (string.IsNullOrWhiteSpace(RecordId))
+        {
+            <nav class="sv-pwa-editor-modes" aria-label="Choose the type of item">
+                <a class="@(_kind == "record" ? "selected" : "")" href="/add" aria-current="@(_kind == "record" ? "page" : null)">▤ Record</a>
+                <a class="@(_kind == "folder" ? "selected" : "")" href="/add?kind=folder" aria-current="@(_kind == "folder" ? "page" : null)">▣ Folder</a>
+                <a class="@(_kind == "file" ? "selected" : "")" href="/add?kind=file" aria-current="@(_kind == "file" ? "page" : null)">⇧ File</a>
+            </nav>
+        }
         @if (_loading) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> LOADING RECORD AND FOLDERS...</div> }
         @if (_kind == "file")
         {
