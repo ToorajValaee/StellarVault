@@ -54,12 +54,30 @@
     }
     else
     {
-    <div class="access-grid sv-pwa-access-grid">
+    <div class="access-grid sv-pwa-access-grid sv-modern-entry">
+        <aside class="sv-entry-showcase" aria-label="Welcome to StellarVault">
+            <div class="sv-entry-brand"><span class="sv-entry-shield" aria-hidden="true">✦</span><strong>StellarVault</strong></div>
+            <div class="sv-entry-showcase-content">
+                <span class="sv-entry-eyebrow">YOUR PRIVATE DIGITAL VAULT</span>
+                <h1>Everything important.<br />Safely in your hands.</h1>
+                <p>Protect your records, organize your digital life, and connect to Stellar when you choose.</p>
+                <div class="sv-entry-feature"><span aria-hidden="true">◇</span><span>Encrypted from the moment you unlock</span></div>
+                <div class="sv-entry-feature"><span aria-hidden="true">▣</span><span>Your records and folders, in one place</span></div>
+                <div class="sv-entry-feature"><span aria-hidden="true">◎</span><span>Stellar-backed storage when you approve</span></div>
+            </div>
+            <div class="sv-entry-showcase-foot">PRIVATE BY DESIGN <span aria-hidden="true">·</span> YOU STAY IN CONTROL</div>
+        </aside>
+        <div class="sv-entry-main">
+            <div class="sv-entry-intro">
+                <span class="sv-entry-kicker">SECURE ACCESS</span>
+                <h1>Unlock your vault</h1>
+                <p>Enter your recovery phrase to securely access your StellarVault workspace.</p>
+            </div>
         <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
             @if (Platform == "WEB PWA")
             {
-                <div class="terminal-label">Recovery phrase</div>
+                <div class="sv-entry-field-heading"><span class="terminal-label">Recovery phrase</span><span class="sv-entry-field-hint">12–24 words</span></div>
                 <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
                 @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
@@ -180,6 +198,8 @@
                 </div>
             }
         </form>
+        <p class="sv-entry-privacy"><span aria-hidden="true">♧</span> Your recovery phrase is handled in this session. Never share it with anyone.</p>
+        </div>
     </div>
     @if (Sessions.IsUnlocked && Platform != "WEB PWA")
     {
