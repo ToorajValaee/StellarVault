@@ -6,20 +6,18 @@
 @implements IDisposable
 
 <section class="terminal-panel" aria-label="Offline changes to existing Stellar records and folders">
-    <div class="panel-kicker">HYBRID // VERSIONED REMOTE CHANGES</div>
-    <h3>EDIT OR DELETE PUBLISHED RECORDS OFFLINE</h3>
-    <p>Load published records while connected, then stage an encrypted local update
-       or deletion. No transaction is submitted. Every change is pinned to the
-       original on-chain contents so a later conflicting edit cannot be overwritten silently.</p>
+    <h3>@(_editingRemote is not null || _editingMutationId is not null ? "Edit change" : "Published records")</h3>
     @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
     {
         <p role="status">Unlock the encrypted local vault and enable local storage to edit published data offline.</p>
     }
     else
     {
+        @if (_editingRemote is null && _editingMutationId is null)
+        {
         <div class="sv-access-actions">
             <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
-                    @onclick="LoadRemoteAsync">LOAD PUBLISHED RECORDS</button>
+                    @onclick="LoadRemoteAsync">Load records</button>
             <button class="pixel-button compact" type="button" disabled="@_busy"
                     @onclick="LoadLocalAsync">OPEN LOCAL CHANGE QUEUE</button>
             <button class="pixel-button compact" type="button" disabled="@(_busy || !Ledger.IsConnected)"
@@ -44,15 +42,18 @@
                 </div>
             }
         }
+        }
         @if (_editingRemote is not null || _editingMutationId is not null)
         {
+            <button type="button" class="sv-native-back pixel-button compact" disabled="@_busy" @onclick="CancelEdit">← Back to records</button>
             <section class="terminal-panel" aria-label="Versioned local mutation editor">
-                <h3>@(_deleteMode ? "STAGE DELETION" : "STAGE UPDATE")</h3>
-                <p>Record ID: <code>@_editingRecordId</code> ·
-                    @(_editingIsFolder ? "Folder" : "Record")</p>
+                <h3>@(_deleteMode ? "Delete record" : "Edit record")</h3>
+                <details class="sv-native-help"><summary>Item details</summary>
+                    <p>Record ID: <code>@_editingRecordId</code> · @(_editingIsFolder ? "Folder" : "Record")</p>
+                </details>
                 @if (_editingMutationId is not null)
                 {
-                    <p>Original remote fingerprint remains pinned; editing locally does not replace the baseline.</p>
+ 
                 }
                 @if (_deleteMode)
                 {
@@ -97,9 +98,9 @@
                 </button>
             </section>
         }
-        @if (_local.Count > 0)
+        @if (_editingRemote is null && _editingMutationId is null && _local.Count > 0)
         {
-            <div class="panel-kicker">ENCRYPTED LOCAL UPDATE / DELETE QUEUE</div>
+            <div class="panel-kicker">Saved changes</div>
             @foreach (var item in _local)
             {
                 <div class="data-field">
@@ -135,12 +136,12 @@
                 </div>
             }
         }
-        <p class="advanced-help">Queued update/delete submission is experimental and
-           restricted to Testnet; it is not atomic against another writer. Deletions
-           cannot yet be historically confirmed. For a conflicting record update,
-           preserve the proposed contents as a new encrypted CREATE draft instead
-           of overwriting the published record. Saving or preserving a draft never
-           sends a Stellar transaction.</p>
+        <details class="sv-native-help">
+            <summary>About offline updates</summary>
+            <p>Staged changes do not submit transactions. Update/delete sync is experimental and
+               limited to Testnet. Concurrent remote edits can conflict, and deletions lack
+               independent historical confirmation. Review changes before approving a transaction.</p>
+        </details>
     }
 </section>
 
