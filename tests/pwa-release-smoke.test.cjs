@@ -168,7 +168,8 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
-  assert.ok(access.includes('ON-CHAIN ONLY'));
+  assert.ok(access.includes('Stellar only — do not save data on this device'));
+  assert.ok(access.includes('checked="@(!_enableLocalStorage)"'));
   assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
   assert.ok(program.includes('AddScoped<VaultDeviceRetentionGate>()'));
