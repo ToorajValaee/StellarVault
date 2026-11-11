@@ -31,3 +31,12 @@ This is a PWA-only presentation restructuring; Core and MAUI business logic are 
 ## Automated coverage
 
 `tests/pwa-release-smoke.test.cjs` checks the route, distinct task destinations, on-chain browser retention and editor navigation. Build/asset/cryptographic checks run in `.github/workflows/fresh-v2-build.yml`. **Static tests and CI cannot replace browser interaction and security testing.**
+
+
+## 2026-11-11 — Responsive explorer and CRT visual acceptance
+
+- [ ] All PWA panels, folder/record cards, field groupings and dialogs use consistent squared pixel corners and dim dot-matrix surfaces in green and amber themes; warning/error alerts remain clearly distinct.
+- [ ] On a wide Windows/browser workspace, the folder tree and content list remain simultaneously visible, preserve nested hierarchy, and show the active folder.
+- [ ] Narrow the browser or install on mobile: tree becomes familiar folder/object tiles without horizontal overflow, with breadcrumb and New controls reachable.
+- [ ] Open/rename/move/delete nested folders and verify records remain scoped correctly; keyboard navigation and cycle-guarded tree remain usable.
+- [ ] Switching Records/Drafts/Sync keeps pending fee approvals and encrypted state safe; no transaction is submitted by switching screens.
