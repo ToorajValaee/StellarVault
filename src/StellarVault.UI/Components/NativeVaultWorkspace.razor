@@ -512,6 +512,8 @@ else
     {
         if (_ledgerBusy || mode is not ("browse" or "record" or "folder" or "file")) return;
         if (_nativeMode is "record" or "folder" && mode != _nativeMode && _publishEstimate is not null) CancelPublish();
+        if (_nativeMode == "browse" && mode is "record" or "folder")
+            _publishFolder = _selectedFolderId;
         _nativeMode = mode;
     }
 
@@ -658,10 +660,6 @@ else
     private bool _publishApproved;
     private string? _publishFingerprint;
 
-    private static string PublishFingerprint(string title, string content, string network) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(network + "\\0" + title + "\\0" + content)));
-
     private void CancelPublish()
     {
         _publishEstimate = null;
@@ -728,6 +726,7 @@ else
             _publishContent = string.Empty;
             _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
             _showPublishSecret = false;
+            _nativeMode = "browse";
             // Once the receipt is confirmed, a subsequent read failure must
             // not be reported as a failed submission (which invites retries).
             try
