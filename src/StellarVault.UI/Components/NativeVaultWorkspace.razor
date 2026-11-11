@@ -91,15 +91,52 @@ else
                     @onclick='() => NavigateNative("sync")'>
                 <span class="sv-native-nav-icon" aria-hidden="true">⇅</span><span>Sync</span>
             </button>
+            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")"
+                    aria-current="@(_nativePage == "settings" ? "page" : null)"
+                    @onclick='() => NavigateNative("settings")'>
+                <span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span>
+            </button>
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
             @if (_nativePage != "stellar" || Ledger.IsConnected)
             {
                 <div class="sv-native-page-heading">
-                    <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : "Sync")</h1>
+                    <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : _nativePage == "settings" ? "Settings" : "Sync")</h1>
                 </div>
             }
+    @if (_nativePage == "settings")
+    {
+        <section class="sv-native-settings" aria-label="Vault settings">
+            <div class="terminal-panel">
+                <h2>Connection</h2>
+                <div class="sv-native-setting-row">
+                    <div><strong>Network</strong><p>@NetworkLabel</p></div>
+                    <span>@(Ledger.IsConnected ? "Connected" : "Not connected")</span>
+                </div>
+                @if (Ledger.IsConnected)
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect Stellar</button>
+                }
+            </div>
+            <div class="terminal-panel">
+                <h2>Privacy &amp; storage</h2>
+                <div class="sv-native-setting-row">
+                    <div><strong>Encrypted device vault</strong>
+                        <p>@(Sessions.IsUnlocked ? "Unlocked on this device" : "Locked")</p></div>
+                </div>
+                @if (Sessions.IsUnlocked)
+                {
+                    <button type="button" class="pixel-button compact" @onclick="LockVault">Lock device vault</button>
+                }
+                <details class="sv-native-help">
+                    <summary>Storage and backups</summary>
+                    <VaultStorageSecurityNotice Native="true" />
+                </details>
+            </div>
+        </section>
+    }
     <section class="native-preview sv-vault-data" aria-label="Native vault workspace">
         @if (_nativePage == "stellar")
         {
@@ -413,6 +450,14 @@ else
                             @onclick="ConnectLedgerAsync">Connect Stellar</button>
                 }
             }
+            else if (_nativePage == "settings")
+            {
+                <span class="sv-native-command-hint">Privacy &amp; security</span>
+                @if (Sessions.IsUnlocked)
+                {
+                    <button type="button" class="sv-native-command" @onclick="LockVault">Lock</button>
+                }
+            }
             else if (Sessions.IsUnlocked)
             {
                 @if (_nativePage == "local")
@@ -450,12 +495,13 @@ else
     {
         "local" => "local:" + _localMode,
         "sync" => "sync:" + _syncMode,
+        "settings" => "settings",
         _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
     };
 
     private void NavigateNative(string page)
     {
-        if (page is not ("stellar" or "local" or "sync")) return;
+        if (page is not ("stellar" or "local" or "sync" or "settings")) return;
         _nativePage = page;
         NativeNavigation.SetSecondaryDestination(page != "stellar");
     }
