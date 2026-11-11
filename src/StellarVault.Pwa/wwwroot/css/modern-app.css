@@ -4109,3 +4109,53 @@ html .sv-web-shell .approval-modal .stats-strip strong {
 :root[data-theme="dark"] .sv-web-shell .sv-network-popover .sv-network-popup-title {
   color:#e8f4ef!important;
 }
+
+
+/* High-specificity dark surface corrections for Explorer's explicit !important
+   light-row selectors. These are the actual visible file manager surfaces. */
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-pwa-stage,
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-explorer-layout,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-folder-tile,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .record-list,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-explorer-folder-panel,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-explorer-list-head {
+  background:#16292e!important;color:#e4f4ed!important;
+  border-color:#355359!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row.is-selected,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-tree .sv-tree-item.selected {
+  background:#1e5646!important;color:#d5ffed!important;
+  border-color:#3e9d7a!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row .sv-modern-record,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-folder-tile .sv-folder-open {
+  background:transparent!important;color:#e7f5ef!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row .record-card-body strong,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-folder-tile .sv-folder-open span:last-child,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row small {
+  color:#e2f0e8!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-explorer-tree {
+  background:#172b30!important;border-color:#355359!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-pwa-rail {
+  background:linear-gradient(160deg,#032f29,#011f1f)!important;color:#f5fffb!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-adaptive-header {
+  background:#14292c!important;border-color:#375155!important;
+}
+@media(min-width:1100px) {
+  html[data-theme="dark"] .sv-web-shell:has(.sv-pwa-app) > .sv-adaptive-header {
+    background:linear-gradient(90deg,#032d28 0px,#032d28 245px,#14292c 245px,#14292c 100%)!important;
+  }
+}
+html[data-theme="dark"] .sv-web-shell .sv-adaptive-header :is(.sv-brand-name strong,.sv-brand-name small) {
+  color:#dbf5eb!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-pwa-screen-tools :is(.pixel-button:not(.primary),button:not(.primary)),
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-folder-tile .sv-object-actions > summary,
+html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row .sv-object-actions > summary {
+  background:#203b3d!important;color:#ddf0e9!important;border-color:#416064!important;
+}
