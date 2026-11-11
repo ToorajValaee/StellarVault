@@ -233,8 +233,13 @@ else
                     @foreach (var draft in PendingLocalFolders.Where(x => PendingFolderId(x) == _folder))
                     {
                         <div class="sv-folder-tile">
-                            <button class="pixel-button compact" type="button" @onclick="() => OpenFolder(draft.EntityId)">📁 @PendingTitle(draft) · LOCAL</button>
-                            <button class="pixel-button compact" type="button" @onclick="() => OpenPending(draft)">EDIT DRAFT</button>
+                            <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)"><span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span></button>
+                            <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
+                                <div class="sv-object-menu">
+                                    <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
+                                    <button type="button" @onclick="() => OpenPending(draft)">Edit local draft</button>
+                                </div>
+                            </details>
                         </div>
                     }
                 }
@@ -245,10 +250,15 @@ else
                     x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.UploadFile &&
                     PendingFolderId(x) == _folder))
                 {
-                    <button type="button" class="record-card" @onclick="() => OpenPending(draft)">
-                        <span class="record-card-body"><strong>@PendingTitle(draft)</strong><small>LOCAL DRAFT · @draft.Kind · NOT ON STELLAR</small></span>
-                        <span class="record-chevron">›</span>
-                    </button>
+                    <div class="sv-object-row">
+                        <button type="button" class="record-card sv-modern-record" @onclick="() => OpenPending(draft)">
+                            <span class="sv-modern-record-icon" aria-hidden="true">▤</span>
+                            <span class="record-card-body"><strong>@PendingTitle(draft)</strong><small>Local draft · Not on Stellar</small></span>
+                        </button>
+                        <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
+                            <div class="sv-object-menu"><button type="button" @onclick="() => OpenPending(draft)">View or edit draft</button></div>
+                        </details>
+                    </div>
                 }
             }
             <div class="sv-access-actions">
