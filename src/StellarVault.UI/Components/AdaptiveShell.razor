@@ -1,5 +1,7 @@
 @using Microsoft.JSInterop
+@using StellarVault.Core.Services
 @inject Microsoft.JSInterop.IJSRuntime JS
+@inject VaultNetworkSelection NetworkSelection
 
 <div class="sv-adaptive-shell">
     <header class="sv-adaptive-header">
@@ -7,7 +9,26 @@
             <span class="sv-mark" aria-hidden="true">SV</span>
             <span><strong>STELLARVAULT</strong></span>
         </div>
-        <div class="sv-header-actions">@HeaderActions<button class="icon-button sv-theme-toggle" type="button" title="Switch green / amber theme" aria-label="Change phosphor theme" @onclick="ToggleThemeAsync"><span aria-hidden="true">◐</span></button></div>
+        <div class="sv-header-actions">
+            @if (HeaderActions is not null)
+            {
+                @HeaderActions
+            }
+            else
+            {
+                <details class="sv-network-menu">
+                    <summary class="sv-network-icon-trigger" aria-label="Current Stellar network" title="Current network">
+                        <span aria-hidden="true">◎</span>
+                        <span class="sv-network-indicator @(NetworkSelection.SelectedPreset == "public" ? "mainnet" : NetworkSelection.SelectedPreset == "custom" ? "custom" : "")" aria-hidden="true"></span>
+                    </summary>
+                    <div class="sv-network-popover terminal-panel">
+                        <strong class="sv-network-popup-title">@(NetworkSelection.SelectedPreset == "public" ? "Mainnet" : NetworkSelection.SelectedPreset == "custom" ? "Custom network" : "Testnet")</strong>
+                        <p class="advanced-help">To change networks, lock and disconnect your vault first.</p>
+                    </div>
+                </details>
+            }
+            <button class="icon-button sv-theme-toggle" type="button" title="Switch green / amber theme" aria-label="Change phosphor theme" @onclick="ToggleThemeAsync"><span aria-hidden="true">◐</span></button>
+        </div>
     </header>
     <main class="sv-adaptive-main" id="main-content">
         @ChildContent
