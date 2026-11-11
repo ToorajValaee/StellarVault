@@ -236,3 +236,38 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
   .sv-modern-settings {grid-template-columns:minmax(0,1fr);}
   .sv-modern-settings .sv-modern-settings-section {padding:19px;}
 }
+
+/* Secondary controls inside detailed records and legacy workflow panels. */
+.sv-adaptive-shell :is(.mini-button,.network-option,.sv-folder-tile details > summary,
+  .sv-explorer-tree .sv-tree-item,.sv-access-learn summary) {
+  font-family:inherit;text-shadow:none;letter-spacing:normal;text-transform:none;
+  border-radius:10px;box-shadow:none;}
+.sv-adaptive-shell .mini-button {min-height:35px;min-width:36px;padding:7px 10px;
+  color:#176e54;background:#eef7f2;border:1px solid #d8ebe1;
+  font-size:12px;font-weight:650;cursor:pointer;}
+.sv-adaptive-shell .mini-button:hover {background:#e2f3e9;}
+.sv-adaptive-shell .network-option {background:#fff;color:#275446;border:1px solid var(--border);
+  min-height:44px;box-shadow:none;}
+.sv-adaptive-shell .network-option.active {background:#e7f5ed;color:#167355;border-color:#9acbb6;}
+.sv-adaptive-shell .sv-folder-tile details > summary {display:grid;place-items:center;
+  height:35px;min-width:35px;list-style:none;cursor:pointer;
+  background:#f4f8f6;border:1px solid var(--border);color:#5d7d70;font-size:18px;}
+.sv-adaptive-shell .sv-folder-tile details > summary::-webkit-details-marker {display:none;}
+.sv-adaptive-shell .pixel-tag {background:#edf7f1;border:0;color:#497b67;
+  border-radius:8px;font-size:11px;font-weight:600;text-shadow:none;}
+.sv-adaptive-shell .data-field {border:1px solid var(--border);
+  border-radius:12px!important;padding:15px;background:#fff;}
+.sv-adaptive-shell .data-field .field-label {font-size:12px;color:#61786c;
+  font-weight:650;text-transform:none;letter-spacing:0;}
+.sv-adaptive-shell .data-field code,.sv-adaptive-shell .field-value-row code {
+  color:#275245;background:transparent;font:500 13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;}
+.sv-adaptive-shell .data-field .secret-value {color:#2a5548;overflow-wrap:anywhere;}
+.sv-adaptive-shell .modal-header {border-bottom:1px solid var(--border);
+  margin-bottom:14px;padding-bottom:14px;}
+.sv-adaptive-shell .modal-header h2 {margin:0;font-size:21px;letter-spacing:-.02em;}
+.sv-adaptive-shell .modal-action-row {gap:10px;flex-wrap:wrap;}
+.sv-adaptive-shell .record-modal .terminal-alert {margin-block:12px;}
+@media(max-width:560px) {
+  .sv-adaptive-shell .field-value-row {flex-wrap:wrap;gap:8px;}
+  .sv-adaptive-shell .record-modal {padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));}
+}
