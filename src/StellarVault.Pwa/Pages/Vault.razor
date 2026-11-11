@@ -194,13 +194,13 @@ else
                 <span>A browser refresh ends the in-memory Stellar signing session, even if your internet connection is working. Your local vault is unlocked, but on-chain records require reconnecting with your recovery phrase. No records have been erased.</span>
             </div>
         }
-        <label class="search-console sv-modern-search"><span class="search-prefix" aria-hidden="true">⌕</span><input aria-label="Search your vault" @bind="_search" @bind:event="oninput" placeholder="Search records, folders, and tags" autocomplete="off"/></label>
         @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
         <div class="sv-mobile-collection-tabs" role="group" aria-label="Browse vault items">
             <button type="button" class="@(_mobileCollection == "all" ? "selected" : "")" aria-pressed="@(_mobileCollection == "all")" @onclick='() => _mobileCollection = "all"'><span aria-hidden="true">▱</span> All Items</button>
             <button type="button" class="@(_mobileCollection == "folders" ? "selected" : "")" aria-pressed="@(_mobileCollection == "folders")" @onclick='() => _mobileCollection = "folders"'><span aria-hidden="true">▱</span> Folders</button>
             <button type="button" class="@(_mobileCollection == "records" ? "selected" : "")" aria-pressed="@(_mobileCollection == "records")" @onclick='() => _mobileCollection = "records"'><span aria-hidden="true">◷</span> Records</button>
         </div>
+        <label class="search-console sv-modern-search"><span class="search-prefix" aria-hidden="true">⌕</span><input aria-label="Search your vault" @bind="_search" @bind:event="oninput" placeholder="Search records, folders, and tags" autocomplete="off"/></label>
         @if (Folders.Count > 0 && _folder is null)
         {
             <div class="sv-mobile-folder-shortcuts">
@@ -326,7 +326,6 @@ else
                         <div class="sv-folder-tile">
                             <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)"><span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span></button>
                             <span class="sv-object-type">Folder</span><span class="sv-object-storage">Local</span>
-                            <span class="sv-object-type">Draft</span><span class="sv-object-storage">Local</span>
                         <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
                                 <div class="sv-object-menu">
                                     <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
