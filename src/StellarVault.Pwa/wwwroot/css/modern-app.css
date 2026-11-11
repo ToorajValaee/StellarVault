@@ -4238,3 +4238,202 @@ html[data-theme="dark"] .sv-web-shell .sv-pwa-stage .sv-help-embedded .sv-help-s
    color:#075f46!important;background:#dff4e9!important;
  }
 }
+
+
+/* Vault workflow surfaces: one design system across Details, Settings, Drafts
+   and Sync. This intentionally overrides older scoped terminal presentation
+   while preserving the encryption, queue and authorization component logic. */
+.sv-web-shell {
+  --sv-work-bg:#f7f9fa;--sv-work-panel:#fff;--sv-work-raised:#f8fbfa;
+  --sv-work-text:#203840;--sv-work-muted:#637d80;
+  --sv-work-line:#dce7e6;--sv-work-green:#087b59;
+  --sv-work-selection:#e5f5ec;--sv-work-hover:#edf8f3;
+}
+html[data-theme="dark"] .sv-web-shell {
+  --sv-work-bg:#111e22;--sv-work-panel:#1c2e32;--sv-work-raised:#23383c;
+  --sv-work-text:#e4f2ef;--sv-work-muted:#b0c8c4;
+  --sv-work-line:#3e5b5d;--sv-work-green:#82ecc0;
+  --sv-work-selection:#245343;--sv-work-hover:#294942;
+}
+/* Settings' separate fixed-color cards and status pills. */
+html .sv-web-shell .sv-modern-settings.sv-workspace-surface {
+  display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))!important;
+  align-items:start;gap:16px!important;margin:8px 0 26px!important;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-settings-section {
+  min-width:0!important;width:100%!important;margin:0!important;padding:24px!important;
+  background:var(--sv-work-panel)!important;background-image:none!important;
+  border:1px solid var(--sv-work-line)!important;border-radius:12px!important;
+  box-shadow:0 6px 22px rgba(18,65,50,.04)!important;
+  color:var(--sv-work-text)!important;
+}
+html .sv-web-shell .sv-modern-settings h2 {
+  color:var(--sv-work-text)!important;font:750 18px/1.3 Inter,"Segoe UI",Arial,sans-serif!important;
+  text-transform:none!important;letter-spacing:-.02em!important;margin:0 0 14px!important;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-setting-row {
+  border-top:1px solid var(--sv-work-line)!important;padding:16px 0!important;gap:13px;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-setting-row :is(strong,p) {
+  color:var(--sv-work-text)!important;text-shadow:none!important;
+  font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-setting-row strong {
+  font-weight:650!important;font-size:14px!important;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-setting-row p,
+html .sv-web-shell .sv-modern-settings .advanced-help {
+  color:var(--sv-work-muted)!important;font-size:12px!important;line-height:1.65!important;
+}
+html .sv-web-shell .sv-modern-settings .sv-modern-setting-status {
+  flex:none;border:1px solid var(--sv-work-line)!important;
+  background:var(--sv-work-selection)!important;color:var(--sv-work-green)!important;
+  border-radius:8px!important;font:650 11px Inter,"Segoe UI",Arial,sans-serif!important;
+}
+html .sv-web-shell .sv-modern-settings :is(.pixel-button,.mini-button) {
+  border-radius:8px!important;
+}
+/* Shared drafts, remote mutations and manual sync components. */
+html .sv-web-shell .sv-workspace-surface:is(.sv-drafts-workspace,.sv-sync-workspace) {
+  width:100%!important;max-width:none!important;min-width:0!important;
+  margin:8px 0 28px!important;padding:0!important;
+  background:transparent!important;color:var(--sv-work-text)!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(.terminal-panel,.data-field,.record-card) {
+  background:var(--sv-work-panel)!important;background-image:none!important;
+  border:1px solid var(--sv-work-line)!important;border-radius:11px!important;
+  box-shadow:none!important;text-shadow:none!important;
+  color:var(--sv-work-text)!important;min-width:0!important;
+}
+html .sv-web-shell .sv-workspace-surface > .terminal-panel {
+  padding:clamp(17px,2.2vw,28px)!important;
+  box-shadow:0 8px 22px rgba(22,62,53,.04)!important;
+}
+html .sv-web-shell .sv-workspace-surface .terminal-panel .terminal-panel {
+  margin:14px 0!important;padding:18px!important;
+  background:var(--sv-work-raised)!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(.data-field,.record-card) {
+  display:block;max-width:100%;margin:10px 0!important;
+  padding:13px 15px!important;background:var(--sv-work-raised)!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(h2,h3,h4,.panel-kicker,.terminal-label,
+ .data-field strong,.record-card strong,.record-card-body strong) {
+  color:var(--sv-work-text)!important;
+  font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+  text-transform:none!important;letter-spacing:0!important;text-shadow:none!important;
+}
+html .sv-web-shell .sv-workspace-surface h3 {
+  font-size:18px!important;line-height:1.4!important;font-weight:750!important;
+  margin:0 0 14px!important;
+}
+html .sv-web-shell .sv-workspace-surface .panel-kicker {
+  font:650 11px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:var(--sv-work-green)!important;margin:0 0 8px!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(.terminal-label,.field-label) {
+  display:block;margin:13px 0 6px!important;
+  color:var(--sv-work-muted)!important;font-size:12px!important;font-weight:650!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(p,small,.advanced-help,.data-field p,
+ .record-card-body small) {
+  color:var(--sv-work-muted)!important;
+  font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+  font-size:12px!important;line-height:1.65!important;
+  letter-spacing:0!important;text-shadow:none!important;
+  overflow-wrap:anywhere;
+}
+html .sv-web-shell .sv-workspace-surface code {
+  color:var(--sv-work-text)!important;font-family:ui-monospace,Consolas,monospace!important;
+  font-size:12px!important;overflow-wrap:anywhere;
+}
+html .sv-web-shell .sv-workspace-surface :is(.terminal-input,input:not([type="checkbox"]):not([type="radio"]),
+ textarea,select) {
+  background:var(--sv-work-raised)!important;color:var(--sv-work-text)!important;
+  border:1px solid var(--sv-work-line)!important;border-radius:9px!important;
+  box-shadow:none!important;width:100%;max-width:100%;min-width:0;
+  font:500 13px/1.45 Inter,"Segoe UI",Arial,sans-serif!important;
+  padding:10px 12px!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(button.pixel-button,.mini-button,
+ .sv-native-back.pixel-button,.sv-pwa-task-tabs button) {
+  min-height:40px!important;border-radius:8px!important;
+  border:1px solid var(--sv-work-line)!important;
+  background:var(--sv-work-panel)!important;color:var(--sv-work-text)!important;
+  box-shadow:none!important;text-shadow:none!important;
+  font:650 12px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+  text-transform:none!important;letter-spacing:0!important;
+  padding:9px 14px!important;
+}
+html .sv-web-shell .sv-workspace-surface button.pixel-button.primary {
+  background:linear-gradient(180deg,#119a70,#057755)!important;
+  color:#fff!important;border-color:#087f5d!important;
+}
+html .sv-web-shell .sv-workspace-surface .sv-access-actions {
+  display:flex;flex-wrap:wrap;gap:9px!important;margin:0 0 18px!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(.terminal-alert,.terminal-alert.warning) {
+  padding:12px 14px!important;background:var(--sv-work-raised)!important;
+  color:var(--sv-work-text)!important;border:1px solid var(--sv-work-line)!important;
+  border-radius:9px!important;box-shadow:none!important;
+}
+html .sv-web-shell .sv-workspace-surface .terminal-alert.warning {
+  border-color:#b99457!important;
+}
+html .sv-web-shell .sv-sync-workspace > .sv-pwa-task-tabs {
+  display:flex;gap:8px;margin:0 0 16px!important;padding:0!important;
+}
+html .sv-web-shell .sv-sync-workspace .sv-pwa-task-tabs button.selected {
+  background:var(--sv-work-selection)!important;
+  border-color:var(--sv-work-green)!important;color:var(--sv-work-green)!important;
+}
+html .sv-web-shell .sv-workspace-surface :is(.record-list,.tag-row,.inline-actions) {
+  max-width:100%;min-width:0;
+}
+/* Detail inspector: theme applies even to high-specificity fixed white desktop
+   declarations and to the field controls exposed inside the sidecar. */
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-record-inspector-backdrop,
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-record-inspector-backdrop .sv-record-inspector,
+html[data-theme="dark"] .sv-web-shell .sv-pwa-app .sv-record-inspector-backdrop .sv-record-inspector:has(#sv-record-title) {
+  background:var(--sv-work-panel)!important;color:var(--sv-work-text)!important;
+  border-color:var(--sv-work-line)!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector :is(
+ .sv-inspector-heading,.sv-inspector-tabs,.sv-inspector-section-label,
+ .record-actions,.sv-inspector-record-icon,.data-field,.field-value-row,
+ .record-notes,.sv-record-activity dl,.sv-inspector-more-menu) {
+  background:var(--sv-work-panel)!important;color:var(--sv-work-text)!important;
+  border-color:var(--sv-work-line)!important;box-shadow:none!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector :is(
+ .field-value-row,.record-notes,.sv-record-activity dl,.sv-inspector-record-icon) {
+  background:var(--sv-work-raised)!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector :is(
+ h2,h3,strong,p,small,.panel-kicker,.field-label,.sv-inspector-subtitle,
+ .sv-record-activity dt,.sv-record-activity dd,code,.secret-value,.pixel-tag,
+ .sv-inspector-more > summary) {
+  color:var(--sv-work-text)!important;text-shadow:none!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector :is(
+ .mini-button,.close-button,.sv-inspector-more-menu button,.sv-inspector-tabs button) {
+  background:var(--sv-work-panel)!important;color:var(--sv-work-text)!important;
+  border-color:var(--sv-work-line)!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector .sv-inspector-tabs button.selected {
+  color:var(--sv-work-green)!important;border-bottom-color:var(--sv-work-green)!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-record-inspector .sv-inspector-more-menu {
+  box-shadow:0 10px 28px rgba(0,0,0,.25)!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-workspace-surface,
+html[data-theme="dark"] .sv-web-shell .sv-workspace-surface :is(.sv-modern-settings-section,
+ .terminal-panel,.record-card,.data-field,.terminal-input,.sv-pwa-task-tabs button) {
+  color:var(--sv-work-text)!important;background-color:var(--sv-work-panel)!important;
+  border-color:var(--sv-work-line)!important;
+}
+@media(max-width:840px) {
+ html .sv-web-shell .sv-modern-settings.sv-workspace-surface {grid-template-columns:1fr!important;}
+ html .sv-web-shell .sv-workspace-surface > .terminal-panel {padding:17px!important;}
+ html .sv-web-shell .sv-workspace-surface .sv-access-actions > button {flex:1 1 auto;}
+}
