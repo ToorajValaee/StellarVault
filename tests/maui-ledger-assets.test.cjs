@@ -272,7 +272,9 @@ test('MAUI keeps the network preset without storing a trusted custom network ide
     'src/StellarVault.Pwa/wwwroot/js/vault-v2-network.js'), 'utf8');
   assert.match(workspace, /stellarVaultNetworkPreference\.load/);
   assert.match(workspace, /stellarVaultNetworkPreference\.save/);
-  assert.match(workspace, /Custom Horizon remembered\. Detect the network before connecting/);
+  assert.match(workspace, /Verifying remembered custom Horizon/);
+  assert.match(workspace, /await DiscoverNativeNetworkAsync\(\)/);
+  assert.match(workspace, /Custom network verified and selected/);
   assert.match(workspace, /NetworkSelection\.ResetCustom\(\)/);
   assert.match(networkJs, /stellarVaultNetworkPreference/);
 });
