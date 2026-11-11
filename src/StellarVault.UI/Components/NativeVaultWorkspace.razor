@@ -72,7 +72,7 @@ else
                         }
                     </div>
                 </details>
-                <span class="sv-native-online-pill"><span aria-hidden="true">◉</span> @(Ledger.IsConnected ? "Online · Synced" : "Offline · Local")</span>
+                <span class="sv-native-online-pill"><span aria-hidden="true">◉</span> @(Ledger.IsConnected ? "Online · Connected" : "Offline · Local")</span>
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
@@ -445,7 +445,7 @@ else
         {
             <button class="sv-native-mobile-fab" type="button" aria-label="New record" @onclick='() => SetNativeMode("record")'>＋</button>
         }
-        <div class="sv-native-commandbar" aria-label="Quick actions">
+        <div class="sv-native-commandbar @(_nativePage == "stellar" && Ledger.IsConnected && _nativeMode == "browse" ? "sv-native-commandbar-quiet" : "")" aria-label="Quick actions">
             @if (_nativePage == "stellar")
             {
                 @if (Ledger.IsConnected)
