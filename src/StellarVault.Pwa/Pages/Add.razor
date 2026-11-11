@@ -26,8 +26,6 @@ else
     <div class="sv-pwa-app sv-pwa-secondary-app">
         <nav class="sv-pwa-rail" aria-label="Vault navigation">
             <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▤</span> Vault</a>
-            <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▣</span> Folders</a>
-            <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">⇅</span> Sync</a>
             <div class="sv-pwa-rail-divider"></div>
             <a class="sv-pwa-rail-action @(_kind == "record" ? "selected" : "")" href="/add"><span aria-hidden="true">＋</span> New record</a>
             <a class="sv-pwa-rail-action @(_kind == "folder" ? "selected" : "")" href="/add?kind=folder"><span aria-hidden="true">▣</span> New folder</a>
