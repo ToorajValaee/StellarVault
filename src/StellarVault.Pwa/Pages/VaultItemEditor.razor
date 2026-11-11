@@ -103,7 +103,6 @@ else
                     <label class="terminal-label">TAGS // COMMA SEPARATED</label>
                     <input class="terminal-input" @bind="_tags" placeholder="work, infrastructure, private"/>
                 }
-                <div class="commit-preview"><span>MODE</span><strong>ENCRYPT → CHUNK → SIGN → SUBMIT</strong><span>TARGET</span><strong>STELLAR LEDGER</strong></div>
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>COMMIT STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
                 <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
