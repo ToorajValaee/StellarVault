@@ -35,7 +35,7 @@ else
             <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark" aria-hidden="true">✦</span><span><strong>STELLARVAULT</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span aria-hidden="true">♙</span> Vault</button>
-            <button type="button" class="@(_appView == "records" && _folder is null ? "sv-sidebar-folder-link" : "sv-sidebar-folder-link")"
+            <button type="button" class="sv-sidebar-folder-link"
                     @onclick='() => { SelectAppView("records"); _folder = null; }'><span aria-hidden="true">▱</span> Folders</button>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
@@ -314,7 +314,7 @@ else
         <section class="record-list">
             @if (_busy) { <p role="status">SYNCING STELLAR LEDGER...</p> }
             else if (!Ledger.IsConnected) { <div class="terminal-panel empty-state"><h2>ON-CHAIN RECORDS NOT LOADED</h2><p>Reconnect with your recovery phrase to load on-chain records. This does not indicate an internet outage or an empty vault.</p></div> }
-            else if (Filtered.Count == 0) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
+            else if (Filtered.Count == 0 && !Folders.Any(x => x.FolderId == _folder)) { <div class="terminal-panel empty-state"><h2>NO MATCH</h2><p>No records found for this folder and search.</p></div> }
             else
             {
                 @foreach (var item in Filtered)
@@ -375,7 +375,7 @@ else
     @if (_selected is not null)
     {
         <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
-            <section class="record-modal terminal-panel sv-record-inspector" role="dialog" aria-modal="true"
+            <section class="record-modal terminal-panel sv-record-inspector" role="region"
                      aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
                 <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
                      tabindex="0" title="Drag to adjust preview width"></div>
