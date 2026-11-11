@@ -936,3 +936,20 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
 :root[data-theme="dark"] .sv-native-shell .pixel-button.primary {
  background:#0b986b!important;color:#fff!important;
 }
+
+
+/* Native close controls share the borderless inspector/approval treatment. */
+.sv-native-shell :is(.modal-header,.approval-modal,.record-modal) .close-button {
+  display:grid!important;place-items:center!important;
+  width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;
+  padding:0!important;margin:0!important;border:0!important;
+  background:transparent!important;box-shadow:none!important;
+  color:#607972!important;font:500 23px/1 "Segoe UI",Arial,sans-serif!important;
+  border-radius:8px!important;
+}
+.sv-native-shell :is(.modal-header,.approval-modal,.record-modal) .close-button:focus-visible {
+  outline:3px solid rgba(17,154,103,.24)!important;outline-offset:2px!important;
+}
+:root[data-theme="dark"] .sv-native-shell :is(.modal-header,.approval-modal,.record-modal) .close-button {
+  color:#c2e7d8!important;
+}
