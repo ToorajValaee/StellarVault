@@ -146,15 +146,20 @@
                     }
                     else
                     {
-                        <button class="pixel-button primary" type="submit"
-                                disabled="@(_busy || _mnemonic.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length is not (12 or 15 or 18 or 21 or 24) || (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase)) || (_network == "public" && !_confirmMainnetAccess) || (_network == "custom" && string.IsNullOrWhiteSpace(_customPassphrase)))"
-                                >@(_busy ? "Opening…" : "Unlock vault")</button>
+                        <button class="pixel-button primary" type="submit" disabled="@_busy"
+                                aria-describedby="sv-access-readiness">@(_busy ? "Opening…" : "Unlock vault")</button>
                     }
                 </div>
-                <div class="terminal-alert warning" role="status">
-                    <strong>EARLY ACCESS — USE TEST ACCOUNTS ONLY</strong>
-                    <span>This preview has not completed a production security audit. Do not use real secrets or funds. Data saved only on this device is not automatically backed up or synced.</span>
-                </div>
+                @if (!Sessions.IsUnlocked)
+                {
+                    <p id="sv-access-readiness" class="sv-access-readiness" role="status" aria-live="polite">
+                        @AccessReadiness
+                    </p>
+                }
+                <details class="sv-access-security-notice">
+                    <summary>Security and release status</summary>
+                    <p><strong>Early access — use test accounts only.</strong> StellarVault has not completed a production security audit. Do not enter recovery phrases protecting real funds. Records saved only on this device are not automatically backed up or synchronized.</p>
+                </details>
             }
             else
             {
@@ -642,9 +647,41 @@
         finally { _busy = false; }
     }
 
+    private int EnteredWordCount => _mnemonic.Split((char[]?)null,
+        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
+
+    private string AccessReadiness
+    {
+        get
+        {
+            if (_busy) return "Opening the vault…";
+            if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
+                return $"Enter a complete 12, 15, 18, 21 or 24-word recovery phrase ({EnteredWordCount} words entered).";
+            if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
+                return "Enter a vault passphrase to enable encrypted device storage.";
+            if (_network == "custom" &&
+                (string.IsNullOrWhiteSpace(_customPassphrase) ||
+                 !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
+                return "Detect your custom Horizon network before unlocking.";
+            if (_network == "public" && !_confirmMainnetAccess)
+                return "Confirm the mainnet risk notice before unlocking.";
+            return "Ready to unlock. Your recovery phrase is processed in this session.";
+        }
+    }
+
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected) return;
+        if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
+        {
+            _message = "Enter a complete BIP-39 recovery phrase of 12, 15, 18, 21 or 24 words.";
+            return;
+        }
+        if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
+        {
+            _message = "Enter a vault passphrase before enabling encrypted device storage.";
+            return;
+        }
         if (_network == "public" && !_confirmMainnetAccess)
         {
             _message = "Confirm the Stellar mainnet warning before accessing a public-network vault.";
