@@ -172,7 +172,7 @@ test('native entry screen is task-first with no developer runtime button', () =>
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   assert.doesNotMatch(component, />Check native runtime</);
   assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
-  assert.match(component, /"Connect your vault"/);
+  assert.doesNotMatch(component, /"Welcome back"|"Connect your vault"/);
   assert.match(component, />Recovery phrase</);
   assert.match(component, /OnAfterRenderAsync\(bool firstRender\)/);
   assert.match(component, /await CheckRuntimeAsync\(\)/);
@@ -180,4 +180,17 @@ test('native entry screen is task-first with no developer runtime button', () =>
   assert.match(component, />Try again</);
   assert.match(component, /SelectNativeNetwork\("public"\)/);
   assert.match(component, /_ledgerNetwork == "public" && !_confirmMainnetAccess/);
+});
+
+test('native header network menu discovers a verified custom Horizon passphrase', () => {
+  const component = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(component, /class="sv-native-header-network"/);
+  assert.match(component, /SelectNativeNetwork\("custom"\)/);
+  assert.match(component, /stellarVaultV2Network\.probeCustom/);
+  assert.match(component, /NetworkSelection\.ConfigureCustom\(detected\)/);
+  assert.match(component, /NetworkSelection\.CustomHorizonUrl = _customHorizon\.Trim\(\)/);
+  assert.match(component, /_ledgerNetwork == "custom" && !CustomNetworkReady/);
+  assert.doesNotMatch(component, /class="sv-native-network-settings"/);
+  assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
 });
