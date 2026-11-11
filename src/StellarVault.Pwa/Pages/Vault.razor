@@ -55,10 +55,16 @@ else
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
-                    <h1>@(_appView == "records" ? "Records" : _appView == "drafts" ? "Drafts" : _appView == "settings" ? "Settings" : "Sync")</h1>
+                    <h1>@(_appView == "records" ? "Vault" : _appView == "drafts" ? "Drafts" : _appView == "settings" ? "Settings" : "Sync")</h1>
+                    @if (_appView == "records") { <p class="sv-vault-subtitle">Your secure records, organized and always in your control.</p> }
                     
                 </div>
                 <div class="sv-pwa-screen-tools">
+                    @if (_appView == "records")
+                    {
+                        <a class="pixel-button primary sv-create-record" href="/add"><span aria-hidden="true">＋</span> New record</a>
+                        <a class="pixel-button sv-create-folder" href="/add?kind=folder"><span aria-hidden="true">＋</span> New folder</a>
+                    }
                     @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
                     <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
                     @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ Refresh</button> }
@@ -67,7 +73,7 @@ else
             </header>
             @if (_appView == "records" && Ledger.IsConnected)
             {
-                <div class="stats-strip sv-pwa-summary"><div><span>Records</span><strong>@Records.Count</strong></div><div><span>Folders</span><strong>@Folders.Count</strong></div></div>
+                <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
             }
         @if (_appView == "settings")
         {
@@ -168,7 +174,7 @@ else
         @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
         <div class="sv-explorer-layout">
         <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
-            <div class="sv-explorer-tree-title">Folders</div>
+            <div class="sv-explorer-tree-title">My Vault <span class="sv-explorer-tree-count">@Folders.Count folders</span></div>
             <button type="button" class="sv-tree-item @(_folder is null ? "selected" : "")"
                     aria-current="@(_folder is null ? "location" : null)"
                     @onclick='() => _folder = null'><span aria-hidden="true">▣</span> My vault</button>
@@ -209,7 +215,7 @@ else
                     <span>/</span><strong>📁 @PendingTitle(PendingLocalFolders.First(x => x.EntityId == _folder)) (LOCAL)</strong>
                 }
             </nav>
-            <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>Include subfolders</span></label>
+            <div class="sv-explorer-toolbar"><label><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>Include subfolders</span></label><span class="sv-explorer-toolbar-count">@Filtered.Count records</span></div>
             <div class="sv-folder-grid">
             @foreach (var item in Folders.Where(f => f.FolderId == _folder))
             {
