@@ -568,3 +568,12 @@ test('Unreachable registry never redirects an unlocked local vault to initializa
   assert.match(vault, /Stellar cannot be reached right now\. You can continue working with encrypted local drafts/);
   assert.doesNotMatch(vault, /Ledger setup check failed: " \+ ex\.Message/);
 });
+
+test('Offline record loader and fee estimation never display vendor network stack traces', () => {
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  assert.match(editor, /IsHorizonUnavailable\(ex\)/);
+  assert.match(editor, /Stellar is offline\. Published records cannot be loaded/);
+  assert.match(editor, /Stellar is unreachable\. No transaction was sent/);
+  assert.doesNotMatch(editor, /"Cannot load record: " \+ ex\.Message/);
+  assert.doesNotMatch(editor, /"Cannot estimate ledger stage: " \+ ex\.Message/);
+});
