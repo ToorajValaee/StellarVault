@@ -11,7 +11,7 @@ on:
       - 'src/StellarVault.Core/**'
       - 'src/StellarVault.Pwa/LegacyLedger/**'
       - 'src/StellarVault.Pwa/Services/**'
-      - 'src/StellarVault.Pwa/wwwroot/css/app.css'
+      - 'src/StellarVault.Pwa/wwwroot/css/modern-app.css'
       - 'src/StellarVault.Pwa/wwwroot/js/**'
 
 jobs:
