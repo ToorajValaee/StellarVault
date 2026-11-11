@@ -3707,3 +3707,37 @@ html .sv-web-shell .sv-editor-embedded .sv-adaptive-main {min-height:0!important
  .sv-web-shell .sv-pwa-app .sv-sidebar-network {display:none;}
  .sv-web-shell .sv-pwa-app .sv-pwa-mobile-tabs {z-index:100;}
 }
+
+
+/* The product header belongs to the same two-tone shell as the reference. */
+@media(min-width:1100px) {
+  html .sv-web-shell:has(.sv-pwa-app) > .sv-adaptive-header {
+    background:linear-gradient(90deg,#043d33 0px,#043d33 245px,#fff 245px,#fff 100%)!important;
+    border-bottom:1px solid #e3ebeb!important;
+    box-shadow:none!important;padding-left:20px!important;}
+  html .sv-web-shell:has(.sv-pwa-app) > .sv-adaptive-header .sv-brand-name strong {
+    color:#fff!important;font-weight:750!important;}
+  html .sv-web-shell:has(.sv-pwa-app) > .sv-adaptive-header .sv-brand-name small {
+    color:#a8d8c6!important;}
+  html .sv-web-shell:has(.sv-pwa-app) > .sv-adaptive-header .sv-mark {
+    box-shadow:none!important;border-radius:10px!important;}
+}
+@media(min-width:1100px) and (max-width:1350px) {
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-list-head,
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main .sv-folder-tile,
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main .sv-object-row,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-list-head,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main .sv-folder-tile,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main .sv-object-row {
+    grid-template-columns:minmax(0,1fr) 67px 34px!important;
+  }
+  .sv-web-shell:has(.sv-record-inspector) .sv-object-storage,
+  .sv-web-shell:has(.sv-editor-sidecar) .sv-object-storage,
+  .sv-web-shell:has(.sv-record-inspector) .sv-explorer-list-head > span:nth-child(3),
+  .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-list-head > span:nth-child(3) {
+    display:none!important;
+  }
+}
+.sv-web-shell .sv-modern-fab {
+  border:0!important;cursor:pointer;font-family:inherit;
+}
