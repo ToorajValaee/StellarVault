@@ -16,6 +16,7 @@
 @inject NavigationManager Nav
 @inject Microsoft.JSInterop.IJSRuntime JS
 
+<div class="sv-editor-host @(Embedded ? "sv-editor-embedded" : "")">
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
 @if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
@@ -35,7 +36,9 @@ else
         <main class="sv-pwa-stage sv-pwa-secondary-stage">
     <section class="form-page sv-pwa-editor">
         <nav class="sv-pwa-editor-breadcrumb" aria-label="Edit workflow navigation">
-            <a href="@ReturnUrl">← Back to vault</a><span aria-hidden="true">/</span>
+            @if (Embedded) { <button type="button" class="sv-inline-back" @onclick="CancelEmbeddedEditor">← Back to vault</button> }
+            else { <a href="@ReturnUrl">← Back to vault</a> }
+            <span aria-hidden="true">/</span>
             <span>@(!string.IsNullOrWhiteSpace(RecordId) ? "Edit item" : "New " + (_kind == "folder" ? "folder" : _kind == "file" ? "file" : "record"))</span>
         </nav>
         <header class="page-command-header sv-pwa-editor-heading">
@@ -44,9 +47,12 @@ else
         @if (string.IsNullOrWhiteSpace(RecordId))
         {
             <nav class="sv-pwa-editor-modes" aria-label="Choose the type of item">
-                <a class="@(_kind == "record" ? "selected" : "")" href="/add" aria-current="@(_kind == "record" ? "page" : null)">▤ Record</a>
-                <a class="@(_kind == "folder" ? "selected" : "")" href="/add?kind=folder" aria-current="@(_kind == "folder" ? "page" : null)">▣ Folder</a>
-                <a class="@(_kind == "file" ? "selected" : "")" href="/add?kind=file" aria-current="@(_kind == "file" ? "page" : null)">⇧ File</a>
+                @if (Embedded) { <button type="button" class="@(_kind == "record" ? "selected" : "")" @onclick='() => SelectEmbeddedKind("record")'>▤ Record</button> }
+                else { <a class="@(_kind == "record" ? "selected" : "")" href="/add" aria-current="@(_kind == "record" ? "page" : null)">▤ Record</a> }
+                @if (Embedded) { <button type="button" class="@(_kind == "folder" ? "selected" : "")" @onclick='() => SelectEmbeddedKind("folder")'>▣ Folder</button> }
+                else { <a class="@(_kind == "folder" ? "selected" : "")" href="/add?kind=folder" aria-current="@(_kind == "folder" ? "page" : null)">▣ Folder</a> }
+                @if (Embedded) { <button type="button" class="@(_kind == "file" ? "selected" : "")" @onclick='() => SelectEmbeddedKind("file")'>⇧ File</button> }
+                else { <a class="@(_kind == "file" ? "selected" : "")" href="/add?kind=file" aria-current="@(_kind == "file" ? "page" : null)">⇧ File</a> }
             </nav>
         }
         @if (_loading) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> LOADING RECORD AND FOLDERS...</div> }
@@ -112,8 +118,12 @@ else
     <LedgerCostApprovalModal Open="@(_estimate is not null)" Estimate="_estimate" Title="APPROVE LEDGER WRITE" Busy="_busy" OnConfirm="CommitAsync" OnCancel="CancelReview" />
 }
 </AdaptiveShell>
+</div>
 
 @code {
+    [Parameter] public bool Embedded { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public string? RecordId { get; set; }
     [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
     [SupplyParameterFromQuery(Name = "kind")] public string? Kind { get; set; }
@@ -180,6 +190,21 @@ else
     private LedgerRecordDraft? _reviewedDraft;
     private string? _reviewedRecordId;
     private string ReturnUrl => string.IsNullOrEmpty(_folder) ? "/vault" : "/vault?folder=" + Uri.EscapeDataString(_folder);
+    private async Task CompleteEditorAsync()
+    {
+        if (Embedded) await OnSaved.InvokeAsync();
+        else Nav.NavigateTo(ReturnUrl);
+    }
+    private void CancelEmbeddedEditor() => _ = OnCancel.InvokeAsync();
+    private void SelectEmbeddedKind(string kind)
+    {
+        if (kind is not ("record" or "folder" or "file")) return;
+        Kind = kind;
+        _filePlan = null;
+        _estimate = null;
+        _status = null;
+        ClearFileBytes();
+    }
     private string? _status;
     private IReadOnlyList<LedgerRecordItem> _folders = [];
     private IEnumerable<LedgerRecordItem> AvailableFolders =>
@@ -354,7 +379,7 @@ else
                     payload, expectedRemoteVersion: RecordId is null ? null : "requires-remote-reconciliation");
                 await PendingQueue.EnqueueAsync(mutation);
                 ClearFileBytes();
-                Nav.NavigateTo(ReturnUrl);
+                await CompleteEditorAsync();
             }
             finally { CryptographicOperations.ZeroMemory(payload); }
         }
@@ -402,7 +427,7 @@ else
                 if (_fileStep == _filePlan.Count) {
                     await ClearCheckpointAsync();
                     ClearFileBytes();
-                    Nav.NavigateTo(ReturnUrl);
+                    await CompleteEditorAsync();
                 }
             } else {
                 var draft = Draft();
@@ -413,7 +438,7 @@ else
                     var hash = await Ledger.PublishDetailedAsync(draft);
                     _status = "COMMITTED TX: " + hash;
                 }
-                Nav.NavigateTo(ReturnUrl);
+                await CompleteEditorAsync();
             }
         }
         catch (Exception ex) {
