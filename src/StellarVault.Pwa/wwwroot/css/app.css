@@ -2302,3 +2302,94 @@ html.ios-device.standalone-app .terminal-footer {
   clip-path: inset(50%) !important;
 }
 .sv-file-picker:focus-within .sv-file-picker-button { outline: 2px solid var(--phosphor); outline-offset: 3px; }
+
+/* 2026-11: installed PWA is a task-based vault app, not one continuous
+   terminal document. All styling stays scoped to the /vault app surface. */
+.sv-pwa-app {
+  width: min(100%, 96rem); margin: 0 auto;
+  min-width:0; min-height:calc(100dvh - 4.5rem);
+  display:grid; grid-template-columns:218px minmax(0,1fr);
+  background:linear-gradient(125deg,rgba(112,255,155,.025),transparent 46%);
+  border-left:1px solid rgba(112,255,155,.12);
+  border-right:1px solid rgba(112,255,155,.12);
+}
+.sv-pwa-rail {
+  position:sticky; top:4.6rem; height:calc(100dvh - 4.6rem);
+  display:flex; flex-direction:column; align-items:stretch;
+  gap:.35rem; padding:1.25rem .85rem 1rem;
+  background:rgba(4,18,12,.96); border-right:1px solid var(--border);
+  overflow-y:auto; overscroll-behavior:contain; min-width:0;
+}
+.sv-pwa-rail-heading { display:flex; gap:.6rem; align-items:center;
+  color:var(--phosphor-strong); margin:.2rem .35rem 1.5rem; }
+.sv-pwa-rail-mark { font-size:1.65rem; color:var(--phosphor); }
+.sv-pwa-rail-heading strong { display:block; font-size:.79rem; letter-spacing:.09em; }
+.sv-pwa-rail-heading small { display:block; color:var(--muted); font-size:.59rem; margin-top:.3rem; }
+.sv-pwa-rail > button, .sv-pwa-rail-action {
+  display:flex; align-items:center; gap:.8rem; width:100%;
+  min-height:46px; padding:.72rem .8rem;
+  text-decoration:none; text-align:left;
+  border:1px solid transparent; border-radius:10px;
+  background:transparent; color:var(--muted);
+  font:600 .79rem/1.35 inherit; cursor:pointer;
+}
+.sv-pwa-rail > button > span, .sv-pwa-rail-action > span {font-size:1.35rem; width:1.45rem; flex:none; text-align:center;}
+.sv-pwa-rail > button.selected { border-color:rgba(113,255,155,.33);
+  background:rgba(113,255,155,.10); color:var(--phosphor-strong); }
+.sv-pwa-rail > button:hover,.sv-pwa-rail-action:hover {background:var(--phosphor-faint); color:var(--phosphor-strong);}
+.sv-pwa-rail-divider {border-top:1px solid rgba(113,255,155,.2); margin:.75rem .2rem;}
+.sv-pwa-rail-foot {margin-top:auto; padding:.8rem .4rem; color:var(--muted);
+  font-size:.68rem; display:flex;align-items:center;gap:.6rem;line-height:1.45;}
+.sv-pwa-led {width:8px;height:8px;flex:none;border-radius:50%;background:#7a806f;}
+.sv-pwa-led.connected {background:var(--phosphor);box-shadow:0 0 9px var(--phosphor);}
+.sv-pwa-stage {min-width:0; padding:clamp(1rem,2.8vw,2rem);
+  overscroll-behavior-y:contain; scroll-margin-top:5rem;}
+.sv-pwa-vault-page {margin:0; min-width:0; max-width:100%;}
+.sv-pwa-screen-header {display:flex;justify-content:space-between;align-items:flex-start;
+  gap:1.5rem; margin:0 0 1.1rem;}
+.sv-pwa-screen-header h1 { font-size:clamp(1.7rem,3vw,2.5rem);
+  letter-spacing:-.035em; text-transform:none; text-shadow:none; margin:.2rem 0 .45rem; }
+.sv-pwa-screen-header .page-subtitle {margin:0; max-width:40rem;}
+.sv-pwa-screen-tools { display:flex;gap:.4rem;flex-wrap:wrap;justify-content:flex-end;}
+.sv-pwa-screen-tools .pixel-button {min-height:43px;border-radius:9px;white-space:nowrap;}
+.sv-pwa-summary { margin:0 0 1.5rem; border-radius:12px; }
+.sv-pwa-view-intro {display:flex;flex-wrap:wrap;gap:.65rem;align-items:baseline;
+  padding:.85rem 1rem;margin:1rem 0;border:1px solid rgba(113,255,155,.25);
+  border-radius:10px;background:var(--panel-soft);font-size:.76rem;}
+.sv-pwa-view-intro strong {color:var(--phosphor-strong);}
+.sv-pwa-view-intro span {color:var(--muted);}
+.sv-pwa-mobile-tabs {display:none;}
+.sv-pwa-app .terminal-panel {border-radius:12px;box-shadow:0 5px 18px rgba(0,0,0,.22);}
+.sv-pwa-app .terminal-panel::before,.sv-pwa-app .terminal-panel::after {width:.35rem;height:.35rem;}
+.sv-pwa-app .record-card {border-radius:10px;}
+.sv-pwa-app button:focus-visible,.sv-pwa-app a:focus-visible {outline:2px solid var(--accent);outline-offset:3px;}
+@media(max-width:840px) {
+  .sv-pwa-app {grid-template-columns:minmax(0,1fr); border:0; min-height:0;}
+  .sv-pwa-rail {display:none;}
+  .sv-pwa-stage {min-width:0; padding:1rem 1rem calc(6.5rem + env(safe-area-inset-bottom,0px));}
+  .sv-pwa-mobile-tabs {position:fixed;bottom:0;left:0;right:0;z-index:160;
+    display:flex;align-items:stretch;justify-content:space-around;gap:.3rem;
+    padding:.45rem max(.75rem,env(safe-area-inset-left,0px))
+      calc(.45rem + env(safe-area-inset-bottom,0px))
+      max(.75rem,env(safe-area-inset-right,0px));
+    border-top:1px solid var(--border);background:rgba(4,17,11,.97);
+    box-shadow:0 -10px 28px rgba(0,0,0,.25);backdrop-filter:blur(12px);}
+  .sv-pwa-mobile-tabs button,.sv-pwa-mobile-tabs a {min-width:0;flex:1;
+    display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.3rem;
+    min-height:53px;padding:.4rem .3rem;border:1px solid transparent;border-radius:10px;
+    background:transparent;color:var(--muted);text-decoration:none;
+    font-size:.68rem;font-weight:700;line-height:1.2;}
+  .sv-pwa-mobile-tabs button.selected {background:var(--phosphor-faint);color:var(--phosphor-strong);border-color:rgba(113,255,155,.29);}
+  .sv-pwa-mobile-tabs span {font-size:1.45rem;line-height:1;}
+  .sv-pwa-screen-header {gap:.7rem;flex-wrap:wrap;}
+  .sv-pwa-screen-tools {width:100%;justify-content:flex-start;}
+  .sv-pwa-screen-tools .pixel-button {flex:1 1 auto;min-width:0; }
+  .sv-pwa-app .terminal-panel {border-radius:10px;}
+}
+@media(max-width:390px) {
+  .sv-pwa-stage {padding-inline:.7rem;}
+  .sv-pwa-mobile-tabs button,.sv-pwa-mobile-tabs a {font-size:.62rem;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .sv-pwa-app *, .sv-pwa-mobile-tabs * {scroll-behavior:auto!important;animation-duration:.01ms!important;}
+}
