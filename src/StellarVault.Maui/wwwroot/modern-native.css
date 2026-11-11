@@ -123,3 +123,45 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
   .sv-native-nav button {font-size:10px;padding-inline:4px;min-width:0;}
   .sv-native-nav-icon {font-size:20px;}
 }
+
+
+/* Shared AdaptiveShell header parity after the modern brand markup upgrade. */
+.sv-native-shell .sv-adaptive-header {
+ min-height:67px!important;background:#fff!important;background-image:none!important;
+ border-bottom:1px solid #dfeae6!important;box-shadow:none!important;
+ padding:10px max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px))!important;
+ display:flex;align-items:center;justify-content:space-between;}
+.sv-native-shell .sv-brand {display:flex;align-items:center;gap:11px;}
+.sv-native-shell .sv-mark {display:grid!important;place-items:center;
+ flex:0 0 39px!important;width:39px!important;height:39px!important;
+ border:0!important;border-radius:12px!important;color:white!important;font-size:23px!important;
+ background:linear-gradient(145deg,#23c18c,#057354)!important;
+ box-shadow:0 4px 12px rgba(6,114,82,.16)!important;}
+.sv-native-shell .sv-brand-name {display:flex;flex-direction:column;gap:2px;}
+.sv-native-shell .sv-brand-name strong {font:750 17px/1.15 "Segoe UI",Arial,sans-serif!important;
+ letter-spacing:-.04em!important;color:#17392f!important;text-transform:none!important;}
+.sv-native-shell .sv-brand-name small {font:500 10px/1.2 "Segoe UI",Arial,sans-serif;
+ color:#779188!important;}
+.sv-native-shell .sv-header-actions {display:flex;align-items:center;gap:8px;}
+.sv-native-shell .sv-header-privacy {display:none;}
+.sv-native-shell .sv-network-menu > summary.sv-network-icon-trigger,
+.sv-native-shell .sv-theme-toggle {display:grid;place-items:center;
+ min-height:40px!important;min-width:40px!important;width:40px!important;height:40px!important;
+ padding:0!important;background:#f4f9f7!important;
+ border:1px solid #dde9e3!important;border-radius:12px!important;
+ color:#116d50!important;box-shadow:none!important;text-shadow:none!important;}
+.sv-native-shell :is(.pixel-button,.mini-button,.network-option) {
+ border-radius:11px!important;box-shadow:none!important;text-shadow:none!important;
+ font-family:"Segoe UI",Arial,sans-serif!important;letter-spacing:0!important;
+ text-transform:none!important;transform:none!important;}
+.sv-native-shell .pixel-button.primary {background:#087f59!important;
+ border-color:#087f59!important;color:white!important;}
+@media(max-width:520px) {
+ .sv-native-shell .sv-adaptive-header {min-height:62px!important;padding:8px 12px!important;}
+ .sv-native-shell .sv-mark {display:grid!important;flex:0 0 35px!important;width:35px!important;height:35px!important;}
+ .sv-native-shell .sv-brand-name small {display:none;}
+ .sv-native-shell .sv-brand-name strong {font-size:16px!important;}
+ .sv-native-shell .sv-network-menu > summary.sv-network-icon-trigger,
+ .sv-native-shell .sv-theme-toggle {width:37px!important;height:37px!important;
+  min-width:37px!important;min-height:37px!important;}
+}
