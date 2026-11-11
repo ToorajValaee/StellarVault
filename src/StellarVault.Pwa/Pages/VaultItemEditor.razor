@@ -186,6 +186,7 @@ else
         finally { _busy = false; }
     }
     private bool _loading;
+    private bool _newEditorInitialized;
     private LedgerCostPreview? _estimate;
     private LedgerRecordDraft? _reviewedDraft;
     private string? _reviewedRecordId;
@@ -249,7 +250,11 @@ else
         // The parent view can provide its last verified folder snapshot.
         if (string.IsNullOrWhiteSpace(RecordId))
         {
-            _folder = InitialFolder ?? "";
+            if (!_newEditorInitialized)
+            {
+                _folder = InitialFolder ?? "";
+                _newEditorInitialized = true;
+            }
             _folders = CachedFolders ?? [];
             _loading = false;
             return;
