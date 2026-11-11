@@ -366,7 +366,7 @@ else
                     <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
                     <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
                 </div>
-                <Add @key="_editorKey" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
+                <Add @key="_editorKey" @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
                      Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
             </aside>
         }
@@ -609,6 +609,7 @@ else
     }
 
     private string _appView = "records";
+    private Add? _inlineEditor;
     private bool _editorOpen;
     private string? _editorRecordId;
     private string _editorKind = "record";
@@ -634,18 +635,19 @@ else
     private bool HasTreeChildren(string id) => Folders.Any(x => x.FolderId == id);
     private void OpenEditor(string kind, string? recordId = null)
     {
-        if (_busy) return;
+        if (_busy || _inlineEditor?.BlocksDismissal == true) return;
         _editorKind = kind is "folder" or "file" ? kind : "record";
         _editorRecordId = recordId;
         _editorOpen = true;
         _selected = null;
         _editorKey++;
     }
-    private void CloseEditor() { if (_busy) return; _editorOpen = false; _editorRecordId = null; }
+    private void CloseEditor() { if (_busy || _inlineEditor?.BlocksDismissal == true) return; _editorOpen = false; _editorRecordId = null; _inlineEditor = null; }
     private async Task OnEditorSavedAsync()
     {
         _editorOpen = false;
         _editorRecordId = null;
+        _inlineEditor = null;
         await RefreshAsync();
     }
     private string _syncTask = "review";
