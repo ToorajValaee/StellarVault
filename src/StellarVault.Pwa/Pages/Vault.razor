@@ -363,7 +363,7 @@ else
                     <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
                     <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
                 </div>
-                <Add @key="_editorKey" @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
+                <VaultItemEditor @key="_editorKey" @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
                      Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
             </aside>
         }
@@ -606,7 +606,7 @@ else
     }
 
     private string _appView = "records";
-    private Add? _inlineEditor;
+    private VaultItemEditor? _inlineEditor;
     private bool _editorOpen;
     private string? _editorRecordId;
     private string _editorKind = "record";
