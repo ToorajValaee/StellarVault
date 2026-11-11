@@ -360,6 +360,7 @@ else
             <button type="button" class="@(_appView == "settings" ? "selected" : "")"
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
+            <a href="/help" class="sv-pwa-mobile-help"><span aria-hidden="true">ⓘ</span>Help</a>
         </nav>
         <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
         @if (_editorOpen)
