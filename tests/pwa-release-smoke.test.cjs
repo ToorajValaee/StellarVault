@@ -389,7 +389,7 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(vault, /sv-explorer-list-head/);
   assert.match(vault, /sv-layout-switch/);
   assert.match(vault, /_explorerLayout == "grid"/);
-  assert.match(vault, /<VaultItemEditor @key="_editorKey" @ref="_inlineEditor" Embedded="true"/);
+  assert.match(vault, /<VaultItemEditor @ref="_inlineEditor" Embedded="true"/);
   assert.match(vault, /sv-inspector-tabs/);
   assert.match(vault, /sv-inspector-more/);
   assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _uncertainStage/);
@@ -410,7 +410,8 @@ test('Embedded Add/Edit renders without a nested app grid; create actions stay o
   assert.match(shell, /@if \(Embedded\)/);
   const rail = vault.slice(vault.indexOf('<nav class="sv-pwa-rail"'), vault.indexOf('</nav>') + 6);
   assert.doesNotMatch(rail, /OpenEditor\(/);
-  assert.match(vault, /<VaultItemEditor @key="_editorKey"/);
+  assert.match(vault, /<VaultItemEditor @ref="_inlineEditor"/);
+  assert.match(vault, /<ErrorBoundary @key="_editorKey">/);
   assert.match(css, /\.sv-editor-sidecar \.sv-inline-editor-layout/);
   assert.match(css, /\.sv-folder-tile \.sv-folder-open > span:last-child/);
   assert.match(css, /text-align:left!important/);
