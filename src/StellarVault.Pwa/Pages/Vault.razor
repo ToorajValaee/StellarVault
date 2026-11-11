@@ -493,7 +493,7 @@ else
     private void SelectAppView(string view)
     {
         if (view is not ("records" or "drafts" or "sync" or "settings")) return;
-        if (view is "drafts" or "sync" && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
+        if ((view is "drafts" or "sync") && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
         _appView = view;
         if (view == "sync") _ = InvokeAsync(LoadPendingAsync);
     }
