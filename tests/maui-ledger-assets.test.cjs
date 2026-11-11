@@ -236,3 +236,17 @@ test('shared device and hybrid editors have a directory screen separate from ite
   assert.match(remote, /Back to records/);
   assert.match(remote, /_editingRemote is null && _editingMutationId is null/);
 });
+
+test('MAUI loads final native-modern presentation while preserving first-render bridge', () => {
+  const nativeHost = fs.readFileSync(path.join(maui, 'wwwroot/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
+  const oldCss = nativeHost.indexOf('href="native-app.css"');
+  const modern = nativeHost.indexOf('href="modern-native.css"');
+  assert.ok(oldCss >= 0 && modern > oldCss);
+  assert.match(nativeHost, /blazor\.webview\.js" autostart="false"/);
+  assert.match(css, /--sv-native-bg:#f3f7f6/);
+  assert.match(css, /\.sv-native-object-card/);
+  assert.match(css, /\.sv-native-nav button\.selected/);
+  assert.match(css, /\.sv-native-network-popover/);
+  assert.match(css, /prefers-reduced-motion/);
+});
