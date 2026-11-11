@@ -136,7 +136,7 @@ else
                 <span>A browser refresh ends the in-memory Stellar signing session, even if your internet connection is working. Your local vault is unlocked, but on-chain records require reconnecting with your recovery phrase. No records have been erased.</span>
             </div>
         }
-        <label class="search-console"><span class="search-prefix">FIND&gt;</span><input @bind="_search" @bind:event="oninput" placeholder="title, username, URL, tag, folder..." autocomplete="off"/></label>
+        <label class="search-console sv-modern-search"><span class="search-prefix" aria-hidden="true">⌕</span><input aria-label="Search your vault" @bind="_search" @bind:event="oninput" placeholder="Search records, folders, and tags" autocomplete="off"/></label>
         @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
         <div class="sv-explorer-layout">
         <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
@@ -170,7 +170,7 @@ else
         <section class="terminal-panel sv-explorer-folder-panel">
             <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
 
-                <button class="pixel-button compact" @onclick='() => _folder = null'>MY VAULT</button>
+                <button class="pixel-button compact" @onclick='() => _folder = null'>My vault</button>
                 @foreach (var crumb in Breadcrumbs)
                 {
                     <span>/</span><button class="pixel-button compact" @onclick="() => _folder = crumb.Id">@crumb.Title</button>
@@ -181,12 +181,12 @@ else
                     <span>/</span><strong>📁 @PendingTitle(PendingLocalFolders.First(x => x.EntityId == _folder)) (LOCAL)</strong>
                 }
             </nav>
-            <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>INCLUDE RECORDS FROM SUBFOLDERS</span></label>
+            <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0"><input type="checkbox" @bind="_includeChildren" aria-label="Include records from subfolders" /><span>Include subfolders</span></label>
             <div class="sv-folder-grid">
             @foreach (var item in Folders.Where(f => f.FolderId == _folder))
             {
                 <div class="sv-folder-tile">
-                    <button class="pixel-button compact" @onclick="() => OpenFolder(item.Id)">📁 @item.Title</button>
+                    <button class="pixel-button compact sv-folder-open" @onclick="() => OpenFolder(item.Id)"><span aria-hidden="true">📁</span><span>@item.Title</span></button>
                     <details><summary>⋯</summary>
                         <a class="pixel-button compact" href="@($"/edit/{item.Id}")">RENAME / MOVE</a>
                         <button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button>
@@ -217,9 +217,9 @@ else
                 }
             }
             <div class="sv-access-actions">
-                <a class="pixel-button compact" href="@($"/add?folder={_folder}")">+ ADD RECORD</a>
-                <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">+ NEW FOLDER</a>
-                <a class="pixel-button compact" href="/add?kind=file">+ ADD FILE</a>
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}")">New record</a>
+                <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">New folder</a>
+                <a class="pixel-button compact" href="/add?kind=file">Add file</a>
             </div>
         </section>
         @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
@@ -231,9 +231,9 @@ else
             {
                 @foreach (var item in Filtered)
                 {
-                    <button class="record-card" type="button" @onclick="() => OpenRecord(item)">
-                        <span class="record-index">@((Filtered.IndexOf(item) + 1).ToString("D2"))</span>
-                        <span class="record-card-body"><strong>@item.Title</strong>
+                    <button class="record-card sv-modern-record" type="button" @onclick="() => OpenRecord(item)">
+                        <span class="sv-modern-record-icon" aria-hidden="true">@(IsLedgerFile(item) ? "▤" : "▦")</span>
+                        <span class="record-card-body"><strong>@item.Title</strong><small>@(IsLedgerFile(item) ? "Encrypted file" : "Secure record")</small>
                         @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
                         @if (_includeChildren || !string.IsNullOrWhiteSpace(_search)) { <small>📁 @FolderPath(item.FolderId)</small> }
                         </span><span class="record-chevron">›</span>
@@ -285,7 +285,7 @@ else
                     }
                     <label class="terminal-label">PARENT FOLDER</label>
                     <select class="terminal-input" @bind="_pendingEditFolder">
-                        <option value="">MY VAULT (ROOT)</option>
+                        <option value="">My vault (ROOT)</option>
                         @foreach (var folder in Folders.Where(x => x.Id != _selectedPending.EntityId))
                         {
                             <option value="@folder.Id">STELLAR · @folder.Title</option>
@@ -1024,7 +1024,7 @@ else
             if (folder is null) { names.Insert(0, "[missing folder]"); break; }
             names.Insert(0, folder.Title); id = folder.FolderId;
         }
-        return names.Count == 0 ? "MY VAULT" : "MY VAULT / " + string.Join(" / ", names);
+        return names.Count == 0 ? "My vault" : "My vault / " + string.Join(" / ", names);
     }
     [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
     protected override void OnParametersSet() {
