@@ -13,7 +13,7 @@
 @inject Microsoft.Extensions.Logging.ILogger<VaultHome> Logger
 @implements IDisposable
 
-<AdaptiveShell PlatformName="@Platform" Subtitle="ENCRYPTED ACCOUNT DATABASE">
+<AdaptiveShell PlatformName="@Platform" Subtitle="YOUR VAULT">
     <HeaderActions>
             <details class="sv-network-menu">
                 <summary title="Select Stellar network" aria-label="Select Stellar network">
@@ -52,14 +52,14 @@
     }
     else
     {
-    <div class="access-grid">
+    <div class="access-grid sv-pwa-access-grid">
         <VaultOverview />
 
         <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
             <div class="panel-heading">
                 <div>
-                    <div class="panel-kicker">SECURE ACCESS</div>
-                    <h2>OPEN YOUR VAULT</h2>
+                    <div class="panel-kicker">YOUR ACCOUNT</div>
+                    <h2>Unlock your vault</h2>
                 </div>
                 <span class="step-led">01</span>
             </div>
@@ -73,18 +73,18 @@
                         <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET SAVED ACCOUNT SHORTCUT</button>
                     </div>
                 }
-                <div class="terminal-label">BIP-39 RECOVERY WORDS</div>
+                <div class="terminal-label">Recovery phrase</div>
                 <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
-                <div class="terminal-label">DEVICE STORAGE POLICY</div>
-                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> ON-CHAIN ONLY — No saved vault credentials, local records or offline drafts</label>
-                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> ENCRYPTED LOCAL STORAGE — Save encrypted local vault data on this device</label>
+                <div class="terminal-label">Where to save your data</div>
+                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> Stellar only — do not save data on this device</label>
+                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Also save encrypted items on this device</label>
                 @if (_enableLocalStorage)
                 {
-                <label class="terminal-label" for="sv-passphrase">VAULT ENCRYPTION PASSPHRASE</label>
+                <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <VaultStorageSecurityNotice />
-                <p class="advanced-help">Local encrypted storage is an opt-in feature. The recovery phrase is encrypted on this device using your separate passphrase. Hybrid mode supports offline records and folders with explicit manual Sync approval. Hybrid file operations are disabled.</p>
+                <details class="sv-access-learn"><summary>About local storage and Sync</summary><p>Your recovery phrase is encrypted on this device using a separate passphrase. Offline records and folders can be synced only after your approval. Hybrid file syncing is unavailable.</p></details>
                 }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
@@ -99,7 +99,7 @@
                 @if (!Sessions.IsUnlocked && _enableLocalStorage)
                 {
                     <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
-                        OFFER DEVICE UNLOCK AFTER ACCESS (OPTIONAL)
+                        Enable device unlock after signing in (optional)
                     </label>
                     <p class="advanced-help">Use a passkey protected by your device's biometrics or PIN for future privacy unlocks on this device. Enrollment happens only here, after your passphrase is verified.</p>
                 }
@@ -135,8 +135,8 @@
                     }
                 </div>
                 <div class="terminal-alert warning" role="status">
-                    <strong>EARLY ACCESS // VERIFY BEFORE USING REAL SECRETS</strong>
-                    <span>Local records and files are encrypted and stored in this browser, not automatically published or backed up. Stellar ledger storage is a separate workflow with transaction fees and explicit approvals. Cross-device local-vault synchronization is not available. This build is not yet production-security audited: use test accounts and noncritical information only.</span>
+                    <strong>EARLY ACCESS — USE TEST ACCOUNTS ONLY</strong>
+                    <span>This preview has not completed a production security audit. Do not use real secrets or funds. Data saved only on this device is not automatically backed up or synced.</span>
                 </div>
             }
             else
