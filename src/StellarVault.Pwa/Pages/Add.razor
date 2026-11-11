@@ -24,16 +24,16 @@
 }
 else
 {
-    <div class="sv-pwa-app sv-pwa-secondary-app">
-        <nav class="sv-pwa-rail" aria-label="Vault navigation">
-            <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▤</span> Vault</a>
-            <div class="sv-pwa-rail-divider"></div>
-            <a class="sv-pwa-rail-action @(_kind == "record" ? "selected" : "")" href="/add"><span aria-hidden="true">＋</span> New record</a>
-            <a class="sv-pwa-rail-action @(_kind == "folder" ? "selected" : "")" href="/add?kind=folder"><span aria-hidden="true">▣</span> New folder</a>
-            <a class="sv-pwa-rail-action @(_kind == "file" ? "selected" : "")" href="/add?kind=file"><span aria-hidden="true">⇧</span> Add file</a>
-            <div class="sv-pwa-rail-foot">Encrypted vault workspace</div>
-        </nav>
-        <div class="sv-pwa-stage sv-pwa-secondary-stage">
+    <div class="@(Embedded ? "sv-inline-editor-layout" : "sv-pwa-app sv-pwa-secondary-app")">
+        @if (!Embedded)
+        {
+            <nav class="sv-pwa-rail" aria-label="Vault navigation">
+                <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▤</span> Vault</a>
+                <div class="sv-pwa-rail-divider"></div>
+                <div class="sv-pwa-rail-foot">Encrypted vault workspace</div>
+            </nav>
+        }
+        <div class="@(Embedded ? "sv-inline-editor-stage" : "sv-pwa-stage sv-pwa-secondary-stage")">
     <section class="form-page sv-pwa-editor">
         <nav class="sv-pwa-editor-breadcrumb" aria-label="Edit workflow navigation">
             @if (Embedded) { <button type="button" class="sv-inline-back" @onclick="CancelEmbeddedEditor">← Back to vault</button> }
