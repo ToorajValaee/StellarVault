@@ -207,7 +207,7 @@ else
     }
     private void SelectEmbeddedKind(string kind)
     {
-        if (kind is not ("record" or "folder" or "file")) return;
+        if (BlocksDismissal || kind is not ("record" or "folder" or "file")) return;
         Kind = kind;
         _filePlan = null;
         _estimate = null;
