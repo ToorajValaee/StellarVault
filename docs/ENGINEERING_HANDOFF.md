@@ -630,3 +630,18 @@ Changes on `main`: `AppRoot.razor` now performs an intentionally minimal, depend
 The Android CI workflow now inspects the APK ZIP entries to require bundled `wwwroot/index.html`, `wwwroot/native-app.css` and the locally packaged Stellar SDK. This catches missing build assets but **not** bridge execution failures. When testing the next successful artifact, report which stage the emulator displays, and (if still stuck) capture: `adb logcat -d -s StellarVaultStartup BlazorWebView chromium AndroidRuntime` (do not include mnemonic or vault data). Emulator system WebView must be installed and updated.
 
 Do not call this fixed until successful **interactive emulator startup**, followed by Android offline vault and manual Testnet acceptance.
+
+
+## 2026-11-11 — PWA-first installed-app UX redesign
+
+The user is introducing the browser/PWA as the primary early-access preview while MAUI startup is still unresolved on the Android emulator. To make PWA behave as a proper installed application, the `/vault` route now uses a task-based app frame instead of stacking offline editing, Hybrid Sync review, queue recovery and the on-chain record browser into one page.
+
+- Desktop/tablet: an application navigation rail with **Records**, **Offline drafts**, **Hybrid Sync**, and direct creation shortcuts. Phones: bottom navigation with safe-area padding and 44px+ touch targets. Shared top product chrome stays sticky. The unlocked vault content scrolls independently from the app chrome in browsers supporting `:has`; legacy browsers retain document scrolling. Tab destination `@key` replaces its content scroll so navigation does not inherit an unrelated scroll offset.
+- Records remains the original on-chain folder/record browser with search, breadcrumbs, selected-item modals, file actions and explicit account information. No on-chain transaction or local queue logic was ported or reimplemented for the new navigation.
+- Offline drafts shows only the existing encrypted local record/folder editor when consent and unlocked retention allow it.
+- Sync has separate **Review & Sync** and **Stage remote changes** task choices. It retains original manually approved fee/ledger reviews, uncertain-submission warnings, and read-only recovery; no automatic publish.
+- The `/add` and `/edit` routes are now focused editor screens with a return-to-vault link and Record/Folder/File selection for new items. Hybrid local file draft UI was removed in line with the existing Core prohibition; direct on-chain files remain available with individual fee approvals.
+- Stale access-page language claiming offline drafts and manual Sync are unavailable was corrected; disconnected signing sessions remain clearly labeled `NOT SIGNED IN`, never incorrectly reported as internet offline.
+- `tests/pwa-release-smoke.test.cjs` covers task destinations, on-chain browser retention, no accidental duplicate local editor, Sync components and focused editor route. `docs/PWA_APP_UX_ACCEPTANCE.md` records manual browser/mobile and security acceptance before distributing beyond a limited test cohort.
+
+These commits are **presentation changes, not a completed security audit or a live Testnet E2E certification**. The PWA cannot be claimed production-ready from CI alone; verify actual mobile keyboard, privacy lock, installed service-worker upgrade, on-chain fee approval and offline/Sync interruption behavior before introducing it to users with real assets or secrets. MAUI core/host and Hybrid file policy remain unchanged.
