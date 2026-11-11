@@ -51,3 +51,13 @@ The installed app should never look like a vertically concatenated website. It p
 
 ## Automated gates
 The existing PWA/Core/Android MAUI GitHub workflow builds shared C# and Android APK. `tests/maui-ledger-assets.test.cjs` guards root wiring, host asset list, native CSS ordering, scroll layout, navigation and sticky command strip. **These are static/build checks, not screenshots or input-event/end-to-end validation.**
+
+
+## 2026-11-11 — Explorer, record parity and dedicated editor acceptance
+
+- [ ] Windows/macOS wide window: nested folder tree plus object cards, selected folder and scroll region work independently.
+- [ ] Android/iOS: browse as folder/object grid; tap an item to navigate into a dedicated detail view, Back returns to its folder; record/file/folder creation opens its own screen rather than expanding beneath the directory.
+- [ ] New on-chain record includes title, parent folder, username, URL, masked secret/content, notes, tags; each appears on the recovered record after approved Testnet publication.
+- [ ] New folder inherits the current folder as its parent and appears in that folder after a confirmed transaction.
+- [ ] Editing any record metadata after fee review revokes the prior approval and demands a new estimate.
+- [ ] Local encrypted records, Hybrid drafts and remote staging display a directory screen or an editor, not both; successful local saves return to the directory, unresolved submissions never auto-retry.
