@@ -136,26 +136,6 @@ else
                     <button type="button" class="sv-native-back" disabled="@_ledgerBusy"
                             @onclick='() => SetNativeMode("browse")'>← Back to records</button>
                 }
-                @if (false)
-                {
-                <nav class="network-selector" aria-label="Native Stellar workspace">
-                    <button type="button" class="network-option @(_nativeMode == "browse" ? "active" : "")"
-                            aria-pressed="@(_nativeMode == "browse")" disabled="@_ledgerBusy"
-                            @onclick='() => SetNativeMode("browse")'>
-                        <span class="network-symbol">S</span><span><strong>Browse</strong><small>EXPLORE</small></span>
-                    </button>
-                    <button type="button" class="network-option @(_nativeMode == "record" ? "active" : "")"
-                            aria-pressed="@(_nativeMode == "record")" disabled="@_ledgerBusy"
-                            @onclick='() => SetNativeMode("record")'>
-                        <span class="network-symbol">R</span><span><strong>New record</strong><small>ON-CHAIN</small></span>
-                    </button>
-                    <button type="button" class="network-option @(_nativeMode == "file" ? "active" : "")"
-                            aria-pressed="@(_nativeMode == "file")" disabled="@_ledgerBusy"
-                            @onclick='() => SetNativeMode("file")'>
-                        <span class="network-symbol">F</span><span><strong>Add file</strong><small>ON-CHAIN</small></span>
-                    </button>
-                </nav>
-                }
                 @if (_nativeMode == "record")
                 {
                                 <section aria-label="Publish Stellar record" class="terminal-panel">
@@ -225,25 +205,49 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
-                    <div class="panel-kicker"></div>
-                    <h3>Browse your vault</h3>
-                    <label class="terminal-label" for="native-ledger-folder">FOLDER</label>
-                <select id="native-ledger-folder" class="terminal-input" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
-                    <option value="">Root</option>
-                    @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder))
+                    @if (_selectedRecord is null)
                     {
-                        <option value="@folder.Id">@folder.Title</option>
+                    <div class="sv-native-explorer">
+                        <aside class="sv-native-folder-tree" aria-label="Folder tree">
+                            <button type="button" class="sv-native-tree-item @(_selectedFolderId == "" ? "selected" : "")"
+                                    @onclick='() => OpenNativeFolder("")'>▣ My vault</button>
+                            @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => NativeFolderPath(x.Id)))
+                            {
+                                <button type="button" class="sv-native-tree-item @(_selectedFolderId == folder.Id ? "selected" : "")"
+                                        style="--sv-tree-depth:@NativeFolderDepth(folder.Id)"
+                                        @onclick="() => OpenNativeFolder(folder.Id)">▸ ▣ @folder.Title</button>
+                            }
+                        </aside>
+                        <div class="sv-native-object-storage">
+                            <label class="terminal-label" for="native-ledger-folder">Folder</label>
+                            <select id="native-ledger-folder" class="terminal-input sv-native-mobile-folder"
+                                    @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
+                                <option value="">My vault</option>
+                                @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder))
+                                {
+                                    <option value="@folder.Id">@NativeFolderPath(folder.Id)</option>
+                                }
+                            </select>
+                            <div class="sv-native-object-grid">
+                            @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
+                                !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+                                .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
+                            {
+                                <button type="button" class="sv-native-object-card" disabled="@_ledgerBusy"
+                                        @onclick="() => SelectRecord(item.Id)">
+                                    <span class="sv-native-object-icon" aria-hidden="true">@(item.IsFolder ? "▣" : StellarLedgerFileProtocol.IsFile(item) ? "▤" : "▦")</span>
+                                    <strong>@item.Title</strong>
+                                    <small>@(item.IsFolder ? "Folder" : StellarLedgerFileProtocol.IsFile(item) ? "File" : "Record")</small>
+                                </button>
+                            }
+                            </div>
+                        </div>
+                    </div>
                     }
-                </select>
-                @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId && !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)))
-                {
-                    <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="() => SelectRecord(item.Id)">
-                        @(item.IsFolder ? "Open folder: " : StellarLedgerFileProtocol.IsFile(item) ? "View file: " : "View record: ") @item.Title
-                    </button>
-                }
                 @if (_selectedRecord is not null && !_selectedRecord.IsFolder)
                 {
-                    <section aria-label="Selected ledger record">
+                    <section class="sv-native-detail-screen" aria-label="Selected ledger record">
+                        <button type="button" class="sv-native-back" @onclick="ResetSelection">← Back to folder</button>
                         <h3>@_selectedRecord.Title</h3>
                         @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
                         {
@@ -252,6 +256,14 @@ else
                         @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
                         {
                             <p>URL: @_selectedRecord.Url</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.Notes))
+                        {
+                            <p>Notes: @_selectedRecord.Notes</p>
+                        }
+                        @if (_selectedRecord.Tags is { Length: > 0 })
+                        {
+                            <p>Tags: @string.Join(", ", _selectedRecord.Tags)</p>
                         }
                         @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
                         {
@@ -434,7 +446,7 @@ else
     {
         "local" => "local:" + _localMode,
         "sync" => "sync:" + _syncMode,
-        _ => "stellar:" + _nativeMode
+        _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
     };
 
     private void NavigateNative(string page)
@@ -459,6 +471,38 @@ else
     }
 
     private string _nativeMode = "browse";
+
+    private void OpenNativeFolder(string id)
+    {
+        _selectedFolderId = id;
+        ResetSelection();
+    }
+
+    private int NativeFolderDepth(string id)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var depth = 0;
+        var folder = _ledgerRecords.FirstOrDefault(x => x.IsFolder && x.Id == id);
+        while (folder?.FolderId is { Length: > 0 } parent && visited.Add(folder.Id) && depth < 12)
+        {
+            depth++;
+            folder = _ledgerRecords.FirstOrDefault(x => x.IsFolder && x.Id == parent);
+        }
+        return depth;
+    }
+
+    private string NativeFolderPath(string id)
+    {
+        var names = new List<string>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var folder = _ledgerRecords.FirstOrDefault(x => x.IsFolder && x.Id == id);
+        while (folder is not null && visited.Add(folder.Id) && names.Count < 16)
+        {
+            names.Insert(0, folder.Title);
+            folder = _ledgerRecords.FirstOrDefault(x => x.IsFolder && x.Id == folder.FolderId);
+        }
+        return string.Join(" / ", names);
+    }
 
     private void SetNativeMode(string mode)
     {
