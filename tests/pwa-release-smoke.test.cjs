@@ -330,3 +330,17 @@ test('PWA loads the final modern design after legacy and scoped styles', () => {
   assert.match(css, /modal-backdrop:has\(#sv-record-title\)/);
   assert.match(css, /prefers-reduced-motion/);
 });
+
+test('PWA modern destinations expose usable settings and mobile new action', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(vault, /SelectAppView\("settings"\)/);
+  assert.match(vault, /_appView == "settings"/);
+  assert.match(vault, /OpenAccountInfoAsync/);
+  assert.match(vault, /LockAsync/);
+  assert.match(vault, /class="sv-modern-fab"/);
+  assert.match(css, /\.sv-modern-settings/);
+  assert.match(css, /\.sv-modern-fab/);
+  assert.match(vault, /sv-modern-record-icon/);
+  assert.match(vault, /sv-modern-search/);
+});
