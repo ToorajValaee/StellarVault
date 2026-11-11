@@ -79,7 +79,7 @@ test('MAUI renders platform-adaptive native shell with scrollable content and fi
   assert.match(appRoot, /HostPlatform="@NativePlatform"/);
   assert.match(workspace, /class="sv-native-nav"/);
   assert.match(workspace, /class="sv-native-scroll"/);
-  assert.match(workspace, /class="sv-native-commandbar"/);
+  assert.match(workspace, /class="sv-native-commandbar @\(/);
   for (const page of ['stellar', 'local', 'sync']) {
     assert.ok(workspace.includes('NavigateNative("' + page + '")'),
       'Missing navigation destination ' + page);
@@ -286,4 +286,23 @@ test('Native shell theme is initialized before optional ledger runtime', () => {
   assert.ok(host.indexOf('window.stellarVaultTheme =') < host.indexOf('window.stellarVaultNativeRuntime ='));
   assert.match(host, /dataset\.theme === 'dark' \? 'light' : 'dark'/);
   assert.match(nativeCss, /:root\[data-theme="dark"\]/);
+});
+
+test('Native phone uses the approved compact vault layout and keeps critical actions', () => {
+  const workspace = fs.readFileSync(path.join(root, 'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/wwwroot/modern-native.css'), 'utf8');
+  assert.match(workspace, /sv-native-mobile-collections/);
+  assert.match(workspace, /sv-native-mobile-search/);
+  assert.match(workspace, /sv-native-folder-shortcuts/);
+  assert.match(workspace, /sv-native-shortcut-grid/);
+  assert.match(workspace, /sv-native-object-row/);
+  assert.match(workspace, /sv-native-detail-screen/);
+  assert.match(workspace, /sv-native-sheet-tabs/);
+  assert.match(workspace, /sv-native-mobile-fab/);
+  assert.match(workspace, /sv-native-commandbar-quiet/);
+  assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)!important/);
+  assert.match(css, /sv-native-commandbar:not\(\.sv-native-commandbar-quiet\)/);
+  assert.match(css, /max-height:60dvh/);
+  assert.match(css, /safe-area-inset-bottom/);
+  assert.doesNotMatch(workspace, /Online · Synced/);
 });
