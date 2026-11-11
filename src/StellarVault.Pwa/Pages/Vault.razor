@@ -70,7 +70,18 @@ else
         }
         @if (_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
-            <VaultHybridRemoteChanges />
+            <nav class="sv-pwa-task-tabs" aria-label="Hybrid Sync task">
+                <button type="button" class="@(_syncTask == "review" ? "selected" : "")" aria-pressed="@(_syncTask == "review")"
+                        @onclick='() => _syncTask = "review"'>Review &amp; Sync</button>
+                <button type="button" class="@(_syncTask == "stage" ? "selected" : "")" aria-pressed="@(_syncTask == "stage")"
+                        @onclick='() => _syncTask = "stage"'>Stage remote changes</button>
+            </nav>
+            @if (_syncTask == "stage")
+            {
+                <VaultHybridRemoteChanges />
+            }
+            else
+            {
             <section class="terminal-panel" aria-label="Encrypted local pending changes" style="padding:1rem;margin:1rem 0">
                 <div class="panel-kicker">DEVICE STORAGE // NOT ON STELLAR</div>
                 <h2>LOCAL PENDING CHANGES</h2>
@@ -111,6 +122,7 @@ else
                 }
                 else if (_pendingError is null && !_pendingLoading) { <p class="advanced-help">No local record or folder changes are pending. Hybrid file synchronization is disabled.</p> }
             </section>
+            }
         }
         @if (_appView == "records")
         {
@@ -398,6 +410,7 @@ else
 
 @code {
     private string _appView = "records";
+    private string _syncTask = "review";
     private void SelectAppView(string view)
     {
         if (view is not ("records" or "drafts" or "sync")) return;
