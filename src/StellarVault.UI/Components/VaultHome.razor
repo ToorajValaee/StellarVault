@@ -366,7 +366,12 @@
                         _customHorizon = url;
                         _customPassphrase = null;
                         _detectedHorizon = null;
-                        _networkStatus = "Custom Horizon remembered. Detect the network again before unlocking.";
+                        _networkStatus = "Verifying remembered custom Horizon…";
+                        await InvokeAsync(StateHasChanged);
+                        // Re-read the public network identity from Horizon. The
+                        // preference never stores a trusted network passphrase.
+                        // Do not require the user to repeat the Detect action.
+                        await DetectCustomAsync();
                     }
                 }
 
@@ -619,6 +624,7 @@
         _message = null;
         _customPassphrase = null;
         _detectedHorizon = null;
+        _networkStatus = "Verifying custom Horizon…";
         NetworkSelection.ResetCustom();
         try
         {
@@ -633,7 +639,7 @@
             NetworkSelection.ConfigureCustom(detected);
             NetworkSelection.CustomHorizonUrl = requestedHorizon;
             _detectedHorizon = requestedHorizon;
-            _networkStatus = "Network detected.";
+            _networkStatus = "Custom network verified and selected.";
             try { await JS.InvokeVoidAsync("stellarVaultNetworkPreference.save", "custom", requestedHorizon); }
             catch (JSException) { _networkStatus = "Network detected, but browser preference could not be saved."; }
         }
@@ -642,9 +648,14 @@
             NetworkSelection.ResetCustom();
             _customPassphrase = null;
             _detectedHorizon = null;
-            _message = "Could not detect this network. Check the Horizon URL and try again.";
+            _networkStatus = "Could not verify the custom network. Check the Horizon URL and select Detect network to retry.";
+            _message = null;
         }
-        finally { _busy = false; }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private int EnteredWordCount => _mnemonic.Split((char[]?)null,
