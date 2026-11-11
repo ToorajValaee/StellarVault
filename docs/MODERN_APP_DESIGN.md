@@ -112,3 +112,13 @@ A remembered custom Horizon URL is the **selected preference**, not a verified s
 - Legacy `/help` deep links redirect to `/vault?view=help`, so direct links still work for unlocked users. A locked user must first unlock to access the Vault workspace.
 - Source transparency via GitHub remains in the left navigation. `Powered by badje.ir` is now a small text-only attribution beneath the sidebar connection status, without a large badge, border, or promotion block.
 - Static checks required: verify no second Help sidebar, active Help state in desktop/mobile navigation, no accidental create/actions when Help is active, and footer contrast at narrow heights. Actual screenshot/build validation is outstanding.
+
+
+## 2026-11-11 — Unified Inspector / Settings / Drafts / Sync theme
+
+- Removed the redundant `Folders` action from the primary left rail. Folder navigation remains available through the actual nested explorer tree and breadcrumbs.
+- Removed the old `MODE / ENCRYPT → CHUNK → SIGN → SUBMIT / TARGET / STELLAR LEDGER` readout from the shared Add/Edit record and folder editor. The real signed-operation fee review remains in its dedicated approval dialog.
+- Scoped Settings, Drafts and Sync into `sv-workspace-surface` panels. Shared draft, sync review, and staged remote mutation components use `sv-hybrid-panel` classes and modern headings/labels without modifying ledger submission, mutation state transitions, or consent.
+- A single pair of work-surface palettes drives the PWA light/dark surfaces, text, inputs, tabs, controls, cards and warning boundaries. Added high-specificity dark selectors for record detail's third-column inspector and its tabs, menus, notes, fields and activity metadata, to override older hard-coded light declarations.
+- Added source-based regression assertions and bumped the CSS resource version.
+- **Verification limitation:** static Razor tag balance and stylesheet brace balance passed. Not yet run: .NET build, functional PWA theme switching, screenshots on desktop and mobile, accessibility contrast tests, end-to-end draft synchronization, or real Stellar transaction signing. Those remain essential acceptance criteria.
