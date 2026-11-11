@@ -377,3 +377,34 @@ html, body {
     .native-maccatalyst .sv-native-nav,
     .native-ios .sv-native-nav { background: #0b1a13; }
 }
+
+/* Customer-facing native screens: a clear task, not a system diagnostics page. */
+.sv-native-page-heading {margin:0 0 12px;align-items:center;}
+.sv-native-page-heading h1 {margin:0;color:var(--sv-native-text);
+    font-size:clamp(23px,3vw,30px);}
+.sv-native-page-heading p {font-size:12px;margin:.15rem 0 0;}
+.sv-native-shell .native-preview > .terminal-panel {position:relative;}
+.sv-native-shell .native-preview > .terminal-panel > .panel-heading {margin-bottom:8px;}
+.sv-native-shell .native-preview > .terminal-panel > .panel-heading h2 {
+    font-size:19px;line-height:1.3;margin:0 0 5px;
+}
+.sv-native-shell .native-preview > .terminal-panel > p:first-of-type {margin-top:5px;}
+.sv-native-subtle-status,.sv-native-summary {font-size:12px;
+    color:var(--sv-native-muted);line-height:1.55;}
+.sv-native-summary {margin:4px 0 12px;}
+.sv-native-shell .sv-native-help {margin-top:14px;}
+.sv-native-shell .sv-native-help .terminal-alert {margin:12px 0 0;}
+.sv-native-shell .sv-native-command-hint {max-width:55%;overflow-wrap:anywhere;}
+.sv-native-shell .network-selector {gap:8px;}
+.sv-native-shell .network-option {min-height:48px;justify-content:center;}
+.sv-native-shell .network-option .network-symbol {display:none;}
+.sv-native-shell .network-option small {display:none;}
+.sv-native-shell .network-option strong {font-size:12px;letter-spacing:0;text-transform:none;}
+@media(max-width:699px) {
+  .sv-native-content {padding:14px 13px 30px;}
+  .sv-native-page-heading {margin-bottom:10px;}
+  .sv-native-page-heading h1 {font-size:23px;}
+  .sv-native-shell .terminal-panel {padding:15px;margin-bottom:12px;}
+  .sv-native-shell .network-option {padding:8px 5px;}
+  .sv-native-shell .terminal-label {font-size:11px;}
+}
