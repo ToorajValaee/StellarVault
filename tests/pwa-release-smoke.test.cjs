@@ -577,3 +577,24 @@ test('Offline record loader and fee estimation never display vendor network stac
   assert.doesNotMatch(editor, /"Cannot load record: " \+ ex\.Message/);
   assert.doesNotMatch(editor, /"Cannot estimate ledger stage: " \+ ex\.Message/);
 });
+
+test('Phone PWA reproduces the approved object-storage workspace while desktop stays separate', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(vault, /sv-mobile-collection-tabs/);
+  assert.match(vault, /sv-mobile-folder-shortcuts/);
+  assert.match(vault, /sv-mobile-shortcut-grid/);
+  assert.match(vault, /sv-mobile-items-heading/);
+  assert.match(vault, /sv-mobile-collection-@_mobileCollection/);
+  assert.match(vault, /sv-mobile-folder-back/);
+  assert.match(vault, /_mobileCollection == "folders"/);
+  assert.match(vault, /OpenEditor\("record"\)/);
+  assert.match(vault, /sv-record-inspector-backdrop/);
+  assert.match(css, /MOBILE VAULT/);
+  assert.match(css, /@media\(max-width:840px\)/);
+  assert.match(css, /sv-mobile-collection-folders/);
+  assert.match(css, /sv-mobile-collection-records/);
+  assert.match(css, /max-height:60dvh/);
+  assert.match(css, /sv-pwa-mobile-tabs/);
+  assert.match(css, /safe-area-inset-bottom/);
+});
