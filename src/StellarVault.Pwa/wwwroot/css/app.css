@@ -2331,7 +2331,7 @@ html.ios-device.standalone-app .terminal-footer {
   text-decoration:none; text-align:left;
   border:1px solid transparent; border-radius:10px;
   background:transparent; color:var(--muted);
-  font:600 .79rem/1.35 inherit; cursor:pointer;
+  font-family:inherit;font-size:.79rem;font-weight:600;line-height:1.35;cursor:pointer;
 }
 .sv-pwa-rail > button > span, .sv-pwa-rail-action > span {font-size:1.35rem; width:1.45rem; flex:none; text-align:center;}
 .sv-pwa-rail > button.selected { border-color:rgba(113,255,155,.33);
@@ -2392,4 +2392,35 @@ html.ios-device.standalone-app .terminal-footer {
 }
 @media(prefers-reduced-motion:reduce) {
   .sv-pwa-app *, .sv-pwa-mobile-tabs * {scroll-behavior:auto!important;animation-duration:.01ms!important;}
+}
+
+/* PWA create/edit workflows: focused pages with a predictable return path. */
+.sv-pwa-editor {max-width:56rem;width:min(100%,56rem);margin:0 auto;
+  padding:clamp(.9rem,2.7vw,1.8rem) 1rem 3rem;min-width:0;}
+.sv-pwa-editor-breadcrumb {display:flex;align-items:center;gap:.7rem;
+  font-size:.76rem;color:var(--muted);margin:0 0 1.2rem;}
+.sv-pwa-editor-breadcrumb a {color:var(--phosphor-strong);text-decoration:none;
+  border:1px solid var(--border);border-radius:8px;min-height:44px;
+  padding:.7rem .95rem;display:inline-flex;align-items:center;}
+.sv-pwa-editor-heading {margin-bottom:1.2rem;align-items:flex-start;}
+.sv-pwa-editor-heading h1 {text-transform:none;text-shadow:none;
+  font-size:clamp(1.7rem,4vw,2.45rem);letter-spacing:-.035em;}
+.sv-pwa-editor-modes {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:.5rem;margin:0 0 1.1rem;}
+.sv-pwa-editor-modes a {display:flex;align-items:center;justify-content:center;
+  text-align:center;gap:.5rem;text-decoration:none;
+  min-height:48px;padding:.7rem;
+  color:var(--muted);border:1px solid var(--border);
+  border-radius:10px;background:var(--panel-soft);font-size:.8rem;}
+.sv-pwa-editor-modes a.selected {color:var(--phosphor-strong);
+  border-color:var(--phosphor);background:var(--phosphor-faint);}
+.sv-pwa-editor .credential-form {border-radius:12px;}
+.sv-pwa-editor .terminal-input {max-width:100%;border-radius:8px;min-height:44px;}
+.sv-pwa-editor .access-button {min-height:49px;max-width:100%;white-space:normal;}
+@media(max-width:600px) {
+  .sv-pwa-editor {padding:1rem .8rem calc(2rem + env(safe-area-inset-bottom,0px));}
+  .sv-pwa-editor-modes {gap:.35rem;}
+  .sv-pwa-editor-modes a {font-size:.74rem;padding:.6rem .3rem;}
+  .sv-pwa-editor .credential-form {padding:1rem;}
+  .sv-pwa-editor .terminal-input {font-size:16px;}
 }
