@@ -143,3 +143,19 @@ test('native startup reports WebView initialization stages and isolates first Ra
   assert.match(root, /if \(!_shellReady\)/);
   assert.match(root, /Startup\.NotifyFirstRender\(\)/);
 });
+
+test('MAUI WebView and Controls use the same supported stable patch', () => {
+  const controls = project.match(/Microsoft\.Maui\.Controls" Version="([^"]+)"/)?.[1];
+  const hybrid = project.match(/Microsoft\.AspNetCore\.Components\.WebView\.Maui" Version="([^"]+)"/)?.[1];
+  assert.equal(controls, '10.0.120');
+  assert.equal(hybrid, controls,
+    'Mismatched MAUI/BlazorWebView packages can create native bridge compatibility problems');
+});
+
+test('Android bridge timeout includes safe WebView compatibility metadata', () => {
+  const page = fs.readFileSync(path.join(maui, 'MainPage.xaml.cs'), 'utf8');
+  assert.match(page, /Android\.Webkit\.WebView\.CurrentWebViewPackage/);
+  assert.match(page, /Android\.OS\.Build\.VERSION\.SdkInt/);
+  assert.match(page, /_androidWebViewInfo/);
+  assert.doesNotMatch(page, /JavaScriptInterface|AddJavascriptInterface/);
+});
