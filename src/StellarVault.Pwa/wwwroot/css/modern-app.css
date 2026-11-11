@@ -1,0 +1,173 @@
+/* StellarVault modern product UI — 2026-11. Final presentation layer.
+   Keeps the security flows and shared Razor components unchanged. */
+:root {
+  color-scheme: light;
+  --bg-0:#f3f7f6; --bg-1:#f7faf9;
+  --panel:#ffffff; --panel-soft:#f7faf9;
+  --phosphor:#146a56; --phosphor-strong:#154d43;
+  --phosphor-dim:#7aa89a; --phosphor-faint:rgba(22,124,95,.075);
+  --accent:#168568; --danger:#c33e50; --warning:#9d5d0c;
+  --shadow:rgba(21,58,50,.09); --border:#e1eae6; --muted:#667c76;
+  --sv-text:#19352e; --sv-radius:16px; --sv-radius-sm:11px;
+  --sv-shadow:0 8px 28px rgba(27,72,61,.055);
+  --sv-shadow-lg:0 18px 55px rgba(22,64,55,.14);
+}
+:root[data-theme="amber"] {
+  --bg-0:#f8f5ef;--bg-1:#faf8f4;--panel:#fffefa;--panel-soft:#faf7f0;
+  --phosphor:#90642b;--phosphor-strong:#534129;--phosphor-dim:#b4a185;
+  --phosphor-faint:rgba(155,108,35,.085);--accent:#9f702e;
+  --border:#ece4d6;--muted:#857866;--sv-text:#433c32;
+}
+:root, :root[data-theme="amber"] { --sv-crt-grid:none; --sv-crt-radius:var(--sv-radius); }
+html,body {background:var(--bg-0);color:var(--sv-text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--sv-text);}
+.screen-noise,.scanlines {display:none!important;}
+.sv-adaptive-shell {background:var(--bg-0);color:var(--sv-text);}
+.sv-adaptive-header {min-height:74px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.95);
+  box-shadow:none;backdrop-filter:blur(16px);}
+.sv-brand {gap:12px;}
+.sv-mark {width:41px;height:41px;border:0;border-radius:13px;
+  background:linear-gradient(140deg,#229775,#126b57);color:white;
+  box-shadow:0 4px 12px rgba(18,107,87,.18);font-size:13px;letter-spacing:-.03em;}
+.sv-brand strong {color:var(--sv-text);font-size:16px;font-weight:750;letter-spacing:-.025em;text-transform:none;}
+.sv-adaptive-shell .icon-button,.sv-network-menu > summary.sv-network-icon-trigger {
+  border-radius:12px!important;min-width:42px;min-height:42px;background:#f3f8f6;
+  color:var(--phosphor);border:1px solid var(--border);box-shadow:none;text-shadow:none;}
+.sv-network-popover {background:#fff;border:1px solid var(--border);box-shadow:var(--sv-shadow-lg);border-radius:16px!important;}
+.sv-pwa-app {background:var(--bg-0);border:0;grid-template-columns:228px minmax(0,1fr);}
+.sv-pwa-rail {background:#fff!important;border-right:1px solid var(--border);
+  padding:20px 12px;box-shadow:none!important;gap:5px;}
+.sv-pwa-rail-heading {display:none;}
+.sv-pwa-rail > button,.sv-pwa-rail-action {border:0!important;border-radius:11px!important;
+  background:transparent!important;color:#647b73;font:600 14px/1.3 inherit;
+  min-height:47px;letter-spacing:0;text-transform:none;}
+.sv-pwa-rail > button > span,.sv-pwa-rail-action > span {font-size:20px;color:#6b9c8a;}
+.sv-pwa-rail > button.selected {background:#e8f5ef!important;color:#156d51!important;}
+.sv-pwa-rail > button.selected > span {color:#157557;}
+.sv-pwa-rail > button:hover,.sv-pwa-rail-action:hover {background:#f1f7f4!important;color:var(--sv-text);}
+.sv-pwa-rail-divider {border-color:var(--border);}
+.sv-pwa-rail-foot {font-size:12px;color:var(--muted);letter-spacing:0;}
+.sv-pwa-led.connected {background:#22a978;box-shadow:none;}
+.sv-pwa-stage {padding:clamp(20px,3vw,36px);}
+.sv-pwa-vault-page {max-width:1500px;margin:auto;}
+.sv-pwa-screen-header {margin-bottom:22px;align-items:center;}
+.sv-pwa-screen-header h1 {font-size:clamp(25px,3vw,34px);font-weight:750;color:var(--sv-text);letter-spacing:-.04em;}
+.sv-pwa-screen-tools {gap:9px;}
+.sv-adaptive-shell .terminal-panel,
+.sv-adaptive-shell .record-card,
+.sv-adaptive-shell .sv-folder-tile,
+.sv-adaptive-shell .stats-strip,
+.sv-adaptive-shell .sv-pwa-task-tabs,
+.sv-adaptive-shell .sv-pwa-rail,
+.sv-adaptive-shell .sv-pwa-mobile-tabs,
+.sv-adaptive-shell .sv-pwa-editor-modes a,
+.sv-adaptive-shell .sv-access-storage-settings,
+.sv-adaptive-shell .sv-access-learn,
+.sv-adaptive-shell .sv-biometric-choice,
+.sv-adaptive-shell .sv-pwa-view-intro,
+.sv-adaptive-shell .sv-pwa-editor-breadcrumb a,
+.sv-adaptive-shell .sv-network-popover,
+.sv-adaptive-shell .sv-pwa-rail button.selected,
+.sv-adaptive-shell .sv-pwa-mobile-tabs button.selected,
+.sv-adaptive-shell .data-field,
+.sv-adaptive-shell .commit-preview,
+.sv-adaptive-shell .record-modal,
+.sv-adaptive-shell .sv-explorer-folder-panel {
+  background-image:none!important;background-color:#fff!important;
+  border-radius:var(--sv-radius)!important;border:1px solid var(--border);
+  box-shadow:var(--sv-shadow);color:var(--sv-text);
+}
+.sv-adaptive-shell .terminal-panel::before,.sv-adaptive-shell .terminal-panel::after {display:none!important;}
+.sv-adaptive-shell :is(h1,h2,h3,strong,.form-section-title,.panel-kicker,.terminal-label) {
+  font-family:inherit;text-shadow:none;letter-spacing:normal;text-transform:none;}
+.sv-adaptive-shell :is(h1,h2,h3) {color:var(--sv-text);font-weight:720;}
+.sv-adaptive-shell :is(.panel-kicker,.advanced-help,.page-subtitle) {color:var(--muted);line-height:1.55;}
+.sv-adaptive-shell .panel-kicker {font-size:12px;font-weight:600;letter-spacing:0;}
+.sv-adaptive-shell .pixel-button,.sv-adaptive-shell .icon-button,
+.sv-adaptive-shell .terminal-input,.sv-adaptive-shell .search-console,
+.sv-adaptive-shell .sv-pwa-task-tabs button,.sv-adaptive-shell .sv-pwa-editor-modes a {
+  border-radius:var(--sv-radius-sm)!important;box-shadow:none!important;
+  text-shadow:none;letter-spacing:0;text-transform:none;font-family:inherit;}
+.sv-adaptive-shell .pixel-button {background:#fff;color:var(--phosphor);border:1px solid #d8e6e0;
+  min-height:42px;padding:9px 15px;font-size:13px;font-weight:650;}
+.sv-adaptive-shell .pixel-button.primary,.sv-adaptive-shell .access-button.primary {
+  background:#168667;color:white;border-color:#168667;}
+.sv-adaptive-shell .pixel-button:hover:not(:disabled) {filter:brightness(.975);transform:none;}
+.sv-adaptive-shell .terminal-input {background:#fff;color:var(--sv-text);
+  border:1px solid #cfdfd7;min-height:46px;padding:11px 13px;max-width:100%;}
+.sv-adaptive-shell .terminal-input:focus {border-color:#168667;outline:3px solid rgba(22,134,103,.13);}
+.sv-adaptive-shell .terminal-label {font-size:12px;color:#516b61;font-weight:650;}
+.sv-adaptive-shell .terminal-alert {border-radius:12px;border-width:1px;box-shadow:none;}
+.sv-adaptive-shell .terminal-alert.warning {background:#fff6e9;color:#745018;border-color:#f0dcb9;}
+.sv-adaptive-shell .terminal-alert.error {background:#fff0f0;color:#9b3548;border-color:#f1ccd2;}
+.sv-adaptive-shell :is(.sv-explorer-tree,.sv-explorer-folder-panel) {background-color:#fff!important;box-shadow:var(--sv-shadow);}
+.sv-explorer-layout {grid-template-columns:minmax(190px,238px) minmax(0,1fr);gap:18px;}
+.sv-explorer-tree {padding:14px 10px;max-height:calc(100dvh - 160px);}
+.sv-explorer-tree-title {color:#6e8179;font-weight:650;text-transform:none;font-size:13px;letter-spacing:0;}
+.sv-tree-item {color:#4c695d;font:500 13px/1.35 inherit;border-radius:9px!important;
+  margin:2px 0;min-height:41px;}
+.sv-tree-item.selected,.sv-tree-item:hover {background:#eaf6ef;border-color:transparent;color:#157253;}
+.sv-tree-folder-icon {color:#1b9976!important;}
+.sv-explorer-folder-panel {padding:15px 19px;}
+.sv-explorer-breadcrumbs {gap:6px;font-size:13px;}
+.sv-explorer-main .sv-folder-grid {grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:13px;}
+.sv-explorer-main .record-list {grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:13px;}
+.sv-adaptive-shell .record-card,.sv-adaptive-shell .sv-folder-tile {
+  padding:17px;border:1px solid var(--border);border-radius:14px!important;
+  background:#fff!important;box-shadow:0 3px 14px rgba(24,70,59,.045);
+  min-height:99px;transition:border-color .15s,box-shadow .15s,transform .15s;
+}
+.sv-adaptive-shell .record-card:hover,.sv-adaptive-shell .sv-folder-tile:hover {
+  background:#fff!important;border-color:#9acfb8;box-shadow:var(--sv-shadow);transform:translateY(-1px);
+}
+.sv-adaptive-shell .record-card-body strong {color:var(--sv-text);font-size:14px;font-weight:680;}
+.sv-adaptive-shell .record-card-body small {color:#748980;font-size:11px;}
+.sv-adaptive-shell .record-index {color:#8ca99c;}
+.sv-adaptive-shell .tag-row {gap:5px;}
+.sv-pwa-summary {margin-bottom:22px;box-shadow:none!important;background:#fff;}
+.sv-pwa-summary strong {color:#185c46;}
+.sv-adaptive-shell .record-modal {max-width:560px;border-radius:19px!important;}
+.sv-adaptive-shell .modal-backdrop {background:rgba(17,36,30,.36);backdrop-filter:blur(5px);}
+.sv-adaptive-shell .sv-pwa-mobile-tabs {background:#fff!important;border-top:1px solid var(--border);box-shadow:0 -5px 25px rgba(22,63,52,.075);}
+.sv-adaptive-shell .sv-pwa-mobile-tabs :is(button,a) {color:#7d9489;font-weight:600;border-radius:11px!important;}
+.sv-adaptive-shell .sv-pwa-mobile-tabs button.selected {background:#e7f5ee!important;box-shadow:none;color:#167653;}
+.sv-adaptive-shell .sv-pwa-task-tabs {background:#eef4f1!important;box-shadow:none;border-radius:13px!important;}
+.sv-adaptive-shell .sv-pwa-task-tabs button.selected {background:#fff;color:#176b53;border-color:transparent;box-shadow:0 2px 8px rgba(20,79,60,.08);}
+.sv-pwa-editor {max-width:760px;}
+.sv-adaptive-shell .sv-pwa-editor-modes a.selected {background:#e8f5ef!important;color:#167252;}
+.sv-adaptive-shell .sv-pwa-editor-breadcrumb a {box-shadow:none;}
+/* Detail dialogue becomes a right-hand inspector in wide desktop workspaces.
+   Keep native modal semantics, focus and close behavior intact. */
+@media(min-width:1100px) {
+  .sv-adaptive-shell .modal-backdrop:has(#sv-record-title) {
+    justify-content:flex-end;align-items:stretch;padding:0;
+    background:rgba(11,36,27,.14);backdrop-filter:none;
+  }
+  .sv-adaptive-shell .record-modal:has(#sv-record-title) {
+    height:100%;max-height:100dvh;width:min(450px,40vw);
+    max-width:none!important;margin:0;overflow-y:auto;
+    border-radius:20px 0 0 20px!important;box-shadow:var(--sv-shadow-lg);
+    padding:25px;
+  }
+}
+@media(max-width:840px){
+  .sv-pwa-app {grid-template-columns:minmax(0,1fr);}
+  .sv-pwa-stage {padding:18px 15px calc(110px + env(safe-area-inset-bottom,0px));}
+  .sv-explorer-layout {grid-template-columns:minmax(0,1fr);}
+  .sv-explorer-tree {display:none;}
+  .sv-explorer-main .record-list {grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+  .sv-explorer-main .sv-folder-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;}
+}
+@media(max-width:560px){
+  .sv-adaptive-header {min-height:62px;}
+  .sv-pwa-stage {padding:16px 12px calc(110px + env(safe-area-inset-bottom,0px));}
+  .sv-pwa-screen-header h1 {font-size:25px;}
+  .sv-adaptive-shell .record-card,.sv-adaptive-shell .sv-folder-tile {padding:14px;min-height:105px;}
+  .sv-adaptive-shell .record-modal {width:100%;max-height:100dvh;border-radius:20px 20px 0 0!important;
+    margin-top:auto;overflow-y:auto;}
+  .sv-adaptive-shell .modal-backdrop {align-items:flex-end;padding:0;}
+}
+@media(prefers-reduced-motion:reduce){
+  .sv-adaptive-shell * {transition:none!important;animation:none!important;}
+}
