@@ -293,3 +293,25 @@ test('PWA access starts with recovery phrase and network icon in the header', ()
   assert.match(access, /sv-access-storage-settings/);
   assert.doesNotMatch(access, /<h2>Unlock your vault<\/h2>/);
 });
+
+test('PWA desktop explorer and mobile object storage share one folder model', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  assert.match(vault, /sv-explorer-layout/);
+  assert.match(vault, /sv-explorer-tree/);
+  assert.match(vault, /sv-explorer-main/);
+  assert.match(vault, /FolderDepth\(folder.Id\)/);
+  assert.match(vault, /OpenFolder\(folder.Id\)/);
+  assert.match(css, /\.sv-explorer-tree/);
+  assert.match(css, /\.sv-explorer-main \.record-list/);
+  assert.match(css, /@media\(max-width:1040px\)/);
+  assert.match(css, /@media\(max-width:540px\)/);
+});
+
+test('PWA terminal surfaces share squared pixel geometry and a faint dotted texture', () => {
+  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  assert.match(css, /--sv-crt-radius:\s*2px/);
+  assert.match(css, /--sv-crt-grid:/);
+  assert.match(css, /\.sv-adaptive-shell :is\(\.terminal-panel, \.record-card/);
+  assert.match(css, /background-image:var\(--sv-crt-grid\) !important/);
+});
