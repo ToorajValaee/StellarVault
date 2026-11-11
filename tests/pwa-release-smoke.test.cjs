@@ -362,3 +362,18 @@ test('Screenshot regressions: inspector uses one width reservation and entry has
   assert.doesNotMatch(css, /--bg-0:\s*#020604/);
   assert.doesNotMatch(css, /font-family:\s*"Courier New"/);
 });
+
+
+test('Explorer rows expose individual action menus and the inspector never centers the workspace', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(vault, /class="sv-object-row/);
+  assert.match(vault, /class="sv-object-actions"/);
+  assert.match(vault, /Actions for folder/);
+  assert.match(vault, /Actions for \{item.Title\}/);
+  assert.doesNotMatch(vault, /<small>📁 @FolderPath\(item.FolderId\)<\/small>/);
+  assert.match(css, /\.sv-web-shell:has\(\.sv-pwa-app\) > \.sv-adaptive-main/);
+  assert.match(css, /width:calc\(100% - var\(--sv-record-inspector-width\)\)/);
+  assert.match(css, /\.sv-explorer-tree \.sv-tree-item\.selected/);
+  assert.match(css, /\.sv-object-menu/);
+});
