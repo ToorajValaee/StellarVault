@@ -189,7 +189,7 @@ test('native header network menu discovers a verified custom Horizon passphrase'
   assert.match(component, /SelectNativeNetwork\("custom"\)/);
   assert.match(component, /stellarVaultV2Network\.probeCustom/);
   assert.match(component, /NetworkSelection\.ConfigureCustom\(detected\)/);
-  assert.match(component, /NetworkSelection\.CustomHorizonUrl = _customHorizon\.Trim\(\)/);
+  assert.match(component, /NetworkSelection\.CustomHorizonUrl = requestedHorizon/);
   assert.match(component, /_ledgerNetwork == "custom" && !CustomNetworkReady/);
   assert.doesNotMatch(component, /class="sv-native-network-settings"/);
   assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
