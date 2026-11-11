@@ -59,6 +59,8 @@
 
             @if (Platform == "WEB PWA")
             {
+                <div class="terminal-label">Recovery phrase</div>
+                <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
                 @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
                     <details class="sv-access-learn"><summary>Saved device vault</summary>
@@ -66,8 +68,7 @@
                         <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">Forget saved account</button>
                     </details>
                 }
-                <div class="terminal-label">Recovery phrase</div>
-                <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
+
                 <details class="sv-access-storage-settings" open="@_enableLocalStorage">
                     <summary>Save encrypted items on this device (optional)</summary>
                     <fieldset class="sv-access-storage-choices">
