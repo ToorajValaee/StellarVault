@@ -72,12 +72,30 @@ else
             @if (!Ledger.IsConnected)
             {
                 <p>Enter your recovery phrase to access your records.</p>
+                <details class="sv-native-network-settings" @key="_ledgerNetwork">
+                    <summary>Network: @(_ledgerNetwork == "testnet" ? "Testnet" : _ledgerNetwork == "public" ? "Mainnet" : "Custom")</summary>
+                    <div class="sv-native-network-choice" role="group" aria-label="Choose Stellar network">
+                        <button type="button" class="pixel-button compact @(_ledgerNetwork == "testnet" ? "primary" : "")"
+                            disabled="@(_ledgerBusy || Sessions.IsUnlocked)"
+                            @onclick='() => SelectNativeNetwork("testnet")'>Testnet</button>
+                        <button type="button" class="pixel-button compact @(_ledgerNetwork == "public" ? "primary" : "")"
+                            disabled="@(_ledgerBusy || Sessions.IsUnlocked)"
+                            @onclick='() => SelectNativeNetwork("public")'>Mainnet</button>
+                    </div>
+                    <p class="sv-native-subtle-status">Testnet is for trying the app. Mainnet uses real XLM.</p>
+                </details>
+                @if (_ledgerNetwork == "public")
+                {
+                    <label class="sv-native-mainnet-consent">
+                        <input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_ledgerBusy" />
+                        I understand that Mainnet uses real funds and approved transactions may cost XLM.
+                    </label>
+                }
                 <label class="terminal-label" for="native-ledger-mnemonic">Recovery phrase</label>
                 <VaultMnemonicInput @bind-Value="_ledgerMnemonic" Disabled="@(_ledgerBusy || _runtimeReady != true)" />
                 @if (_runtimeReady is null || (_runtimeReady == false && _ledgerBusy))
                 { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
-                @if (_ledgerNetwork == "public")
-                { <p class="terminal-alert warning" role="alert">Mainnet uses real XLM for approved transactions. Review costs before publishing.</p> }
+
             }
             else
             {
@@ -319,7 +337,7 @@ else
                 {
                     <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
-                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
+                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic) || (_ledgerNetwork == "public" && !_confirmMainnetAccess))"
                             @onclick="ConnectLedgerAsync">Connect Stellar</button>
                 }
             }
@@ -435,6 +453,18 @@ else
             _ledgerMessage = "Unable to prepare a secure connection. Restart the app or try again.";
         }
         finally { _ledgerBusy = false; }
+    }
+
+    private bool _confirmMainnetAccess;
+
+    private void SelectNativeNetwork(string network)
+    {
+        if (network is not ("testnet" or "public") || Ledger.IsConnected ||
+            Sessions.IsUnlocked || _ledgerBusy) return;
+        NetworkSelection.ChoosePreset(network);
+        _confirmMainnetAccess = false;
+        _ledgerMnemonic = string.Empty;
+        _ledgerMessage = null;
     }
 
     private string _ledgerNetwork => NetworkSelection.SelectedPreset;
@@ -943,7 +973,8 @@ else
 
     private async Task ConnectLedgerAsync()
     {
-        if (_ledgerBusy || Ledger.IsConnected || _runtimeReady != true) return;
+        if (_ledgerBusy || Ledger.IsConnected || _runtimeReady != true ||
+            (_ledgerNetwork == "public" && !_confirmMainnetAccess)) return;
         _ledgerBusy = true;
         _ledgerMessage = null;
         try
