@@ -3375,3 +3375,17 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
     position:absolute;right:5px;top:5px;
   }
 }
+
+
+/* Explorer action popovers may extend beyond their row; avoid clipping by
+   the explorer's original overflow:hidden border radius. */
+.sv-web-shell .sv-explorer-layout,
+.sv-web-shell .sv-explorer-main,
+.sv-web-shell .sv-explorer-main .record-list,
+.sv-web-shell .sv-explorer-main .sv-folder-grid,
+.sv-web-shell .sv-explorer-folder-panel {overflow:visible!important;}
+.sv-web-shell .sv-explorer-layout {border-radius:15px!important;}
+.sv-web-shell .sv-explorer-main .sv-object-row:has(.sv-object-actions[open]),
+.sv-web-shell .sv-explorer-main .sv-folder-tile:has(.sv-object-actions[open]) {
+  z-index:20;
+}
