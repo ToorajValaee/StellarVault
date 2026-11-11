@@ -36,8 +36,6 @@ else
             <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark sv-rail-shield" aria-hidden="true"><svg viewBox="0 0 32 36" width="27" height="30" fill="none"><path d="M16 2 29 7v11c0 8-6.2 13.5-13 16C9.2 31.5 3 26 3 18V7L16 2Z" fill="currentColor"/><path d="m16 9 2.7 6.3L25 18l-6.3 2.7L16 27l-2.7-6.3L7 18l6.3-2.7L16 9Z" fill="#084839"/></svg></span><span><strong>StellarVault</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span class="sv-nav-vault-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1"/></svg></span> Vault</button>
-            <button type="button" class="sv-sidebar-folder-link"
-                    @onclick='() => { SelectAppView("records"); _folder = null; }'><span aria-hidden="true">▱</span> Folders</button>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
                 <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
@@ -100,7 +98,7 @@ else
         }
         @if (_appView == "settings")
         {
-            <section class="sv-modern-settings" aria-label="Vault settings">
+            <section class="sv-modern-settings sv-workspace-surface" aria-label="Vault settings">
                 <div class="terminal-panel sv-modern-settings-section">
                     <h2>Connection</h2>
                     <div class="sv-modern-setting-row">
@@ -126,10 +124,11 @@ else
         @if (_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
             
-            <VaultHybridDraftEditor />
+            <div class="sv-drafts-workspace sv-workspace-surface" aria-label="Encrypted local drafts"><VaultHybridDraftEditor /></div>
         }
         @if (_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
+            <div class="sv-sync-workspace sv-workspace-surface" aria-label="Synchronization workspace">
             <nav class="sv-pwa-task-tabs" aria-label="Hybrid Sync task">
                 <button type="button" class="@(_syncTask == "review" ? "selected" : "")" aria-pressed="@(_syncTask == "review")"
                         @onclick='() => _syncTask = "review"'>Review sync</button>
