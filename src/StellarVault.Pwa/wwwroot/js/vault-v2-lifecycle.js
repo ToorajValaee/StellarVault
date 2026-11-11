@@ -24,21 +24,24 @@ document.addEventListener('keydown', event => {
     document.querySelectorAll('details.sv-network-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
 
+// Semantic light/dark theme. Keep theme preference independent of vault secrets.
 window.stellarVaultTheme = (() => {
   const key = 'stellar-vault-theme';
+  const normalize = value => value === 'dark' || value === 'amber' ? 'dark' : 'light';
   function apply(value) {
-    const next = value === 'amber' ? 'amber' : 'green';
+    const next = normalize(value);
     document.documentElement.dataset.theme = next;
+    document.documentElement.style.colorScheme = next;
     try { localStorage.setItem(key, next); } catch (_) {}
     return next;
   }
   function initialize() {
-    let saved = 'green';
+    let saved = 'light';
     try { saved = localStorage.getItem(key) || saved; } catch (_) {}
     return apply(saved);
   }
   function toggle() {
-    return apply(document.documentElement.dataset.theme === 'amber' ? 'green' : 'amber');
+    return apply(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   }
   return Object.freeze({ initialize, toggle });
 })();
