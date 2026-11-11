@@ -3741,3 +3741,71 @@ html .sv-web-shell .sv-editor-embedded .sv-adaptive-main {min-height:0!important
 .sv-web-shell .sv-modern-fab {
   border:0!important;cursor:pointer;font-family:inherit;
 }
+
+
+/* 2026-11: embedded editor is a form surface, never a second app grid.
+   Explicit classes avoid the broad .sv-pwa-app selectors that previously made
+   Add/Edit appear blank or placed it outside the inspector's visible column. */
+.sv-web-shell .sv-editor-sidecar {
+  min-width:0!important;box-sizing:border-box;overflow-x:hidden!important;
+}
+.sv-web-shell .sv-editor-sidecar .sv-editor-host,
+.sv-web-shell .sv-editor-sidecar .sv-inline-editor-layout,
+.sv-web-shell .sv-editor-sidecar .sv-inline-editor-stage,
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor {
+  display:block!important;position:static!important;
+  width:100%!important;min-width:0!important;max-width:none!important;
+  height:auto!important;min-height:0!important;
+  margin:0!important;padding:0!important;
+  background:transparent!important;box-shadow:none!important;
+  opacity:1!important;visibility:visible!important;
+  transform:none!important;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor > .credential-form,
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor > .terminal-panel {
+  display:flex!important;flex-direction:column!important;gap:9px!important;
+  width:100%!important;max-width:none!important;min-width:0!important;
+  margin:0!important;padding:12px 0!important;
+  background:#fff!important;border:0!important;box-shadow:none!important;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor :is(input,select,textarea) {
+  max-width:100%!important;min-width:0!important;box-sizing:border-box;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor-modes {
+  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:7px!important;margin:12px 0 18px!important;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor-modes > button {
+  width:100%!important;min-width:0!important;min-height:40px!important;
+  padding:8px 5px!important;border:1px solid #dce7e2!important;
+  background:#fff!important;border-radius:8px!important;
+  color:#36564e!important;cursor:pointer;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor-modes > button.selected {
+  background:#e6f6ed!important;border-color:#92d2b1!important;color:#087657!important;
+}
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor-heading,
+.sv-web-shell .sv-editor-sidecar .sv-pwa-editor-breadcrumb {display:none!important;}
+/* File explorer rows: folder icon and name share the record/file text origin,
+   never inherit the pixel-button centered text treatment. */
+.sv-web-shell .sv-explorer-main .sv-folder-tile .sv-folder-open {
+  justify-content:flex-start!important;text-align:left!important;
+  align-self:stretch!important;gap:12px!important;
+}
+.sv-web-shell .sv-explorer-main .sv-folder-tile .sv-folder-open > span:first-child {
+  display:inline-flex!important;align-items:center;justify-content:center;
+  flex:0 0 40px!important;width:40px!important;height:40px!important;
+  line-height:1!important;font-size:26px!important;
+}
+.sv-web-shell .sv-explorer-main .sv-folder-tile .sv-folder-open > span:last-child {
+  flex:1!important;min-width:0!important;margin:0!important;padding:0!important;
+  text-align:left!important;justify-self:start!important;
+  font-weight:650!important;font-size:13px!important;
+}
+.sv-web-shell .sv-explorer-main .sv-object-row .sv-modern-record {
+  justify-content:flex-start!important;text-align:left!important;
+}
+.sv-web-shell .sv-explorer-main .sv-object-row .sv-modern-record-icon {
+  display:inline-flex!important;align-items:center;justify-content:center;
+  flex:0 0 40px!important;width:40px!important;height:40px!important;
+}
