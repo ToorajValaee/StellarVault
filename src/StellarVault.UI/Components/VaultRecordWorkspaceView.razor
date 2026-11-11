@@ -3,30 +3,37 @@
 
 <section class="form-page" aria-label="Encrypted text records">
     <header class="page-command-header">
-        <div>
-            <div class="panel-kicker">WRITE OPERATION // LOCAL ENCRYPTED RECORD</div>
-            <h2>ADD RECORD</h2>
-            <p class="page-subtitle">Original terminal-style record editor. This local workspace does not publish to Stellar.</p>
-        </div>
-        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="RefreshAsync">REFRESH LIST</button>
+        <h2>@(_editingScreen ? (_version is null ? "New record" : "Edit record") : "Device records")</h2>
+        @if (_editingScreen)
+        {
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="BackToList">← Back</button>
+        }
+        else
+        {
+            <div class="sv-access-actions">
+                <button type="button" class="pixel-button primary" disabled="@_busy" @onclick="NewRecord">＋ New record</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="RefreshAsync">Refresh</button>
+            </div>
+        }
     </header>
     @if (_busy) { <div class="terminal-alert" role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> PROCESSING ENCRYPTED RECORD...</div> }
+    @if (_editingScreen)
+    {
     <div class="terminal-panel credential-form">
-        <div class="form-section-title"><span>01</span> RECORD IDENTITY</div>
+        <div class="form-section-title">Record</div>
         <label class="terminal-label" for="sv-record-name">TITLE / RECORD NAME *</label>
         <input id="sv-record-name" class="terminal-input" maxlength="512" @bind="_name"
                @bind:event="oninput" disabled="@_busy" autocomplete="off" placeholder="Record name" />
-        <div class="form-section-title"><span>02</span> ENCRYPTED CONTENT</div>
+        <div class="form-section-title">Content</div>
         <label class="terminal-label" for="sv-record-content">RECORD DATA *</label>
         <textarea id="sv-record-content" class="terminal-input terminal-textarea" rows="8"
                   @bind="_text" @bind:event="oninput" disabled="@_busy"
                   placeholder="Enter information to encrypt"></textarea>
-        <div class="commit-preview">
-            <span>MODE</span><strong>LOCAL ENCRYPTED DATABASE</strong>
-            <span>STORAGE</span><strong>BROWSER INDEXEDDB — NOT LEDGER</strong>
-        </div>
+        <details class="sv-native-help"><summary>About local records</summary>
+            <p>These encrypted records stay on this device and are not published to Stellar.</p>
+        </details>
         <div class="sv-access-actions">
-            <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="NewRecord">NEW</button>
+            
             <button class="pixel-button primary" type="button"
                     disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" @onclick="SaveAsync">
                 @(_busy ? "PROCESSING..." : "SAVE ENCRYPTED RECORD")
@@ -39,6 +46,9 @@
             <div class="terminal-alert" role="status"><strong>RECORD STATUS</strong><span>@_message</span></div>
         }
     </div>
+    }
+    else
+    {
     <section class="terminal-panel">
         <div class="panel-kicker">STORED RECORDS</div>
         <h3>RECORD DIRECTORY</h3>
@@ -61,6 +71,11 @@
             </ul>
         }
     </section>
+    }
+    @if (!_editingScreen && !string.IsNullOrEmpty(_message))
+    {
+        <p class="terminal-alert" role="status">@_message</p>
+    }
 </section>
 
 @code {
@@ -70,6 +85,7 @@
     private string _text = string.Empty;
     private StellarVault.Core.Abstractions.VaultRecordPointer? _version;
     private bool _busy;
+    private bool _editingScreen;
     private string? _message;
 
     protected override async Task OnInitializedAsync() => await RefreshAsync();
@@ -95,6 +111,7 @@
     {
         var record = await Workspace.ReadTextAsync(name);
         if (record is null) { _message = "Record not found."; return; }
+        _editingScreen = true;
         _name = record.Name;
         _loadedName = record.Name;
         _text = record.Text;
@@ -103,11 +120,21 @@
 
     private void NewRecord()
     {
+        _editingScreen = true;
         _name = string.Empty;
         _loadedName = null;
         _text = string.Empty;
         _version = null;
         _message = null;
+    }
+
+    private void BackToList()
+    {
+        if (_busy) return;
+        _editingScreen = false;
+        _version = null;
+        _loadedName = null;
+        _name = _text = string.Empty;
     }
 
     private Task SaveAsync() => RunAsync(async () =>
@@ -124,6 +151,7 @@
         _loadedName = _name;
         _items = await Workspace.ListAsync();
         _message = "Encrypted record saved.";
+        _editingScreen = false;
     });
 
     private Task DeleteAsync() => RunAsync(async () =>
@@ -136,6 +164,7 @@
         await Workspace.DeleteAsync(_name, _version);
         NewRecord();
         _items = await Workspace.ListAsync();
+        _editingScreen = false;
         _message = "Record hidden from catalog; ciphertext may remain in history.";
     });
 }
