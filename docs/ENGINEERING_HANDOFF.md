@@ -645,3 +645,14 @@ The user is introducing the browser/PWA as the primary early-access preview whil
 - `tests/pwa-release-smoke.test.cjs` covers task destinations, on-chain browser retention, no accidental duplicate local editor, Sync components and focused editor route. `docs/PWA_APP_UX_ACCEPTANCE.md` records manual browser/mobile and security acceptance before distributing beyond a limited test cohort.
 
 These commits are **presentation changes, not a completed security audit or a live Testnet E2E certification**. The PWA cannot be claimed production-ready from CI alone; verify actual mobile keyboard, privacy lock, installed service-worker upgrade, on-chain fee approval and offline/Sync interruption behavior before introducing it to users with real assets or secrets. MAUI core/host and Hybrid file policy remain unchanged.
+
+
+## 2026-11-11 — Android emulator WebView bridge compatibility hypothesis
+
+Latest emulator screenshot reports **"WebView initialized; waiting for Blazor bridge"**. This proves MAUI reached `BlazorWebViewInitialized` and the 12-second native watchdog; it does not prove that `_framework/blazor.webview.js` was successfully loaded or parsed. Minimal Razor root rendering was already isolated on a preceding commit, so do not resume UI redesign as a startup workaround.
+
+Source inspection identified a material version mismatch: `Microsoft.Maui.Controls` was 10.0.30 but `Microsoft.AspNetCore.Components.WebView.Maui` was **10.0.0**. Both are now pinned to matched **10.0.120** stable .NET 10 packages (published 2026-10-21). This should remove a plausible bridge compatibility risk, but the user's emulator has not retested it. The native initialization callback now captures OS API level and `Android.Webkit.WebView.CurrentWebViewPackage.VersionName`, logs those public metadata through the existing credential-free `StellarVaultStartup` logcat tag, and shows them alongside the last reached stage on timeout. Test coverage checks package alignment and safe diagnostics.
+
+There are public upstream reports of WebView bridge `Uncaught SyntaxError` / `Blazor is not defined` on older Android 11/12 emulators and System WebView builds (dotnet/maui#32860, dotnet/aspnetcore#53699). If the matched-patch APK still stalls, compare the emulator API level and installed Android System WebView/Chrome version and request narrow `adb logcat -d -s StellarVaultStartup chromium AndroidRuntime` output; neither the screenshot nor successful CI proves the user's emulator version. Prefer updating the emulator WebView or using a recent API 35+ emulator as an A/B test, not arbitrarily weakening Android or Blazor browser security.
+
+**Unresolved:** Android interactive first-render confirmation and on-device Hybrid offline/transaction acceptance. Preserve PWA-first priority and signed-transaction safety boundaries.
