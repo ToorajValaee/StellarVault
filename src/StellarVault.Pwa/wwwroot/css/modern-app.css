@@ -211,3 +211,28 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
   .sv-modern-search {margin:8px 0 17px;}
   .sv-explorer-main .sv-folder-tile {padding:12px;}
 }
+
+/* Real Settings destination, not a mock tab. */
+.sv-modern-settings {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));
+  align-items:start;gap:16px;}
+.sv-modern-settings .sv-modern-settings-section {margin:0;padding:25px;}
+.sv-modern-settings h2 {font-size:18px;margin:0 0 16px;line-height:1.35;}
+.sv-modern-setting-row {display:flex;align-items:center;justify-content:space-between;
+  gap:15px;border-top:1px solid var(--border);padding:16px 0;}
+.sv-modern-setting-row strong {font-size:14px;font-weight:650;}
+.sv-modern-setting-row p {font-size:12px;margin:5px 0 0;color:var(--muted);line-height:1.5;}
+.sv-modern-setting-status {display:inline-flex;flex:none;align-items:center;
+  padding:7px 10px;border-radius:20px;background:#edf6f1;color:#177055;
+  font-size:11px;font-weight:650;}
+.sv-modern-fab {display:none;}
+@media(max-width:840px) {
+  .sv-modern-fab {position:fixed;display:grid;place-items:center;z-index:165;
+    right:18px;bottom:calc(94px + env(safe-area-inset-bottom,0px));
+    width:55px;height:55px;border-radius:17px;
+    background:#168568;color:#fff;text-decoration:none;
+    box-shadow:0 9px 25px rgba(17,109,78,.29);
+    font-size:30px;line-height:1;font-weight:400;}
+  .sv-modern-fab:focus-visible {outline:3px solid #80c5a9;outline-offset:3px;}
+  .sv-modern-settings {grid-template-columns:minmax(0,1fr);}
+  .sv-modern-settings .sv-modern-settings-section {padding:19px;}
+}
