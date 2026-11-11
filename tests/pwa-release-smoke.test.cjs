@@ -504,3 +504,28 @@ test('Vault query navigation uses one combined OnParametersSet override', () => 
   assert.match(vault, /if \(!string\.IsNullOrEmpty\(InitialFolder\)\) _folder = InitialFolder/);
   assert.match(vault, /if \(RequestedView == "help"\) _appView = "help"/);
 });
+
+test('Vault inspector, Settings, Drafts and Sync use the unified light-dark workspace theme', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const shared = path.join(root, '..', '..', 'StellarVault.UI', 'Components');
+  const drafts = fs.readFileSync(path.join(shared, 'VaultHybridDraftEditor.razor'), 'utf8');
+  const sync = fs.readFileSync(path.join(shared, 'VaultHybridSyncReview.razor'), 'utf8');
+  const remote = fs.readFileSync(path.join(shared, 'VaultHybridRemoteChanges.razor'), 'utf8');
+  const sidebar = vault.slice(vault.indexOf('<nav class="sv-pwa-rail"'), vault.indexOf('</nav>') + 6);
+  assert.doesNotMatch(sidebar, /sv-sidebar-folder-link|> Folders<\/button>/);
+  assert.doesNotMatch(editor, /ENCRYPT → CHUNK → SIGN → SUBMIT/);
+  assert.doesNotMatch(editor, /<span>MODE<\/span>|<span>TARGET<\/span>/);
+  assert.match(vault, /sv-modern-settings sv-workspace-surface/);
+  assert.match(vault, /sv-drafts-workspace sv-workspace-surface/);
+  assert.match(vault, /sv-sync-workspace sv-workspace-surface/);
+  assert.match(drafts, /sv-hybrid-drafts-panel/);
+  assert.match(sync, /sv-hybrid-sync-panel/);
+  assert.match(remote, /sv-hybrid-remote-panel/);
+  assert.match(css, /--sv-work-panel:#1c2e32/);
+  assert.match(css, /\.sv-modern-settings \.sv-modern-settings-section/);
+  assert.match(css, /\.sv-workspace-surface \.sv-hybrid-panel/);
+  assert.match(css, /\.sv-record-inspector:has\(#sv-record-title\)/);
+  assert.match(css, /\.sv-record-inspector \.sv-inspector-tabs button\.selected/);
+});
