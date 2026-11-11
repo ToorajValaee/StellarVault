@@ -425,3 +425,17 @@ test('Add/Edit route only forwards navigation parameters to a reusable editor', 
   assert.doesNotMatch(reusable, /@page/);
   assert.match(reusable, /OnSaved.InvokeAsync/);
 });
+
+test('Network preference contains only non-secret metadata and custom network must be redetected', () => {
+  const js = fs.readFileSync(path.join(root, 'js', 'vault-v2-network.js'), 'utf8');
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  assert.match(js, /stellarVaultNetworkPreference/);
+  assert.match(js, /stellar-vault-v2-network-preference/);
+  assert.match(js, /horizonUrl/);
+  assert.doesNotMatch(js.slice(js.indexOf('window.stellarVaultNetworkPreference')), /networkPassphrase|mnemonic|secretKey/);
+  assert.match(home, /stellarVaultNetworkPreference\.load/);
+  assert.match(home, /stellarVaultNetworkPreference\.save/);
+  assert.match(home, /NetworkSelection\.ResetCustom\(\)/);
+  assert.match(home, /Custom Horizon remembered\. Detect the network again before unlocking/);
+  assert.match(home, /EARLY ACCESS — USE TEST ACCOUNTS ONLY/);
+});
