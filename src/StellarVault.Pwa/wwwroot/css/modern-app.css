@@ -3591,3 +3591,43 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
 .sv-web-shell .sv-network-popover .sv-network-popup-title {font-size:16px!important;
  font-weight:750!important;color:#1c3e36!important;letter-spacing:0!important;}
 .sv-web-shell .sv-network-popover .advanced-help {font-size:12px!important;line-height:1.5;}
+
+
+/* Specificity guard: old :has(#sv-record-title) rules must not reclaim inspector width. */
+@media(min-width:1100px) {
+ .sv-web-shell .sv-record-inspector-backdrop:has(#sv-record-title) {
+   position:fixed!important;inset:74px 0 0 auto!important;
+   width:var(--sv-record-inspector-width)!important;min-width:320px!important;
+   height:calc(100dvh - 74px)!important;max-width:none!important;
+   background:transparent!important;backdrop-filter:none!important;
+   padding:0!important;pointer-events:none!important;
+ }
+ .sv-web-shell .sv-record-inspector:has(#sv-record-title) {
+   position:relative!important;width:100%!important;min-width:0!important;
+   max-width:none!important;height:100%!important;max-height:100%!important;
+   margin:0!important;border-radius:0!important;overflow-y:auto!important;
+   padding:21px 23px 25px!important;pointer-events:auto!important;
+ }
+}
+/* Consistent secondary panels and interaction controls throughout PWA tasks. */
+.sv-web-shell :is(.sv-access-learn,.sv-access-storage-settings,.sv-biometric-choice,
+ .terminal-panel,.approval-modal,.sv-account-info-modal,.record-modal,.network-option) {
+ background-image:none!important;text-shadow:none!important;}
+.sv-web-shell :is(.sv-access-learn,.sv-access-storage-settings) {
+ border:1px solid #dbe8e2!important;border-radius:12px!important;
+ background:#f8fbfa!important;box-shadow:none!important;color:#2d5348!important;}
+.sv-web-shell :is(.sv-access-learn,.sv-access-storage-settings) > summary {
+ cursor:pointer;padding:8px 3px;color:#255244;font:650 13px/1.5 Inter,"Segoe UI",Arial,sans-serif;}
+.sv-web-shell :is(.sv-access-learn,.sv-access-storage-settings) > summary:focus-visible {
+ outline:3px solid rgba(8,125,86,.22)!important;outline-offset:2px!important;}
+.sv-web-shell .terminal-alert {box-shadow:none!important;
+ border-radius:12px!important;font:500 13px/1.5 Inter,"Segoe UI",Arial,sans-serif!important;
+ letter-spacing:0!important;text-transform:none!important;}
+.sv-web-shell .terminal-alert.warning {background:#fff8ea!important;border-color:#edddb8!important;color:#795d2c!important;}
+.sv-web-shell .terminal-alert.error {background:#fff0f2!important;border-color:#eed0d7!important;color:#994355!important;}
+.sv-web-shell .approval-modal,.sv-web-shell .sv-account-info-modal {
+ background:#fff!important;border:1px solid #dce7e5!important;
+ border-radius:18px!important;box-shadow:0 22px 75px rgba(20,52,45,.17)!important;}
+.sv-web-shell .sv-network-menu .sv-network-popover :is(button,input,label) {max-width:100%;min-width:0;}
+.sv-web-shell .sv-network-menu .sv-network-popover .terminal-input {box-sizing:border-box;}
+.sv-web-shell .sv-access-actions,.sv-web-shell .modal-action-row {gap:10px;align-items:center;}
