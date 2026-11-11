@@ -18,21 +18,21 @@
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
 @if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
-    <section class="terminal-panel centered-message"><h1>DATABASE LOCKED</h1><a class="pixel-button primary" href="/">OPEN ACCESS TERMINAL</a></section>
+    <section class="terminal-panel centered-message"><h1>Vault locked</h1><a class="pixel-button primary" href="/">Unlock vault</a></section>
 }
 else if (Ledger.IsConnected && _registryReady != true)
 {
     <section class="terminal-panel centered-message">
-        <h1>REGISTRY SETUP REQUIRED</h1>
-        <p>Complete one-time initialization before using the on-chain database.</p>
-        <a class="pixel-button primary" href="/initialize">CONTINUE SETUP</a>
+        <h1>Finish setup</h1>
+        <p>One step remains before your records are available.</p>
+        <a class="pixel-button primary" href="/initialize">Continue setup</a>
     </section>
 }
 else
 {
     <div class="sv-pwa-app" aria-label="StellarVault application">
         <nav class="sv-pwa-rail" aria-label="Vault navigation">
-            <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark" aria-hidden="true">✦</span><span><strong>STELLARVAULT</strong><small>MY VAULT</small></span></div>
+            <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark" aria-hidden="true">✦</span><span><strong>STELLARVAULT</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span aria-hidden="true">▤</span> Records</button>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
@@ -52,8 +52,8 @@ else
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
-                    <h1>@(_appView == "records" ? "Your records" : _appView == "drafts" ? "Offline drafts" : "Hybrid Sync")</h1>
-                    <p class="page-subtitle">@(_appView == "records" ? "Your saved records and files." : _appView == "drafts" ? "Items saved on this device." : "Review and approve changes.")</p>
+                    <h1>@(_appView == "records" ? "Records" : _appView == "drafts" ? "Drafts" : "Sync")</h1>
+                    
                 </div>
                 <div class="sv-pwa-screen-tools">
                     @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
@@ -62,7 +62,10 @@ else
                     <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock</button>
                 </div>
             </header>
-            <div class="stats-strip sv-pwa-summary"><div><span>Records</span><strong>@Records.Count</strong></div><div><span>Folders</span><strong>@Folders.Count</strong></div><div><span>Connection</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
+            @if (_appView == "records" && Ledger.IsConnected)
+            {
+                <div class="stats-strip sv-pwa-summary"><div><span>Records</span><strong>@Records.Count</strong></div><div><span>Folders</span><strong>@Folders.Count</strong></div></div>
+            }
         @if (_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
             
