@@ -377,3 +377,23 @@ test('Explorer rows expose individual action menus and the inspector never cente
   assert.match(css, /\.sv-explorer-tree \.sv-tree-item\.selected/);
   assert.match(css, /\.sv-object-menu/);
 });
+
+
+test('Vault desktop explorer uses a genuine third-column inspector and nested folder tree', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(vault, /sv-tree-node/);
+  assert.match(vault, /ToggleTreeFolder\(folder.Id\)/);
+  assert.match(vault, /sv-current-folder/);
+  assert.match(vault, /sv-explorer-list-head/);
+  assert.match(vault, /sv-layout-switch/);
+  assert.match(vault, /_explorerLayout == "grid"/);
+  assert.match(vault, /<Add @key="_editorKey" @ref="_inlineEditor" Embedded="true"/);
+  assert.match(vault, /sv-inspector-tabs/);
+  assert.match(vault, /sv-inspector-more/);
+  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _uncertainStage/);
+  assert.match(editor, /OnSaved.InvokeAsync/);
+  assert.match(css, /grid-template-columns:245px minmax\(0,1fr\) var\(--sv-record-inspector-width\)/);
+  assert.match(css, /\.sv-editor-embedded/);
+});
