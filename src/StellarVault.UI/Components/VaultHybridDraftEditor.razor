@@ -5,9 +5,7 @@
 @implements IDisposable
 
 <section class="terminal-panel" aria-label="Offline encrypted record and folder drafts">
-    <div class="panel-kicker">HYBRID // DEVICE-ONLY DRAFTS</div>
-    <h3>OFFLINE RECORDS AND FOLDERS</h3>
-    <p>Local drafts are encrypted on this device. Saving here does not submit anything to Stellar.</p>
+    <h3>@(_editingScreen ? "Edit draft" : "Offline drafts")</h3>
     @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)
     {
         <p role="status">Choose encrypted local storage and unlock the local vault before editing drafts.</p>
@@ -56,8 +54,7 @@
             <label class="terminal-label" for="hybrid-draft-tags">TAGS (COMMA-SEPARATED)</label>
             <input id="hybrid-draft-tags" class="terminal-input" @bind="_tags" disabled="@_busy" />
         }
-        <p class="advanced-help">Type: @(_isFolder ? "Folder" : "Record") ·
-            @(_editingId is null ? "New local draft" : "Editing unpublished local draft")</p>
+ 
         <button type="button" class="pixel-button primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || (!_isFolder && string.IsNullOrEmpty(_content)))" @onclick="SaveAsync">SAVE ENCRYPTED LOCAL DRAFT</button>
         @if (_editingId is not null)
         {
@@ -70,7 +67,11 @@
         }
         else
         {
-        <div class="panel-kicker">LOCAL DRAFT DIRECTORY</div>
+        <h3>Drafts</h3>
+        @if (!string.IsNullOrEmpty(_status))
+        {
+            <p role="status" class="terminal-alert">@_status</p>
+        }
         @foreach (var draft in _items)
         {
             <div class="data-field">
@@ -264,7 +265,8 @@
                     "The opened draft revision is unavailable; reopen the draft."));
             _items = await Drafts.ListAsync();
             Reset(_isFolder);
-            _status = "Encrypted draft saved locally. Parent dependencies were revised with the draft. No Stellar transaction occurred.";
+            _editingScreen = false;
+            _status = "Draft saved on this device. No Stellar transaction was submitted.";
         }
         catch (Exception)
         {
@@ -282,7 +284,8 @@
             await Drafts.DiscardAsync(_editingId);
             _items = await Drafts.ListAsync();
             Reset(_isFolder);
-            _status = "Unsubmitted local draft discarded. No Stellar operation occurred.";
+            _editingScreen = false;
+            _status = "Draft discarded.";
         }
         catch (Exception) { _status = "Cannot discard this draft; inspect its dependencies."; }
         finally { _busy = false; }
