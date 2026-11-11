@@ -716,3 +716,19 @@ Implementation now on main:
 - `docs/MODERN_APP_DESIGN.md` describes the product design system and device acceptance.
 
 **Verification caution:** Green builds from earlier stylesheet-only revisions do not certify the latest functional Settings/navigation commits; check current workflow outcomes. No emulator screenshots or real browser visual end-to-end tests were run by the connector. Modern visual refresh does not change production crypto/audit readiness. PWA is the initial preview product; do not turn on mainnet launch claims or re-enable Hybrid file sync merely because the UI looks production-quality.
+
+
+## 2026-11-11 — Offline save versus failed Horizon refresh
+
+Reported symptom: creating a record while disconnected displayed `Cannot load record: Failed to fetch`. Saving the encrypted local draft did persist the item, but the parent Vault immediately attempted `Ledger.ReadAsync()` and displayed `Ledger synchronization failed: Failed to fetch`, conflating successful local persistence with a failed remote refresh.
+
+Changes:
+- `VaultItemEditor.OnParametersSetAsync` does **not** load the Stellar ledger for new items. It takes the last known folder snapshot from `CachedFolders` and retains the chosen parent. Editing an already-published record still requires a trustworthy loaded remote record.
+- `SaveOfflineDraftAsync` only enqueues the encrypted local mutation; after a confirmed enqueue it signals `OnDraftSaved` separately from the on-chain `OnSaved` callback. Post-save navigation/queue-refresh problems cannot rewrite a successful local commit into a failed-save status.
+- `Vault.OnLocalDraftSavedAsync` opens Drafts and refreshes **only** the local pending queue. It deliberately does not call `Ledger.ReadAsync`, `loadChain`, Horizon, fee estimation, or submit.
+- A failed user-triggered ledger refresh preserves the last verified in-memory records and shows a brief connection error rather than the vendor SDK stack. A registry lookup which fails because Horizon is unreachable is **unknown**, not `registryReady == false`; locally unlocked workspaces remain accessible.
+- Add source regression checks for no implicit network calls on local create/save and no false registry redirect.
+
+Security distinctions: encrypted local save is not proof of Stellar submission or sync. Unknown/uncertain signed submissions must still be reconciled before retry; this change does not relax approval or recovery gates.
+
+Verification still required: .NET 10 build, live offline PWA save, refresh browser while offline, cached folder selection, queue persistence on device, reconnect/review/approval sequence, and platform-specific offline handling. Source assertions alone are not end-to-end verification.
