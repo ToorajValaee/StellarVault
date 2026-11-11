@@ -84,7 +84,7 @@
                 <input id="sv-passphrase" class="terminal-input" type="password"
                        autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                 <VaultStorageSecurityNotice />
-                <p class="advanced-help">Local encrypted storage is an opt-in feature. The recovery phrase is encrypted on this device using your separate passphrase. Offline drafts and manual ledger synchronization are not yet available.</p>
+                <p class="advanced-help">Local encrypted storage is an opt-in feature. The recovery phrase is encrypted on this device using your separate passphrase. Hybrid mode supports offline records and folders with explicit manual Sync approval. Hybrid file operations are disabled.</p>
                 }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
