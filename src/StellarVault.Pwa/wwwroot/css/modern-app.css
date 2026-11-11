@@ -3624,3 +3624,86 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
   .sv-web-shell .sv-explorer-main .record-list {display:grid!important;
     grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;}
 }
+
+
+/* Final product shell refinements — sidebar hierarchy and inspector actions. */
+.sv-web-shell .sv-pwa-app .sv-pwa-rail {
+  background-image:linear-gradient(160deg,#043a31,#05382f 72%,#075d4c)!important;
+  padding:20px 14px!important;gap:4px!important;
+}
+.sv-web-shell .sv-pwa-app .sv-pwa-rail > button,
+.sv-web-shell .sv-pwa-app .sv-pwa-rail > a {
+  min-height:45px!important;padding:10px 13px!important;
+  border-radius:9px!important;font-size:13px!important;
+}
+.sv-web-shell .sv-pwa-app .sv-pwa-rail .sv-sidebar-network {
+  margin:19px 4px 0;padding-top:18px;border-top:1px solid rgba(255,255,255,.18);
+}
+.sv-sidebar-network-label {color:#a8c9bd;font:700 10px/1.5 Inter,"Segoe UI",Arial,sans-serif!important;
+  text-transform:uppercase!important;letter-spacing:.12em!important;}
+.sv-web-shell .sv-sidebar-network p {color:#afcfc4;font-size:11px!important;
+  line-height:1.65!important;margin:12px 0!important;}
+.sv-web-shell .sv-pwa-app .sv-sidebar-connect {
+  display:flex;justify-content:center;align-items:center;gap:10px;
+  width:100%;margin-top:12px!important;padding:9px!important;
+  background:#086c4f!important;color:#f2fff9!important;border:1px solid #4bddab!important;
+  border-radius:8px!important;min-height:43px!important;
+  font:650 13px Inter,"Segoe UI",Arial,sans-serif!important;
+  cursor:pointer;}
+.sv-sidebar-connected {color:#c3f5de;font-size:12px;font-weight:700;
+  display:flex;align-items:center;gap:9px;padding:12px 3px;}
+.sv-sidebar-connected span {color:#31d88e;font-size:10px;}
+.sv-web-shell .sv-pwa-app .sv-pwa-rail .sv-pwa-rail-foot {
+  margin-top:auto!important;padding:12px!important;border-top:1px solid rgba(255,255,255,.15);}
+.sv-web-shell .sv-inspector-heading {display:flex;align-items:center;justify-content:space-between;}
+.sv-inspector-tools {display:flex;align-items:center;gap:6px;}
+.sv-inspector-more {position:relative;}
+.sv-inspector-more > summary {list-style:none;display:grid;place-items:center;width:35px;height:35px;
+  color:#4c646b;background:transparent;border:0;border-radius:8px;
+  cursor:pointer;font-size:22px;}
+.sv-inspector-more > summary::-webkit-details-marker {display:none;}
+.sv-inspector-more > summary:hover,.sv-inspector-more[open] > summary {background:#edf5f2;}
+.sv-inspector-more-menu {position:absolute;top:calc(100% + 5px);right:0;
+  z-index:35;display:flex;flex-direction:column;gap:3px;width:165px;
+  background:#fff;border:1px solid #dfe8e5;border-radius:9px;
+  box-shadow:0 12px 30px rgba(14,48,40,.14);padding:6px;}
+.sv-inspector-more-menu button {text-align:left;min-height:34px;border:0!important;
+  background:transparent!important;border-radius:7px!important;color:#294e46!important;
+  font:600 12px Inter,"Segoe UI",Arial,sans-serif!important;padding:8px 10px!important;cursor:pointer;}
+.sv-inspector-more-menu button:hover {background:#ecf5f0!important;}
+.sv-inspector-more-menu .sv-object-delete {color:#b4444e!important;}
+.sv-web-shell .sv-record-inspector .sv-inspector-tabs {
+  display:flex;gap:16px;align-items:center;border-bottom:1px solid #dfe8e7;
+  margin:0 0 20px;padding:0;}
+.sv-web-shell .sv-record-inspector .sv-inspector-tabs button {
+  min-height:42px;display:flex;align-items:center;gap:8px;
+  padding:8px 10px!important;background:transparent!important;border:0!important;
+  border-bottom:3px solid transparent!important;border-radius:0!important;
+  box-shadow:none!important;color:#6a7c82!important;font:650 13px Inter,"Segoe UI",Arial,sans-serif!important;
+  cursor:pointer;}
+.sv-web-shell .sv-record-inspector .sv-inspector-tabs button.selected {
+  color:#08744e!important;border-bottom-color:#0b9566!important;}
+.sv-web-shell .sv-record-inspector .sv-inspector-tabs button:hover {color:#0b7658!important;}
+.sv-record-activity h3 {font-size:14px!important;color:#223b3d!important;margin:8px 0 14px;}
+.sv-record-activity dl {display:grid;grid-template-columns:88px minmax(0,1fr);
+  gap:10px 14px;padding:17px 14px;background:#f8fbfa;border:1px solid #e0e8e6;
+  border-radius:9px;margin:0;}
+.sv-record-activity dt {color:#69827a;font-size:12px;}
+.sv-record-activity dd {margin:0;min-width:0;color:#253d3a;font-size:12px;overflow-wrap:anywhere;}
+.sv-record-activity .sv-activity-id {font-family:ui-monospace,Consolas,monospace!important;font-size:11px;}
+.sv-record-activity p {font-size:12px;color:#71817e;line-height:1.6;margin-top:15px;}
+/* Nested page component inherits scoped shell styles, so override with equal
+   or higher specificity than outer shell layout rules. */
+html .sv-web-shell .sv-editor-embedded .sv-pwa-app {
+  display:block!important;width:100%!important;max-width:none!important;
+  min-width:0!important;margin:0!important;padding:0!important;
+  grid-template-columns:none!important;min-height:0!important;
+}
+html .sv-web-shell .sv-editor-embedded .sv-pwa-stage {
+  display:block!important;width:100%!important;max-width:none!important;
+  margin:0!important;padding:0!important;min-height:0!important;}
+html .sv-web-shell .sv-editor-embedded .sv-adaptive-main {min-height:0!important;}
+@media(max-width:1099px) {
+ .sv-web-shell .sv-pwa-app .sv-sidebar-network {display:none;}
+ .sv-web-shell .sv-pwa-app .sv-pwa-mobile-tabs {z-index:100;}
+}
