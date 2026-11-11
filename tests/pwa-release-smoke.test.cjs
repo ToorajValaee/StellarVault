@@ -472,19 +472,26 @@ test('Signed approval and account modal block blurred background without obscuri
   assert.match(approval, /aria-modal="true"/);
   assert.match(vault, /sv-account-info-modal/);
 });
-test('Product Help, source transparency and persistent semantic light-dark theme are reachable', () => {
+test('Product Help stays inside the Vault layout and attribution is a thin footer', () => {
   const rootCss = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const help = fs.readFileSync(path.join(root, '..', 'Pages', 'Help.razor'), 'utf8');
+  const helpContent = fs.readFileSync(path.join(root, '..', 'Shared', 'VaultHelpContent.razor'), 'utf8');
   const lifecycle = fs.readFileSync(path.join(root, 'js', 'vault-v2-lifecycle.js'), 'utf8');
   const shell = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'AdaptiveShell.razor'), 'utf8');
   assert.match(help, /@page "\/help"/);
-  assert.match(help, /#getting-started/);
-  assert.match(help, /#security/);
-  assert.match(vault, /href="\/help"/);
+  assert.match(help, /NavigateTo\("\/vault\?view=help"/);
+  assert.match(helpContent, /id="getting-started"/);
+  assert.match(helpContent, /id="security"/);
+  assert.doesNotMatch(helpContent, /sv-help-sidebar|sv-help-toc/);
+  assert.match(vault, /<VaultHelpContent\s*\/>/);
+  assert.match(vault, /SelectAppView\("help"\)/);
+  assert.match(vault, /sv-nav-vault-icon/);
+  assert.match(vault, /sv-rail-attribution/);
   assert.match(vault, /https:\/\/github\.com\/ToorajValaee\/StellarVault/);
   assert.match(vault, /https:\/\/badje\.ir\//);
-  assert.match(rootCss, /\.sv-powered-by/);
+  assert.match(rootCss, /\.sv-pwa-stage \.sv-help-main\.sv-help-embedded/);
+  assert.match(rootCss, /\.sv-rail-attribution/);
   assert.match(rootCss, /:root\[data-theme="dark"\]/);
   assert.match(lifecycle, /dataset\.theme === 'dark' \? 'light' : 'dark'/);
   assert.match(shell, /sv-network-symbol/);
