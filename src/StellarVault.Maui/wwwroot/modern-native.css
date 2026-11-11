@@ -1182,7 +1182,21 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
    background:linear-gradient(150deg,#10aa77,#005c41)!important;color:#fff!important;
    box-shadow:0 12px 25px rgba(2,104,71,.28)!important;font-size:37px!important;
  }
- html .sv-native-shell .sv-native-commandbar {display:none!important;}
+ html .sv-native-shell .sv-native-commandbar-quiet {display:none!important;}
+ html .sv-native-shell .sv-native-commandbar:not(.sv-native-commandbar-quiet) {
+   display:flex!important;position:fixed!important;left:0!important;right:0!important;
+   bottom:calc(69px + env(safe-area-inset-bottom,0px))!important;
+   grid-row:auto!important;grid-column:auto!important;
+   z-index:280!important;align-items:center!important;justify-content:space-between!important;
+   gap:8px!important;padding:10px 13px!important;background:#fff!important;
+   border-top:1px solid #e0e8e6!important;
+   box-shadow:0 -5px 18px rgba(15,54,44,.09)!important;
+ }
+ html .sv-native-shell .sv-native-commandbar:not(.sv-native-commandbar-quiet) .sv-native-command {
+   min-height:42px!important;padding:9px 12px!important;border-radius:9px!important;
+   font:650 12px "Segoe UI",Arial,sans-serif!important;
+ }
+
  html .sv-native-shell .sv-native-footer {display:none!important;}
  html .sv-native-shell .sv-native-nav {
    display:grid!important;grid-row:3!important;grid-column:1!important;
