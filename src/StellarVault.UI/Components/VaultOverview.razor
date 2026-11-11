@@ -1,21 +1,15 @@
 @using StellarVault.Core.Services
 
-<section class="hero-terminal terminal-panel" aria-label="StellarVault product overview">
-    <div class="panel-kicker">PRIVATE DATA // STELLAR IDENTITY</div>
-    <h1>YOUR DATA.<br />YOUR VAULT<span class="blink-cursor">_</span></h1>
-    <p class="hero-copy">
-        Secure notes and files in an encrypted, account-scoped vault.
-        Keep local encrypted records on this device, and use supported Stellar
-        ledger operations when you explicitly choose to publish on-chain.
-    </p>
-    <div class="boot-log" aria-label="Vault storage options">
-        <span><b>[LOCAL]</b> ENCRYPTED RECORDS AND FILES ON THIS DEVICE</span>
-        <span><b>[STELLAR]</b> SEPARATE ACCOUNT-LINKED LEDGER STORAGE</span>
-        <span><b>[CONTROL]</b> EXPLICIT APPROVAL FOR ON-CHAIN WRITES</span>
-    </div>
-    <p class="advanced-help">
-        Local data does not automatically sync across devices.
-        Stellar transactions may require network fees and reserves.
-    </p>
+<section class="hero-terminal terminal-panel sv-access-welcome" aria-label="StellarVault welcome">
+    <span class="sv-access-welcome-mark" aria-hidden="true">✦</span>
+    <h1>Your vault<span class="blink-cursor">_</span></h1>
+    <p class="hero-copy">Your records, files, and private data in one place.</p>
+    <details class="sv-access-learn">
+        <summary>How StellarVault works</summary>
+        <p>Keep encrypted items on this device, or save supported records and files on Stellar.
+           You approve every on-chain transaction before it can cost XLM.</p>
+        <p>Local items are not backed up or synced automatically. Keep your recovery
+           phrase and vault passphrase safe.</p>
+    </details>
     <ManagedVaultSessionStatus />
 </section>
