@@ -700,3 +700,19 @@ Following user screenshots, the next cross-host UI pass addresses four concrete 
 New Node regressions in `tests/maui-ledger-assets.test.cjs` and `tests/pwa-release-smoke.test.cjs` verify structural separation, metadata parity, fee-review fingerprint wiring, responsive tree/cards and terminal tokens.
 
 **Verification caveat:** Static assertions and intermediate successful PWA/Android CI builds do not validate the latest revision until its workflow completes; manual Windows explorer width/keyboard and Android mobile interaction checks are still required. Do not claim the app can safely hold live customer assets before approval-path and emulator acceptance. Keep these requirements in `docs/PWA_APP_UX_ACCEPTANCE.md` and `docs/NATIVE_UX_ACCEPTANCE.md`.
+
+
+## 2026-11-11 — Approved modern product UI implementation (PWA first, then MAUI)
+
+The user explicitly chose the newer high-fidelity desktop and mobile StellarVault mockups over the previous terminal/CRT style. **Do not reintroduce dot-matrix, scanlines, sharp pixel borders or neon terminal visual treatments** as the default app identity. The current visual direction is modern, calm, clean, premium green/teal with rounded surfaces and accessible typography.
+
+Implementation now on main:
+
+- `src/StellarVault.Pwa/wwwroot/css/modern-app.css`, loaded last in the browser `index.html`, overrides the 70KB legacy CSS without changing shared Core operations. It contains modern design tokens, a light application frame and sidebar, responsive folder/file cards, accessible controls, sheet-like mobile record details, a desktop right-hand record inspector using existing modal semantics, and reduced-motion handling.
+- `src/StellarVault.Maui/wwwroot/modern-native.css`, loaded last after native host and Razor scoped styles, makes Windows/Android/iOS mobile and desktop compositions visually consistent with PWA. Existing native scroll, foreground-loss lock, BlazorWebView bridge autostart=false, and safe-area navigation behavior remain.
+- `src/StellarVault.Pwa/Pages/Vault.razor`: upgraded search and object/folder card content, added **Settings** with real network status, account info and local retention/Lock actions; mobile bottom navigation offers destinations with a floating New action (not a fake interactive button). Do not expose secret contents in cards; the record inspector continues masking content until explicit reveal.
+- `src/StellarVault.UI/Components/NativeVaultWorkspace.razor`: fourth Settings destination with active network, disconnect and local-vault lock, using existing services. Separate Create Record/Folder/File screens, folder tree and record detail remain implemented.
+- PWA and native Node smoke/regression tests assert asset ordering, consistent product theme, editor/navigation structure, and no regression to Android BlazorWebView autostart safety.
+- `docs/MODERN_APP_DESIGN.md` describes the product design system and device acceptance.
+
+**Verification caution:** Green builds from earlier stylesheet-only revisions do not certify the latest functional Settings/navigation commits; check current workflow outcomes. No emulator screenshots or real browser visual end-to-end tests were run by the connector. Modern visual refresh does not change production crypto/audit readiness. PWA is the initial preview product; do not turn on mainnet launch claims or re-enable Hybrid file sync merely because the UI looks production-quality.
