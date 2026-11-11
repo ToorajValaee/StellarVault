@@ -2557,3 +2557,34 @@ html.ios-device.standalone-app .terminal-footer {
 @media(max-width:760px) {
     .sv-pwa-access-grid {padding-block:.75rem 1.5rem;}
 }
+
+/* Minimal recovery-first sign-in and compact network control. */
+.sv-network-menu > summary.sv-network-icon-trigger {
+  position:relative;display:grid;place-items:center;
+  width:42px;height:42px;padding:0;border-radius:11px;
+  border:1px solid var(--border);font-size:23px;line-height:1;
+  color:var(--phosphor-strong);background:var(--panel-soft);
+}
+.sv-network-indicator {position:absolute;right:5px;bottom:5px;
+  width:8px;height:8px;border-radius:50%;border:1px solid #07110c;
+  background:#77eaa3;}
+.sv-network-indicator.mainnet{background:#e6ba73}
+.sv-network-indicator.custom{background:#79bbf6}
+.sv-network-popup-title{display:block;font-size:.9rem;margin-bottom:8px}
+.sv-network-choice{flex-wrap:nowrap}
+.sv-network-choice .pixel-button{flex:1;min-width:0;
+  margin:0;padding:.65rem .4rem;min-height:42px}
+.sv-access-storage-settings{margin:.85rem 0;padding:.65rem .8rem;
+  border:1px solid var(--border);border-radius:10px;background:var(--panel-soft)}
+.sv-access-storage-settings summary{cursor:pointer;color:var(--muted);
+  font-size:.76rem;line-height:1.4}
+.sv-access-storage-choices{padding:0;border:0;margin:.65rem 0 0;min-width:0}
+.sv-access-storage-choices .sv-biometric-choice{margin-top:.4rem}
+.sv-pwa-access-grid > .access-form{padding-top:clamp(.9rem,2vw,1.35rem)}
+.sv-pwa-access-grid .access-form > .terminal-label:first-of-type{margin-top:0}
+.sv-pwa-access-grid .access-form .panel-heading{display:none}
+@media(max-width:480px){
+  .sv-network-menu > summary.sv-network-icon-trigger{width:40px;height:40px}
+  .sv-network-menu .sv-network-popover{right:-3.15rem;max-width:calc(100vw - 1rem)}
+  .sv-pwa-access-grid{padding-top:.25rem}
+}
