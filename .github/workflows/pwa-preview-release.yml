@@ -1,0 +1,88 @@
+name: StellarVault PWA preview release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pwa-preview-release.yml'
+      - 'src/StellarVault.Pwa/**'
+      - 'src/StellarVault.UI/**'
+      - 'src/StellarVault.Core/**'
+      - 'tests/pwa-release-smoke.test.cjs'
+      - 'tests/recent-vault.test.cjs'
+      - 'tests/upload-checkpoint.test.cjs'
+      - 'tests/StellarVault.Core.CryptoTests/**'
+
+# Only the newest preview artifact should be built when commits arrive quickly.
+concurrency:
+  group: stellarvault-pwa-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pwa-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build shared Razor UI and Core
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.UI/StellarVault.UI.csproj --configuration Release --verbosity normal 2>&1 | tee shared-ui-build.log
+      - name: Restore .NET 10 browser host and shared core
+        run: dotnet restore src/StellarVault.Pwa/StellarVault.Pwa.csproj
+      - name: Build .NET 10 browser host and shared core
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release --no-restore --verbosity normal 2>&1 | tee pwa-build.log
+      - name: Publish deployable PWA
+        run: dotnet publish src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release --no-restore --output ./artifacts/pwa
+      - name: Validate published PWA assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=artifacts/pwa/wwwroot
+          test -s "$root/index.html"
+          test -s "$root/_framework/blazor.webassembly.js"
+          test -s "$root/service-worker.js"
+          test -s "$root/service-worker-assets.js"
+          test -s "$root/manifest.webmanifest"
+          test -s "$root/css/app.css"
+          test -s "$root/js/vault-v2-keywrap.js"
+          test -s "$root/js/vault-v2-indexeddb.js"
+          test -s "$root/js/ledger-compat/app.js"
+          grep -q 'blazor.webassembly.js' "$root/index.html"
+          grep -q 'service-worker-assets.js' "$root/service-worker.js"
+      - name: Upload browser and shared build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-core-build-logs
+          path: |
+            shared-ui-build.log
+            pwa-build.log
+          if-no-files-found: ignore
+      - name: Validate shipped JavaScript parses
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts/pwa/wwwroot/js -type f -name '*.js' -print0 |
+            while IFS= read -r -d '' script; do node --check "$script"; done
+      - name: Run .NET 10 authenticated encryption tests
+        run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
+      - name: Run PWA and encrypted storage regressions
+        run: node --test tests/upload-checkpoint.test.cjs tests/recent-vault.test.cjs tests/pwa-release-smoke.test.cjs
+      - name: Package verified PWA
+        uses: actions/upload-artifact@v4
+        with:
+          name: stellarvault-pwa-preview
+          path: artifacts/pwa/wwwroot/
+          if-no-files-found: error
+
