@@ -378,7 +378,9 @@ else
                 <ErrorBoundary @key="_editorKey">
                     <ChildContent>
                         <VaultItemEditor @ref="_inlineEditor" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
-                                         Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
+                                         CachedFolders="@Folders" Kind="@_editorKind"
+                                         OnSaved="OnEditorSavedAsync" OnDraftSaved="OnLocalDraftSavedAsync"
+                                         OnCancel="CloseEditor" />
                     </ChildContent>
                     <ErrorContent>
                         <div class="terminal-alert warning" role="alert">
@@ -669,6 +671,17 @@ else
         _editorRecordId = null;
         _inlineEditor = null;
         await RefreshAsync();
+        if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            await LoadPendingAsync();
+    }
+    private async Task OnLocalDraftSavedAsync()
+    {
+        // Local save is complete before this callback. Do not call Ledger.ReadAsync:
+        // offline operation must not become a Horizon refresh failure.
+        _editorOpen = false;
+        _editorRecordId = null;
+        _inlineEditor = null;
+        _appView = "drafts";
         if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             await LoadPendingAsync();
     }
@@ -1264,9 +1277,18 @@ else
     }
     private async Task RefreshAsync() {
         if (_busy) return;
-        _busy = true; _busyMessage = "SYNCING STELLAR LEDGER..."; _error = null; _revealedIds.Clear();
+        _busy = true; _busyMessage = "Refreshing Stellar records…"; _error = null; _revealedIds.Clear();
         try { _records = await Ledger.ReadAsync(); }
-        catch (Exception ex) { _error = "Ledger synchronization failed: " + ex.Message; }
+        catch (Exception ex) {
+            // Retain the last verified snapshot and keep the local draft queue
+            // available. Do not leak a vendor JavaScript stack into the UI.
+            var offline = ex.Message.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("NetworkError", StringComparison.OrdinalIgnoreCase)
+                || ex is HttpRequestException;
+            _error = offline
+                ? "Stellar network is unavailable. The last loaded records remain visible; encrypted local drafts are still available under Drafts."
+                : "Stellar records could not be refreshed. Try again when the network is available.";
+        }
         finally { _busy = false; }
     }
     private async Task ReconnectAsync()
