@@ -303,42 +303,63 @@ else
                 {
                     <section class="sv-native-detail-screen" aria-label="Selected ledger record">
                         <button type="button" class="sv-native-sheet-close" aria-label="Close record details" @onclick="ResetSelection">×</button>
-                        <h3>@_selectedRecord.Title</h3>
-                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
+                        <div class="sv-native-sheet-heading">
+                            <span class="sv-native-sheet-icon" aria-hidden="true">@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "▤" : "▦")</span>
+                            <div><h3>@_selectedRecord.Title</h3><small>@(string.IsNullOrWhiteSpace(_selectedFolderId) ? "My vault" : NativeFolderPath(_selectedFolderId))</small></div>
+                        </div>
+                        <nav class="sv-native-sheet-tabs" aria-label="Record details tabs">
+                            <button type="button" class="@(_nativeDetailTab == "details" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "details")" @onclick='() => _nativeDetailTab = "details"'>▤ Details</button>
+                            <button type="button" class="@(_nativeDetailTab == "activity" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "activity")" @onclick='() => _nativeDetailTab = "activity"'>◷ Activity</button>
+                        </nav>
+                        @if (_nativeDetailTab == "activity")
                         {
-                            <p>Username: @_selectedRecord.UserName</p>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
-                        {
-                            <p>URL: @_selectedRecord.Url</p>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(_selectedRecord.Notes))
-                        {
-                            <p>Notes: @_selectedRecord.Notes</p>
-                        }
-                        @if (_selectedRecord.Tags is { Length: > 0 })
-                        {
-                            <p>Tags: @string.Join(", ", _selectedRecord.Tags)</p>
-                        }
-                        @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
-                        {
-                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
-                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
-                            <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
-                            @if (!string.IsNullOrEmpty(_verifiedFileMessage))
-                            {
-                                <p role="status">@_verifiedFileMessage</p>
-                            }
+                            <div class="sv-native-activity-panel">
+                                <p>Storage: Stellar ledger</p>
+                                <p>Type: @(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "Encrypted file" : "Secure record")</p>
+                                <p>Historical activity is not available from the current ledger reader.</p>
+                            </div>
                         }
                         else
                         {
-                        <button type="button" class="pixel-button compact" @onclick="ToggleSecret">
-                            @(_revealSecret ? "Hide secret" : "Reveal secret")
-                        </button>
-                        @if (_revealSecret)
-                        {
-                            <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@_selectedRecord.Content</pre>
-                        }
+                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
+                            {
+                                <div class="sv-native-detail-field"><label>Username</label><p>@_selectedRecord.UserName</p></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
+                            {
+                                <div class="sv-native-detail-field"><label>URL</label><p>@_selectedRecord.Url</p></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Notes))
+                            {
+                                <div class="sv-native-detail-field"><label>Notes</label><p>@_selectedRecord.Notes</p></div>
+                            }
+                            @if (_selectedRecord.Tags is { Length: > 0 })
+                            {
+                                <div class="sv-native-detail-field"><label>Tags</label><div class="sv-native-tag-list">
+                                    @foreach (var tag in _selectedRecord.Tags)
+                                    {
+                                        <span>@tag</span>
+                                    }
+                                </div></div>
+                            }
+                            @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
+                            {
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
+                                <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
+                                @if (!string.IsNullOrEmpty(_verifiedFileMessage))
+                                {
+                                    <p role="status">@_verifiedFileMessage</p>
+                                }
+                            }
+                            else
+                            {
+                                <button type="button" class="pixel-button compact" @onclick="ToggleSecret">@(_revealSecret ? "Hide secret" : "Reveal secret")</button>
+                                @if (_revealSecret)
+                                {
+                                    <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@_selectedRecord.Content</pre>
+                                }
+                            }
                         }
                     </section>
                 }
@@ -541,6 +562,7 @@ else
     private string _nativeMode = "browse";
     private string _nativeCollection = "all";
     private string _nativeSearch = "";
+    private string _nativeDetailTab = "details";
     private bool _nativeGrid;
 
     private void OpenNativeFolder(string id)
@@ -1222,6 +1244,7 @@ else
 
     private void SelectRecord(string id)
     {
+        _nativeDetailTab = "details";
         _revealSecret = false;
         _verifiedFileMessage = null;
         var record = _ledgerRecords.SingleOrDefault(x => x.Id == id);
