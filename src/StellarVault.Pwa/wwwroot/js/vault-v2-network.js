@@ -56,3 +56,41 @@ window.stellarVaultV2Network = Object.freeze({
     } finally { clearTimeout(timeout); }
   }
 });
+
+
+// Convenience preference only: no mnemonic, account ID, network passphrase,
+// signing key, or account-specific vault metadata is persisted by this helper.
+window.stellarVaultNetworkPreference = Object.freeze((() => {
+  const key = 'stellar-vault-v2-network-preference';
+  function safeHorizon(value) {
+    try {
+      const url = new URL(value);
+      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+      if ((url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) ||
+          url.username || url.password || url.search || url.hash ||
+          url.pathname !== '/' || url.origin === 'null') return null;
+      return url.origin + '/';
+    } catch { return null; }
+  }
+  function load() {
+    try {
+      const value = JSON.parse(localStorage.getItem(key));
+      if (value?.version !== 1 || !['testnet', 'public', 'custom'].includes(value.network))
+        return null;
+      if (value.network === 'custom') {
+        const horizonUrl = safeHorizon(value.horizonUrl);
+        return horizonUrl ? { network: 'custom', horizonUrl } : null;
+      }
+      return { network: value.network, horizonUrl: null };
+    } catch { return null; }
+  }
+  function save(network, horizonUrl = null) {
+    if (!['testnet', 'public', 'custom'].includes(network))
+      throw new Error('Invalid network preference.');
+    const url = network === 'custom' ? safeHorizon(horizonUrl) : null;
+    if (network === 'custom' && !url)
+      throw new Error('Invalid custom network URL.');
+    localStorage.setItem(key, JSON.stringify({ version: 1, network, horizonUrl: url }));
+  }
+  return { load, save };
+})());
