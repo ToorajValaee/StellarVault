@@ -438,5 +438,17 @@ test('Network preference contains only non-secret metadata and custom network mu
   assert.match(home, /stellarVaultNetworkPreference\.save/);
   assert.match(home, /NetworkSelection\.ResetCustom\(\)/);
   assert.match(home, /Custom Horizon remembered\. Detect the network again before unlocking/);
-  assert.match(home, /EARLY ACCESS — USE TEST ACCOUNTS ONLY/);
+  assert.match(home, /Early access — use test accounts only/);
+});
+
+test('Unlock button stays actionable and explains prerequisites without bypassing validation', () => {
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(home, /type="submit" disabled="@_busy"/);
+  assert.match(home, /aria-describedby="sv-access-readiness"/);
+  assert.match(home, /private string AccessReadiness/);
+  assert.match(home, /if \(EnteredWordCount is not \(12 or 15 or 18 or 21 or 24\)\)/);
+  assert.match(home, /if \(_enableLocalStorage && string\.IsNullOrWhiteSpace\(_passphrase\)\)/);
+  assert.match(home, /sv-access-security-notice/);
+  assert.match(css, /\.sv-access-security-notice/);
 });
