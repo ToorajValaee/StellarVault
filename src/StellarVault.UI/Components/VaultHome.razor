@@ -563,6 +563,8 @@
     private async Task DetectCustomAsync()
     {
         if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || _network != "custom") return;
+        var requestedHorizon = _customHorizon.Trim();
+        var startingEpoch = Sessions.Epoch;
         _busy = true;
         _message = null;
         _customPassphrase = null;
@@ -570,11 +572,18 @@
         NetworkSelection.ResetCustom();
         try
         {
-            _customPassphrase = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon);
-            NetworkSelection.ConfigureCustom(_customPassphrase);
-            NetworkSelection.CustomHorizonUrl = _customHorizon.Trim();
-            _detectedHorizon = _customHorizon.Trim();
-            _networkStatus = "Private network detected.";
+            var detected = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", requestedHorizon);
+            if (Sessions.Epoch != startingEpoch || Sessions.IsUnlocked || LedgerRecords.IsConnected ||
+                _network != "custom" ||
+                !string.Equals(_customHorizon.Trim(), requestedHorizon, StringComparison.Ordinal))
+                return; // Do not trust a response to an endpoint edited during discovery.
+            if (string.IsNullOrWhiteSpace(detected))
+                throw new JSException("Custom network returned no passphrase.");
+            _customPassphrase = detected;
+            NetworkSelection.ConfigureCustom(detected);
+            NetworkSelection.CustomHorizonUrl = requestedHorizon;
+            _detectedHorizon = requestedHorizon;
+            _networkStatus = "Network detected.";
         }
         catch (JSException)
         {
