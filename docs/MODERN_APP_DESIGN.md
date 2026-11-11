@@ -39,3 +39,14 @@ PWA preview artifact is independently generated in `.github/workflows/pwa-previe
 - Security behaviors remain unchanged: mnemonic validation, local-storage consent, account selection, network guards, signatures and fee approvals.
 - **Not yet validated:** A browser/Android runtime screenshot, dotnet build, accessibility tests, CSS computed-style inspection, and real device scroll height. Do not call this visually verified.
 - **Next verification:** Check desktop 1440×900 and 1366×768, tablet 820×1180, phone 390×844, phone landscape, 200% zoom, 12/24-word entry, expanded local-storage settings, Add/Edit, Sync/Drafts, setup, modal approval and native Android.
+
+
+## 2026-11-11 — Inspector, design controls and stylesheet consolidation
+
+- Record detail uses a desktop sidecar with a drag handle (pointer devices) and left/right arrow-key sizing at 24px increments. The width is bounded between 320px and 720px (and 58% of viewport width). It does **not** save secret data or width preferences to device storage.
+- When the record inspector opens on a wide workspace, the folder tree is hidden and the remaining file list uses compact full-width rows. The inspector is visually separate rather than a dimming modal backdrop. Phone/tablet still present a sheet and omit the resize handle.
+- Network chooser controls have a three-column button layout; the Horizon URL and Detect Network action are separated with explicit spacing. Checkbox/radio geometry, status alerts, detail fields and approvals use the green/neutral product design.
+- Obsolete `src/StellarVault.Pwa/wwwroot/css/app.css` and `src/StellarVault.Maui/wwwroot/native-app.css` are deleted; both hosts load `modern-app.css`, and MAUI additionally loads `modern-native.css`. Packaging, CI paths and smoke-test references were updated.
+- **Migration detail:** required structural/layout rules from the deleted files were moved into the beginning of the corresponding modern stylesheets. This avoids breaking unrelated legacy components but means terminal-era selectors remain in consolidated source until a follow-up selector-by-selector cleanup. Appearance overrides are loaded later and own the visible modern theme. Do not claim that legacy selector migration is complete.
+- **Static review only:** verified stylesheet references, MAUI packaging paths, inspector markup, keyboard/pointer code, network and checkbox selector presence, and test-path references. This does not prove computed CSS, browser drag mechanics, scroll sizing, focus traps, or MAUI layout correctness.
+- **Still needed before UI acceptance:** actual builds, PWA screenshots at 1440/1366/1024/390px, Android screenshots, screen-reader review, network popup overlap test, record inspector min/max resize and focus behavior, Sync/Drafts/Settings/editors and all danger/approval dialogs.
