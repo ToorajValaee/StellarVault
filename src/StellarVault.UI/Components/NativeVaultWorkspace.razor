@@ -573,6 +573,12 @@ else
         public bool SdkReady { get; set; }
     }
 
+    private sealed class NativeNetworkPreference
+    {
+        public string? Network { get; set; }
+        public string? HorizonUrl { get; set; }
+    }
+
     private bool? _runtimeReady;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -581,6 +587,22 @@ else
         // JS interop is available after the WebView's first render. Run the
         // credential-free check automatically so the UI fails closed promptly.
         await CheckRuntimeAsync();
+        try
+        {
+            var preference = await JS.InvokeAsync<NativeNetworkPreference?>("stellarVaultNetworkPreference.load");
+            if (preference?.Network is "testnet" or "public" && CanChangeNetwork)
+                NetworkSelection.ChoosePreset(preference.Network);
+            else if (preference?.Network == "custom" && CanChangeNetwork &&
+                     !string.IsNullOrWhiteSpace(preference.HorizonUrl))
+            {
+                NetworkSelection.ResetCustom();
+                NetworkSelection.ChoosePreset("custom");
+                NetworkSelection.CustomHorizonUrl = preference.HorizonUrl;
+                _customHorizon = preference.HorizonUrl;
+                _networkError = "Custom Horizon remembered. Detect the network before connecting.";
+            }
+        }
+        catch (JSException) { /* Preferences are optional; never block native startup. */ }
         await InvokeAsync(StateHasChanged);
     }
 
@@ -621,7 +643,7 @@ else
         !string.IsNullOrWhiteSpace(NetworkSelection.CustomPassphrase) &&
         string.Equals(NetworkSelection.CustomHorizonUrl, _customHorizon.Trim(), StringComparison.Ordinal);
 
-    private void SelectNativeNetwork(string network)
+    private async Task SelectNativeNetwork(string network)
     {
         if (network is not ("testnet" or "public" or "custom") || !CanChangeNetwork) return;
         NetworkSelection.ChoosePreset(network);
@@ -633,6 +655,11 @@ else
         {
             NetworkSelection.ResetCustom();
             _customHorizon = NetworkSelection.CustomHorizonUrl;
+        }
+        else
+        {
+            try { await JS.InvokeVoidAsync("stellarVaultNetworkPreference.save", network, (string?)null); }
+            catch (JSException) { _networkError = "Network selected, but its preference could not be saved."; }
         }
     }
 
@@ -658,6 +685,8 @@ else
                 throw new InvalidOperationException("No network passphrase was detected.");
             NetworkSelection.ConfigureCustom(detected);
             NetworkSelection.CustomHorizonUrl = requestedHorizon;
+            try { await JS.InvokeVoidAsync("stellarVaultNetworkPreference.save", "custom", requestedHorizon); }
+            catch (JSException) { _networkError = "Network detected, but its preference could not be saved."; }
         }
         catch (Exception ex) when (ex is JSException or InvalidOperationException or ArgumentException)
         {
