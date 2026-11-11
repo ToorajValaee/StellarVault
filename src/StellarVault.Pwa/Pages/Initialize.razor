@@ -22,7 +22,16 @@ else if (!Ledger.IsConnected)
 }
 else
 {
-    <section class="form-page">
+    <div class="sv-pwa-app sv-pwa-secondary-app">
+        <nav class="sv-pwa-rail" aria-label="Vault navigation">
+            <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▤</span> Vault</a>
+            <a class="sv-pwa-rail-action" href="/vault"><span aria-hidden="true">▣</span> Folders</a>
+            <div class="sv-pwa-rail-divider"></div>
+            <span class="sv-pwa-rail-action selected" aria-current="page"><span aria-hidden="true">✦</span> Set up vault</span>
+            <div class="sv-pwa-rail-foot">Stellar network setup</div>
+        </nav>
+        <main class="sv-pwa-stage sv-pwa-secondary-stage">
+    <section class="form-page sv-pwa-editor sv-pwa-initialize">
         <header class="page-command-header">
             <div><h1>Set up your vault</h1></div>
         </header>
@@ -64,6 +73,8 @@ else
             }
         </div>
     </section>
+        </main>
+    </div>
 }
 </AdaptiveShell>
 
