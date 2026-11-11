@@ -166,3 +166,18 @@ test('MAUI native bridge owns Blazor start and disables script autostart', () =>
   assert.doesNotMatch(host, /blazor\.webassembly\.js/);
   assert.doesNotMatch(host, /blazor\.server\.js/);
 });
+
+test('native entry screen is task-first with no developer runtime button', () => {
+  const component = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.doesNotMatch(component, />Check native runtime</);
+  assert.doesNotMatch(component, /@HostPlatform · PRIVATE STORAGE/);
+  assert.match(component, />Connect your vault</);
+  assert.match(component, />Recovery phrase</);
+  assert.match(component, /OnAfterRenderAsync\(bool firstRender\)/);
+  assert.match(component, /await CheckRuntimeAsync\(\)/);
+  assert.match(component, /_ledgerMessage = status.Ready \? null/);
+  assert.match(component, />Try again</);
+  assert.match(component, /SelectNativeNetwork\("public"\)/);
+  assert.match(component, /_ledgerNetwork == "public" && !_confirmMainnetAccess/);
+});
