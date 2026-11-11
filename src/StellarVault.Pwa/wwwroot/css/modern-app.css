@@ -171,3 +171,43 @@ body {background:linear-gradient(160deg,#f8fbfa 0%,var(--bg-0) 65%);color:var(--
 @media(prefers-reduced-motion:reduce){
   .sv-adaptive-shell * {transition:none!important;animation:none!important;}
 }
+
+/* File-manager cards and search retain their original navigation actions. */
+.sv-adaptive-shell .sv-modern-search {display:flex;align-items:center;gap:10px;
+  width:min(100%,680px);min-height:49px;padding:0 14px;margin:10px 0 22px;
+  border:1px solid #d9e7e0;border-radius:14px!important;background:#fff;
+  box-shadow:0 2px 10px rgba(25,70,57,.045);}
+.sv-modern-search .search-prefix {font-family:inherit;font-size:26px;
+  font-weight:500;color:#72998b;letter-spacing:0;}
+.sv-modern-search input {width:100%;min-height:46px;min-width:0;
+  background:transparent;border:0;outline:0;box-shadow:none;font:inherit;
+  font-size:14px;color:var(--sv-text);}
+.sv-modern-search:focus-within {outline:3px solid rgba(22,133,104,.14);border-color:#70bba0;}
+.sv-explorer-main .sv-folder-tile {display:flex;align-items:flex-start;
+  justify-content:space-between;gap:8px;min-width:0;}
+.sv-explorer-main .sv-folder-open {display:flex;flex-direction:column;align-items:flex-start;
+  gap:12px;justify-content:flex-start;flex:1;min-width:0;width:100%;
+  background:transparent!important;border:0;box-shadow:none;
+  padding:0;min-height:72px;text-align:left;color:#254e40;font-weight:650;}
+.sv-folder-open span:first-child {font-size:27px;line-height:1;color:#1d9b72;}
+.sv-folder-open span:last-child {font-size:14px;line-height:1.4;overflow-wrap:anywhere;}
+.sv-explorer-main .sv-folder-tile details {align-self:flex-start;flex:none;}
+.sv-modern-record {display:flex;flex-direction:column;align-items:flex-start;
+  gap:13px;text-align:left;}
+.sv-modern-record-icon {display:grid;place-items:center;width:40px;height:40px;
+  border-radius:11px;background:#e7f6ee;color:#138161;font-size:24px;line-height:1;}
+.sv-modern-record .record-card-body {display:flex;flex-direction:column;
+  align-items:flex-start;gap:5px;min-width:0;width:100%;}
+.sv-modern-record .record-chevron {display:none;}
+.sv-modern-record .tag-row {margin-top:4px;}
+.sv-modern-record .pixel-tag {background:#f1f7f3;border:0;
+  color:#447467;border-radius:8px;font-size:11px;}
+.sv-adaptive-shell .record-card:focus-visible,.sv-adaptive-shell .sv-folder-open:focus-visible {
+  outline:3px solid rgba(22,133,104,.34);outline-offset:2px;}
+.sv-pwa-screen-tools .pixel-button:first-child {white-space:nowrap;}
+@media(max-width:560px) {
+  .sv-modern-record {gap:10px;}
+  .sv-modern-record-icon {height:35px;width:35px;font-size:22px;}
+  .sv-modern-search {margin:8px 0 17px;}
+  .sv-explorer-main .sv-folder-tile {padding:12px;}
+}
