@@ -30,19 +30,47 @@ else if (Ledger.IsConnected && _registryReady != true)
 }
 else
 {
-    <section class="vault-page">
-        <header class="page-command-header">
-            <div><div class="panel-kicker">DATABASE BROWSER // STELLAR LEDGER</div><h1>VAULT RECORDS</h1><p class="page-subtitle">Search encrypted metadata recovered from the connected Stellar network.</p></div>
-            <div class="sv-access-actions">@if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }<button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" title="Account and chain information" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ INFO</button><button class="pixel-button compact" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ REFRESH LEDGER</button><button class="pixel-button compact" @onclick="LockAsync">LOCK</button></div>
-        </header>
-        <div class="stats-strip"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
-        @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+    <div class="sv-pwa-app" aria-label="StellarVault application">
+        <nav class="sv-pwa-rail" aria-label="Vault navigation">
+            <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark" aria-hidden="true">✦</span><span><strong>STELLARVAULT</strong><small>ENCRYPTED WORKSPACE</small></span></div>
+            <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
+                    @onclick='() => SelectAppView("records")'><span aria-hidden="true">▤</span> Records</button>
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            {
+                <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
+                        @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span> Offline drafts</button>
+                <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)"
+                        @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⇅</span> Hybrid Sync</button>
+            }
+            <div class="sv-pwa-rail-divider"></div>
+            <a href="/add" class="sv-pwa-rail-action"><span aria-hidden="true">＋</span> New record</a>
+            <a href="/add?kind=folder" class="sv-pwa-rail-action"><span aria-hidden="true">▣</span> New folder</a>
+            <a href="/add?kind=file" class="sv-pwa-rail-action"><span aria-hidden="true">⇧</span> On-chain file</a>
+            <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Local / disconnected")</div>
+        </nav>
+        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="_appView">
+        <section class="vault-page sv-pwa-vault-page">
+            <header class="sv-pwa-screen-header">
+                <div><div class="panel-kicker">STELLARVAULT // @(_appView == "records" ? "ON-CHAIN DATABASE" : _appView == "drafts" ? "DEVICE ONLY" : "EXPLICIT APPROVAL")</div>
+                    <h1>@(_appView == "records" ? "Your records" : _appView == "drafts" ? "Offline drafts" : "Hybrid Sync")</h1>
+                    <p class="page-subtitle">@(_appView == "records" ? "Browse encrypted records, folders and on-chain files." : _appView == "drafts" ? "Edit encrypted records and folders saved only on this device." : "Inspect conflicts and authorize one Stellar transaction at a time.")</p>
+                </div>
+                <div class="sv-pwa-screen-tools">
+                    @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">Connect</button> }
+                    <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
+                    @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ Refresh</button> }
+                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock</button>
+                </div>
+            </header>
+            <div class="stats-strip sv-pwa-summary"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "OFFLINE")</strong></div></div>
+        @if (_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
+            <div class="sv-pwa-view-intro"><strong>DEVICE STORAGE</strong><span>These drafts are encrypted locally. Nothing is published automatically.</span></div>
             <VaultHybridDraftEditor />
-            <VaultHybridRemoteChanges />
         }
-        @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+        @if (_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
+            <VaultHybridRemoteChanges />
             <section class="terminal-panel" aria-label="Encrypted local pending changes" style="padding:1rem;margin:1rem 0">
                 <div class="panel-kicker">DEVICE STORAGE // NOT ON STELLAR</div>
                 <h2>LOCAL PENDING CHANGES</h2>
@@ -84,6 +112,8 @@ else
                 else if (_pendingError is null && !_pendingLoading) { <p class="advanced-help">No local drafts loaded. Use Add Record, New Folder or Add File to save one.</p> }
             </section>
         }
+        @if (_appView == "records")
+        {
         @if (!Ledger.IsConnected)
         {
             <div class="terminal-alert warning" role="status">
@@ -167,7 +197,19 @@ else
                 }
             }
         </section>
-    </section>
+        }
+        </section>
+        </main>
+        <nav class="sv-pwa-mobile-tabs" aria-label="Mobile vault navigation">
+            <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)" @onclick='() => SelectAppView("records")'><span aria-hidden="true">▤</span>Records</button>
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            {
+                <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)" @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span>Drafts</button>
+                <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)" @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⇅</span>Sync</button>
+            }
+            <a href="/add"><span aria-hidden="true">＋</span>New</a>
+        </nav>
+    </div>
     @if (_selectedPending is not null)
     {
         <div class="modal-backdrop" @onclick="ClosePending">
@@ -355,6 +397,15 @@ else
 </AdaptiveShell>
 
 @code {
+    private string _appView = "records";
+    private void SelectAppView(string view)
+    {
+        if (view is not ("records" or "drafts" or "sync")) return;
+        if (view != "records" && (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked)) return;
+        _appView = view;
+        if (view == "sync") _ = InvokeAsync(LoadPendingAsync);
+    }
+
     private string? _pendingFileStatus;
     private async Task DownloadPendingFileAsync()
     {
