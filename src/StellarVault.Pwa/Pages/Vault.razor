@@ -46,9 +46,9 @@ else
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <div class="sv-pwa-rail-divider"></div>
-            <a href="/add" class="sv-pwa-rail-action"><span aria-hidden="true">＋</span> New record</a>
-            <a href="/add?kind=folder" class="sv-pwa-rail-action"><span aria-hidden="true">▣</span> New folder</a>
-            <a href="/add?kind=file" class="sv-pwa-rail-action"><span aria-hidden="true">⇧</span> Add file</a>
+            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span> New record</button>
+            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("folder")'><span aria-hidden="true">▣</span> New folder</button>
+            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("file")'><span aria-hidden="true">⇧</span> Add file</button>
             <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Not connected")</div>
         </nav>
         <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="_appView">
@@ -62,8 +62,8 @@ else
                 <div class="sv-pwa-screen-tools">
                     @if (_appView == "records")
                     {
-                        <a class="pixel-button primary sv-create-record" href="/add"><span aria-hidden="true">＋</span> New record</a>
-                        <a class="pixel-button sv-create-folder" href="/add?kind=folder"><span aria-hidden="true">＋</span> New folder</a>
+                        <button class="pixel-button primary sv-create-record" type="button" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span> New record</button>
+                        <button class="pixel-button sv-create-folder" type="button" @onclick='() => OpenEditor("folder")'><span aria-hidden="true">＋</span> New folder</button>
                     }
                     @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
                     <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
@@ -223,7 +223,7 @@ else
                     <button class="pixel-button compact sv-folder-open" @onclick="() => OpenFolder(item.Id)"><span aria-hidden="true">📁</span><span>@item.Title</span></button>
                     <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
                         <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
-                        <a href="@($"/edit/{item.Id}")">Rename / move</a>
+                        <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
                         <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
                     </details>
                 </div>
@@ -262,9 +262,9 @@ else
                 }
             }
             <div class="sv-access-actions">
-                <a class="pixel-button compact" href="@($"/add?folder={_folder}")">New record</a>
-                <a class="pixel-button compact" href="@($"/add?folder={_folder}&kind=folder")">New folder</a>
-                <a class="pixel-button compact" href="/add?kind=file">Add file</a>
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("record")'>New record</button>
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("folder")'>New folder</button>
+                <button class="pixel-button compact" type="button" @onclick='() => OpenEditor("file")'>Add file</button>
             </div>
         </section>
         @if (_busy) { <div class="terminal-alert" role="status"><span class="sv-loading-spinner"></span> @_busyMessage</div> }
@@ -288,7 +288,7 @@ else
                             <summary aria-label="@($"Actions for {item.Title}")" title="More actions">⋯</summary>
                             <div class="sv-object-menu">
                                 <button type="button" @onclick="() => OpenRecord(item)">View details</button>
-                                @if (!IsLedgerFile(item)) { <a href="@($"/edit/{item.Id}")">Edit record</a> }
+                                @if (!IsLedgerFile(item)) { <button type="button" @onclick='() => OpenEditor("record", item.Id)'>Edit record</button> }
                                 <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
                             </div>
                         </details>
@@ -313,6 +313,51 @@ else
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
         </nav>
         <a href="/add" class="sv-modern-fab" aria-label="Create a new vault item" title="New item"><span aria-hidden="true">＋</span></a>
+        @if (_editorOpen)
+        {
+            <aside class="sv-editor-sidecar" aria-label="Vault item editor">
+                <div class="sv-sidecar-topbar">
+                    <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
+                    <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
+                </div>
+                <Add @key="_editorKey" Embedded="true" RecordId="@_editorRecordId" InitialFolder="@_folder"
+                     Kind="@_editorKind" OnSaved="OnEditorSavedAsync" OnCancel="CloseEditor" />
+            </aside>
+        }
+        else
+        {
+    @if (_selected is not null)
+    {
+        <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
+            <section class="record-modal terminal-panel sv-record-inspector" role="dialog" aria-modal="true"
+                     aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
+                <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
+                     tabindex="0" title="Drag to adjust preview width"></div>
+                <header class="modal-header sv-inspector-heading">
+                    <div class="sv-inspector-title"><span class="sv-inspector-record-icon" aria-hidden="true">▦</span><div><div class="panel-kicker">Record details</div><h2 id="sv-record-title">@_selected.Title</h2><p class="sv-inspector-subtitle">@FolderPath(_selected.FolderId)</p></div></div>
+                    <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
+                </header>
+                <div class="sv-inspector-section-label">Details</div>
+                @if (IsLedgerFile(_selected))
+                {
+                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
+                }
+                else
+                {
+                <div class="data-field"><span class="field-label">USERNAME / IDENTIFIER</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
+                <div class="data-field secret-field"><span class="field-label">SECRET</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
+                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">URL</span><div class="field-value-row"><code>@_selected.Url</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>COPY</button></div></div> }
+                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">NOTES</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
+                @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
+                }
+                <div class="modal-action-row record-actions">
+                    @if (!IsLedgerFile(_selected)) { <button class="pixel-button primary" type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
+                    <button class="pixel-button danger" @onclick="() => SelectDelete(_selected)">DELETE</button>
+                </div>
+            </section>
+        </div>
+    }
+        }
     </div>
     @if (_selectedPending is not null)
     {
@@ -427,37 +472,6 @@ else
             </section>
         </div>
     }
-    @if (_selected is not null)
-    {
-        <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
-            <section class="record-modal terminal-panel sv-record-inspector" role="dialog" aria-modal="true"
-                     aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
-                <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
-                     tabindex="0" title="Drag to adjust preview width"></div>
-                <header class="modal-header sv-inspector-heading">
-                    <div class="sv-inspector-title"><span class="sv-inspector-record-icon" aria-hidden="true">▦</span><div><div class="panel-kicker">Record details</div><h2 id="sv-record-title">@_selected.Title</h2><p class="sv-inspector-subtitle">@FolderPath(_selected.FolderId)</p></div></div>
-                    <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
-                </header>
-                <div class="sv-inspector-section-label">Details</div>
-                @if (IsLedgerFile(_selected))
-                {
-                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
-                }
-                else
-                {
-                <div class="data-field"><span class="field-label">USERNAME / IDENTIFIER</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
-                <div class="data-field secret-field"><span class="field-label">SECRET</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
-                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">URL</span><div class="field-value-row"><code>@_selected.Url</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>COPY</button></div></div> }
-                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">NOTES</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
-                @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
-                }
-                <div class="modal-action-row record-actions">
-                    @if (!IsLedgerFile(_selected)) { <a class="pixel-button primary" href="@($"/edit/{_selected.Id}")">EDIT RECORD</a> }
-                    <button class="pixel-button danger" @onclick="() => SelectDelete(_selected)">DELETE</button>
-                </div>
-            </section>
-        </div>
-    }
     @if (_showAccountInfo)
     {
         <div class="modal-backdrop" @onclick="CloseAccountInfo">
@@ -518,6 +532,44 @@ else
     }
 
     private string _appView = "records";
+    private bool _editorOpen;
+    private string? _editorRecordId;
+    private string _editorKind = "record";
+    private int _editorKey;
+    private string _explorerLayout = "list";
+    private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
+    private void ToggleTreeFolder(string id)
+    {
+        if (!_collapsedFolders.Add(id)) _collapsedFolders.Remove(id);
+    }
+    private bool IsTreeFolderVisible(LedgerRecordItem folder)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var parentId = folder.FolderId;
+        while (!string.IsNullOrWhiteSpace(parentId) && visited.Add(parentId))
+        {
+            if (_collapsedFolders.Contains(parentId)) return false;
+            parentId = Folders.FirstOrDefault(x => x.Id == parentId)?.FolderId;
+        }
+        return true;
+    }
+    private bool HasTreeChildren(string id) => Folders.Any(x => x.FolderId == id);
+    private void OpenEditor(string kind, string? recordId = null)
+    {
+        if (_busy) return;
+        _editorKind = kind is "folder" or "file" ? kind : "record";
+        _editorRecordId = recordId;
+        _editorOpen = true;
+        _selected = null;
+        _editorKey++;
+    }
+    private void CloseEditor() { if (_busy) return; _editorOpen = false; _editorRecordId = null; }
+    private async Task OnEditorSavedAsync()
+    {
+        _editorOpen = false;
+        _editorRecordId = null;
+        await RefreshAsync();
+    }
     private string _syncTask = "review";
     private void SelectAppView(string view)
     {
@@ -991,7 +1043,7 @@ else
     private string? _fileDownloadStatus;
     private LedgerRecordItem? _selected;
     private bool _revealed;
-    private void OpenRecord(LedgerRecordItem item) { _selected = item; _revealed = false; _fileDownloadStatus = null; }
+    private void OpenRecord(LedgerRecordItem item) { _editorOpen = false; _selected = item; _revealed = false; _fileDownloadStatus = null; }
     private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
     private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
     private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
