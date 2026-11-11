@@ -31,7 +31,7 @@ else
                 <span><strong>StellarVault</strong><small>Private account vault</small></span></div>
             <div class="sv-native-session">
                 <span class="sv-native-status-dot @(Ledger.IsConnected ? "connected" : "")" aria-hidden="true"></span>
-                @(Ledger.IsConnected ? "Stellar connected" : "Offline")
+                @(Ledger.IsConnected ? "Connected" : "Not connected")
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
@@ -54,12 +54,11 @@ else
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
             <div class="sv-native-page-heading">
-                <div><span class="sv-native-eyebrow">@HostPlatform · PRIVATE STORAGE</span>
-                    <h1>@(_nativePage == "stellar" ? "Stellar storage" :
-                          _nativePage == "local" ? "My vault" : "Hybrid sync")</h1>
-                    <p>@(_nativePage == "stellar" ? "Browse your on-chain records and files" :
-                         _nativePage == "local" ? "Encrypted storage on this device" :
-                         "Review local changes before paid publication")</p></div>
+                <div>
+                    <h1>@(_nativePage == "stellar" ? (Ledger.IsConnected ? "My records" : "Welcome back") :
+                          _nativePage == "local" ? "My vault" : "Sync")</h1>
+                    @if (_nativePage == "sync") { <p>Review changes before syncing.</p> }
+                </div>
                 @if (Sessions.IsUnlocked && _nativePage != "stellar")
                 {
                     <button type="button" class="sv-native-outline-action" @onclick="LockVault">Lock vault</button>
@@ -69,42 +68,40 @@ else
         @if (_nativePage == "stellar")
         {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
-            <div class="panel-heading"><div><div class="panel-kicker">SECURE ACCESS // STELLAR IDENTITY</div><h2>OPEN YOUR VAULT</h2></div><span class="step-led">01</span></div>
+            <div class="panel-heading"><div><h2>@(Ledger.IsConnected ? "Your Stellar vault" : "Connect your vault")</h2></div></div>
             @if (!Ledger.IsConnected)
             {
-                <p>Connect with a BIP-39 mnemonic to discover existing HD-v2 ledger records. No transaction will be submitted.</p>
-                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Check native runtime</button>
-                <p class="advanced-help">Selected network: @NetworkSelection.SelectedPreset.ToUpperInvariant(). Use the network selector in the application header to change networks before connecting.</p>
-                <label class="terminal-label" for="native-ledger-mnemonic">BIP-39 RECOVERY WORDS</label>
+                <p>Enter your recovery phrase to access your records.</p>
+                <label class="terminal-label" for="native-ledger-mnemonic">Recovery phrase</label>
                 <VaultMnemonicInput @bind-Value="_ledgerMnemonic" Disabled="@(_ledgerBusy || _runtimeReady != true)" />
-                <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
-                        @onclick="ConnectLedgerAsync">Connect and read ledger</button>
+                @if (_runtimeReady is null || (_runtimeReady == false && _ledgerBusy))
+                { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
+                @if (_ledgerNetwork == "public")
+                { <p class="terminal-alert warning" role="alert">Mainnet uses real XLM for approved transactions. Review costs before publishing.</p> }
             }
             else
             {
-                <p>Ledger connected to @_ledgerNetwork. Recovered records: @_ledgerRecords.Count</p>
+                <p class="sv-native-summary">@_ledgerRecords.Count items · @_ledgerNetwork</p>
                 @if (!string.IsNullOrWhiteSpace(_rootAccountId))
                 {
                     <p>Root account: <code>@_rootAccountId</code></p>
                 }
-                <p>Folders: @_ledgerRecords.Count(x => x.IsFolder) | Records: @_ledgerRecords.Count(x => !x.IsFolder)</p>
-                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
-                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect ledger</button>
+                <p class="sv-native-subtle-status">@_ledgerRecords.Count(x => x.IsFolder) folders · @_ledgerRecords.Count(x => !x.IsFolder) records</p>
                 <nav class="network-selector" aria-label="Native Stellar workspace">
                     <button type="button" class="network-option @(_nativeMode == "browse" ? "active" : "")"
                             aria-pressed="@(_nativeMode == "browse")" disabled="@_ledgerBusy"
                             @onclick='() => SetNativeMode("browse")'>
-                        <span class="network-symbol">S</span><span><strong>STELLAR STORAGE</strong><small>EXPLORE</small></span>
+                        <span class="network-symbol">S</span><span><strong>Browse</strong><small>EXPLORE</small></span>
                     </button>
                     <button type="button" class="network-option @(_nativeMode == "record" ? "active" : "")"
                             aria-pressed="@(_nativeMode == "record")" disabled="@_ledgerBusy"
                             @onclick='() => SetNativeMode("record")'>
-                        <span class="network-symbol">R</span><span><strong>ADD RECORD</strong><small>ON-CHAIN</small></span>
+                        <span class="network-symbol">R</span><span><strong>New record</strong><small>ON-CHAIN</small></span>
                     </button>
                     <button type="button" class="network-option @(_nativeMode == "file" ? "active" : "")"
                             aria-pressed="@(_nativeMode == "file")" disabled="@_ledgerBusy"
                             @onclick='() => SetNativeMode("file")'>
-                        <span class="network-symbol">F</span><span><strong>ADD FILE</strong><small>ON-CHAIN</small></span>
+                        <span class="network-symbol">F</span><span><strong>Add file</strong><small>ON-CHAIN</small></span>
                     </button>
                 </nav>
                 @if (_nativeMode == "record")
@@ -154,8 +151,8 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
-                    <div class="panel-kicker">STORED RECORDS // STELLAR LEDGER</div>
-                    <h3>RECORD AND FILE DIRECTORY</h3>
+                    <div class="panel-kicker"></div>
+                    <h3>Browse your vault</h3>
                     <label class="terminal-label" for="native-ledger-folder">FOLDER</label>
                 <select id="native-ledger-folder" class="terminal-input" @bind="_selectedFolderId" @bind:after="ResetSelection" disabled="@_ledgerBusy">
                     <option value="">Root</option>
@@ -208,20 +205,27 @@ else
             }
             @if (!string.IsNullOrEmpty(_ledgerMessage))
             {
-                <p role="status" aria-live="polite">@_ledgerMessage</p>
+                <div class="terminal-alert warning" role="alert">
+                    <span>@_ledgerMessage</span>
+                    @if (_runtimeReady == false && !Ledger.IsConnected)
+                    { <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CheckRuntimeAsync">Try again</button> }
+                </div>
             }
-            <p class="advanced-help">Local encrypted records and Stellar ledger writes are separate storage destinations. Publishing requires explicit transaction approval.</p>
+            @if (Ledger.IsConnected)
+            {
+                <details class="sv-native-help"><summary>About storage and transactions</summary>
+                    <p>Local records stay on this device. Publishing to Stellar needs your approval and may cost XLM.</p>
+                </details>
+            }
         </section>
         }
         @if (_nativePage is "local" or "sync")
         {
         <section class="terminal-panel" aria-label="Local encrypted vault status">
-            <div class="panel-kicker">LOCAL STORAGE // SESSION SECURITY</div>
-            <h3>LOCAL ENCRYPTED VAULT</h3>
+            <h3>@(Sessions.IsUnlocked ? "Your saved items" : "Unlock local storage")</h3>
             @if (Sessions.IsUnlocked)
             {
-                <p class="advanced-help">Local session unlocked for account <code>@Sessions.ActiveAccountId</code>.</p>
-                <button type="button" class="pixel-button compact" @onclick="LockVault">LOCK LOCAL VAULT</button>
+                <p class="sv-native-subtle-status">Protected on this device</p>
                 @if (_nativePage == "local")
                 {
                     <nav class="sv-native-segments" aria-label="Local vault views">
@@ -243,8 +247,7 @@ else
                 }
                 else
                 {
-                    <p class="advanced-help">Hybrid Sync includes encrypted records and folders.
-                        File synchronization is intentionally unavailable.</p>
+                    <p class="sv-native-subtle-status">Only records and folders can be synced.</p>
                     <nav class="sv-native-segments" aria-label="Hybrid sync views">
                         <button type="button" class="@(_syncMode == "changes" ? "selected" : "")"
                                 aria-pressed="@(_syncMode == "changes")"
@@ -265,39 +268,34 @@ else
             }
             else
             {
-                <div class="terminal-alert warning" role="status">
-                    <strong>DEVICE-ONLY ENCRYPTED STORAGE — OPTIONAL</strong>
-                    <span>This local namespace is NOT proof of Stellar account ownership.
-                    An address labels encrypted files; a separate vault passphrase controls access.
-                    Nothing is uploaded or synchronized unless separately approved.</span>
-                </div>
+                <p>Your saved items are encrypted on this device. Choose local storage to get started.</p>
                 <label class="sv-biometric-choice">
                     <input type="checkbox" @bind="_localConsent" disabled="@_busy" />
-                    I OPT IN TO ENCRYPTED LOCAL DEVICE STORAGE AND ACCEPT DEVICE LOSS/BACKUP RISKS
+                    Save encrypted items on this device (I understand I need my own backup)
                 </label>
                 @if (_localConsent)
                 {
-                    <label class="terminal-label" for="native-local-account">STELLAR ACCOUNT (LOCAL NAMESPACE ONLY)</label>
+                    <label class="terminal-label" for="native-local-account">Stellar account address</label>
                     <input id="native-local-account" class="terminal-input"
                            autocomplete="off" spellcheck="false" maxlength="56"
                            @bind="_accountId" disabled="@_busy" />
-                    <label class="terminal-label" for="native-local-passphrase">SEPARATE LOCAL ENCRYPTION PASSPHRASE</label>
+                    <label class="terminal-label" for="native-local-passphrase">Vault passphrase</label>
                     <input id="native-local-passphrase" class="terminal-input" type="password"
                            autocomplete="off" @bind="_passphrase" disabled="@_busy" />
                     <div class="sv-access-actions">
                         <button type="button" class="pixel-button compact"
                                 disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
-                                @onclick="CreateVault">CREATE LOCAL ENCRYPTED VAULT</button>
+                                @onclick="CreateVault">Create vault</button>
                         <button type="button" class="pixel-button compact"
                                 disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
-                                @onclick="UnlockVault">UNLOCK EXISTING LOCAL VAULT</button>
+                                @onclick="UnlockVault">Unlock vault</button>
                     </div>
-                    <p class="advanced-help">Creating a vault requires a new passphrase of at least 12 characters.
-                       Unlocking an existing device vault uses its original passphrase. Local unlock
-                       does not enable wallet signing or confirm account control.</p>
+                    <p class="sv-native-subtle-status">For a new vault, use at least 12 characters. Keep your passphrase safe.</p>
                 }
             }
-            <VaultStorageSecurityNotice Native="true" />
+            <details class="sv-native-help"><summary>How local storage works</summary>
+                <VaultStorageSecurityNotice Native="true" />
+            </details>
         </section>
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -319,7 +317,7 @@ else
                 }
                 else
                 {
-                    <span class="sv-native-command-hint">Connect to view your on-chain records.</span>
+                    <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
                             disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic))"
                             @onclick="ConnectLedgerAsync">Connect Stellar</button>
@@ -341,7 +339,7 @@ else
             }
             else
             {
-                <span class="sv-native-command-hint">Unlock the device vault to access private records.</span>
+                <span class="sv-native-command-hint">Your saved items</span>
                 <button type="button" class="sv-native-command primary"
                         disabled="@(_busy || !_localConsent || _accountId.Length != 56 || string.IsNullOrWhiteSpace(_passphrase))"
                         @onclick="UnlockVault">Unlock vault</button>
@@ -427,22 +425,14 @@ else
             var status = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
             _runtimeReady = status.Ready;
             if (!status.Ready) _ledgerMnemonic = string.Empty;
-            _ledgerMessage = status.Ready
-                ? "Stellar runtime ready. You can connect to your selected network."
-                : "Runtime incomplete: " + string.Join(", ", new[]
-                    {
-                        status.CryptoReady ? null : "WebCrypto",
-                        status.Bip39Ready ? null : "BIP-39",
-                        status.HdReady ? null : "HD keys",
-                        status.LedgerReady ? null : "ledger scripts",
-                        status.SdkReady ? null : "Stellar SDK"
-                    }.Where(x => x is not null));
+            _ledgerMessage = status.Ready ? null
+                : "Unable to prepare a secure connection. Restart the app or try again.";
         }
         catch
         {
             _runtimeReady = false;
             _ledgerMnemonic = string.Empty;
-            _ledgerMessage = "Unable to verify the WebView Stellar runtime. Ledger access is blocked.";
+            _ledgerMessage = "Unable to prepare a secure connection. Restart the app or try again.";
         }
         finally { _ledgerBusy = false; }
     }
@@ -984,7 +974,7 @@ else
             _rootAccountId = account.RootAccountId;
             _selectedFolderId = string.Empty;
             ResetSelection();
-            _ledgerMessage = "Ledger records recovered (read-only).";
+            _ledgerMessage = null;
         }
         catch
         {
@@ -1009,7 +999,7 @@ else
             _ledgerRecords = await Ledger.ReadAsync();
             _selectedFolderId = string.Empty;
             ResetSelection();
-            _ledgerMessage = "Ledger records refreshed.";
+            _ledgerMessage = null;
         }
         catch
         {
@@ -1026,7 +1016,7 @@ else
         try
         {
             await Ledger.DisconnectAsync();
-            _ledgerMessage = "Ledger disconnected.";
+            _ledgerMessage = null;
         }
         catch
         {
