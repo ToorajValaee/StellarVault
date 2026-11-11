@@ -33,7 +33,7 @@ else
 {
     <div class="sv-pwa-app" aria-label="StellarVault application">
         <nav class="sv-pwa-rail" aria-label="Vault navigation">
-            <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark" aria-hidden="true">✦</span><span><strong>STELLARVAULT</strong></span></div>
+            <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark sv-rail-shield" aria-hidden="true"><svg viewBox="0 0 32 36" width="27" height="30" fill="none"><path d="M16 2 29 7v11c0 8-6.2 13.5-13 16C9.2 31.5 3 26 3 18V7L16 2Z" fill="currentColor"/><path d="m16 9 2.7 6.3L25 18l-6.3 2.7L16 27l-2.7-6.3L7 18l6.3-2.7L16 9Z" fill="#084839"/></svg></span><span><strong>StellarVault</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span aria-hidden="true">♙</span> Vault</button>
             <button type="button" class="sv-sidebar-folder-link"
@@ -48,6 +48,7 @@ else
             <button type="button" class="@(_appView == "settings" ? "selected" : "")"
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
+            <a class="sv-rail-link" href="/help"><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</a>
             <div class="sv-pwa-rail-divider"></div>
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
@@ -61,6 +62,10 @@ else
                     <button type="button" class="sv-sidebar-connect" @onclick="ReconnectAsync"><span aria-hidden="true">◎</span> Connect Stellar</button>
                     <p>Connect your account for encrypted ledger records and recovery.</p>
                 }
+            </div>
+            <div class="sv-rail-trust">
+                <a href="https://github.com/ToorajValaee/StellarVault" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌘</span> View source on GitHub <span aria-hidden="true">↗</span></a>
+                <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer" class="sv-powered-by">Powered by <strong>badje.ir</strong> <span aria-hidden="true">↗</span></a>
             </div>
             <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Not connected")</div>
         </nav>
