@@ -81,8 +81,12 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
   const vault = fs.readFileSync(path.join(pages, 'Vault.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
   assert.ok(vault.includes('@page "/vault"'));
-  assert.ok(vault.includes('VAULT RECORDS'));
+  assert.ok(vault.includes('Your records'));
   assert.ok(vault.includes('FOLDERS'));
+  assert.ok(vault.includes('sv-pwa-app'));
+  assert.ok(vault.includes('sv-pwa-rail'));
+  assert.ok(vault.includes('sv-pwa-mobile-tabs'));
+  assert.ok(vault.includes('SelectAppView("records")'));
   assert.ok(vault.includes('search-console'));
   assert.ok(vault.includes('Ledger.ReadAsync()'));
   assert.ok(!vault.includes('Offline local vault'));
@@ -247,4 +251,30 @@ test('encrypted offline queue stores authenticated envelopes, not readable draft
   assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
   assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
   assert.ok(program.includes('IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier'));
+});
+
+test('PWA exposes independent record, offline draft and manual sync views', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.ok(vault.includes('SelectAppView("drafts")'));
+  assert.ok(vault.includes('SelectAppView("sync")'));
+  assert.ok(vault.includes('_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked'));
+  assert.ok(vault.includes('_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked'));
+  assert.ok(vault.includes('<VaultHybridDraftEditor />'));
+  assert.ok(vault.includes('<VaultHybridRemoteChanges />'));
+  assert.ok(vault.includes('<VaultHybridSyncReview />'));
+  assert.ok(vault.includes('_appView == "records"'));
+  assert.ok(vault.includes('Ledger.ReadAsync()'));
+  assert.ok(vault.includes('Ledger.DisconnectAsync()'));
+});
+
+test('PWA item editor offers one focused task with app navigation', () => {
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  assert.ok(add.includes('sv-pwa-editor-breadcrumb'));
+  assert.ok(add.includes('sv-pwa-editor-modes'));
+  assert.ok(add.includes('href="/add?kind=folder"'));
+  assert.ok(add.includes('href="/add?kind=file"'));
+  assert.ok(css.includes('.sv-pwa-mobile-tabs'));
+  assert.ok(css.includes('.sv-pwa-rail'));
+  assert.ok(css.includes('safe-area-inset-bottom'));
 });
