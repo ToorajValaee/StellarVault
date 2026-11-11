@@ -456,3 +456,66 @@ html, body {
   .sv-native-network-popover {right:-22px;}
   .sv-native-shell .sv-native-scroll .sv-native-content {padding-top:10px;}
 }
+
+/* Native pages are actual destinations: controls never accordion-open a form
+   beneath an unrelated record list. Desktop gets a tree; phones get files. */
+.sv-native-browser-toolbar {display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin:0 0 15px;}
+.sv-native-browser-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.sv-native-browser-actions .pixel-button{margin:0;min-height:44px;}
+.sv-native-back{display:inline-flex;align-items:center;min-height:44px;
+  border:1px solid var(--sv-native-line);border-radius:8px;
+  background:var(--sv-native-elevated);color:var(--sv-native-text);
+  padding:10px 15px;margin:0 0 15px;cursor:pointer;font:inherit;font-size:13px;}
+.sv-native-explorer{display:grid;grid-template-columns:205px minmax(0,1fr);gap:14px;min-width:0;}
+.sv-native-folder-tree{display:flex;flex-direction:column;gap:4px;
+  border-right:1px solid var(--sv-native-line);padding-right:12px;
+  max-height:calc(100dvh - 250px);overflow-y:auto;}
+.sv-native-tree-item{width:100%;min-height:39px;padding:8px;
+  padding-left:calc(8px + min(var(--sv-tree-depth, 0), 8) * 12px);
+  color:var(--sv-native-text);text-align:left;background:transparent;
+  border:1px solid transparent;border-radius:6px;font:inherit;font-size:12px;cursor:pointer;
+  overflow-wrap:anywhere;}
+.sv-native-tree-item.selected,.sv-native-tree-item:hover{
+  background:rgba(126,246,164,.12);border-color:var(--sv-native-line);}
+.sv-native-object-storage{min-width:0;}
+.sv-native-mobile-folder{display:none;}
+.sv-native-object-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));
+  gap:10px;min-width:0;}
+.sv-native-object-card{min-width:0;min-height:115px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+  padding:14px;text-align:left;color:var(--sv-native-text);
+  border:1px solid var(--sv-native-line);border-radius:8px;
+  background:var(--sv-native-elevated);cursor:pointer;}
+.sv-native-object-icon{font-size:26px;line-height:1;color:var(--sv-native-accent);}
+.sv-native-object-card strong{font-size:13px;overflow-wrap:anywhere;}
+.sv-native-object-card small{font-size:11px;color:var(--sv-native-muted);}
+.sv-native-detail-screen{min-width:0;}
+.sv-native-secret-entry{display:flex;gap:8px;align-items:stretch;}
+.sv-native-secret-entry .terminal-input{flex:1;min-width:0;}
+.sv-native-secret-entry .pixel-button{flex:none;margin:0;}
+.sv-native-shell .sv-native-scroll .terminal-panel .terminal-panel{
+  border:0;background:transparent;padding:0;margin:0;box-shadow:none;}
+.sv-native-shell .sv-native-scroll .terminal-panel .terminal-panel::before{display:none;}
+@media(max-width:899px){
+  .sv-native-explorer{display:block;}
+  .sv-native-folder-tree{display:none;}
+  .sv-native-mobile-folder{display:block;margin-bottom:14px;}
+  .sv-native-object-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+  .sv-native-object-card{min-height:102px;padding:12px;}
+  .sv-native-shell .sv-native-page-heading{margin-bottom:8px;}
+}
+@media(max-width:420px){
+  .sv-native-browser-toolbar{align-items:flex-start;flex-wrap:wrap;}
+  .sv-native-browser-actions{width:100%;}
+  .sv-native-browser-actions .pixel-button{flex:1;}
+}
+/* The terminal identity stays consistent across both hosts: green phosphor,
+   faint dot-matrix surfaces and hard-edged cards rather than mixed glass styles. */
+.sv-native-shell :is(.terminal-panel,.sv-native-object-card,.sv-native-folder-tree,
+  .sv-native-network-popover,.sv-native-object-grid .sv-native-object-card,
+  .sv-native-segments,.sv-native-command,.sv-native-nav button.selected) {
+  border-radius:3px;
+  background-image:radial-gradient(circle,rgba(126,246,164,.07) 0 .6px,transparent .8px);
+  background-size:9px 9px;
+}
