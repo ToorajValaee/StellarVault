@@ -420,10 +420,10 @@ else
                 }
                 else
                 {
-                <div class="data-field"><span class="field-label">USERNAME / IDENTIFIER</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
-                <div class="data-field secret-field"><span class="field-label">SECRET</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
-                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">URL</span><div class="field-value-row"><code>@_selected.Url</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>COPY</button></div></div> }
-                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">NOTES</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
+                <div class="data-field"><span class="field-label">Username</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
+                <div class="data-field secret-field"><span class="field-label">Password / secret</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
+                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">Website</span><div class="field-value-row"><code>@_selected.Url</code><div class="inline-actions">@if (SafeRecordUrl(_selected.Url) is string safeUrl) { <a class="mini-button" href="@safeUrl" target="_blank" rel="noopener noreferrer" aria-label="Open website">Open</a> }<button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>Copy</button></div></div></div> }
+                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">Notes</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
                 @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
                 }
                 }
@@ -1130,6 +1130,11 @@ else
     private void OpenRecord(LedgerRecordItem item) { _editorOpen = false; _selected = item; _recordInspectorTab = "details"; _revealed = false; _fileDownloadStatus = null; }
     private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
     private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
+    private static string? SafeRecordUrl(string? value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return null;
+        return uri.Scheme is "http" or "https" ? uri.AbsoluteUri : null;
+    }
     private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
     private bool _showAccountInfo, _infoLoading;
     private LedgerAccountInfo? _accountInfo;
