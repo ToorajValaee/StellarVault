@@ -4159,3 +4159,82 @@ html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-folder-tile .sv-obje
 html[data-theme="dark"] .sv-web-shell .sv-explorer-main .sv-object-row .sv-object-actions > summary {
   background:#203b3d!important;color:#ddf0e9!important;border-color:#416064!important;
 }
+
+
+/* 2026-11-11 — Help is an inline workspace view, not a second shell. */
+.sv-web-shell .sv-pwa-rail .sv-inline-help-nav {
+  width:100%!important;display:flex!important;align-items:center!important;
+  justify-content:flex-start!important;text-align:left!important;
+  gap:13px!important;min-height:45px!important;padding:10px 13px!important;
+  background:transparent!important;border:1px solid transparent!important;
+  border-radius:8px!important;box-shadow:none!important;
+  color:#e8f9f2!important;cursor:pointer;
+  font:600 13px/1.45 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-inline-help-nav:hover {
+  background:rgba(162,245,207,.12)!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-inline-help-nav.selected {
+  background:rgba(65,193,147,.36)!important;
+  border-color:rgba(150,244,205,.14)!important;color:#fff!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-inline-help-nav > .sv-rail-icon {
+  color:#c5f4dc!important;
+}
+.sv-web-shell .sv-nav-vault-icon {display:inline-flex;align-items:center;
+  justify-content:center;width:22px;height:22px;flex:0 0 22px;}
+.sv-web-shell .sv-nav-vault-icon svg {display:block;}
+/* Thin footer credit, not a promotional pill. */
+.sv-web-shell .sv-pwa-rail .sv-rail-trust {
+  margin-top:auto!important;margin-bottom:5px!important;
+  padding-top:10px!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-rail-attribution {
+  display:block!important;flex:0 0 auto!important;
+  text-align:center!important;white-space:nowrap;
+  width:100%;max-width:100%;padding:5px 6px!important;
+  margin:0!important;background:transparent!important;border:0!important;
+  font:400 10px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#87b7a6!important;letter-spacing:0!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-rail-attribution a {
+  display:inline!important;min-height:0!important;padding:0!important;margin:0!important;
+  border:0!important;border-radius:0!important;background:none!important;
+  text-decoration:none!important;color:#bae8d3!important;
+  font:600 10px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-pwa-rail .sv-rail-attribution a:hover {text-decoration:underline!important;}
+.sv-web-shell .sv-pwa-rail .sv-pwa-rail-foot {margin-top:0!important;}
+/* No second help navigation, no app routes inside documentation. */
+.sv-web-shell .sv-pwa-stage .sv-help-main.sv-help-embedded {
+  display:block!important;width:100%!important;max-width:100%!important;
+  margin:0!important;padding:4px 0 32px!important;
+  background:transparent!important;box-shadow:none!important;
+}
+.sv-web-shell .sv-pwa-stage .sv-help-embedded .sv-help-section {
+  max-width:100%;scroll-margin-top:18px;
+}
+.sv-web-shell .sv-pwa-stage .sv-help-embedded > h1 {
+  font-size:clamp(25px,2.5vw,33px)!important;
+}
+.sv-web-shell .sv-pwa-stage .sv-help-embedded .sv-help-intro {
+  max-width:750px!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-pwa-stage .sv-help-main.sv-help-embedded {
+  background:transparent!important;color:#e2efeb!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-pwa-stage .sv-help-embedded .sv-help-section {
+  background:#1b2d30!important;color:#e2efeb!important;
+  border-color:#3b5656!important;
+}
+@media(max-width:840px) {
+ .sv-web-shell .sv-pwa-stage .sv-help-main.sv-help-embedded {padding:0 0 28px!important;}
+ .sv-web-shell .sv-pwa-mobile-help {
+   border:0!important;background:transparent!important;
+   font:600 11px/1.3 Inter,"Segoe UI",Arial,sans-serif!important;
+   cursor:pointer;
+ }
+ .sv-web-shell .sv-pwa-mobile-help.selected {
+   color:#075f46!important;background:#dff4e9!important;
+ }
+}
