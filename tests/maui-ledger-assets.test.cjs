@@ -159,3 +159,10 @@ test('Android bridge timeout includes safe WebView compatibility metadata', () =
   assert.match(page, /_androidWebViewInfo/);
   assert.doesNotMatch(page, /JavaScriptInterface|AddJavascriptInterface/);
 });
+
+test('MAUI native bridge owns Blazor start and disables script autostart', () => {
+  assert.match(host, /<script\s+src="_framework\/blazor\.webview\.js"\s+autostart="false"/);
+  assert.doesNotMatch(host, /Blazor\.start\s*\(/);
+  assert.doesNotMatch(host, /blazor\.webassembly\.js/);
+  assert.doesNotMatch(host, /blazor\.server\.js/);
+});
