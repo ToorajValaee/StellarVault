@@ -138,9 +138,38 @@ else
         }
         <label class="search-console"><span class="search-prefix">FIND&gt;</span><input @bind="_search" @bind:event="oninput" placeholder="title, username, URL, tag, folder..." autocomplete="off"/></label>
         @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
-        <section class="terminal-panel" style="padding:1rem;margin-bottom:1rem">
-            <strong>FOLDERS</strong>
-            <nav style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.75rem 0">
+        <div class="sv-explorer-layout">
+        <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
+            <div class="sv-explorer-tree-title">Folders</div>
+            <button type="button" class="sv-tree-item @(_folder is null ? "selected" : "")"
+                    aria-current="@(_folder is null ? "location" : null)"
+                    @onclick='() => _folder = null'><span aria-hidden="true">▣</span> My vault</button>
+            @foreach (var folder in Folders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase))
+            {
+                <button type="button" class="sv-tree-item @(_folder == folder.Id ? "selected" : "")"
+                        style="--sv-tree-depth:@FolderDepth(folder.Id)"
+                        aria-current="@(_folder == folder.Id ? "location" : null)"
+                        @onclick="() => OpenFolder(folder.Id)">
+                    <span aria-hidden="true">▸</span><span class="sv-tree-folder-icon" aria-hidden="true">▣</span>
+                    <span class="sv-tree-label">@folder.Title</span>
+                </button>
+            }
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            {
+                @foreach (var draft in PendingLocalFolders)
+                {
+                    <button type="button" class="sv-tree-item @(_folder == draft.EntityId ? "selected" : "")"
+                            @onclick="() => OpenFolder(draft.EntityId)">
+                        <span aria-hidden="true">▸</span><span class="sv-tree-folder-icon" aria-hidden="true">▣</span>
+                        <span class="sv-tree-label">@PendingTitle(draft) <small>local</small></span>
+                    </button>
+                }
+            }
+        </aside>
+        <div class="sv-explorer-main">
+        <section class="terminal-panel sv-explorer-folder-panel">
+            <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
+
                 <button class="pixel-button compact" @onclick='() => _folder = null'>MY VAULT</button>
                 @foreach (var crumb in Breadcrumbs)
                 {
@@ -212,6 +241,8 @@ else
                 }
             }
         </section>
+        </div>
+        </div>
         }
         </section>
         </main>
@@ -412,6 +443,20 @@ else
 </AdaptiveShell>
 
 @code {
+    private int FolderDepth(string id)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var depth = 0;
+        var current = Folders.FirstOrDefault(x => x.Id == id);
+        while (current is not null && current.FolderId is { Length: > 0 } parent &&
+               visited.Add(current.Id) && depth < 12)
+        {
+            depth++;
+            current = Folders.FirstOrDefault(x => x.Id == parent);
+        }
+        return depth;
+    }
+
     private string _appView = "records";
     private string _syncTask = "review";
     private void SelectAppView(string view)
