@@ -121,12 +121,23 @@ else
             }
             else
             {
-                <p class="sv-native-summary">@_ledgerRecords.Count items · @_ledgerNetwork</p>
-                @if (!string.IsNullOrWhiteSpace(_rootAccountId))
+                @if (_nativeMode == "browse")
                 {
-                    <p>Root account: <code>@_rootAccountId</code></p>
+                <div class="sv-native-browser-toolbar">
+                    <span class="sv-native-subtle-status">@_ledgerRecords.Count items</span>
+                    <div class="sv-native-browser-actions">
+                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("record")'>＋ Record</button>
+                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("file")'>⇧ File</button>
+                    </div>
+                </div>
                 }
-                <p class="sv-native-subtle-status">@_ledgerRecords.Count(x => x.IsFolder) folders · @_ledgerRecords.Count(x => !x.IsFolder) records</p>
+                else
+                {
+                    <button type="button" class="sv-native-back" disabled="@_ledgerBusy"
+                            @onclick='() => SetNativeMode("browse")'>← Back to records</button>
+                }
+                @if (false)
+                {
                 <nav class="network-selector" aria-label="Native Stellar workspace">
                     <button type="button" class="network-option @(_nativeMode == "browse" ? "active" : "")"
                             aria-pressed="@(_nativeMode == "browse")" disabled="@_ledgerBusy"
@@ -144,15 +155,38 @@ else
                         <span class="network-symbol">F</span><span><strong>Add file</strong><small>ON-CHAIN</small></span>
                     </button>
                 </nav>
+                }
                 @if (_nativeMode == "record")
                 {
                                 <section aria-label="Publish Stellar record" class="terminal-panel">
                     <h3>New record</h3>
-                    <p class="notice">Publishing submits a paid Stellar transaction. Review the estimate before authorizing. This does not save to local storage.</p>
-                    <label class="terminal-label" for="native-publish-title">RECORD TITLE</label>
+                    <label class="terminal-label" for="native-publish-title">Title</label>
                     <input id="native-publish-title" class="terminal-input" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
-                    <label class="terminal-label" for="native-publish-content">RECORD CONTENT</label>
-                    <textarea id="native-publish-content" class="terminal-input" @bind="_publishContent" @bind:event="oninput" disabled="@_ledgerBusy" rows="3"></textarea>
+                    <label class="terminal-label" for="native-publish-folder">Folder</label>
+                    <select id="native-publish-folder" class="terminal-input" @bind="_publishFolder" disabled="@_ledgerBusy">
+                        <option value="">My vault (root)</option>
+                        @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => x.Title))
+                        { <option value="@folder.Id">@folder.Title</option> }
+                    </select>
+                    <label class="terminal-label" for="native-publish-username">Username / identifier</label>
+                    <input id="native-publish-username" class="terminal-input" @bind="_publishUsername" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
+                    <label class="terminal-label" for="native-publish-url">URL</label>
+                    <input id="native-publish-url" class="terminal-input" type="url" @bind="_publishUrl" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
+                    <label class="terminal-label" for="native-publish-content">Secret / content</label>
+                    <div class="sv-native-secret-entry">
+                        <input id="native-publish-content" class="terminal-input" type="@(_showPublishSecret ? "text" : "password")"
+                               @bind="_publishContent" @bind:event="oninput" autocomplete="new-password" disabled="@_ledgerBusy" />
+                        <button type="button" class="pixel-button compact" @onclick="() => _showPublishSecret = !_showPublishSecret"
+                                aria-label="@(_showPublishSecret ? "Hide secret" : "Show secret")">@(_showPublishSecret ? "Hide" : "Show")</button>
+                    </div>
+                    <label class="terminal-label" for="native-publish-notes">Notes</label>
+                    <textarea id="native-publish-notes" class="terminal-input" @bind="_publishNotes" @bind:event="oninput" disabled="@_ledgerBusy" rows="4"></textarea>
+                    <label class="terminal-label" for="native-publish-tags">Tags</label>
+                    <input id="native-publish-tags" class="terminal-input" @bind="_publishTags" @bind:event="oninput"
+                           placeholder="work, private" disabled="@_ledgerBusy" />
+                    <details class="sv-native-help"><summary>About publishing</summary>
+                        <p>Publishing writes an encrypted record to Stellar. Network fees and account reserves apply; every transaction requires explicit approval.</p>
+                    </details>
                     <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || string.IsNullOrWhiteSpace(_publishTitle) || string.IsNullOrWhiteSpace(_publishContent))" @onclick="EstimatePublishAsync">Review transaction cost</button>
                     @if (_publishEstimate is not null)
                     {
@@ -429,6 +463,7 @@ else
     private void SetNativeMode(string mode)
     {
         if (_ledgerBusy || mode is not ("browse" or "record" or "file")) return;
+        if (_nativeMode == "record" && mode != "record" && _publishEstimate is not null) CancelPublish();
         _nativeMode = mode;
     }
 
@@ -549,6 +584,27 @@ else
 
     private string _publishTitle = string.Empty;
     private string _publishContent = string.Empty;
+    private string _publishFolder = string.Empty;
+    private string _publishUsername = string.Empty;
+    private string _publishUrl = string.Empty;
+    private string _publishNotes = string.Empty;
+    private string _publishTags = string.Empty;
+    private bool _showPublishSecret;
+
+    private LedgerRecordDraft CurrentPublishDraft() =>
+        new(_publishTitle.Trim(), _publishContent,
+            string.IsNullOrWhiteSpace(_publishFolder) ? null : _publishFolder,
+            _publishTags.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            false, _publishUsername, _publishUrl, _publishNotes);
+    private string CurrentPublishFingerprint() =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new {
+                network = _ledgerNetwork,
+                title = _publishTitle.Trim(), content = _publishContent, folder = _publishFolder,
+                username = _publishUsername, url = _publishUrl, notes = _publishNotes,
+                tags = _publishTags
+            })));
     private LedgerCostPreview? _publishEstimate;
     private bool _publishApproved;
     private string? _publishFingerprint;
@@ -574,9 +630,9 @@ else
         {
             // This gate remains local until a real user-approved publish.
             StorageMode.Select(VaultStorageMode.StellarLedger);
-            var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
+            var draft = CurrentPublishDraft();
             _publishEstimate = await Ledger.EstimateAsync(draft);
-            _publishFingerprint = PublishFingerprint(draft.Title, draft.Content, _ledgerNetwork);
+            _publishFingerprint = CurrentPublishFingerprint();
             _ledgerMessage = "Review the estimated fee and reserve before approving.";
         }
         catch
@@ -596,7 +652,7 @@ else
         if (_ledgerBusy || !_publishApproved || _publishEstimate is null ||
             _publishFingerprint is null || !Ledger.IsConnected) return;
         var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
-        if (_publishFingerprint != PublishFingerprint(draft.Title, draft.Content, _ledgerNetwork))
+        if (_publishFingerprint != CurrentPublishFingerprint())
         {
             CancelPublish();
             _ledgerMessage = "Record changed since cost review. Review the transaction again.";
@@ -621,6 +677,8 @@ else
             _ledgerMessage = "Stellar transaction confirmed: " + hash;
             _publishTitle = string.Empty;
             _publishContent = string.Empty;
+            _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
+            _showPublishSecret = false;
             // Once the receipt is confirmed, a subsequent read failure must
             // not be reported as a failed submission (which invites retries).
             try
@@ -1038,6 +1096,8 @@ else
         CancelPublish();
         _publishTitle = string.Empty;
         _publishContent = string.Empty;
+        _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
+        _showPublishSecret = false;
     }
 
     private async Task ConnectLedgerAsync()
