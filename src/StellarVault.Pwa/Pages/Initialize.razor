@@ -4,7 +4,7 @@
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
 
-<AdaptiveShell PlatformName="WEB PWA" Subtitle="FIRST-TIME HD SETUP">
+<AdaptiveShell PlatformName="WEB PWA" Subtitle="SET UP YOUR VAULT">
 @if (!Sessions.IsUnlocked && !Ledger.IsConnected)
 {
     <section class="terminal-panel centered-message">
