@@ -27,3 +27,15 @@ This is a presentation change only. Shared .NET Core, encryption, native signer,
 ## Rollout
 
 PWA preview artifact is independently generated in `.github/workflows/pwa-preview-release.yml`. The combined pipeline separately compiles Android; Windows preview has its own runner. A green CI build does not verify visual layout or live Testnet interaction. Keep the old CSS assets temporarily to avoid regressions in legacy components while migrating to the final modern design layer; progressively delete legacy rules once visual acceptance is complete.
+
+
+## 2026-11-11 — Shared shell, entry sizing and control consistency
+
+- `AdaptiveShell.razor` now provides a green shield-like mark, product-case branding and contextual header security indicator, with separate `sv-web-shell` and `sv-native-shell` host classes. These are presentation-only changes.
+- `modern-app.css` includes a final scoped, high-specificity control layer for PWA buttons, inputs, editor tabs, dialogs, header controls and focus rings to override remaining terminal-era button definitions (notably /add and /edit).
+- The unlock page was compacted: smaller field spacing, reduced showcase height/padding, and fewer stacked margins. **Do not force overflow hidden**: 24-word recovery phrases, mainnet warnings, expanded options, small displays and zoom may legitimately require scrolling.
+- `modern-native.css` aligns the shared header with the updated native-host design without changing mnemonic handling or native authorizations.
+- `index.html` explicitly versions the modern CSS URL to help distinguish a stale PWA stylesheet when checking screenshots.
+- Security behaviors remain unchanged: mnemonic validation, local-storage consent, account selection, network guards, signatures and fee approvals.
+- **Not yet validated:** A browser/Android runtime screenshot, dotnet build, accessibility tests, CSS computed-style inspection, and real device scroll height. Do not call this visually verified.
+- **Next verification:** Check desktop 1440×900 and 1366×768, tablet 820×1180, phone 390×844, phone landscape, 200% zoom, 12/24-word entry, expanded local-storage settings, Add/Edit, Sync/Drafts, setup, modal approval and native Android.
