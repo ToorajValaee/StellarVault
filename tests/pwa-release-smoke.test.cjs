@@ -179,7 +179,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
 
 test('on-chain-only file review never requires a local vault checkpoint', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
   assert.ok(add.includes('if (Retention.AllowsLocalPersistence)\n                    {'));
   assert.ok(add.includes('saved = await Checkpoints.LoadAsync(account)'));
@@ -270,7 +270,7 @@ test('PWA exposes independent record, offline draft and manual sync views', () =
 
 test('PWA item editor offers one focused task with app navigation', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.ok(add.includes('sv-pwa-editor-breadcrumb'));
   assert.ok(add.includes('sv-pwa-editor-modes'));
   assert.ok(add.includes('href="/add?kind=folder"'));
@@ -296,7 +296,7 @@ test('PWA access starts with recovery phrase and network icon in the header', ()
 
 test('PWA desktop explorer and mobile object storage share one folder model', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.match(vault, /sv-explorer-layout/);
   assert.match(vault, /sv-explorer-tree/);
   assert.match(vault, /sv-explorer-main/);
@@ -308,21 +308,23 @@ test('PWA desktop explorer and mobile object storage share one folder model', ()
   assert.match(css, /@media\(max-width:540px\)/);
 });
 
-test('PWA terminal surfaces share squared pixel geometry and a faint dotted texture', () => {
-  const css = fs.readFileSync(path.join(root, 'css', 'app.css'), 'utf8');
-  assert.match(css, /--sv-crt-radius:\s*2px/);
-  assert.match(css, /--sv-crt-grid:/);
-  assert.match(css, /\.sv-adaptive-shell :is\(\.terminal-panel, \.record-card/);
-  assert.match(css, /background-image:var\(--sv-crt-grid\) !important/);
+test('PWA modern design overrides CRT geometry and supports resizable record inspector', () => {
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const host = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(css, /--sv-crt-grid:none/);
+  assert.match(css, /--sv-record-inspector-width:400px/);
+  assert.match(vault, /sv-inspector-resize-handle/);
+  assert.match(host, /pointerdown/);
 });
 
-test('PWA loads the final modern design after legacy and scoped styles', () => {
+test('PWA loads only the consolidated modern design after scoped styles', () => {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  const base = html.indexOf('href="css/app.css"');
   const scoped = html.indexOf('href="StellarVault.Pwa.styles.css"');
   const modern = html.indexOf('href="css/modern-app.css"');
-  assert.ok(base >= 0 && scoped > base && modern > scoped);
+  assert.ok(scoped >= 0 && modern > scoped);
+  assert.ok(!html.includes('href="css/app.css"'));
   assert.match(css, /--sv-radius:16px/);
   assert.match(css, /\.screen-noise,\.scanlines \{display:none!important;/);
   assert.match(css, /sv-explorer-layout/);
