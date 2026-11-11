@@ -2424,3 +2424,14 @@ html.ios-device.standalone-app .terminal-footer {
   .sv-pwa-editor .credential-form {padding:1rem;}
   .sv-pwa-editor .terminal-input {font-size:16px;}
 }
+
+/* Keep staged remote mutation editing separate from paid Sync decisions. */
+.sv-pwa-task-tabs {display:flex;gap:.4rem;max-width:38rem;margin:.7rem 0 1.2rem;
+  padding:.3rem;border-radius:11px;border:1px solid var(--border);background:var(--panel-soft);}
+.sv-pwa-task-tabs button {flex:1;min-width:0;min-height:44px;padding:.7rem .5rem;
+  color:var(--muted);border:1px solid transparent;border-radius:8px;
+  background:transparent;font-family:inherit;font-size:.8rem;font-weight:700;cursor:pointer;}
+.sv-pwa-task-tabs button.selected {border-color:rgba(113,255,155,.36);color:var(--phosphor-strong);
+  background:var(--phosphor-faint);}
+@media(max-width:600px){.sv-pwa-task-tabs {max-width:100%;}
+ .sv-pwa-task-tabs button {font-size:.73rem;}}
