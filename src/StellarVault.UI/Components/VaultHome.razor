@@ -18,7 +18,7 @@
             <details class="sv-network-menu">
                 <summary title="Network: @(_network == "public" ? "Mainnet" : _network == "testnet" ? "Testnet" : "Custom")"
                          aria-label="Select Stellar network" class="sv-network-icon-trigger">
-                    <span aria-hidden="true">◎</span>
+                    <svg class="sv-network-symbol" viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m4.5 15.5 15-7M3.3 11.1l15-7M5.8 19l14.9-7"/></svg>
                     <span class="sv-network-indicator @(_network == "public" ? "mainnet" : _network == "custom" ? "custom" : "")" aria-hidden="true"></span>
                 </summary>
                 <div class="sv-network-popover terminal-panel">
