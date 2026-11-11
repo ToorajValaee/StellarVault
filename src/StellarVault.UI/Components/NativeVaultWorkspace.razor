@@ -29,9 +29,50 @@ else
         <header class="sv-native-topbar">
             <div class="sv-native-brand"><span class="sv-native-brandmark" aria-hidden="true">✦</span>
                 <span><strong>StellarVault</strong><small>Private account vault</small></span></div>
-            <div class="sv-native-session">
-                <span class="sv-native-status-dot @(Ledger.IsConnected ? "connected" : "")" aria-hidden="true"></span>
-                @(Ledger.IsConnected ? "Connected" : "Not connected")
+            <div class="sv-native-header-actions">
+                <details class="sv-native-header-network">
+                    <summary aria-label="Select Stellar network" title="Network: @NetworkLabel">
+                        <span aria-hidden="true">◎</span><span class="sv-native-network-dot @(_ledgerNetwork == "public" ? "mainnet" : _ledgerNetwork == "custom" ? "custom" : "")"></span>
+                    </summary>
+                    <div class="sv-native-network-popover">
+                        <strong>Network</strong>
+                        <div class="sv-native-network-choice" role="group" aria-label="Choose Stellar network">
+                            <button type="button" class="pixel-button compact @(_ledgerNetwork == "testnet" ? "primary" : "")"
+                                    disabled="@(!CanChangeNetwork)" @onclick='() => SelectNativeNetwork("testnet")'>Testnet</button>
+                            <button type="button" class="pixel-button compact @(_ledgerNetwork == "public" ? "primary" : "")"
+                                    disabled="@(!CanChangeNetwork)" @onclick='() => SelectNativeNetwork("public")'>Mainnet</button>
+                            <button type="button" class="pixel-button compact @(_ledgerNetwork == "custom" ? "primary" : "")"
+                                    disabled="@(!CanChangeNetwork)" @onclick='() => SelectNativeNetwork("custom")'>Custom</button>
+                        </div>
+                        @if (_ledgerNetwork == "custom")
+                        {
+                            <label class="terminal-label" for="native-custom-horizon">Horizon URL</label>
+                            <input id="native-custom-horizon" class="terminal-input" type="url" autocomplete="url"
+                                   placeholder="https://horizon.example.com"
+                                   @bind="_customHorizon" @bind:event="oninput" disabled="@(!CanChangeNetwork)" />
+                            <button type="button" class="pixel-button compact" @onclick="DiscoverNativeNetworkAsync"
+                                    disabled="@(!CanChangeNetwork || string.IsNullOrWhiteSpace(_customHorizon))">
+                                @(_networkDiscovering ? "Detecting…" : "Detect network")
+                            </button>
+                            @if (CustomNetworkReady)
+                            {
+                                <p class="sv-native-subtle-status" role="status">Network detected and ready.</p>
+                                <details class="sv-native-help"><summary>Network passphrase</summary>
+                                    <code>@NetworkSelection.CustomPassphrase</code>
+                                </details>
+                            }
+                            else
+                            {
+                                <p class="sv-native-subtle-status">Detect the network before connecting.</p>
+                            }
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_networkError))
+                        {
+                            <p class="terminal-alert warning" role="alert">@_networkError</p>
+                        }
+                    </div>
+                </details>
+                <span class="sv-native-status-dot @(Ledger.IsConnected ? "connected" : "")" title="@(Ledger.IsConnected ? "Connected" : "Not connected")" aria-label="@(Ledger.IsConnected ? "Connected" : "Not connected")"></span>
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
@@ -53,37 +94,18 @@ else
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
-            <div class="sv-native-page-heading">
-                <div>
-                    <h1>@(_nativePage == "stellar" ? (Ledger.IsConnected ? "My records" : "Welcome back") :
-                          _nativePage == "local" ? "My vault" : "Sync")</h1>
-                    @if (_nativePage == "sync") { <p>Review changes before syncing.</p> }
+            @if (_nativePage != "stellar" || Ledger.IsConnected)
+            {
+                <div class="sv-native-page-heading">
+                    <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : "Sync")</h1>
                 </div>
-                @if (Sessions.IsUnlocked && _nativePage != "stellar")
-                {
-                    <button type="button" class="sv-native-outline-action" @onclick="LockVault">Lock vault</button>
-                }
-            </div>
+            }
     <section class="native-preview sv-vault-data" aria-label="Native vault workspace">
         @if (_nativePage == "stellar")
         {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
-            <div class="panel-heading"><div><h2>@(Ledger.IsConnected ? "Your Stellar vault" : "Connect your vault")</h2></div></div>
             @if (!Ledger.IsConnected)
             {
-                <p>Enter your recovery phrase to access your records.</p>
-                <details class="sv-native-network-settings" @key="_ledgerNetwork">
-                    <summary>Network: @(_ledgerNetwork == "testnet" ? "Testnet" : _ledgerNetwork == "public" ? "Mainnet" : "Custom")</summary>
-                    <div class="sv-native-network-choice" role="group" aria-label="Choose Stellar network">
-                        <button type="button" class="pixel-button compact @(_ledgerNetwork == "testnet" ? "primary" : "")"
-                            disabled="@(_ledgerBusy || Sessions.IsUnlocked)"
-                            @onclick='() => SelectNativeNetwork("testnet")'>Testnet</button>
-                        <button type="button" class="pixel-button compact @(_ledgerNetwork == "public" ? "primary" : "")"
-                            disabled="@(_ledgerBusy || Sessions.IsUnlocked)"
-                            @onclick='() => SelectNativeNetwork("public")'>Mainnet</button>
-                    </div>
-                    <p class="sv-native-subtle-status">Testnet is for trying the app. Mainnet uses real XLM.</p>
-                </details>
                 @if (_ledgerNetwork == "public")
                 {
                     <label class="sv-native-mainnet-consent">
@@ -337,7 +359,7 @@ else
                 {
                     <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
-                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic) || (_ledgerNetwork == "public" && !_confirmMainnetAccess))"
+                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                             @onclick="ConnectLedgerAsync">Connect Stellar</button>
                 }
             }
@@ -456,15 +478,57 @@ else
     }
 
     private bool _confirmMainnetAccess;
+    private string _customHorizon = string.Empty;
+    private string? _networkError;
+    private bool _networkDiscovering;
+    private bool CanChangeNetwork => !Ledger.IsConnected && !Sessions.IsUnlocked && !_ledgerBusy && !_networkDiscovering;
+    private string NetworkLabel => _ledgerNetwork switch
+    {
+        "testnet" => "Testnet", "public" => "Mainnet", _ => "Custom"
+    };
+    private bool CustomNetworkReady => _ledgerNetwork == "custom" &&
+        !string.IsNullOrWhiteSpace(NetworkSelection.CustomPassphrase) &&
+        string.Equals(NetworkSelection.CustomHorizonUrl, _customHorizon.Trim(), StringComparison.Ordinal);
 
     private void SelectNativeNetwork(string network)
     {
-        if (network is not ("testnet" or "public") || Ledger.IsConnected ||
-            Sessions.IsUnlocked || _ledgerBusy) return;
+        if (network is not ("testnet" or "public" or "custom") || !CanChangeNetwork) return;
         NetworkSelection.ChoosePreset(network);
         _confirmMainnetAccess = false;
         _ledgerMnemonic = string.Empty;
+        _networkError = null;
         _ledgerMessage = null;
+        if (network == "custom")
+        {
+            NetworkSelection.ResetCustom();
+            _customHorizon = NetworkSelection.CustomHorizonUrl;
+        }
+    }
+
+    private async Task DiscoverNativeNetworkAsync()
+    {
+        if (_ledgerNetwork != "custom" || !CanChangeNetwork ||
+            string.IsNullOrWhiteSpace(_customHorizon)) return;
+        _networkDiscovering = true;
+        _networkError = null;
+        NetworkSelection.ResetCustom();
+        try
+        {
+            if (_runtimeReady != true)
+                await JS.InvokeVoidAsync("stellarVaultNativeRuntime.load");
+            var detected = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon.Trim());
+            // Probe must succeed before custom network can be selected for signing.
+            if (string.IsNullOrWhiteSpace(detected))
+                throw new InvalidOperationException("No network passphrase was detected.");
+            NetworkSelection.ConfigureCustom(detected);
+            NetworkSelection.CustomHorizonUrl = _customHorizon.Trim();
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            NetworkSelection.ResetCustom();
+            _networkError = "Could not detect this network. Check the HTTPS Horizon URL and try again.";
+        }
+        finally { _networkDiscovering = false; }
     }
 
     private string _ledgerNetwork => NetworkSelection.SelectedPreset;
@@ -974,7 +1038,8 @@ else
     private async Task ConnectLedgerAsync()
     {
         if (_ledgerBusy || Ledger.IsConnected || _runtimeReady != true ||
-            (_ledgerNetwork == "public" && !_confirmMainnetAccess)) return;
+            (_ledgerNetwork == "public" && !_confirmMainnetAccess) ||
+            (_ledgerNetwork == "custom" && !CustomNetworkReady)) return;
         _ledgerBusy = true;
         _ledgerMessage = null;
         try
