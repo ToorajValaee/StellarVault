@@ -2588,3 +2588,80 @@ html.ios-device.standalone-app .terminal-footer {
   .sv-network-menu .sv-network-popover{right:-3.15rem;max-width:calc(100vw - 1rem)}
   .sv-pwa-access-grid{padding-top:.25rem}
 }
+
+/* Unified CRT surface system. No glass-card/round-card mix:
+   one squared pixel-terminal geometry and one dim dot-matrix treatment. */
+:root { --sv-crt-radius: 2px; --sv-crt-grid:
+  radial-gradient(circle, rgba(113,255,155,.115) 0 .65px, transparent .8px);
+  --sv-crt-bg: var(--panel); }
+:root[data-theme="amber"] { --sv-crt-grid:
+  radial-gradient(circle, rgba(255,191,75,.115) 0 .65px, transparent .8px); }
+.sv-adaptive-shell :is(.terminal-panel, .record-card, .sv-folder-tile,
+  .sv-pwa-rail, .sv-pwa-mobile-tabs, .sv-pwa-task-tabs,
+  .sv-pwa-editor-modes a, .sv-pwa-editor-breadcrumb a,
+  .sv-biometric-choice, .sv-access-storage-settings, .sv-access-learn,
+  .stats-strip, .sv-pwa-view-intro, .sv-pwa-rail-action,
+  .sv-network-popover, .sv-network-menu > summary, .sv-theme-toggle,
+  .pixel-button, .terminal-input, .search-console, .icon-button,
+  .modal-backdrop .record-modal, .approval-modal,
+  .sv-pwa-rail button, .sv-pwa-mobile-tabs button, .sv-pwa-mobile-tabs a,
+  .sv-pwa-task-tabs button) {
+  border-radius:var(--sv-crt-radius);
+}
+.sv-adaptive-shell :is(.terminal-panel, .record-card, .sv-folder-tile,
+  .stats-strip, .sv-pwa-task-tabs, .sv-pwa-rail, .sv-pwa-mobile-tabs,
+  .sv-pwa-editor-modes a, .sv-access-storage-settings, .sv-access-learn,
+  .sv-biometric-choice, .sv-pwa-view-intro, .sv-pwa-editor-breadcrumb a,
+  .sv-network-popover, .sv-pwa-rail button.selected,
+  .sv-pwa-mobile-tabs button.selected) {
+  background-image:var(--sv-crt-grid) !important;
+  background-size:9px 9px !important;
+  background-color:var(--panel) !important;
+  box-shadow:inset 0 0 20px rgba(0,0,0,.16),3px 3px 0 rgba(0,0,0,.3);
+}
+.sv-adaptive-shell .terminal-panel::before,
+.sv-adaptive-shell .terminal-panel::after { border-radius:0; }
+.sv-adaptive-shell .sv-pwa-rail button.selected,
+.sv-adaptive-shell .sv-pwa-mobile-tabs button.selected {border-color:var(--phosphor-dim);}
+.sv-pwa-app .record-card:hover,.sv-pwa-app .sv-folder-tile:hover {
+  border-color:var(--phosphor-strong);background-color:var(--panel-soft) !important;
+}
+/* Desktop file explorer; narrow screens become a familiar object-storage grid. */
+.sv-explorer-layout {display:grid;grid-template-columns:minmax(180px,230px) minmax(0,1fr);
+  gap:14px;align-items:start;min-width:0;}
+.sv-explorer-tree {padding:12px 8px;position:sticky;top:0;min-width:0;
+  max-height:calc(100dvh - 120px);overflow-y:auto;}
+.sv-explorer-tree-title {font-size:.76rem;color:var(--phosphor-strong);
+  padding:8px 10px 12px;text-transform:uppercase;letter-spacing:.08em;}
+.sv-tree-item {width:100%;display:flex;gap:7px;align-items:center;
+  text-align:left;min-height:39px;border:1px solid transparent;
+  color:var(--phosphor);background:transparent;padding:8px 9px;
+  padding-left:calc(9px + min(var(--sv-tree-depth,0),8) * 13px);
+  font-size:.74rem;cursor:pointer;border-radius:var(--sv-crt-radius);}
+.sv-tree-item:hover,.sv-tree-item.selected{background:var(--phosphor-faint);border-color:var(--border);}
+.sv-tree-item .sv-tree-folder-icon {color:var(--accent);}
+.sv-tree-label {min-width:0;overflow-wrap:anywhere;}
+.sv-tree-label small {color:var(--muted);}
+.sv-explorer-main {min-width:0;}
+.sv-explorer-breadcrumbs {display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem;}
+.sv-explorer-folder-panel {padding:14px;margin-bottom:14px;}
+.sv-explorer-main .record-list {display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+.sv-explorer-main .record-card {height:100%;min-height:68px;box-shadow:none;}
+.sv-explorer-main .sv-folder-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+.sv-explorer-main .sv-folder-tile {min-height:60px;}
+@media(max-width:1040px){
+ .sv-explorer-layout{grid-template-columns:minmax(0,1fr);}
+ .sv-explorer-tree{display:none;}
+ .sv-explorer-main .record-list{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+ .sv-explorer-main .record-card {grid-template-columns:minmax(0,1fr) auto;min-height:92px;padding:12px;}
+ .sv-explorer-main .record-index {display:none;}
+ .sv-explorer-main .record-chevron {align-self:center;}
+}
+@media(max-width:540px){
+ .sv-explorer-main .sv-folder-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .sv-explorer-main .record-list{grid-template-columns:repeat(2,minmax(0,1fr));}
+ .sv-explorer-main .record-card {min-height:100px;padding:10px;}
+ .sv-explorer-main .record-card-body strong{line-height:1.3;}
+ .sv-explorer-main .record-chevron{display:none;}
+ .sv-explorer-folder-panel{padding:10px;}
+}
