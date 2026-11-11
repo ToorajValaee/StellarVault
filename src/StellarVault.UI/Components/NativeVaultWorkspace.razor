@@ -324,10 +324,10 @@ else
                            autocomplete="off" @bind="_passphrase" disabled="@_busy" />
                     <div class="sv-access-actions">
                         <button type="button" class="pixel-button compact"
-                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56 || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                                 @onclick="CreateVault">Create vault</button>
                         <button type="button" class="pixel-button compact"
-                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56)"
+                                disabled="@(_busy || string.IsNullOrWhiteSpace(_passphrase) || _accountId.Length != 56 || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                                 @onclick="UnlockVault">Unlock vault</button>
                     </div>
                     <p class="sv-native-subtle-status">For a new vault, use at least 12 characters. Keep your passphrase safe.</p>
@@ -381,7 +381,7 @@ else
             {
                 <span class="sv-native-command-hint">Your saved items</span>
                 <button type="button" class="sv-native-command primary"
-                        disabled="@(_busy || !_localConsent || _accountId.Length != 56 || string.IsNullOrWhiteSpace(_passphrase))"
+                        disabled="@(_busy || !_localConsent || _accountId.Length != 56 || string.IsNullOrWhiteSpace(_passphrase) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                         @onclick="UnlockVault">Unlock vault</button>
             }
         </div>
@@ -481,7 +481,7 @@ else
     private string _customHorizon = string.Empty;
     private string? _networkError;
     private bool _networkDiscovering;
-    private bool CanChangeNetwork => !Ledger.IsConnected && !Sessions.IsUnlocked && !_ledgerBusy && !_networkDiscovering;
+    private bool CanChangeNetwork => !_foregroundRevoked && !Ledger.IsConnected && !Sessions.IsUnlocked && !_ledgerBusy && !_networkDiscovering;
     private string NetworkLabel => _ledgerNetwork switch
     {
         "testnet" => "Testnet", "public" => "Mainnet", _ => "Custom"
@@ -509,6 +509,8 @@ else
     {
         if (_ledgerNetwork != "custom" || !CanChangeNetwork ||
             string.IsNullOrWhiteSpace(_customHorizon)) return;
+        var requestedHorizon = _customHorizon.Trim();
+        var startingEpoch = Sessions.Epoch;
         _networkDiscovering = true;
         _networkError = null;
         NetworkSelection.ResetCustom();
@@ -516,12 +518,15 @@ else
         {
             if (_runtimeReady != true)
                 await JS.InvokeVoidAsync("stellarVaultNativeRuntime.load");
-            var detected = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", _customHorizon.Trim());
-            // Probe must succeed before custom network can be selected for signing.
+            var detected = await JS.InvokeAsync<string>("stellarVaultV2Network.probeCustom", requestedHorizon);
+            if (_foregroundRevoked || Sessions.Epoch != startingEpoch ||
+                _ledgerNetwork != "custom" || Ledger.IsConnected ||
+                !string.Equals(_customHorizon.Trim(), requestedHorizon, StringComparison.Ordinal))
+                return; // Never attach a stale discovery result to a changed endpoint.
             if (string.IsNullOrWhiteSpace(detected))
                 throw new InvalidOperationException("No network passphrase was detected.");
             NetworkSelection.ConfigureCustom(detected);
-            NetworkSelection.CustomHorizonUrl = _customHorizon.Trim();
+            NetworkSelection.CustomHorizonUrl = requestedHorizon;
         }
         catch (Exception ex) when (ex is JSException or InvalidOperationException)
         {
@@ -1191,6 +1196,11 @@ else
     private async Task RunAsync(bool create)
     {
         if (_busy) return;
+        if (_ledgerNetwork == "custom" && !CustomNetworkReady)
+        {
+            _message = "Detect the custom network before unlocking local storage.";
+            return;
+        }
         _busy = true;
         _message = null;
         try
