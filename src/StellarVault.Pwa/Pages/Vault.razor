@@ -1228,7 +1228,7 @@ else
     private LedgerCostPreview? _deleteEstimate;
     private readonly HashSet<string> _revealedIds = new(StringComparer.Ordinal);
     private void ToggleReveal(string id) { if (!_revealedIds.Add(id)) _revealedIds.Remove(id); }
-    private void OpenFolder(string id) { _folder = id; _revealedIds.Clear(); }
+    private void OpenFolder(string id) { _folder = string.IsNullOrEmpty(id) ? null : id; _revealedIds.Clear(); }
     private void OpenLocalParentFolder()
     {
         var local = PendingLocalFolders.FirstOrDefault(x => x.EntityId == _folder);
