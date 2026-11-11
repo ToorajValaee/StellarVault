@@ -221,3 +221,18 @@ test('native explorer has mobile object tiles, desktop folder tree and back navi
   assert.match(styles, /\.sv-native-folder-tree/);
   assert.match(styles, /\.sv-native-object-card/);
 });
+
+test('shared device and hybrid editors have a directory screen separate from item editing', () => {
+  const shared = path.join(root, 'src/StellarVault.UI/Components');
+  const record = fs.readFileSync(path.join(shared, 'VaultRecordWorkspaceView.razor'), 'utf8');
+  const drafts = fs.readFileSync(path.join(shared, 'VaultHybridDraftEditor.razor'), 'utf8');
+  const remote = fs.readFileSync(path.join(shared, 'VaultHybridRemoteChanges.razor'), 'utf8');
+  assert.match(record, /@if \(_editingScreen\)/);
+  assert.match(record, /BackToList/);
+  assert.match(record, /_editingScreen = false/);
+  assert.match(drafts, /@if \(_editingScreen\)/);
+  assert.match(drafts, /BackToDraftList/);
+  assert.match(drafts, /_editingScreen = false/);
+  assert.match(remote, /Back to records/);
+  assert.match(remote, /_editingRemote is null && _editingMutationId is null/);
+});
