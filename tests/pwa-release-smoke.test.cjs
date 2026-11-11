@@ -287,7 +287,8 @@ test('PWA access starts with recovery phrase and network icon in the header', ()
   assert.match(access, /SelectNetwork\("custom"\)/);
   assert.match(access, /DetectCustomAsync/);
   assert.match(access, /stellarVaultV2Network\.probeCustom/);
-  assert.match(access, /NetworkSelection\.ConfigureCustom\(_customPassphrase\)/);
+  assert.match(access, /NetworkSelection\.ConfigureCustom\(detected\)/);
+  assert.match(access, /_detectedHorizon = requestedHorizon/);
   assert.match(access, /<VaultMnemonicInput/);
   assert.match(access, /sv-access-storage-settings/);
   assert.doesNotMatch(access, /<h2>Unlock your vault<\/h2>/);
