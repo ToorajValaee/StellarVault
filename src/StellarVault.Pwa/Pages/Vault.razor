@@ -98,6 +98,7 @@ else
         }
         @if (_appView == "settings")
         {
+            <button type="button" class="sv-mobile-help-entry" @onclick='() => SelectAppView("help")'>ⓘ Documentation &amp; Help</button>
             <section class="sv-modern-settings sv-workspace-surface" aria-label="Vault settings">
                 <div class="terminal-panel sv-modern-settings-section">
                     <h2>Connection</h2>
@@ -195,6 +196,42 @@ else
         }
         <label class="search-console sv-modern-search"><span class="search-prefix" aria-hidden="true">⌕</span><input aria-label="Search your vault" @bind="_search" @bind:event="oninput" placeholder="Search records, folders, and tags" autocomplete="off"/></label>
         @if (!string.IsNullOrWhiteSpace(_error)) { <div class="terminal-alert warning" role="status">@_error</div> }
+        <div class="sv-mobile-collection-tabs" role="group" aria-label="Browse vault items">
+            <button type="button" class="@(_mobileCollection == "all" ? "selected" : "")" aria-pressed="@(_mobileCollection == "all")" @onclick='() => _mobileCollection = "all"'><span aria-hidden="true">▱</span> All Items</button>
+            <button type="button" class="@(_mobileCollection == "folders" ? "selected" : "")" aria-pressed="@(_mobileCollection == "folders")" @onclick='() => _mobileCollection = "folders"'><span aria-hidden="true">▱</span> Folders</button>
+            <button type="button" class="@(_mobileCollection == "records" ? "selected" : "")" aria-pressed="@(_mobileCollection == "records")" @onclick='() => _mobileCollection = "records"'><span aria-hidden="true">◷</span> Records</button>
+        </div>
+        @if (Folders.Count > 0 && _folder is null)
+        {
+            <div class="sv-mobile-folder-shortcuts">
+                <div class="sv-mobile-section-heading"><h2>Folder Shortcuts</h2><button type="button" @onclick='() => _mobileCollection = "folders"'>See all <span aria-hidden="true">›</span></button></div>
+                <div class="sv-mobile-shortcut-grid">
+                    @foreach (var shortcut in Folders.Where(x => string.IsNullOrEmpty(x.FolderId)).Take(4))
+                    {
+                        <button type="button" @onclick="() => OpenFolder(shortcut.Id)">
+                            <span class="sv-mobile-shortcut-icon" aria-hidden="true">📁</span>
+                            <strong>@shortcut.Title</strong>
+                            <small>@(Folders.Count(x => x.FolderId == shortcut.Id) + Records.Count(x => x.FolderId == shortcut.Id)) items</small>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+        <div class="sv-mobile-items-heading">
+            <h2>@(_folder is not null ? (Breadcrumbs.LastOrDefault()?.Title ?? "Items") : _mobileCollection == "folders" ? "Folders" : _mobileCollection == "records" ? "Records" : "All Items")</h2>
+            <div class="sv-mobile-item-controls">
+                <button type="button" aria-label="Switch between list and grid" @onclick='() => _explorerLayout = _explorerLayout == "list" ? "grid" : "list"'>☷</button>
+                <button type="button" aria-label="Show item filters" @onclick='() => _showMobileFilters = !_showMobileFilters'>☷</button>
+            </div>
+        </div>
+        @if (_showMobileFilters)
+        {
+            <div class="sv-mobile-filter-panel">
+                <label><input type="checkbox" @bind="_includeChildren" /> Include subfolders</label>
+                <button type="button" @onclick='() => _showMobileFilters = false'>Done</button>
+            </div>
+        }
+        <div class="sv-mobile-collection-content sv-mobile-collection-@_mobileCollection">
         <div class="sv-explorer-layout">
         <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
             <div class="sv-explorer-tree-title">My Vault <span class="sv-explorer-tree-count">@Folders.Count folders</span></div>
@@ -352,20 +389,18 @@ else
         </section>
         </div>
         </div>
+        </div>
         }
         </section>
         </main>
         <nav class="sv-pwa-mobile-tabs" aria-label="Mobile vault navigation">
-            <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)" @onclick='() => SelectAppView("records")'><span aria-hidden="true">▤</span>Records</button>
-            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
-            {
-                <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)" @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span>Drafts</button>
-                <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)" @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⇅</span>Sync</button>
-            }
-            <button type="button" class="@(_appView == "settings" ? "selected" : "")"
-                    aria-current="@(_appView == "settings" ? "page" : null)"
+            <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)" @onclick='() => SelectAppView("records")'><span aria-hidden="true">⌂</span>Home</button>
+            <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
+                    @onclick='() => SelectAppView(Retention.AllowsLocalPersistence && Sessions.IsUnlocked ? "drafts" : "records")'><span aria-hidden="true">♙</span>Vault</button>
+            <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)"
+                    @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⟳</span>Sync</button>
+            <button type="button" class="@(_appView == "settings" ? "selected" : "")" aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
-            <button type="button" class="sv-pwa-mobile-help @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span aria-hidden="true">ⓘ</span>Help</button>
         </nav>
         <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
         @if (_editorOpen)
@@ -637,6 +672,8 @@ else
     private string _editorKind = "record";
     private int _editorKey;
     private string _explorerLayout = "list";
+    private string _mobileCollection = "all";
+    private bool _showMobileFilters;
     private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
     private void ToggleTreeFolder(string id)
