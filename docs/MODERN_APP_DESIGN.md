@@ -62,3 +62,17 @@ Based on actual user screenshots:
 - **Remove visual legacy CSS instead of stacking it**: removed old color, CRT grid, shadow, font, border and related visual declarations from migrated pre-modern PWA and native foundation sections. Kept structural layout properties for compatibility with existing components. Original `app.css` and `native-app.css` files remain deleted.
 - Source checks: brace balance 0 in both stylesheet files, new links/MAUI assets confirmed, dark terminal root colors absent. Added snapshot-regression source assertions. **No runtime build or browser screenshot verification has been executed**.
 - Remaining risk: CSS cascade in shared Razor-scoped and native screens must be tested in a running host; source assertions cannot establish visual acceptance. Also evaluate named `terminal-*` classes for future semantic renaming, while preserving workflows.
+
+
+## 2026-11-11 — Approved desktop reference, structural implementation
+
+This iteration follows the user's desktop reference image:
+- The Vault is now a **real three-column desktop workspace**: navigation rail, folder tree + explorer, and a right inspector. The inspector is a grid track rather than a fixed overlay or width subtraction; the existing pointer/keyboard resize handle changes its track width.
+- The folder tree uses parent depth, independent expand/collapse controls and selected-folder styling. It is based on existing folder IDs and ancestry, not a mock tree.
+- The explorer shows breadcrumbs, the active folder title and item count, list/grid controls, and file-manager Name/Type/Storage columns. Storage replaces the mockup's Updated column because a trustworthy updated timestamp is not currently exposed for every record. Existing three-dot menus remain available for folders, records, files and drafts.
+- New/edit record and folder, and direct on-chain file upload now open **inside the right pane on desktop**. The standalone `/add` and `/edit/{id}` routes remain for deep links and fallback use. The same Add component and existing transaction review/fee approval logic serve both destinations — no duplicate on-chain implementation.
+- `AdaptiveShell.razor` has an `Embedded` option so the nested editor does not render a second app header or main landmark. The Add component blocks dismissals/mode changes while a transaction approval is active, a submission is underway, or an upload stage is uncertain.
+- Record preview now has Details and Activity tabs plus a top-right action menu and close button. The Activity tab exposes record identity, folder, kind and storage; it explicitly does **not** claim a history not provided by the current ledger reader. URL opening is restricted to valid http/https destinations.
+- Sidebar branding and the Stellar network connection section align more closely with the reference; controls use tighter 8–9px corners.
+
+**Verification performed:** code-level inspection of markup balance and CSS brace balance; checked callbacks, command methods, select/expand state, grid rules, update paths, and new smoke-test assertions. **Not performed:** .NET build, actual rendered PWA/MAUI screenshots, keyboard/focus acceptance, or real network transaction tests. Visual fidelity and compiler correctness remain unverified until CI/device test.
