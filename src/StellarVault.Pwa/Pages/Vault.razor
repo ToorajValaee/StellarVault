@@ -628,11 +628,6 @@ else
     }
 
     [SupplyParameterFromQuery(Name = "view")] public string? RequestedView { get; set; }
-    protected override void OnParametersSet()
-    {
-        if (RequestedView == "help" && _appView == "records")
-            _appView = "help";
-    }
     private string _appView = "records";
     private VaultItemEditor? _inlineEditor;
     private bool _editorOpen;
@@ -1253,8 +1248,10 @@ else
         return names.Count == 0 ? "My vault" : "My vault / " + string.Join(" / ", names);
     }
     [SupplyParameterFromQuery(Name = "folder")] public string? InitialFolder { get; set; }
-    protected override void OnParametersSet() {
+    protected override void OnParametersSet()
+    {
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
+        if (RequestedView == "help") _appView = "help";
     }
     protected override async Task OnInitializedAsync() {
         if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) await LoadPendingAsync();
