@@ -2676,3 +2676,20 @@ html.ios-device.standalone-app .terminal-footer {
   .sv-explorer-main .record-card {grid-template-columns:minmax(0,1fr) auto;min-height:92px;padding:12px;}
   .sv-explorer-main .record-index {display:none;}
 }
+
+/* Field groups, metadata cards, and modal bodies use the same CRT panel
+   treatment; keep warning/error banners distinct for accessibility. */
+.sv-adaptive-shell :is(.data-field, .commit-preview, .sv-account-info-modal,
+  .sv-file-picker, .sv-record-directory li, .record-modal,
+  .sv-pwa-editor .credential-form, .sv-explorer-folder-panel) {
+  border-radius:var(--sv-crt-radius) !important;
+  background-color:var(--panel);
+  background-image:var(--sv-crt-grid);
+  background-size:9px 9px;
+}
+.sv-adaptive-shell :is(.record-card, .sv-folder-tile, .data-field,
+  .sv-explorer-tree, .sv-explorer-folder-panel) {border-color:var(--border);}
+.sv-adaptive-shell :is(.pixel-button, .terminal-input,
+  .sv-pwa-task-tabs button, .sv-pwa-editor-modes a) {
+  border-radius:var(--sv-crt-radius) !important;
+}
