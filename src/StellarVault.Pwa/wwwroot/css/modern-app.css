@@ -4079,3 +4079,33 @@ html .sv-web-shell .approval-modal .stats-strip strong {
 :root[data-theme="dark"] .sv-web-shell .sv-modern-entry .sv-entry-main {background:#132426!important;}
 :root[data-theme="dark"] .sv-web-shell .sv-modern-entry > .sv-entry-main > .access-form {
  background:#1b2c30!important;color:#e4f2ee!important;border-color:#385458!important;}
+
+
+/* Compact sponsor attribution and responsive help navigation. */
+.sv-web-shell .sv-rail-trust .sv-powered-by {
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  gap:6px!important;min-height:33px!important;margin-top:4px!important;padding:8px 10px!important;
+  width:fit-content!important;max-width:100%!important;
+  border:1px solid rgba(111,234,187,.35)!important;
+  border-radius:999px!important;
+  background:rgba(55,163,126,.18)!important;
+  font-size:11px!important;font-weight:550!important;
+  color:#c0e9d8!important;
+}
+.sv-web-shell .sv-rail-trust .sv-powered-by:hover {
+  background:rgba(55,163,126,.33)!important;color:white!important;
+}
+.sv-web-shell .sv-pwa-mobile-help {
+  display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;min-width:0;padding:7px 3px!important;color:#4e7466!important;
+  text-decoration:none!important;font-size:11px!important;font-weight:600!important;
+}
+.sv-web-shell .sv-pwa-mobile-help span {font-size:19px!important;}
+.sv-web-shell .sv-pwa-mobile-help:focus-visible {outline:3px solid rgba(11,155,102,.3)!important;outline-offset:-3px;}
+:root[data-theme="dark"] .sv-web-shell .sv-network-popover {
+  background:#1a2c31!important;color:#e7f4ee!important;
+  border:1px solid #456164!important;
+}
+:root[data-theme="dark"] .sv-web-shell .sv-network-popover .sv-network-popup-title {
+  color:#e8f4ef!important;
+}
