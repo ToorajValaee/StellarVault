@@ -16,27 +16,29 @@
 <AdaptiveShell PlatformName="@Platform" Subtitle="YOUR VAULT">
     <HeaderActions>
             <details class="sv-network-menu">
-                <summary title="Select Stellar network" aria-label="Select Stellar network">
-                    <span aria-hidden="true">◎</span> <span class="sv-network-name">@_network.ToUpperInvariant()</span>
+                <summary title="Network: @(_network == "public" ? "Mainnet" : _network == "testnet" ? "Testnet" : "Custom")"
+                         aria-label="Select Stellar network" class="sv-network-icon-trigger">
+                    <span aria-hidden="true">◎</span>
+                    <span class="sv-network-indicator @(_network == "public" ? "mainnet" : _network == "custom" ? "custom" : "")" aria-hidden="true"></span>
                 </summary>
                 <div class="sv-network-popover terminal-panel">
-                    <div class="panel-kicker">ACTIVE STELLAR NETWORK</div>
+                    <strong class="sv-network-popup-title">Network</strong>
                     <div class="sv-network-choice">
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("testnet")'>TESTNET @(_network == "testnet" ? "✓" : "")</button>
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("public")'>PUBLIC @(_network == "public" ? "✓" : "")</button>
-                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("custom")'>CUSTOM @(_network == "custom" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("testnet")'>Testnet @(_network == "testnet" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("public")'>Mainnet @(_network == "public" ? "✓" : "")</button>
+                        <button type="button" class="pixel-button compact" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" @onclick='() => SelectNetwork("custom")'>Custom @(_network == "custom" ? "✓" : "")</button>
                     </div>
                     @if (_network == "custom")
                     {
-                        <label class="terminal-label" for="sv-horizon">PRIVATE HORIZON URL</label>
+                        <label class="terminal-label" for="sv-horizon">Horizon URL</label>
                         <input id="sv-horizon" class="terminal-input" type="url" autocomplete="url" @bind="_customHorizon" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected)" placeholder="https://horizon.example.com/" />
-                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || string.IsNullOrWhiteSpace(_customHorizon))">DETECT NETWORK</button>
+                        <button class="pixel-button compact" type="button" @onclick="DetectCustomAsync" disabled="@(_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || string.IsNullOrWhiteSpace(_customHorizon))">Detect network</button>
                         @if (!string.IsNullOrEmpty(_customPassphrase))
                         {
                             <p class="advanced-help" role="status">Detected network: @_customPassphrase</p>
                         }
                     }
-                    <p class="advanced-help">Choose the network before unlocking. To switch accounts or networks, end the current session.</p>
+                    @if (Sessions.IsUnlocked || LedgerRecords.IsConnected) { <p class="advanced-help">Lock and disconnect before switching networks.</p> }
                 </div>
             </details>
     </HeaderActions>
@@ -54,28 +56,26 @@
     {
     <div class="access-grid sv-pwa-access-grid">
         <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
-            <div class="panel-heading">
-                <div>
-                    <div class="panel-kicker">YOUR ACCOUNT</div>
-                    <h2>Unlock your vault</h2>
-                </div>
-                <span class="step-led">01</span>
-            </div>
+
             @if (Platform == "WEB PWA")
             {
                 @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
-                    <div class="terminal-alert" role="status">
-                        <strong>SAVED VAULT FOUND</strong>
-                        <span>Your encrypted local data is still stored in this browser for account @_recentAccount. After reopening the app, enter your recovery words and vault passphrase to restore full access and Stellar signing.</span>
-                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">FORGET SAVED ACCOUNT SHORTCUT</button>
-                    </div>
+                    <details class="sv-access-learn"><summary>Saved device vault</summary>
+                        <p>Encrypted items for @_recentAccount are stored in this browser. Enter your recovery phrase and vault passphrase to reopen them.</p>
+                        <button class="pixel-button compact" type="button" disabled="@_busy" @onclick="ForgetRecentAsync">Forget saved account</button>
+                    </details>
                 }
                 <div class="terminal-label">Recovery phrase</div>
                 <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
-                <div class="terminal-label">Where to save your data</div>
-                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> Stellar only — do not save data on this device</label>
-                <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Also save encrypted items on this device</label>
+                <details class="sv-access-storage-settings" open="@_enableLocalStorage">
+                    <summary>Save encrypted items on this device (optional)</summary>
+                    <fieldset class="sv-access-storage-choices">
+                        <legend class="sr-only">Device storage choice</legend>
+                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> Stellar only — nothing saved on this device</label>
+                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Save encrypted items on this device</label>
+                    </fieldset>
+                </details>
                 @if (_enableLocalStorage)
                 {
                 <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
@@ -116,8 +116,8 @@
                 {
                     <div class="terminal-alert" role="status" aria-live="polite" aria-busy="true">
                         <span class="sv-loading-spinner" aria-hidden="true"></span>
-                        <strong>PROCESSING // @_accessStage.ToUpperInvariant()</strong>
-                        <span>Cryptographic operations may take time on this device. Do not close the tab.</span>
+                        <strong>Opening vault…</strong>
+                        <span>Keep this screen open.</span>
                     </div>
                 }
                 <div class="sv-access-actions">
