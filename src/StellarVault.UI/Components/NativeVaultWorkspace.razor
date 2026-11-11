@@ -28,7 +28,7 @@ else
     <div class="sv-native-shell native-@HostPlatform.ToLowerInvariant()">
         <header class="sv-native-topbar">
             <div class="sv-native-brand"><span class="sv-native-brandmark" aria-hidden="true">✦</span>
-                <span><strong>StellarVault</strong><small>Private account vault</small></span></div>
+                <span><strong>StellarVault</strong></span></div>
             <div class="sv-native-header-actions">
                 <details class="sv-native-header-network">
                     <summary aria-label="Select Stellar network" title="Network: @NetworkLabel">
@@ -147,7 +147,7 @@ else
                 @if (_nativeMode == "record")
                 {
                                 <section aria-label="Publish Stellar record" class="terminal-panel">
-                    <h3>ON-CHAIN RECORD // TRANSACTION APPROVAL</h3>
+                    <h3>New record</h3>
                     <p class="notice">Publishing submits a paid Stellar transaction. Review the estimate before authorizing. This does not save to local storage.</p>
                     <label class="terminal-label" for="native-publish-title">RECORD TITLE</label>
                     <input id="native-publish-title" class="terminal-input" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
@@ -166,7 +166,7 @@ else
                 @if (_nativeMode == "file")
                 {
                                 <section aria-label="Upload Stellar file" class="terminal-panel">
-                    <h3>ON-CHAIN FILE // MULTIPART UPLOAD</h3>
+                    <h3>Add file</h3>
                     <p class="notice">Each part requires a separate approved Stellar transaction. Keep the original file until all stages are confirmed. Interrupted uploads can resume by selecting the same file.</p>
                     <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
                     @if (_uploadPlan is not null)
