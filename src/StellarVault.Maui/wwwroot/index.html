@@ -21,6 +21,27 @@
   <!-- The native interface starts independently of ledger assets.
        No BIP-39 or signer code is required to display the first screen. -->
   <script>
+    // Host theme is available before the optional Stellar runtime loads.
+    window.stellarVaultTheme = (() => {
+      const key = 'stellar-vault-theme';
+      function apply(value) {
+        const theme = value === 'dark' || value === 'amber' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        try { localStorage.setItem(key, theme); } catch (_) {}
+        return theme;
+      }
+      return Object.freeze({
+        initialize() {
+          let saved = 'light';
+          try { saved = localStorage.getItem(key) || saved; } catch (_) {}
+          return apply(saved);
+        },
+        toggle() { return apply(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); }
+      });
+    })();
+  </script>
+  <script>
     // Native-first startup: the hosted Blazor UI must render before the heavy
     // Stellar SDK / HD runtime. These scripts are loaded only on demand,
     // sequentially, so a missing runtime asset never blocks the whole app.
