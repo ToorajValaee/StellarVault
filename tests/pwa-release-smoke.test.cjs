@@ -455,3 +455,38 @@ test('Unlock button stays actionable and explains prerequisites without bypassin
   assert.match(home, /sv-access-security-notice/);
   assert.match(css, /\.sv-access-security-notice/);
 });
+
+test('Signed approval and account modal block blurred background without obscuring dialog controls', () => {
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const lifecycle = fs.readFileSync(path.join(root, 'js', 'vault-v2-lifecycle.js'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const approval = fs.readFileSync(path.join(root, '..', 'Shared', 'LedgerCostApprovalModal.razor'), 'utf8');
+  assert.match(css, /\.sv-editor-sidecar:has\(\.approval-modal-backdrop\)/);
+  assert.match(css, /\.modal-backdrop:not\(\.sv-record-inspector-backdrop\)/);
+  assert.match(css, /backdrop-filter:blur\(7px\)!important/);
+  assert.match(css, /z-index:8000!important/);
+  assert.match(css, /\.close-button:focus-visible/);
+  assert.match(lifecycle, /MutationObserver\(sync\)/);
+  assert.match(lifecycle, /element\.inert = true/);
+  assert.match(lifecycle, /event\.key !== 'Tab'/);
+  assert.match(approval, /aria-modal="true"/);
+  assert.match(vault, /sv-account-info-modal/);
+});
+test('Product Help, source transparency and persistent semantic light-dark theme are reachable', () => {
+  const rootCss = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const help = fs.readFileSync(path.join(root, '..', 'Pages', 'Help.razor'), 'utf8');
+  const lifecycle = fs.readFileSync(path.join(root, 'js', 'vault-v2-lifecycle.js'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'AdaptiveShell.razor'), 'utf8');
+  assert.match(help, /@page "\/help"/);
+  assert.match(help, /#getting-started/);
+  assert.match(help, /#security/);
+  assert.match(vault, /href="\/help"/);
+  assert.match(vault, /https:\/\/github\.com\/ToorajValaee\/StellarVault/);
+  assert.match(vault, /https:\/\/badje\.ir\//);
+  assert.match(rootCss, /\.sv-powered-by/);
+  assert.match(rootCss, /:root\[data-theme="dark"\]/);
+  assert.match(lifecycle, /dataset\.theme === 'dark' \? 'light' : 'dark'/);
+  assert.match(shell, /sv-network-symbol/);
+  assert.match(shell, /sv-brand-shield/);
+});
