@@ -221,9 +221,10 @@ else
             {
                 <div class="sv-folder-tile">
                     <button class="pixel-button compact sv-folder-open" @onclick="() => OpenFolder(item.Id)"><span aria-hidden="true">📁</span><span>@item.Title</span></button>
-                    <details><summary>⋯</summary>
-                        <a class="pixel-button compact" href="@($"/edit/{item.Id}")">RENAME / MOVE</a>
-                        <button class="pixel-button compact" @onclick="() => SelectDelete(item)">DELETE</button>
+                    <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
+                        <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
+                        <a href="@($"/edit/{item.Id}")">Rename / move</a>
+                        <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
                     </details>
                 </div>
             }
@@ -265,13 +266,23 @@ else
             {
                 @foreach (var item in Filtered)
                 {
-                    <button class="record-card sv-modern-record" type="button" @onclick="() => OpenRecord(item)">
-                        <span class="sv-modern-record-icon" aria-hidden="true">@(IsLedgerFile(item) ? "▤" : "▦")</span>
-                        <span class="record-card-body"><strong>@item.Title</strong><small>@(IsLedgerFile(item) ? "Encrypted file" : "Secure record")</small>
-                        @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
-                        @if (_includeChildren || !string.IsNullOrWhiteSpace(_search)) { <small>📁 @FolderPath(item.FolderId)</small> }
-                        </span><span class="record-chevron">›</span>
-                    </button>
+                    <div class="sv-object-row @(_selected?.Id == item.Id ? "is-selected" : "")">
+                        <button class="record-card sv-modern-record" type="button" @onclick="() => OpenRecord(item)"
+                                aria-label="@($"View {item.Title}")" aria-current="@(_selected?.Id == item.Id ? "true" : null)">
+                            <span class="sv-modern-record-icon" aria-hidden="true">@(IsLedgerFile(item) ? "▤" : "▦")</span>
+                            <span class="record-card-body"><strong>@item.Title</strong><small>@(IsLedgerFile(item) ? "Encrypted file" : "Secure record")</small>
+                            @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
+                            </span>
+                        </button>
+                        <details class="sv-object-actions">
+                            <summary aria-label="@($"Actions for {item.Title}")" title="More actions">⋯</summary>
+                            <div class="sv-object-menu">
+                                <button type="button" @onclick="() => OpenRecord(item)">View details</button>
+                                @if (!IsLedgerFile(item)) { <a href="@($"/edit/{item.Id}")">Edit record</a> }
+                                <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                            </div>
+                        </details>
+                    </div>
                 }
             }
         </section>
