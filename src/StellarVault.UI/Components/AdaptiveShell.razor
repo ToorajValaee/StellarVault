@@ -3,6 +3,12 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject VaultNetworkSelection NetworkSelection
 
+@if (Embedded)
+{
+    @ChildContent
+}
+else
+{
 <div class="sv-adaptive-shell @(PlatformName == "WEB PWA" ? "sv-web-shell" : "sv-native-shell")">
     <header class="sv-adaptive-header">
         <div class="sv-brand">
@@ -35,15 +41,17 @@
         @ChildContent
     </main>
 </div>
+}
 
 @code {
+    [Parameter] public bool Embedded { get; set; }
     [Parameter] public string PlatformName { get; set; } = "WEB";
     [Parameter] public string Subtitle { get; set; } = "ENCRYPTED VAULT";
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public RenderFragment? HeaderActions { get; set; }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender || Embedded) return;
         try { await JS.InvokeVoidAsync("stellarVaultTheme.initialize"); }
         catch (Microsoft.JSInterop.JSException) { }
     }
