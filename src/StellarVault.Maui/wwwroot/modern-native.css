@@ -911,3 +911,28 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
 .sv-native-shell :is(.terminal-alert,.data-field,.commit-preview) {
  box-shadow:none!important;background-image:none!important;
  border-radius:12px!important;}
+
+
+/* Host-driven light/dark appearance (available before ledger scripts load). */
+:root[data-theme="dark"] .sv-native-shell {
+ --sv-native-bg:#101f22;--sv-native-panel:#1b2d30;--sv-native-ink:#e5f4ee;
+ background:#101f22!important;color:#e2efe9!important;
+}
+:root[data-theme="dark"] .sv-native-shell :is(.sv-adaptive-header,.sv-native-topbar,
+ .sv-native-content,.sv-native-workspace,.sv-native-page,.sv-native-card,
+ .terminal-panel,.record-card,.sv-native-record-list,.sv-native-explorer,
+ .sv-native-folder-panel,.sv-native-network-popover) {
+ background:#1b2d30!important;color:#e2efe9!important;
+ border-color:#3b5656!important;box-shadow:none!important;
+}
+:root[data-theme="dark"] .sv-native-shell :is(h1,h2,h3,strong,label,p,small,.terminal-label) {
+ color:#e2efe9!important;
+}
+:root[data-theme="dark"] .sv-native-shell :is(.terminal-input,input,textarea,select,
+ .pixel-button:not(.primary),.sv-network-icon-trigger,.sv-theme-toggle) {
+ background:#20383b!important;color:#e2efe9!important;
+ border-color:#446363!important;
+}
+:root[data-theme="dark"] .sv-native-shell .pixel-button.primary {
+ background:#0b986b!important;color:#fff!important;
+}
