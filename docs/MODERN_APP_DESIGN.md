@@ -85,3 +85,8 @@ This iteration follows the user's desktop reference image:
 - Both the PWA unlock screen and native WebView restore a remembered preference when no active signing session is present. A custom URL must be probed again for its network passphrase before connecting. Mainnet warnings and consent remain unaffected.
 - The early-access warning is still correct: `PWA-RELEASE-GATE.md` marks audit and manual release validation as incomplete. Do not remove it without security release evidence.
 - **Validation remaining:** compile of shared Razor components, runtime Add/Edit pane rendering, actual network-preference restart behavior, browser storage denial, native Android WebView persistence, and CI tests. Static checks and changed tests do not substitute for these.
+
+
+## 2026-11-11 — Automatic verification of saved custom network
+
+A remembered custom Horizon URL is the **selected preference**, not a verified signing network. The saved preference intentionally omits the network passphrase, so the PWA and native host now automatically probe the remembered endpoint after startup. When the probe returns a valid network passphrase, the current session's network identity is configured and unlock can proceed under existing mnemonic, local-storage and mainnet guards. If the probe fails, the custom selection and URL remain visible but the UI explicitly asks the user to retry Detect network. No stored or stale passphrase is trusted, and no signing starts during automatic detection. Runtime confirmation of this flow is still outstanding.
