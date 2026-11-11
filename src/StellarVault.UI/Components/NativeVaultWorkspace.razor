@@ -599,7 +599,11 @@ else
                 NetworkSelection.ChoosePreset("custom");
                 NetworkSelection.CustomHorizonUrl = preference.HorizonUrl;
                 _customHorizon = preference.HorizonUrl;
-                _networkError = "Custom Horizon remembered. Detect the network before connecting.";
+                _networkError = "Verifying remembered custom Horizon…";
+                await InvokeAsync(StateHasChanged);
+                // Never reuse a stored passphrase as verified identity. Probe
+                // Horizon on each new native session before opening this chain.
+                await DiscoverNativeNetworkAsync();
             }
         }
         catch (JSException) { /* Preferences are optional; never block native startup. */ }
@@ -685,13 +689,15 @@ else
                 throw new InvalidOperationException("No network passphrase was detected.");
             NetworkSelection.ConfigureCustom(detected);
             NetworkSelection.CustomHorizonUrl = requestedHorizon;
+            _networkError = null;
+            _ledgerMessage = "Custom network verified and selected.";
             try { await JS.InvokeVoidAsync("stellarVaultNetworkPreference.save", "custom", requestedHorizon); }
             catch (JSException) { _networkError = "Network detected, but its preference could not be saved."; }
         }
         catch (Exception ex) when (ex is JSException or InvalidOperationException or ArgumentException)
         {
             NetworkSelection.ResetCustom();
-            _networkError = "Could not detect this network. Check the HTTPS Horizon URL and try again.";
+            _networkError = "Could not verify the custom network. Check the HTTPS Horizon URL and select Detect network to retry.";
         }
         finally { _networkDiscovering = false; }
     }
