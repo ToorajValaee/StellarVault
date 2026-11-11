@@ -21,7 +21,7 @@
 {
     <section class="terminal-panel centered-message"><h1>Vault locked</h1><a class="pixel-button primary" href="/">Unlock vault</a></section>
 }
-else if (Ledger.IsConnected && _registryReady != true)
+else if (Ledger.IsConnected && _registryReady == false)
 {
     <section class="terminal-panel centered-message">
         <h1>Finish setup</h1>
@@ -1273,7 +1273,11 @@ else
             _registryReady = await Ledger.HasRegistryAsync();
             if (_registryReady == true) await RefreshAsync();
             else Nav.NavigateTo("/initialize", replace: true);
-        } catch (Exception ex) { _error = "Ledger setup check failed: " + ex.Message; }
+        } catch (Exception) {
+            // A disconnected Horizon is not evidence that registry setup is
+            // missing. Keep locally unlocked drafts accessible.
+            _error = "Stellar cannot be reached right now. You can continue working with encrypted local drafts and retry network refresh later.";
+        }
     }
     private async Task RefreshAsync() {
         if (_busy) return;
