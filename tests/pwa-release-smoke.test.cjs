@@ -137,7 +137,7 @@ test('offline vault keeps the normal ledger browser layout instead of an alterna
 
 test('refresh without signing credentials is not mislabeled as offline', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  assert.ok(vault.includes('NOT SIGNED IN'));
+  assert.ok(vault.includes('Not connected'));
   assert.ok(vault.includes('browser refresh ends the in-memory Stellar signing session'));
   assert.ok(!vault.includes('STELLAR DATA UNAVAILABLE OFFLINE'));
 });
@@ -150,7 +150,7 @@ test('explicit-lock policy keeps session while switching tabs and requires mnemo
   assert.ok(!lifecycle.includes("addEventListener('pagehide'"));
   assert.ok(!lifecycle.includes("invokeMethodAsync('SuspendForPrivacy'"));
   assert.ok(app.includes('_coldAccount = null;'));
-  assert.ok(access.includes('SAVED VAULT FOUND'));
+  assert.ok(access.includes('Saved device vault'));
   assert.ok(!access.includes('REOPEN LOCAL VAULT</button>'));
 });
 
@@ -168,7 +168,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'Add.razor'), 'utf8');
-  assert.ok(access.includes('Stellar only — do not save data on this device'));
+  assert.ok(access.includes('Stellar only — nothing saved on this device'));
   assert.ok(access.includes('checked="@(!_enableLocalStorage)"'));
   assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
