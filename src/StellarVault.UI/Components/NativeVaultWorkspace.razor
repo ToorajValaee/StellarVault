@@ -528,7 +528,7 @@ else
             NetworkSelection.ConfigureCustom(detected);
             NetworkSelection.CustomHorizonUrl = requestedHorizon;
         }
-        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or ArgumentException)
         {
             NetworkSelection.ResetCustom();
             _networkError = "Could not detect this network. Check the HTTPS Horizon URL and try again.";
