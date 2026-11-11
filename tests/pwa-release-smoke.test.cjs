@@ -437,7 +437,10 @@ test('Network preference contains only non-secret metadata and custom network mu
   assert.match(home, /stellarVaultNetworkPreference\.load/);
   assert.match(home, /stellarVaultNetworkPreference\.save/);
   assert.match(home, /NetworkSelection\.ResetCustom\(\)/);
-  assert.match(home, /Custom Horizon remembered\. Detect the network again before unlocking/);
+  assert.match(home, /Verifying remembered custom Horizon/);
+  assert.match(home, /await DetectCustomAsync\(\)/);
+  assert.match(home, /Custom network verified and selected/);
+  assert.match(home, /select Detect network to retry/);
   assert.match(home, /Early access — use test accounts only/);
 });
 
