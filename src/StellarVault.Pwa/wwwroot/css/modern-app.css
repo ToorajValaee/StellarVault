@@ -3809,3 +3809,27 @@ html .sv-web-shell .sv-editor-embedded .sv-adaptive-main {min-height:0!important
   display:inline-flex!important;align-items:center;justify-content:center;
   flex:0 0 40px!important;width:40px!important;height:40px!important;
 }
+
+
+/* Unlock affordance: prerequisites are explained, never hidden behind disabled controls. */
+.sv-web-shell .sv-modern-entry .sv-access-readiness {
+  width:100%;margin:3px 0 7px;padding:0 2px;
+  color:#607b75;font:500 12px/1.5 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-modern-entry .sv-access-security-notice {
+  margin:5px 0 0;padding:0 10px;
+  background:#f8faf9!important;border:1px solid #e2eae6!important;
+  border-radius:9px!important;box-shadow:none!important;
+  color:#4d6960;
+}
+.sv-web-shell .sv-modern-entry .sv-access-security-notice summary {
+  cursor:pointer;list-style:revert;padding:10px 3px;
+  color:#54776c;font:600 12px/1.45 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-modern-entry .sv-access-security-notice p {
+  margin:0;padding:0 4px 12px;color:#5a6c67;
+  font:400 12px/1.6 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+.sv-web-shell .sv-modern-entry .sv-access-security-notice strong {
+  color:#7a5b34;font-weight:650;
+}
