@@ -322,7 +322,7 @@ test('PWA loads only the consolidated modern design after scoped styles', () => 
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   const scoped = html.indexOf('href="StellarVault.Pwa.styles.css"');
-  const modern = html.indexOf('href="css/modern-app.css"');
+  const modern = html.indexOf('href="css/modern-app.css');
   assert.ok(scoped >= 0 && modern > scoped);
   assert.ok(!html.includes('href="css/app.css"'));
   assert.match(css, /--sv-radius:16px/);
