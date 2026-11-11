@@ -1,0 +1,107 @@
+/* StellarVault native-host modern presentation, aligned with the PWA concept.
+   Native-only visual layer; all crypto and business rules remain shared. */
+:root {
+  color-scheme: light;
+  --sv-native-bg:#f3f7f6;--sv-native-surface:#fff;
+  --sv-native-elevated:#f5f9f7;--sv-native-text:#1d3830;
+  --sv-native-muted:#6b8379;--sv-native-accent:#168568;
+  --sv-native-line:#e1ebe6;
+  --bg-0:#f3f7f6;--bg-1:#f8fbf9;--panel:#fff;--panel-soft:#f7faf8;
+  --phosphor:#196e56;--phosphor-strong:#154d3d;
+  --phosphor-faint:rgba(20,122,91,.07);--phosphor-dim:#92c1ae;
+  --accent:#168568;--border:#dfeae4;--muted:#73877d;
+}
+html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;}
+.sv-native-shell {background:#f3f7f6;color:var(--sv-native-text);}
+.sv-native-topbar {background:#fff;min-height:68px;padding:12px 21px;
+  border-bottom:1px solid var(--sv-native-line);box-shadow:none;}
+.sv-native-brand {gap:11px;}
+.sv-native-brandmark {border:none;border-radius:12px;background:linear-gradient(140deg,#219675,#11684f);
+  width:40px;height:40px;color:#fff;box-shadow:0 4px 12px rgba(18,107,87,.14);
+  font-family:inherit;text-shadow:none;font-size:23px;}
+.sv-native-brand strong {color:var(--sv-native-text);font-size:16px;letter-spacing:-.015em;}
+.sv-native-header-network > summary {background:#f4f9f6;border-color:var(--sv-native-line);
+  color:#187b60;border-radius:12px;}
+.sv-native-network-popover {background:#fff;border:1px solid var(--sv-native-line);
+  border-radius:17px;box-shadow:0 16px 45px rgba(23,62,52,.15);}
+.sv-native-network-popover strong {color:var(--sv-native-text);}
+.sv-native-network-dot {border-color:#fff;}
+.sv-native-scroll {background:#f3f7f6;scrollbar-gutter:stable;}
+.sv-native-content {max-width:1200px;padding:22px clamp(16px,3vw,35px) 36px;}
+.sv-native-page-heading {margin-bottom:17px;}
+.sv-native-page-heading h1 {color:#183f32;font-size:clamp(24px,2.6vw,32px);
+  font-weight:750;letter-spacing:-.035em;text-transform:none;}
+.sv-native-shell :is(.terminal-panel,.sv-native-object-card,.sv-native-folder-tree,
+  .sv-native-network-popover,.sv-native-segments,.sv-native-command,.sv-native-nav button.selected){
+  background-image:none!important;background-color:#fff;border-radius:16px;
+}
+.sv-native-shell .terminal-panel {border:1px solid var(--sv-native-line);background:#fff;
+  box-shadow:0 6px 22px rgba(18,66,53,.045);margin-bottom:15px;
+  padding:clamp(16px,2.4vw,24px);color:var(--sv-native-text);}
+.sv-native-shell .terminal-panel::before,.sv-native-shell .terminal-panel::after {display:none!important;}
+.sv-native-shell :is(h1,h2,h3, .panel-kicker,.terminal-label,.form-section-title) {
+  font-family:inherit;letter-spacing:normal;text-shadow:none;text-transform:none;}
+.sv-native-shell :is(h1,h2,h3){color:var(--sv-native-text);font-weight:720;}
+.sv-native-shell .panel-kicker {color:var(--sv-native-muted);font-size:12px;}
+.sv-native-shell .terminal-label {color:#597367;font-weight:650;font-size:12px;}
+.sv-native-shell .terminal-input,.sv-native-shell input,.sv-native-shell textarea,.sv-native-shell select {
+  color:var(--sv-native-text);font-family:inherit;}
+.sv-native-shell .terminal-input {background:#fff;border:1px solid #ccded5;
+  border-radius:11px;min-height:45px;padding:11px 13px;}
+.sv-native-shell .terminal-input:focus-visible {outline:3px solid rgba(22,133,104,.13);
+  border-color:#168568;}
+.sv-native-shell .pixel-button,.sv-native-shell .sv-native-outline-action,
+.sv-native-shell .sv-native-back {background:#fff;color:#186d55;border:1px solid #d9e8e0;
+  border-radius:11px;box-shadow:none;text-transform:none;text-shadow:none;letter-spacing:0;
+  min-height:44px;font-family:inherit;font-weight:650;font-size:13px;}
+.sv-native-shell .pixel-button.primary,.sv-native-command.primary {
+  background:#168568;color:#fff;border-color:#168568;border-radius:11px;}
+.sv-native-command {background:#fff;color:#176952;border:1px solid var(--sv-native-line);
+  border-radius:11px;min-height:44px;}
+.sv-native-commandbar {background:#fff;border-top:1px solid var(--sv-native-line);padding:10px 17px;}
+.sv-native-command-hint {color:var(--sv-native-muted);}
+.sv-native-nav {background:#fff;border-top:1px solid var(--sv-native-line);}
+.sv-native-nav button {color:#7c9287;border-radius:12px;font-weight:640;}
+.sv-native-nav button.selected {background:#e6f4ed!important;color:#157455;}
+.sv-native-nav-icon {font-size:21px;}
+.sv-native-status-dot.connected {background:#21aa77;box-shadow:none;}
+.sv-native-shell .sv-native-object-card {border:1px solid var(--sv-native-line);
+  background:#fff!important;border-radius:14px;box-shadow:0 4px 15px rgba(20,62,53,.04);
+  color:var(--sv-native-text);min-height:115px;}
+.sv-native-object-card strong {color:var(--sv-native-text);font-size:14px;font-weight:690;}
+.sv-native-object-card small {color:#81958c;}
+.sv-native-object-icon {color:#1f9873;font-size:27px;}
+.sv-native-folder-tree {background:#fff!important;border:1px solid var(--sv-native-line);
+  border-radius:14px;padding:10px;}
+.sv-native-tree-item {color:#546d61;border:0;border-radius:10px;font-weight:520;}
+.sv-native-tree-item.selected,.sv-native-tree-item:hover {background:#e8f5ed;color:#196d52;}
+.sv-native-segments {background:#eff5f2!important;border:0;box-shadow:none;}
+.sv-native-segments button {border-radius:10px;color:#627b70;}
+.sv-native-segments button.selected {background:#fff;color:#177256;box-shadow:0 2px 7px rgba(21,69,53,.07);}
+.sv-native-subtle-status,.sv-native-summary {color:var(--sv-native-muted);}
+.sv-native-network-settings summary,.sv-native-help summary {color:#166c53;}
+.sv-native-help {border-radius:12px;background:#f8fbf9;border-color:var(--sv-native-line);}
+.sv-native-shell .terminal-alert.warning {background:#fff7e9;border-color:#eedab8;color:#835b25;border-radius:12px;}
+.sv-native-shell .terminal-alert.error {background:#fff0f0;border-color:#f0c5ce;color:#a4394c;border-radius:12px;}
+.sv-native-mainnet-consent {border-radius:12px;background:#fff7e8;color:#8c5b1a;border-color:#edd6a8;}
+.sv-native-footer {background:#fff;color:#8b9a92;border-color:var(--sv-native-line);}
+@media(min-width:720px) {
+  .native-windows .sv-native-nav,.native-winui .sv-native-nav,
+  .native-maccatalyst .sv-native-nav,.native-ios .sv-native-nav {
+    background:#fff;border-right:1px solid var(--sv-native-line);}
+  .native-windows .sv-native-nav button,.native-winui .sv-native-nav button,
+  .native-maccatalyst .sv-native-nav button,.native-ios .sv-native-nav button {
+    font-size:14px;padding:12px 15px;}
+}
+@media(max-width:699px){
+  .sv-native-topbar {min-height:62px;padding:10px 15px;
+    padding-top:calc(10px + env(safe-area-inset-top,0px));}
+  .sv-native-brandmark {width:35px;height:35px;}
+  .sv-native-content {padding:16px 13px 30px;}
+  .sv-native-shell .terminal-panel {border-radius:15px;padding:16px;}
+  .sv-native-object-grid {gap:10px;}
+  .sv-native-object-card {min-height:112px;}
+  .sv-native-commandbar {padding:9px 12px;}
+}
+@media(prefers-reduced-motion:reduce){.sv-native-shell *{transition:none!important;animation:none!important;}}
