@@ -218,6 +218,10 @@ else
             </div>
         }
         <div class="sv-mobile-items-heading">
+            @if (_folder is not null)
+            {
+                <button type="button" class="sv-mobile-folder-back" aria-label="Back to vault root" @onclick='() => OpenFolder("")'>‹</button>
+            }
             <h2>@(_folder is not null ? (Breadcrumbs.LastOrDefault()?.Title ?? "Items") : _mobileCollection == "folders" ? "Folders" : _mobileCollection == "records" ? "Records" : "All Items")</h2>
             <div class="sv-mobile-item-controls">
                 <button type="button" aria-label="Switch between list and grid" @onclick='() => _explorerLayout = _explorerLayout == "list" ? "grid" : "list"'>☷</button>
