@@ -56,13 +56,13 @@ else
                     <p class="page-subtitle">@(_appView == "records" ? "Browse encrypted records, folders and on-chain files." : _appView == "drafts" ? "Edit encrypted records and folders saved only on this device." : "Inspect conflicts and authorize one Stellar transaction at a time.")</p>
                 </div>
                 <div class="sv-pwa-screen-tools">
-                    @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">Connect</button> }
+                    @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
                     <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
                     @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ Refresh</button> }
                     <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock</button>
                 </div>
             </header>
-            <div class="stats-strip sv-pwa-summary"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "OFFLINE")</strong></div></div>
+            <div class="stats-strip sv-pwa-summary"><div><span>RECORDS</span><strong>@Records.Count</strong></div><div><span>FOLDERS</span><strong>@Folders.Count</strong></div><div><span>NETWORK</span><strong>@(Ledger.IsConnected ? "CONNECTED" : "NOT SIGNED IN")</strong></div></div>
         @if (_appView == "drafts" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
         {
             <div class="sv-pwa-view-intro"><strong>DEVICE STORAGE</strong><span>These drafts are encrypted locally. Nothing is published automatically.</span></div>
