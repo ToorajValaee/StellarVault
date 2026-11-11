@@ -2465,3 +2465,23 @@ html.ios-device.standalone-app .terminal-footer {
  .sv-platform {display:none;}
  .sv-header-actions {gap:.35rem;}
 }
+
+/* Only the unlocked vault route uses a fixed app viewport.
+   Access and editor routes retain conventional document scrolling. */
+@supports selector(.sv-adaptive-shell:has(.sv-pwa-app)) {
+  .sv-adaptive-shell:has(.sv-pwa-app) {height:100dvh;min-height:0;overflow:hidden;}
+  .sv-adaptive-shell:has(.sv-pwa-app) > .sv-adaptive-main {
+    flex:1;min-height:0;overflow:hidden;
+  }
+  .sv-adaptive-shell:has(.sv-pwa-app) .sv-pwa-app {
+    height:100%;min-height:0;overflow:hidden;
+  }
+  .sv-adaptive-shell:has(.sv-pwa-app) .sv-pwa-rail {
+    position:relative;top:auto;height:100%;min-height:0;
+  }
+  .sv-adaptive-shell:has(.sv-pwa-app) .sv-pwa-stage {
+    height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior-y:contain;scrollbar-gutter:stable;
+    -webkit-overflow-scrolling:touch;
+  }
+}
