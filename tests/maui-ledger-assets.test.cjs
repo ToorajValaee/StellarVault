@@ -84,7 +84,7 @@ test('MAUI renders platform-adaptive native shell with scrollable content and fi
     assert.ok(workspace.includes('NavigateNative("' + page + '")'),
       'Missing navigation destination ' + page);
   }
-  assert.ok(host.indexOf('href="native-app.css"') > host.indexOf('href="css/app.css"'),
+  assert.ok(host.indexOf('href="native-app.css"') > host.indexOf('href="css/modern-app.css"'),
     'Native override must be loaded after web styling');
   assert.match(nativeCss, /overflow-y:\s*auto/);
   assert.match(nativeCss, /minmax\(0,\s*1fr\)/);
