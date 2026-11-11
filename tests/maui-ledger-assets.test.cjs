@@ -278,3 +278,12 @@ test('MAUI keeps the network preset without storing a trusted custom network ide
   assert.match(workspace, /NetworkSelection\.ResetCustom\(\)/);
   assert.match(networkJs, /stellarVaultNetworkPreference/);
 });
+
+test('Native shell theme is initialized before optional ledger runtime', () => {
+  const host = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/wwwroot/index.html'), 'utf8');
+  const nativeCss = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/wwwroot/modern-native.css'), 'utf8');
+  assert.ok(host.indexOf('window.stellarVaultTheme =') > 0);
+  assert.ok(host.indexOf('window.stellarVaultTheme =') < host.indexOf('window.stellarVaultNativeRuntime ='));
+  assert.match(host, /dataset\.theme === 'dark' \? 'light' : 'dark'/);
+  assert.match(nativeCss, /:root\[data-theme="dark"\]/);
+});
