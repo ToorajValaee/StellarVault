@@ -72,30 +72,14 @@ else
                         }
                     </div>
                 </details>
-                <span class="sv-native-status-dot @(Ledger.IsConnected ? "connected" : "")" title="@(Ledger.IsConnected ? "Connected" : "Not connected")" aria-label="@(Ledger.IsConnected ? "Connected" : "Not connected")"></span>
+                <span class="sv-native-online-pill"><span aria-hidden="true">◉</span> @(Ledger.IsConnected ? "Online · Synced" : "Offline · Local")</span>
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
-            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")"
-                    aria-current="@(_nativePage == "stellar" ? "page" : null)"
-                    @onclick='() => NavigateNative("stellar")'>
-                <span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Stellar</span>
-            </button>
-            <button type="button" class="@(_nativePage == "local" ? "selected" : "")"
-                    aria-current="@(_nativePage == "local" ? "page" : null)"
-                    @onclick='() => NavigateNative("local")'>
-                <span class="sv-native-nav-icon" aria-hidden="true">▣</span><span>My vault</span>
-            </button>
-            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")"
-                    aria-current="@(_nativePage == "sync" ? "page" : null)"
-                    @onclick='() => NavigateNative("sync")'>
-                <span class="sv-native-nav-icon" aria-hidden="true">⇅</span><span>Sync</span>
-            </button>
-            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")"
-                    aria-current="@(_nativePage == "settings" ? "page" : null)"
-                    @onclick='() => NavigateNative("settings")'>
-                <span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span>
-            </button>
+            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Home</span></button>
+            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Vault</span></button>
+            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
+            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
@@ -246,9 +230,28 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
-                    @if (_selectedRecord is null)
+                    <div class="sv-native-mobile-collections" role="group" aria-label="Browse items">
+                        <button type="button" class="@(_nativeCollection == "all" ? "selected" : "")" @onclick='() => _nativeCollection = "all"'>▱ All Items</button>
+                        <button type="button" class="@(_nativeCollection == "folders" ? "selected" : "")" @onclick='() => _nativeCollection = "folders"'>▱ Folders</button>
+                        <button type="button" class="@(_nativeCollection == "records" ? "selected" : "")" @onclick='() => _nativeCollection = "records"'>◷ Records</button>
+                    </div>
+                    @if (_ledgerRecords.Any(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)) && string.IsNullOrEmpty(_selectedFolderId))
                     {
-                    <div class="sv-native-explorer">
+                        <section class="sv-native-folder-shortcuts" aria-label="Folder shortcuts">
+                            <div class="sv-native-section-title"><h2>Folder Shortcuts</h2><button type="button" @onclick='() => _nativeCollection = "folders"'>See all ›</button></div>
+                            <div class="sv-native-shortcut-grid">
+                                @foreach (var shortcut in _ledgerRecords.Where(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)).Take(4))
+                                {
+                                    <button type="button" @onclick="() => OpenNativeFolder(shortcut.Id)">
+                                        <span aria-hidden="true">📁</span><strong>@shortcut.Title</strong>
+                                        <small>@_ledgerRecords.Count(x => x.FolderId == shortcut.Id) items</small>
+                                    </button>
+                                }
+                            </div>
+                        </section>
+                    }
+                    <div class="sv-native-list-toolbar"><h2>@(_nativeCollection == "folders" ? "Folders" : _nativeCollection == "records" ? "Records" : "All Items")</h2><button type="button" aria-label="Toggle item layout" @onclick='() => _nativeGrid = !_nativeGrid'>☷</button></div>
+                    <div class="sv-native-explorer sv-native-collection-@_nativeCollection @(_nativeGrid ? "sv-native-grid-mode" : "")">
                         <aside class="sv-native-folder-tree" aria-label="Folder tree">
                             <button type="button" class="sv-native-tree-item @(_selectedFolderId == "" ? "selected" : "")"
                                     @onclick='() => OpenNativeFolder("")'>▣ My vault</button>
@@ -271,24 +274,27 @@ else
                             </select>
                             <div class="sv-native-object-grid">
                             @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
-                                !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+                                !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+                                (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)))
                                 .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
                             {
-                                <button type="button" class="sv-native-object-card" disabled="@_ledgerBusy"
-                                        @onclick="() => SelectRecord(item.Id)">
-                                    <span class="sv-native-object-icon" aria-hidden="true">@(item.IsFolder ? "▣" : StellarLedgerFileProtocol.IsFile(item) ? "▤" : "▦")</span>
-                                    <strong>@item.Title</strong>
-                                    <small>@(item.IsFolder ? "Folder" : StellarLedgerFileProtocol.IsFile(item) ? "File" : "Record")</small>
-                                </button>
+                                <div class="sv-native-object-row @(_selectedRecord?.Id == item.Id ? "is-selected" : "")">
+                                    <button type="button" class="sv-native-object-card" disabled="@_ledgerBusy"
+                                            @onclick="() => SelectRecord(item.Id)">
+                                        <span class="sv-native-object-icon" aria-hidden="true">@(item.IsFolder ? "📁" : StellarLedgerFileProtocol.IsFile(item) ? "▤" : "▦")</span>
+                                        <span class="sv-native-object-description"><strong>@item.Title</strong>
+                                            <small>@(item.IsFolder ? $"Folder · {_ledgerRecords.Count(x => x.FolderId == item.Id)} items" : StellarLedgerFileProtocol.IsFile(item) ? "Encrypted file" : "Record")</small></span>
+                                    </button>
+                                    <button type="button" class="sv-native-row-more" aria-label="@($"Open {item.Title} details")" @onclick="() => SelectRecord(item.Id)">⋯</button>
+                                </div>
                             }
                             </div>
                         </div>
                     </div>
-                    }
                 @if (_selectedRecord is not null && !_selectedRecord.IsFolder)
                 {
                     <section class="sv-native-detail-screen" aria-label="Selected ledger record">
-                        <button type="button" class="sv-native-back" @onclick="ResetSelection">← Back to folder</button>
+                        <button type="button" class="sv-native-sheet-close" aria-label="Close record details" @onclick="ResetSelection">×</button>
                         <h3>@_selectedRecord.Title</h3>
                         @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
                         {
@@ -432,6 +438,10 @@ else
     </section>
           </div>
         </main>
+        @if (_nativePage == "stellar" && Ledger.IsConnected && _nativeMode == "browse")
+        {
+            <button class="sv-native-mobile-fab" type="button" aria-label="New record" @onclick='() => SetNativeMode("record")'>＋</button>
+        }
         <div class="sv-native-commandbar" aria-label="Quick actions">
             @if (_nativePage == "stellar")
             {
@@ -521,6 +531,8 @@ else
     }
 
     private string _nativeMode = "browse";
+    private string _nativeCollection = "all";
+    private bool _nativeGrid;
 
     private void OpenNativeFolder(string id)
     {
