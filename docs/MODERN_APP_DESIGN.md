@@ -76,3 +76,12 @@ This iteration follows the user's desktop reference image:
 - Sidebar branding and the Stellar network connection section align more closely with the reference; controls use tighter 8–9px corners.
 
 **Verification performed:** code-level inspection of markup balance and CSS brace balance; checked callbacks, command methods, select/expand state, grid rules, update paths, and new smoke-test assertions. **Not performed:** .NET build, actual rendered PWA/MAUI screenshots, keyboard/focus acceptance, or real network transaction tests. Visual fidelity and compiler correctness remain unverified until CI/device test.
+
+
+## 2026-11-11 — Routed editor separation and remembered network
+
+- The previous inline Add/Edit approach mounted the routed `Add.razor` page as a child; the user reported that the right pane remained empty. The actual ledger create/edit/upload implementation has now been moved into route-free `VaultItemEditor.razor`. `Add.razor` is a thin `/add` and `/edit/{RecordId}` wrapper, and the Vault inspector mounts the shared editor with `ErrorBoundary` and an explicit standalone fallback. Ledger fee approval, upload recovery and local-draft logic remain in one implementation.
+- `stellarVaultNetworkPreference` stores only the selected preset and a validated custom Horizon origin URL in browser/WebView local storage. No mnemonic, account ID, network passphrase, encrypted key, or signing material is persisted by this feature.
+- Both the PWA unlock screen and native WebView restore a remembered preference when no active signing session is present. A custom URL must be probed again for its network passphrase before connecting. Mainnet warnings and consent remain unaffected.
+- The early-access warning is still correct: `PWA-RELEASE-GATE.md` marks audit and manual release validation as incomplete. Do not remove it without security release evidence.
+- **Validation remaining:** compile of shared Razor components, runtime Add/Edit pane rendering, actual network-preference restart behavior, browser storage denial, native Android WebView persistence, and CI tests. Static checks and changed tests do not substitute for these.
