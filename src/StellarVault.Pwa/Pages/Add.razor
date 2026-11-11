@@ -61,7 +61,7 @@ else
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
                 <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="ReviewAsync">REVIEW FILE COST AND APPROVE</button>
-                @if (CanSaveOffline) { <button class="pixel-button compact" type="button" disabled="@(_busy || _loading || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="SaveOfflineDraftAsync">SAVE ENCRYPTED LOCAL FILE DRAFT</button> }
+                <p class="advanced-help">Hybrid file drafts are disabled. You may publish this file directly on-chain after reviewing each transaction, or cancel.</p>
             </div>
         }
         else
