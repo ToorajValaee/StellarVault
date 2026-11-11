@@ -14,11 +14,21 @@
     }
     else
     {
-        <div class="sv-access-actions">
-            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewRecord">NEW RECORD</button>
-            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewFolder">NEW FOLDER</button>
-            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="RefreshAsync">REFRESH DRAFTS</button>
-        </div>
+        @if (!_editingScreen)
+        {
+            <div class="sv-access-actions">
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewRecord">＋ Record</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="NewFolder">＋ Folder</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="RefreshAsync">Refresh</button>
+            </div>
+        }
+        else
+        {
+            <button type="button" class="sv-native-back pixel-button compact" disabled="@_busy" @onclick="BackToDraftList">← Back to drafts</button>
+            <h3>@(_editingId is not null ? "Edit draft" : _isFolder ? "New folder" : "New record")</h3>
+        }
+        @if (_editingScreen)
+        {
         <label class="terminal-label" for="hybrid-draft-name">TITLE</label>
         <input id="hybrid-draft-name" class="terminal-input" maxlength="256"
                @bind="_title" @bind:event="oninput" disabled="@_busy" />
@@ -57,6 +67,9 @@
         {
             <p role="status" class="terminal-alert">@_status</p>
         }
+        }
+        else
+        {
         <div class="panel-kicker">LOCAL DRAFT DIRECTORY</div>
         @foreach (var draft in _items)
         {
@@ -98,6 +111,7 @@
                 }
             </div>
         }
+        }
     }
 </section>
 
@@ -109,6 +123,7 @@
     private string _title = "", _content = "", _username = "", _url = "",
         _notes = "", _tags = "", _folderId = "";
     private bool _isFolder;
+    private bool _editingScreen;
 
     protected override void OnInitialized()
     {
@@ -127,6 +142,7 @@
         if (_loadedEpoch == epoch) return;
         _loadedEpoch = epoch;
         Reset(false);
+        _editingScreen = false;
         _items = [];
         if (!Sessions.IsUnlocked || !Retention.AllowsLocalPersistence)
         {
@@ -159,8 +175,15 @@
         _status = null;
     }
 
-    private void NewRecord() => Reset(false);
-    private void NewFolder() => Reset(true);
+    private void BackToDraftList()
+    {
+        if (_busy) return;
+        Reset(false);
+        _editingScreen = false;
+    }
+
+    private void NewRecord() { Reset(false); _editingScreen = true; }
+    private void NewFolder() { Reset(true); _editingScreen = true; }
     private void ClearParent() { if (!_busy) _folderId = ""; }
 
     private void CreateChild(VaultHybridDraftWorkspace.DraftItem parent, bool folder)
@@ -169,6 +192,7 @@
             parent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed)) return;
         Reset(folder);
         _folderId = parent.EntityId;
+        _editingScreen = true;
         _status = "New local child of " + parent.Draft.Title +
             ". Save it offline; publication will wait for the parent.";
     }
@@ -191,6 +215,7 @@
     {
         if (_busy || item.State != VaultSyncState.Pending) return;
         _editingId = item.MutationId;
+        _editingScreen = true;
         _openedRevision = item.PayloadSha256;
         _isFolder = item.Draft.IsFolder;
         _title = item.Draft.Title;
