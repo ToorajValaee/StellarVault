@@ -90,3 +90,16 @@ This iteration follows the user's desktop reference image:
 ## 2026-11-11 — Automatic verification of saved custom network
 
 A remembered custom Horizon URL is the **selected preference**, not a verified signing network. The saved preference intentionally omits the network passphrase, so the PWA and native host now automatically probe the remembered endpoint after startup. When the probe returns a valid network passphrase, the current session's network identity is configured and unlock can proceed under existing mnemonic, local-storage and mainnet guards. If the probe fails, the custom selection and URL remain visible but the UI explicitly asks the user to retry Detect network. No stored or stale passphrase is trusted, and no signing starts during automatic detection. Runtime confirmation of this flow is still outstanding.
+
+
+## 2026-11-11 — Modal safety, help, transparency, and theme
+
+- **Signed ledger approval and account information are modal**, unlike the ordinary record inspector. Their backdrop now covers the viewport with a dark translucent blur and a higher stacking level than explorer row menus. The embedded editor sidecar is elevated while a cost approval is present so its dialog does not appear underneath records.
+- PWA dialog lifecycle guidance uses focus containment, background `inert`, focus restoration, and Tab cycling while the modal exists. Blurred visuals are not considered a substitute for preventing background interaction. Busy transaction approval still cannot be dismissed.
+- Modal and inspector close buttons use borderless 36px icon targets with visible keyboard focus rings.
+- Product branding now uses a scalable shield and a consistent network symbol rather than generic star/target glyphs.
+- The header color toggle now selects a real light/dark theme and persists its preference. The prior amber/green CSS-variable-only toggle was effectively hidden by hard-coded modern surfaces. Native WebView initializes its theme bridge before optional ledger runtime scripts load. An old stored `amber` value migrates to `dark`.
+- Added `/help` as a dedicated, public documentation route covering onboarding, records, local consent/sync, Stellar reserves/fees, security and repository transparency; desktop sidebar and mobile vault navigation expose the link.
+- Added a direct `https://github.com/ToorajValaee/StellarVault` source link and a `Powered by badje.ir` attribution badge in the sidebar. The help page explicitly avoids claiming that open source code alone guarantees security. The existing independent security review warning remains appropriate.
+
+**Status:** Committed and checked structurally, but **not browser-rendered or device-tested in this tool session**. Important acceptance checks: pending ledger approval on desktop while a record menu is open, account modal background blur, Tab focus loop and restored focus, approval Busy blocking, light/dark mode across Vault/entry/help/native, external-link destinations, narrow mobile help layout.
