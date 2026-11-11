@@ -251,7 +251,12 @@ else
                             </div>
                         </section>
                     }
-                    <div class="sv-native-list-toolbar"><h2>@(_nativeCollection == "folders" ? "Folders" : _nativeCollection == "records" ? "Records" : "All Items")</h2><button type="button" aria-label="Toggle item layout" @onclick='() => _nativeGrid = !_nativeGrid'>☷</button></div>
+                    <div class="sv-native-list-toolbar">
+                        @if (!string.IsNullOrEmpty(_selectedFolderId))
+                        {
+                            <button class="sv-native-folder-back" type="button" aria-label="Back to vault root" @onclick='() => OpenNativeFolder("")'>‹</button>
+                        }
+                        <h2>@(_nativeCollection == "folders" ? "Folders" : _nativeCollection == "records" ? "Records" : "All Items")</h2><button type="button" aria-label="Toggle item layout" @onclick='() => _nativeGrid = !_nativeGrid'>☷</button></div>
                     <div class="sv-native-explorer sv-native-collection-@_nativeCollection @(_nativeGrid ? "sv-native-grid-mode" : "")">
                         <aside class="sv-native-folder-tree" aria-label="Folder tree">
                             <button type="button" class="sv-native-tree-item @(_selectedFolderId == "" ? "selected" : "")"
