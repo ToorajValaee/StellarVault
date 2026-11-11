@@ -81,7 +81,7 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
   const vault = fs.readFileSync(path.join(pages, 'Vault.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
   assert.ok(vault.includes('@page "/vault"'));
-  assert.ok(vault.includes('Your records'));
+  assert.ok(vault.includes('Records'));
   assert.ok(vault.includes('FOLDERS'));
   assert.ok(vault.includes('sv-pwa-app'));
   assert.ok(vault.includes('sv-pwa-rail'));
@@ -278,4 +278,17 @@ test('PWA item editor offers one focused task with app navigation', () => {
   assert.ok(css.includes('.sv-pwa-mobile-tabs'));
   assert.ok(css.includes('.sv-pwa-rail'));
   assert.ok(css.includes('safe-area-inset-bottom'));
+});
+
+test('PWA access starts with recovery phrase and network icon in the header', () => {
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultHome.razor'), 'utf8');
+  assert.match(access, /sv-network-icon-trigger/);
+  assert.match(access, /SelectNetwork\("custom"\)/);
+  assert.match(access, /DetectCustomAsync/);
+  assert.match(access, /stellarVaultV2Network\.probeCustom/);
+  assert.match(access, /NetworkSelection\.ConfigureCustom\(_customPassphrase\)/);
+  assert.match(access, /<VaultMnemonicInput/);
+  assert.match(access, /sv-access-storage-settings/);
+  assert.doesNotMatch(access, /<h2>Unlock your vault<\/h2>/);
 });
