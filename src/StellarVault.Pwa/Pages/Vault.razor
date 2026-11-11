@@ -48,9 +48,6 @@ else
                     aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <div class="sv-pwa-rail-divider"></div>
-            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span> New record</button>
-            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("folder")'><span aria-hidden="true">▣</span> New folder</button>
-            <button class="sv-pwa-rail-action" type="button" @onclick='() => OpenEditor("file")'><span aria-hidden="true">⇧</span> Add file</button>
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
                 @if (Ledger.IsConnected)
