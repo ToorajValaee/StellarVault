@@ -75,7 +75,7 @@ test('MAUI renders platform-adaptive native shell with scrollable content and fi
   const workspace = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   const appRoot = fs.readFileSync(path.join(maui, 'AppRoot.razor'), 'utf8');
-  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
   assert.match(appRoot, /HostPlatform="@NativePlatform"/);
   assert.match(workspace, /class="sv-native-nav"/);
   assert.match(workspace, /class="sv-native-scroll"/);
@@ -84,7 +84,7 @@ test('MAUI renders platform-adaptive native shell with scrollable content and fi
     assert.ok(workspace.includes('NavigateNative("' + page + '")'),
       'Missing navigation destination ' + page);
   }
-  assert.ok(host.indexOf('href="native-app.css"') > host.indexOf('href="css/modern-app.css"'),
+  assert.ok(host.indexOf('href="modern-native.css"') > host.indexOf('href="css/modern-app.css"'),
     'Native override must be loaded after web styling');
   assert.match(nativeCss, /overflow-y:\s*auto/);
   assert.match(nativeCss, /minmax\(0,\s*1fr\)/);
@@ -124,8 +124,8 @@ test('native startup fallback is independent of JavaScript and first render repo
   assert.match(root, /Startup\.NotifyFirstRender\(\)/);
 });
 
-test('native-only styling carries the StellarVault terminal identity', () => {
-  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+test('native styling retains structural components under the modern theme', () => {
+  const nativeCss = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
   assert.match(nativeCss, /--sv-native-accent:\s*#7ef6a4/);
   assert.match(nativeCss, /Cascadia Code/);
   assert.match(nativeCss, /\.sv-native-nav/);
@@ -213,7 +213,7 @@ test('native record editor matches PWA record metadata and preserves full review
 test('native explorer has mobile object tiles, desktop folder tree and back navigation', () => {
   const native = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
-  const styles = fs.readFileSync(path.join(maui, 'wwwroot/native-app.css'), 'utf8');
+  const styles = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
   assert.match(native, /sv-native-folder-tree/);
   assert.match(native, /sv-native-object-grid/);
   assert.match(native, /sv-native-detail-screen/);
@@ -240,9 +240,10 @@ test('shared device and hybrid editors have a directory screen separate from ite
 test('MAUI loads final native-modern presentation while preserving first-render bridge', () => {
   const nativeHost = fs.readFileSync(path.join(maui, 'wwwroot/index.html'), 'utf8');
   const css = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
-  const oldCss = nativeHost.indexOf('href="native-app.css"');
+  const shared = nativeHost.indexOf('href="css/modern-app.css"');
   const modern = nativeHost.indexOf('href="modern-native.css"');
-  assert.ok(oldCss >= 0 && modern > oldCss);
+  assert.ok(shared >= 0 && modern > shared);
+  assert.ok(!nativeHost.includes('href="native-app.css"'));
   assert.match(nativeHost, /blazor\.webview\.js" autostart="false"/);
   assert.match(css, /--sv-native-bg:#f3f7f6/);
   assert.match(css, /\.sv-native-object-card/);
