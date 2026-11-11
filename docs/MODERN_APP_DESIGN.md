@@ -50,3 +50,15 @@ PWA preview artifact is independently generated in `.github/workflows/pwa-previe
 - **Migration detail:** required structural/layout rules from the deleted files were moved into the beginning of the corresponding modern stylesheets. This avoids breaking unrelated legacy components but means terminal-era selectors remain in consolidated source until a follow-up selector-by-selector cleanup. Appearance overrides are loaded later and own the visible modern theme. Do not claim that legacy selector migration is complete.
 - **Static review only:** verified stylesheet references, MAUI packaging paths, inspector markup, keyboard/pointer code, network and checkbox selector presence, and test-path references. This does not prove computed CSS, browser drag mechanics, scroll sizing, focus traps, or MAUI layout correctness.
 - **Still needed before UI acceptance:** actual builds, PWA screenshots at 1440/1366/1024/390px, Android screenshots, screen-reader review, network popup overlap test, record inspector min/max resize and focus behavior, Sync/Drafts/Settings/editors and all danger/approval dialogs.
+
+
+## 2026-11-11 — Screenshot-based refinement and removal of migrated terminal visuals
+
+Based on actual user screenshots:
+- **Large empty strip** between explorer and inspector: fixed the double-width reservation. The `sv-pwa-app` workspace now reduces its total width once (by `--sv-record-inspector-width`), while its stage has zero inspector-specific margin. This leaves room for real full-width list rows.
+- **Entry scrolling (12 words)**: desktop mnemonic now uses four columns, smaller field and form spacing, and less decorative vertical padding. Longer 15/18/21/24-word phrases and small/zoomed screens may still need scrolling, intentionally.
+- **Old account modal/consent styling**: unified typography on inherited Razor components; redesigned stats, fields, radio cards, selected choices and warning notices. Kept account identifiers in a readable modern monospace font but removed legacy embossing/shadows.
+- **Dark sidebar legibility**: added explicit rail background, navigation text and icon color at host-specific specificity.
+- **Remove visual legacy CSS instead of stacking it**: removed old color, CRT grid, shadow, font, border and related visual declarations from migrated pre-modern PWA and native foundation sections. Kept structural layout properties for compatibility with existing components. Original `app.css` and `native-app.css` files remain deleted.
+- Source checks: brace balance 0 in both stylesheet files, new links/MAUI assets confirmed, dark terminal root colors absent. Added snapshot-regression source assertions. **No runtime build or browser screenshot verification has been executed**.
+- Remaining risk: CSS cascade in shared Razor-scoped and native screens must be tested in a running host; source assertions cannot establish visual acceptance. Also evaluate named `terminal-*` classes for future semantic renaming, while preserving workflows.
