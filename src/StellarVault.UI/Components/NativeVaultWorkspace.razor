@@ -512,7 +512,7 @@ else
     {
         if (_ledgerBusy || mode is not ("browse" or "record" or "folder" or "file")) return;
         if (_nativeMode is "record" or "folder" && mode != _nativeMode && _publishEstimate is not null) CancelPublish();
-        if (_nativeMode == "browse" && mode is "record" or "folder")
+        if (_nativeMode == "browse" && mode is ("record" or "folder"))
             _publishFolder = _selectedFolderId;
         _nativeMode = mode;
     }
