@@ -284,7 +284,11 @@ else
             }
             else _folder = InitialFolder ?? "";
         }
-        catch (Exception ex) { _status = "Cannot load record: " + ex.Message; }
+        catch (Exception ex) {
+            _status = IsHorizonUnavailable(ex)
+                ? "Stellar is offline. Published records cannot be loaded for editing. You can create a new encrypted local draft without a network connection."
+                : "Published record could not be loaded. Try again after checking the selected network.";
+        }
         finally { _loading = false; }
     }
     private LedgerRecordDraft Draft() {
@@ -371,7 +375,9 @@ else
         catch (Exception ex) {
             _estimate = null;
             if (_kind == "file") { _filePlan = null; _fileFingerprint = null; _uncertainStage = false; _fileStep = 0; }
-            _status = "Cannot estimate ledger stage: " + ex.Message;
+            _status = IsHorizonUnavailable(ex)
+                ? "Stellar is unreachable. No transaction was sent. To keep these changes offline, select Save encrypted local draft."
+                : "Ledger cost could not be estimated. No transaction was sent; review the record and retry.";
         }
         finally { _busy = false; }
     }
@@ -380,6 +386,11 @@ else
         _fileBytes = null;
     }
     public void Dispose() => ClearFileBytes();
+    private static bool IsHorizonUnavailable(Exception ex) =>
+        ex is HttpRequestException ||
+        ex.Message.Contains("Failed to fetch", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("NetworkError", StringComparison.OrdinalIgnoreCase);
+
     private bool CanSaveOffline => Retention.AllowsLocalPersistence &&
         Sessions.IsUnlocked && Sessions.ActiveAccountId is not null;
 
