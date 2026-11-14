@@ -1376,11 +1376,13 @@ else
             _ledgerMessage = "Independent Secret Key vault unlocked.";
             StorageMode.Reset();
         }
-        catch
+        catch (Exception ex)
         {
             try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
             catch { /* Preserve the original failure. */ }
-            _ledgerMessage = "Secret Key vault recovery failed. Verify signer permissions, account links, encrypted records and network.";
+            _ledgerMessage = ex.Message.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase)
+                ? "An older vault record format was found. It requires verified read-only migration; no records were overwritten."
+                : "Secret Key vault recovery failed. Verify signer permissions, account links, encrypted records and network.";
         }
         finally
         {
