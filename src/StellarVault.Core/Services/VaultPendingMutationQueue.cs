@@ -42,7 +42,8 @@ public sealed record VaultPendingMutation(
     string? TransactionHash,
     DateTimeOffset CreatedUtc,
     VaultSignedDeletionManifest[]? SignedDeletionManifests = null,
-    VaultSignedFileEntry[]? SignedFileEntries = null)
+    VaultSignedFileEntry[]? SignedFileEntries = null,
+    string? OriginStrategyId = null)
 {
     public static VaultPendingMutation Create(string accountId, string networkId,
         VaultMutationKind kind, string entityId, byte[] encryptedPayload,
@@ -115,6 +116,10 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     public async Task<VaultPendingMutation> EnqueueAsync(VaultPendingMutation entry, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        VaultMutationStrategyPolicy.Validate(entry.OriginStrategyId);
+        // The current queue authoring path is HD-bound. Linked-key entries need
+        // a separately authenticated key lifecycle before they may be created.
+        VaultMutationStrategyPolicy.RequireHd(entry);
         if (entry.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile)
             VaultHybridFilePolicy.RequireEnabled();
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
