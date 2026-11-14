@@ -801,3 +801,33 @@ test('independent S-key local storage never turns on the HD device-retention gat
   assert.match(gate,/public VaultDeviceRetentionGate DeviceRetention \{ get; \} = new\(\)/);
   assert.match(smoke,/hdRetention\.Policy == VaultDeviceRetentionPolicy\.OnChainOnly/);
 });
+
+
+test('linked draft recovery remains read-only even when current record or receipt is visible',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const recovery=fs.readFileSync(path.join(core,'VaultLinkedDraftRecoveryReview.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const test=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(recovery,/VaultSyncState\.Submitting or VaultSyncState\.Uncertain/);
+  assert.match(recovery,/CurrentRecordMatches/);
+  assert.match(recovery,/HistoricalReceiptObserved/);
+  assert.match(recovery,/receipts\.InspectAsync\(diagnostic, ct\)/);
+  assert.match(recovery,/CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.doesNotMatch(recovery,/State\s*=\s*VaultSyncState\.Confirmed|store\.TryReplaceAsync|SubmitApprovedAsync/);
+  assert.match(panel,/RecoveryReview\.InspectAsync\(id\)/);
+  assert.match(panel,/Assess unresolved \(read-only\)/);
+  assert.match(publisher,/if \(!Equals\(pending\.Quote, approvedQuote\)\)/);
+  assert.match(publisher,/CryptographicOperations\.ZeroMemory\(pending\.Fingerprint\)/);
+  assert.match(publisher,/await ledger\.CancelQuoteAsync\(quote\.QuoteId\)/);
+  assert.match(test,/new VaultLinkedDraftRecoveryReview\(/);
+  assert.match(test,/finding\.CurrentRecordMatches is false/);
+  assert.match(test,/NetworkFeeXlm = "999\.0000000"/);
+  for(const file of ['StellarVault.Pwa/Program.cs','StellarVault.Maui/MauiProgram.cs']){
+    const host=fs.readFileSync(path.join(src,...file.split('/')),'utf8');
+    assert.match(host,/AddScoped<VaultLinkedDraftRecoveryReview>/);
+  }
+});
