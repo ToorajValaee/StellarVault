@@ -446,7 +446,7 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
   assert.match(shared,/sessions\.Epoch != epoch/);
   assert.match(linked,/store\.ListAsync\(root, scope, ct\)/);
   assert.match(linked,/CanPublish/);
-  assert.match(linked,/\n            false,/);
+  assert.match(linked,/\b0,\s*linkedCount,\s*false,/);
   assert.doesNotMatch(linked,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
   assert.match(hd,/scopedQueue\.ReadAsync\(accountId, ct\)/);
   for(const host of [pwa,maui]){
