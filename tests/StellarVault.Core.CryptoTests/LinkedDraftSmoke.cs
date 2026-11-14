@@ -122,8 +122,17 @@ internal static class LinkedDraftSmoke
                 "Offline queue inspection authorized publication or omitted local drafts.");
             await MustRejectAsync(() => publisher.PrepareAsync(offlineRecord.MutationId),
                 "An offline encrypted queue session authorized an on-chain transaction.");
+            ledger.Reconnect();
+            Require(keys.IsUnlocked && keys.IsOfflineOnly && !keys.CanPublish,
+                "Reconnecting a signer improperly upgraded an offline-only queue unlock.");
+            await MustRejectAsync(() => publisher.PrepareAsync(offlineRecord.MutationId),
+                "An offline-only queue key could publish merely because a signer reconnected.");
+            await keys.UnlockAsync("local S-key test passphrase 12345");
+            Require(keys.CanPublish && !keys.IsOfflineOnly,
+                "A fresh live signer-backed queue unlock did not establish publication authorization.");
             await keys.LockAsync();
-            Require(!keys.IsUnlocked, "Offline local queue key remained in memory after lock.");
+            Require(!keys.IsUnlocked && !keys.CanPublish,
+                "Local queue key or publication authorization remained after lock.");
             Console.WriteLine("PASS: linked encrypted drafts, dependency CAS, uncertain outcomes and independent offline-only access");
         }
         finally
@@ -223,6 +232,12 @@ internal static class LinkedDraftSmoke
                 _quotedId, draft.Title, draft.Content, draft.FolderId,
                 draft.Tags, draft.IsFolder, draft.UserName, draft.Url, draft.Notes));
             return Task.FromResult(Submissions.ToString("x64"));
+        }
+
+        public void Reconnect()
+        {
+            IsConnected = true;
+            ConnectionEpoch++;
         }
 
         public Task DisconnectAsync()
