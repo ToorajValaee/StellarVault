@@ -157,6 +157,7 @@ else
                            spellcheck="false" maxlength="56" @bind="_ledgerSecretKey" @bind:event="oninput"
                            disabled="@(_ledgerBusy || _secretRuntimeReady != true)" />
                     <p class="sv-native-subtle-status">Independent Secret Key vault. Verify account signers and encrypted records before unlocking. Ledger mutations require a separate fee review and are Testnet-only until audit.</p>
+                    <VaultLinkedLocalQueuePanel />
                     @if (_secretInspection is not null)
                     {
                         <section class="terminal-panel" aria-label="Verified secret-key account chain">
