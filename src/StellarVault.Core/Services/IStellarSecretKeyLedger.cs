@@ -11,6 +11,7 @@ public interface IStellarSecretKeyLedger
     bool IsConnected { get; }
     string? RootAccountId { get; }
     string? ConnectedNetworkPassphrase { get; }
+    long ConnectionEpoch { get; }
     Task ConnectAsync(string secretKey, string horizonUrl, string networkPassphrase,
         CancellationToken cancellationToken = default);
     Task<IReadOnlyList<LedgerRecordItem>> ReadAsync(CancellationToken cancellationToken = default);
@@ -51,6 +52,7 @@ public sealed class UnavailableStellarSecretKeyLedger : IStellarSecretKeyLedger
     public bool IsConnected => false;
     public string? RootAccountId => null;
     public string? ConnectedNetworkPassphrase => null;
+    public long ConnectionEpoch => 0;
     private static Exception NotAvailable() => new NotSupportedException(
         "Secret Key ledger transport is unavailable on this host.");
     public Task ConnectAsync(string secretKey,string horizonUrl,string networkPassphrase,
