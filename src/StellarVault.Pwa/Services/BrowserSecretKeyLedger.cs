@@ -104,6 +104,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId, draft);
         if (quote is null ||
             string.IsNullOrWhiteSpace(quote.QuoteId) || quote.QuoteId.Length != 32 ||
+            !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
             quote.Operations is < 1 or > 90 || quote.Transactions != 1 ||
             string.IsNullOrWhiteSpace(quote.TargetAccountId) ||
             !StellarAccountAddress.IsValid(quote.TargetAccountId) ||
@@ -115,7 +116,15 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             !decimal.TryParse(quote.PeakReserveXlm,
                 System.Globalization.NumberStyles.Number,
                 System.Globalization.CultureInfo.InvariantCulture, out var peakReserve) ||
-            peakReserve < 0)
+            peakReserve < 0 ||
+            !decimal.TryParse(quote.FundingTopUpXlm,
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var topUp) ||
+            topUp < 0 ||
+            !decimal.TryParse(quote.NetReserveChangeXlm,
+                System.Globalization.NumberStyles.AllowLeadingSign |
+                System.Globalization.NumberStyles.AllowDecimalPoint,
+                System.Globalization.CultureInfo.InvariantCulture, out _))
             throw new InvalidDataException("Invalid or unreviewable Stellar fee quote.");
         return quote;
     }
