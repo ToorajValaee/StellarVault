@@ -927,7 +927,7 @@ test('independent S-key manual sync orders encrypted draft review without automa
   assert.match(panel,/Review next ready draft/);
   assert.match(panel,/ReviewDraftAsync\(nextId\)/);
   assert.match(smoke,/initialPlan\.NextReadyMutationId == folder\.MutationId/);
-  assert.match(smoke,/afterParentPlan\.NextReadyMutationId == child\.MutationId/);
+  assert.match(smoke,/afterParentPlan\.UnresolvedCount > 0 && !afterParentPlan\.CanReviewNext/);
   assert.match(smoke,/uncertainPlan\.UnresolvedCount > 0 && !uncertainPlan\.CanReviewNext/);
 });
 
@@ -954,7 +954,8 @@ test('linked account capacity extension uses a durable single-tail encrypted jou
   const transmit=journal.indexOf('expansion.SubmitApprovedAsync(approvedQuote, true, ct)');
   assert.ok(reserve>0 && transmit>reserve,'Durable CAS reservation must precede network submit');
   assert.match(journal,/State = VaultSyncState\.Uncertain/);
-  assert.match(journal,/State = VaultSyncState\.Confirmed/);
+  assert.doesNotMatch(journal,/State = VaultSyncState\.Confirmed/);
+  assert.match(journal,/historical[\s\S]*?signer/);
   assert.match(policy,/VaultMutationKind\.ExtendLinkedChain/);
   assert.match(manual,/x\.Kind == VaultMutationKind\.ExtendLinkedChain/);
   assert.match(publisher,/x\.Kind == VaultMutationKind\.ExtendLinkedChain/);
