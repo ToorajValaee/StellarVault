@@ -107,3 +107,8 @@ The independent S-key key lifecycle now supports `UnlockOfflineAsync` of **previ
 ### 2026-11-15: S-key unpublished draft revision reuses queue CAS
 
 `VaultLinkedMutationTransitionPolicy` unifies the PWA and MAUI isolated S-key encrypted-queue adapters' single allowable draft edit and publish-state transitions. A pending create can update its serialized record/folder content and parent-dependency edge together without changing immutable mutation/account/network/record identity; the existing store's compare-and-swap enforces concurrency. `VaultLinkedDraftWorkspace.OpenDraftAsync` and `ReviseAsync` supply explicit masked UI editing and optimistic payload fingerprints, reject stale browser revisions and local folder parent cycles, and never permit submitted/uncertain draft changes. Offline remote-parent references remain unverified until the separately approved online preflight. No duplicate engine, no HD key/consent mixing, and no GitHub Actions workflows.
+
+
+### Ordered linked local synchronization review (2026-11-15)
+
+Read-only `VaultLinkedManualSyncPlan.Build` and `VaultLinkedDraftWorkspace.ReviewManualSyncAsync` now show pending linked encrypted draft ordering and blockers using exactly one existing queue snapshot and the established `VaultQueuedCreatePolicy.Problems` dependency validation. Any Submitting/Uncertain/Conflict entry blocks future suggestions, as does missing a fresh connected online signer-backed queue unlock. The shared PWA/native panel offers only **Review next ready draft**, not automatic submission; a fresh explicit fee/reserve approval is required per item. No second queue or signer was built. No .NET build/test run or historical operation proof was completed.
