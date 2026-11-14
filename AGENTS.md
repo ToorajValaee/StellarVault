@@ -491,3 +491,7 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - Existing IndexedDB/MAUI encrypted queue stores now accept `IVaultQueueKeySession`; current `VaultLocalQueueKeySession` uses the existing local-vault unlock key, not imported S-key credentials. Do not register it as an S-key queue key source. The stores still enforce explicit device-storage consent and existing AES-GCM AAD/storage IDs.
 - `VaultPendingMutationQueue.SameDurableRevision` must compare origin; linked-origin entries must not enter HD state transitions or ready review. Read-only mixed-queue inspection remains allowed. The S-key provider requires independently authorized/derived keys and distinct namespace before enabling writes.
 - Source-only refactor, static regression cases not executed. Prefer adapting existing stores/CAS rather than another queue or file engine. EVM last.
+
+## Single-snapshot encrypted queue review (2026-11-15)
+- Reuse pure `VaultPendingMutationReviewPolicy.Build(all)` for HD queue readiness. `VaultScopedQueueReview` must read `ReviewAllAsync` once and construct readiness and folder graph from that same authenticated snapshot; do not reintroduce separate asynchronous reads in one review.
+- Preserve HD-only readiness, linked-origin fail-closed, existing file policy and all consent/key-session requirements. Do not claim an S-key queue publisher exists yet. Source regression assertions were updated; tests not executed (no local checkout/dotnet).
