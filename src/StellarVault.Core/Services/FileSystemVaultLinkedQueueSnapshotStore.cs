@@ -50,32 +50,7 @@ public sealed class FileSystemVaultLinkedQueueSnapshotStore(
     {
         RequireEntry(previous);
         RequireEntry(next);
-        if (previous.Id != next.Id || previous.EntityId != next.EntityId ||
-            previous.Kind != next.Kind || previous.AccountId != next.AccountId ||
-            previous.NetworkId != next.NetworkId ||
-            !previous.EncryptedPayload.AsSpan().SequenceEqual(next.EncryptedPayload) ||
-            previous.DependsOn is null || next.DependsOn is null ||
-            !previous.DependsOn.SequenceEqual(next.DependsOn) ||
-            (previous.State != VaultSyncState.Pending || next.State != VaultSyncState.Submitting) &&
-            (previous.State != VaultSyncState.Submitting ||
-                next.State is not (VaultSyncState.Uncertain or VaultSyncState.Confirmed)))
-            throw new InvalidOperationException(
-                "Only original S-key draft submission and immutable outcome transitions are allowed.");
-        // A valid transition may change ONLY state and transaction hash;
-        // every other authenticated field must match the reviewed revision.
-        var expectedNext = previous with
-        {
-            State = next.State,
-            TransactionHash = next.TransactionHash
-        };
-        if (!Equals(expectedNext, next) ||
-            (next.State == VaultSyncState.Confirmed &&
-             (next.TransactionHash is not { Length: 64 } ||
-              !next.TransactionHash.All(Uri.IsHexDigit))) ||
-            next.TransactionHash is { Length: > 0 } hash &&
-                (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
-            throw new InvalidOperationException(
-                "Linked queue state transition modified an immutable draft field or hash.");
+        VaultLinkedMutationTransitionPolicy.RequireValid(previous, next);
         return ExistingStore().TryReplaceAsync(previous, next, ct);
     }
 
