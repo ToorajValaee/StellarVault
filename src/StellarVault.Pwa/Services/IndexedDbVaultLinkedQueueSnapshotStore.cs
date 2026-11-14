@@ -11,12 +11,14 @@ namespace StellarVault.Pwa.Services;
 public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
     IJSRuntime js,
     VaultLinkedQueueKeySession keys,
-    VaultDeviceRetentionGate retention) : IVaultLinkedQueueSnapshotStore
+    VaultDeviceRetentionGate retention,
+    VaultLinkedLocalRetentionGate linkedRetention) : IVaultLinkedQueueSnapshotStore
 {
     public async Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        linkedRetention.RequireLocalPersistence();
         var storageScope = VaultLinkedQueueStorageScope.FromNetworkScope(linkedNetworkScope);
         var storage = new IndexedDbVaultPendingMutationStore(js, keys, retention);
         var mutations = await storage.ListAsync(accountId, storageScope, ct);
