@@ -897,3 +897,28 @@ test('linked unpublished encrypted draft edits reuse atomic CAS and reject cycle
   assert.match(smoke,/stale linked draft edit incorrectly overwrote/);
   assert.match(smoke,/Offline encrypted draft revision depended on Horizon/);
 });
+
+
+test('independent S-key manual sync orders encrypted draft review without automatic submission',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(policy,/VaultQueuedCreatePolicy\.Problems\(mutation, entries\)/);
+  assert.match(policy,/unresolved-queue-submission/);
+  assert.match(policy,/connected-signer-unlock-required/);
+  assert.match(policy,/NextReadyMutationId/);
+  assert.doesNotMatch(policy,/SubmitApprovedAsync|TryReplaceAsync|QuoteCreateAsync/);
+  assert.match(workspace,/VaultLinkedManualSyncPlan\.Build\(all, keys\.CanPublish\)/);
+  assert.match(workspace,/finally \{ ClearEntries\(all\); \}/);
+  assert.match(panel,/Review manual sync order/);
+  assert.match(panel,/Review next ready draft/);
+  assert.match(panel,/ReviewDraftAsync\(nextId\)/);
+  assert.match(smoke,/initialPlan\.NextReadyMutationId == folder\.MutationId/);
+  assert.match(smoke,/afterParentPlan\.NextReadyMutationId == child\.MutationId/);
+  assert.match(smoke,/uncertainPlan\.UnresolvedCount > 0 && !uncertainPlan\.CanReviewNext/);
+});
