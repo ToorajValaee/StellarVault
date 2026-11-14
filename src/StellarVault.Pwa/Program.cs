@@ -69,6 +69,7 @@ builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
 builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
 builder.Services.AddScoped<VaultSessionWorkflow>();
+builder.Services.AddSingleton<IVaultRecordTypeFactory, VaultRecordTypeFactory>();
 builder.Services.AddScoped<VaultRecordWorkspace>();
 builder.Services.AddScoped<VaultBinaryWorkspace>();
 
