@@ -35,6 +35,7 @@ builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
 builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore, IndexedDbVaultLinkedPassphraseCredentialStore>();
+builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
 builder.Services.AddScoped<VaultLinkedQueueKeySession>();
 builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore, IndexedDbVaultLinkedQueueSnapshotStore>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
