@@ -5,6 +5,7 @@
 @inject VaultLinkedQueueInspection QueueInspection
 @inject VaultLinkedDraftWorkspace DraftWorkspace
 @inject VaultLinkedDraftPublication Publisher
+@inject VaultLinkedDraftRecoveryReview RecoveryReview
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
@@ -133,6 +134,12 @@
                                 · @draft.State
                                 @if (draft.IsCorrupt) { <em>Unreadable draft</em> }
                             </span>
+                            @if (draft.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@_busy"
+                                        @onclick="() => InspectUnresolvedAsync(draft.MutationId)">Assess unresolved (read-only)</button>
+                            }
                             @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
                             {
                                 <button type="button" class="pixel-button compact"
@@ -145,6 +152,19 @@
                     }
                 </section>
             }
+        }
+        @if (_recoveryFinding is not null && QueueKeys.IsUnlocked)
+        {
+            <section class="sv-secret-review" aria-label="Uncertain local draft recovery assessment">
+                <h3>Read-only recovery assessment</h3>
+                <p><strong>Record:</strong> @_recoveryFinding.EntityId</p>
+                <p><strong>Durable queue state:</strong> @_recoveryFinding.DurableState</p>
+                <p><strong>Current matching record:</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
+                    _recoveryFinding.CurrentRecordMatches is false ? "Not observed" : "Unknown")</p>
+                <p><strong>Advisory receipt:</strong> @(_recoveryFinding.HistoricalReceiptObserved ? "Observed (insufficient for release)" : "Not established")</p>
+                <p role="alert">@_recoveryFinding.Explanation</p>
+                <p>No queue state was changed. Independent operation-level verification is required before any release or retry.</p>
+            </section>
         }
         @if (_report is not null && QueueKeys.IsUnlocked)
         {
@@ -171,6 +191,25 @@
     private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
     private VaultLinkedDraftPublication.Review? _review;
     private bool _approvePublish;
+    private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
+
+    private async Task InspectUnresolvedAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _recoveryFinding = null;
+        try
+        {
+            _recoveryFinding = await RecoveryReview.InspectAsync(id);
+            _message = "Recovery assessment is read-only. An unresolved draft cannot be retried or marked confirmed.";
+        }
+        catch
+        {
+            _message = "Uncertain draft could not be inspected. Keep it quarantined and do not retry.";
+        }
+        finally { _busy = false; }
+    }
+
 
     private async Task ReviewDraftAsync(string id)
     {
@@ -352,6 +391,7 @@
         _review = null;
         _approvePublish = false;
         _report = null;
+        _recoveryFinding = null;
         _drafts = [];
         _availableFolders = [];
         ClearDraftEditor();
@@ -464,6 +504,7 @@
     {
         _passphrase = string.Empty;
         _report = null;
+        _recoveryFinding = null;
         _drafts = [];
         ClearDraftEditor();
         await Publisher.CancelAsync();
