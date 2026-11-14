@@ -168,7 +168,7 @@
                             @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
                             {
                                 <button type="button" class="pixel-button compact"
-                                        disabled="@(_busy || _review is not null || !Ledger.IsConnected || QueueKeys.IsOfflineOnly)"
+                                        disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
                                         @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
                                 <button type="button" class="pixel-button compact" disabled="@_busy"
                                         @onclick="() => DiscardDraftAsync(draft.MutationId)">Discard local draft</button>
@@ -239,7 +239,7 @@
 
     private async Task ReviewDraftAsync(string id)
     {
-        if (_busy || _review is not null || !QueueKeys.IsUnlocked) return;
+        if (_busy || _review is not null || !QueueKeys.CanPublish) return;
         _busy = true;
         try
         {
