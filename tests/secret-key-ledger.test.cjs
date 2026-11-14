@@ -320,6 +320,7 @@ test('uncertain submission exposes only public diagnostics and never authorizes 
   assert.equal(finding.RecordId,recordId);
   assert.equal(finding.TransactionHash,null);
   assert.equal(finding.NetworkPassphrase,TEST);
+  assert.equal(finding.HorizonUrl,'https://horizon-testnet.stellar.org');
   assert.ok(!JSON.stringify(finding).includes(record.Content));
   finding.RecordId='attacker-edited'; // The diagnostic is a defensive copy.
   assert.equal(h.inspectUncertain().RecordId,recordId);
@@ -349,10 +350,28 @@ test('uncertain write quarantine and diagnostic survive lock then reopen in same
   assert.equal(reopened.RootAccountId,ROOT);
   assert.equal(reopened.RecordId,recordId);
   assert.equal(reopened.TransactionHash,null);
+  assert.equal(reopened.HorizonUrl,'https://horizon-testnet.stellar.org');
   assert.deepEqual(JSON.parse(JSON.stringify(reopened)),JSON.parse(JSON.stringify(original)));
   assert.equal((await h.read()).length,0,'Read-only inventory remains available');
   await assert.rejects(h.plan('create','fedcba9876543210',record),/unresolved/);
   await assert.rejects(h.plan('expand',null,null),/unresolved/);
   assert.equal(h.submissions(),1);
   h.close();
+});
+
+
+test('historical receipt adapter is strictly read-only and registered in both hosts',()=>{
+  const root=path.join(__dirname,'..');
+  const inspector=fs.readFileSync(path.join(root,'src','StellarVault.Pwa','Services',
+    'HorizonVaultLinkedReceiptEvidence.cs'),'utf8');
+  const pwa=fs.readFileSync(path.join(root,'src','StellarVault.Pwa','Program.cs'),'utf8');
+  const maui=fs.readFileSync(path.join(root,'src','StellarVault.Maui','MauiProgram.cs'),'utf8');
+  const csproj=fs.readFileSync(path.join(root,'src','StellarVault.Maui','StellarVault.Maui.csproj'),'utf8');
+  assert.match(inspector,/network\.InspectAsync/);
+  assert.match(inspector,/transactions\.InspectAsync/);
+  assert.match(inspector,/receipt\.SourceAccount != diagnostic\.RootAccountId/);
+  assert.doesNotMatch(inspector,/SubmitApprovedAsync|submitTransaction|QuoteCreateAsync/);
+  assert.match(pwa,/IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence/);
+  assert.match(maui,/IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence/);
+  assert.match(csproj,/HorizonVaultLinkedReceiptEvidence\.cs/);
 });
