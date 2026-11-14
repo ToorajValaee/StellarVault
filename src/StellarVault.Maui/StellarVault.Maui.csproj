@@ -38,6 +38,8 @@
          linked into native alongside the existing browser HD-v2 adapter. -->
     <Compile Include="../StellarVault.Pwa/Services/HorizonVault*Inspector.cs"
              Link="SharedStellarLedger/%(Filename)%(Extension)" />
+    <Compile Include="../StellarVault.Pwa/Services/HorizonVaultLinkedReceiptEvidence.cs"
+             Link="SharedStellarLedger/HorizonVaultLinkedReceiptEvidence.cs" />
     <Compile Include="../StellarVault.Pwa/Services/HorizonVaultPublicationDiagnostic.cs"
              Link="SharedStellarLedger/HorizonVaultPublicationDiagnostic.cs" />
     <Compile Include="../StellarVault.Pwa/Services/HorizonVaultQueuedMutationEvidenceProvider.cs"
