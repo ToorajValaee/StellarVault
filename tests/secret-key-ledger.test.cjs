@@ -987,3 +987,18 @@ test('pending-only linked expansion journal cleanup cannot clear uncertain or su
   assert.match(smoke,/ledger\.Submissions == 0/);
   assert.match(smoke,/RunUncertainExpansionSmokeAsync/);
 });
+
+
+test('linked expansion abandon is limited to pre-transport journal failures',()=>{
+  const src=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const journal=fs.readFileSync(path.join(src,'VaultLinkedExpansionJournal.cs'),'utf8');
+  const audit=fs.readFileSync(path.join(__dirname,'..','docs','architecture','implementation-reality-check.md'),'utf8');
+  assert.match(journal,/var transportInvoked = false/);
+  assert.match(journal,/transportInvoked = true;/);
+  assert.match(journal,/if \(!transportInvoked\)/);
+  assert.match(journal,/expansion\.AbandonUnsubmittedAsync\(CancellationToken\.None\)/);
+  assert.match(journal,/State = VaultSyncState\.Uncertain/);
+  assert.match(journal,/store\.TryReplaceAsync\(draft, reserved, ct\)/);
+  assert.match(audit,/Already implemented/);
+  assert.match(audit,/Do not rebuild/);
+});
