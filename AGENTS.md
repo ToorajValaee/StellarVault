@@ -549,3 +549,10 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - `VaultLinkedMutationTransitionPolicy` is the only linked store transition validator for both PWA IndexedDB and native filesystem. Pending create drafts may revise content + DependsOn atomically with same immutable mutation identity; only Pending→Submitting→Confirmed/Uncertain are supported publication transitions. Never allow Uncertain/Confirmed/Submitting→Pending or mutation ID/origin/account/network changes.
 - `VaultLinkedDraftWorkspace.ReviseAsync` requires an exact current SHA-256 fingerprint of the opened plaintext-serialized payload, checks local pending parent ancestor cycles, and CAS-commits a revision. Shared `VaultLinkedLocalQueuePanel` handles explicit editing while keeping password fields masked and preserving unverified offline remote parent IDs. A draft edit never signs or broadcasts.
 - Tests added but not executed; do NOT recreate GitHub Actions CI. Production blockers remain historical proof/reconciliation, queued updates/deletes and file chunks, staged capacity expansion, device Testnet tests and security audit.
+
+
+## Manual-only linked queue ordering (2026-11-15)
+
+- Use pure `VaultLinkedManualSyncPlan.Build` for read-only next-ready draft ordering from a SINGLE authenticated encrypted queue snapshot. Do not generate a second queue or retry engine. Feed existing `VaultQueuedCreatePolicy.Problems` blockers, disable suggestions on ANY Uncertain/Submitting/Conflict, and require `VaultLinkedQueueKeySession.CanPublish`.
+- The UI `Review next ready draft` only calls the original S-key manual review/quote. Always require separate explicit user fee approval for each on-chain transaction; no auto-batch broadcast, background sync or retry.
+- Local fake-ledger smoke and Node source assertions were added but not executed. No GitHub Actions per user request; production release blockers remain exact historical proof/recovery, queued update/delete, files, capacity expansion and complete .NET/MAUI/Testnet validation.
