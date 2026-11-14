@@ -75,26 +75,8 @@ internal static class LinkedDraftSmoke
             Require(ledger.Submissions == 0,
                 "Rejected changed quote sent a network transaction.");
 
-            var folderReview = await publisher.PrepareAsync(folder.MutationId);
-            Require(ledger.Submissions == 0,
-                "Preparing a linked draft quote unexpectedly broadcast a transaction.");
-            await publisher.SubmitAsync(folderReview.Quote, true);
-            Require(ledger.Submissions == 1 &&
-                    (await drafts.ListAsync()).Single(x => x.MutationId == folder.MutationId)
-                        .State == VaultSyncState.Confirmed,
-                "Folder publication did not persist a confirmed CAS revision.");
-
-            var afterParentPlan = await drafts.ReviewManualSyncAsync();
-            Require(afterParentPlan.NextReadyMutationId == child.MutationId,
-                "Manual sync did not make a child ready after its parent was confirmed.");
-
-            var recordReview = await publisher.PrepareAsync(child.MutationId);
-            await publisher.SubmitAsync(recordReview.Quote, true);
-            var after = await drafts.ListAsync();
-            Require(after.All(x => x.State == VaultSyncState.Confirmed) &&
-                    ledger.Submissions == 2 && (await ledger.ReadAsync()).Count == 2,
-                "Linked child was not published after its confirmed parent.");
-
+            // Exercise approved capacity expansion before any unresolved record
+            // transaction blocks further writes.
             var strategy = new FakeLinkedAccountStrategy(ledger);
             var expansion = new VaultLinkedAccountExpansion(
                 ledger, network, new VaultAccountStrategyFactory([strategy]));
@@ -102,7 +84,7 @@ internal static class LinkedDraftSmoke
                 expansion, ledger, store, keys, linkedRetention, network);
             var extensionQuote = await journal.PrepareAsync();
             Require(extensionQuote.Kind == "expand" && extensionQuote.CreatesChildNode &&
-                    ledger.Submissions == 2, "Preparing a linked expansion caused a broadcast.");
+                    ledger.Submissions == 0, "Preparing a linked expansion caused a broadcast.");
             await journal.SubmitApprovedAsync(extensionQuote, true);
             Require(ledger.AccountCount == 2 && ledger.Tail != Root &&
                     (await drafts.ListAsync()).Any(x =>
@@ -110,33 +92,32 @@ internal static class LinkedDraftSmoke
                         x.State == VaultSyncState.Confirmed),
                 "Approved linked account expansion was not recorded durably.");
 
-            var pending = await drafts.CreateAsync(
-                new LedgerRecordDraft("Uncertain", "opaque", null, [], false));
-            var uncertainReview = await publisher.PrepareAsync(pending.MutationId);
-            ledger.FailNextSubmission = true;
-            await MustRejectAsync(() => publisher.SubmitAsync(uncertainReview.Quote, true),
-                "Uncertain network transmission returned as a confirmed success.");
+            var folderReview = await publisher.PrepareAsync(folder.MutationId);
+            Require(ledger.Submissions == 0,
+                "Preparing a linked draft quote unexpectedly broadcast a transaction.");
+            var submittedHash = await publisher.SubmitAsync(folderReview.Quote, true);
+            Require(submittedHash.Length > 0 && ledger.Submissions == 1 &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == folder.MutationId)
+                        .State == VaultSyncState.Uncertain,
+                "A matching current record was incorrectly treated as historical transaction proof.");
+            Require((await ledger.ReadAsync()).Any(x => x.Id == folder.EntityId),
+                "Mock ledger did not persist the current-state record.");
+            var afterParentPlan = await drafts.ReviewManualSyncAsync();
+            Require(afterParentPlan.UnresolvedCount > 0 && !afterParentPlan.CanReviewNext,
+                "Unverified parent submission incorrectly unblocked its child.");
+            await MustRejectAsync(() => publisher.PrepareAsync(child.MutationId),
+                "Child was offered for publication before independent parent proof.");
             await MustRejectAsync(() => journal.PrepareAsync(),
-                "Linked account expansion was offered while an unresolved record submission exists.");
-            var uncertainPlan = await drafts.ReviewManualSyncAsync();
-            Require(uncertainPlan.UnresolvedCount > 0 && !uncertainPlan.CanReviewNext,
-                "Manual sync offered publishing while an unresolved transaction exists.");
-            var uncertain = (await drafts.ListAsync())
-                .Single(x => x.MutationId == pending.MutationId);
-            Require(uncertain.State is VaultSyncState.Uncertain or VaultSyncState.Submitting,
-                "Interrupted network transmission silently returned to Pending.");
-            await MustRejectAsync(() => publisher.PrepareAsync(pending.MutationId),
-                "An uncertain linked submission was offered for automatic retry.");
+                "Linked expansion was offered while an unresolved record submission exists.");
 
             var recovery = new VaultLinkedDraftRecoveryReview(ledger, store, keys,
                 linkedRetention, network, new DenyVaultLinkedReceiptEvidence());
-            var finding = await recovery.InspectAsync(pending.MutationId);
+            var finding = await recovery.InspectAsync(folder.MutationId);
             Require(finding.DurableState is VaultSyncState.Uncertain or VaultSyncState.Submitting &&
-                    finding.CurrentRecordMatches is false &&
                     !finding.HistoricalReceiptObserved,
-                "Read-only recovery falsely confirmed an unresolved S-key submission.");
+                "Read-only recovery falsely confirmed a snapshot-matching linked submission.");
             var afterRecovery = (await drafts.ListAsync())
-                .Single(x => x.MutationId == pending.MutationId);
+                .Single(x => x.MutationId == folder.MutationId);
             Require(afterRecovery.State is VaultSyncState.Uncertain or VaultSyncState.Submitting,
                 "Read-only recovery modified the durable uncertain queue state.");
 
