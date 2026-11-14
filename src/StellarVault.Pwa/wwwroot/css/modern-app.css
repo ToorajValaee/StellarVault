@@ -5125,3 +5125,22 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
    bottom:calc(69px + env(safe-area-inset-bottom,0px))!important;
  }
 }
+
+/* The device-storage preference belongs to the access flow, not either credential tab. */
+.sv-web-shell .sv-modern-entry > .sv-entry-main > .sv-entry-storage-outside {
+    width:100%;
+    max-width:640px;
+    margin:0 auto 12px!important;
+    min-width:0;
+    box-sizing:border-box;
+}
+.sv-web-shell .sv-entry-storage-outside .advanced-help {
+    margin:10px 2px 0;
+    font:400 12px/1.5 Inter,"Segoe UI",Arial,sans-serif;
+    color:#53756a;
+}
+@media(max-width:560px) {
+    .sv-web-shell .sv-modern-entry > .sv-entry-main > .sv-entry-storage-outside {
+        margin-bottom:10px!important;
+    }
+}
