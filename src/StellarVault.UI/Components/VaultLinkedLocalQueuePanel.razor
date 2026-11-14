@@ -139,6 +139,11 @@
                 <label>Parent folder
                     <select @bind="_draftFolderId" disabled="@_busy">
                         <option value="">Root of vault</option>
+                        @if (!string.IsNullOrWhiteSpace(_draftFolderId) &&
+                             !_availableFolders.Any(x => x.EntityId == _draftFolderId))
+                        {
+                            <option value="@_draftFolderId">Unverified parent — @_draftFolderId</option>
+                        }
                         @foreach (var folder in _availableFolders)
                         {
                             <option value="@folder.EntityId">@folder.Title @(folder.Local ? "(local draft)" : "(on Stellar)")</option>
