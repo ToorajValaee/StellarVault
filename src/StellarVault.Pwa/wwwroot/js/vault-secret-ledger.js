@@ -270,9 +270,20 @@ window.stellarVaultSecretLedger = (() => {
     // Newly staged keys consume reserve before old keys are removed;
     // require peak headroom even if the net change is negative.
     const additional=BigInt(newUnits)*s.net.reserve;
+    // A record must fit in a single atomic transaction even on an empty account.
+    // Never allocate an account for an oversized write that cannot succeed there.
+    const minimumOps=writeOps+(kind==='create'&&node.account_id!==s.root?1:0);
+    if(minimumOps>MAX_OPS) {
+      cipher?.fill(0);
+      fail('Record exceeds atomic transaction limit; allocating another account cannot fix it.');
+    }
     if(Number(node.subentry_count||0)+newUnits>1000) {
       cipher?.fill(0);
-      fail('SV_ACCOUNT_CAPACITY_REQUIRED: Current account cannot hold this record; a new linked account must be reviewed before saving.');
+      if(kind!=='create')
+        fail('Original record account has insufficient subentry capacity; updating it requires a separate migration protocol.');
+      if(newUnits>997)
+        fail('Record needs too many Stellar data entries to fit on a fresh account.');
+      fail('SV_ACCOUNT_CAPACITY_REQUIRED: Current account cannot hold this record; account capacity must be reviewed before saving.');
     }
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
     const bal=decimalStroops(native?.balance);
