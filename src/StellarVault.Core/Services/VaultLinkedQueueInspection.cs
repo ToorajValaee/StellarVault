@@ -10,7 +10,6 @@ public sealed class VaultLinkedQueueInspection(
     IStellarSecretKeyLedger linked,
     IVaultLinkedQueueSnapshotStore store,
     VaultLinkedQueueKeySession keys,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     VaultNetworkSelection networks)
 {
@@ -24,7 +23,7 @@ public sealed class VaultLinkedQueueInspection(
 
     public async Task<Report> InspectAsync(CancellationToken ct = default)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked)
             throw new UnauthorizedAccessException(
@@ -44,7 +43,7 @@ public sealed class VaultLinkedQueueInspection(
         // and prefixed namespace. It rejects any untagged/HD-origin entry.
         var mutations = await store.ListAsync(root, scope, ct);
         ct.ThrowIfCancellationRequested();
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || !linked.IsConnected || linked.RootAccountId != root ||
             linked.ConnectedNetworkPassphrase != expectedPassphrase ||
             networks.CredentialKey(root) != scope)
