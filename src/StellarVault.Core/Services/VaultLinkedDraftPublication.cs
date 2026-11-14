@@ -152,15 +152,25 @@ public sealed class VaultLinkedDraftPublication(
                 RequireSameScope(root, scope, epoch);
                 CheckRemote(item, draft, all, remote);
                 var quote = await ledger.QuoteCreateAsync(item.EntityId, draft, ct);
-                if (quote.Kind != "create" || quote.CreatesChildNode ||
-                    quote.TargetAccountId is not { Length: 56 } ||
-                    quote.QuoteId is not { Length: 32 })
-                    throw new InvalidDataException("Invalid linked create quote.");
-                RequireSameScope(root, scope, epoch);
-                _pending = new(item.Id, root, scope, epoch,
-                    Fingerprint(item), quote, DateTimeOffset.UtcNow);
-                return new(item.Id, item.EntityId, draft.Title, draft.IsFolder, quote,
-                    "Review the exact XLM fee and reserve. Publishing is a separate explicit step.");
+                try
+                {
+                    if (quote.Kind != "create" || quote.CreatesChildNode ||
+                        quote.TargetAccountId is not { Length: 56 } ||
+                        quote.QuoteId is not { Length: 32 } ||
+                        !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+                        throw new InvalidDataException("Invalid linked create quote.");
+                    RequireSameScope(root, scope, epoch);
+                    _pending = new(item.Id, root, scope, epoch,
+                        Fingerprint(item), quote, DateTimeOffset.UtcNow);
+                    return new(item.Id, item.EntityId, draft.Title, draft.IsFolder, quote,
+                        "Review the exact XLM fee and reserve. Publishing is a separate explicit step.");
+                }
+                catch
+                {
+                    try { await ledger.CancelQuoteAsync(quote.QuoteId); }
+                    catch { /* Preserve the original preflight failure. */ }
+                    throw;
+                }
             }
             finally { Clear(all); }
         }
@@ -178,8 +188,16 @@ public sealed class VaultLinkedDraftPublication(
         {
             var pending = _pending;
             _pending = null; // Single-use, even if preflight or transport fails.
-            if (pending is null || !Equals(pending.Quote, approvedQuote))
+            if (pending is null)
+                throw new InvalidOperationException("No prepared quote exists. Review again.");
+            // Even a mismatched approval must release the old one-shot quote
+            // and wipe the draft digest. Never leave an orphaned SDK quote.
+            if (!Equals(pending.Quote, approvedQuote))
+            {
+                try { await ledger.CancelQuoteAsync(pending.Quote.QuoteId); }
+                finally { CryptographicOperations.ZeroMemory(pending.Fingerprint); }
                 throw new InvalidOperationException("Quote changed; review again.");
+            }
             try
             {
                 RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
