@@ -79,6 +79,9 @@ window.stellarVaultSecretLedger = (() => {
         fail('Child account has another active signer; single-secret chain is not exclusively controlled by the root.');
       if(i===0 && Object.hasOwn(account.data_attr||{},'sv:registry:v2'))
         fail('HD-v2 vault root cannot be used as an independent Secret Key vault.');
+      if(Object.keys(account.data_attr||{}).some(name =>
+          /^svh:|^svc:/.test(name)))
+        fail('A different or historical vault record format is present. Read-only migration and integrity verification are required before using Secret Key v1 writes.');
       nodes.push(account);
       id=next(account,s.sdk);
     }
