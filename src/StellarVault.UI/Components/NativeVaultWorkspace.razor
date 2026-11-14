@@ -4,6 +4,7 @@
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
+@inject IStellarSecretKeyVaultDiscovery SecretChain
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
 @inject VaultNetworkSelection NetworkSelection
@@ -134,8 +135,37 @@ else
                         I understand that Mainnet uses real funds and approved transactions may cost XLM.
                     </label>
                 }
-                <label class="terminal-label" for="native-ledger-mnemonic">Recovery phrase</label>
-                <VaultMnemonicInput @bind-Value="_ledgerMnemonic" Disabled="@(_ledgerBusy || _runtimeReady != true)" />
+                <div class="sv-credential-mode-picker" role="group" aria-label="Vault account type">
+                    <button type="button" class="@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "selected" : "")"
+                            disabled="@_ledgerBusy" aria-pressed="@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd)"
+                            @onclick='() => SelectLedgerCredentialMode(VaultCredentialMode.MnemonicHd)'>Recovery phrase / HD</button>
+                    <button type="button" class="@(_ledgerCredentialMode == VaultCredentialMode.StellarSecretKeyChain ? "selected" : "")"
+                            disabled="@_ledgerBusy" aria-pressed="@(_ledgerCredentialMode == VaultCredentialMode.StellarSecretKeyChain)"
+                            @onclick='() => SelectLedgerCredentialMode(VaultCredentialMode.StellarSecretKeyChain)'>Stellar secret key</button>
+                </div>
+                @if (_ledgerCredentialMode == VaultCredentialMode.MnemonicHd)
+                {
+                    <label class="terminal-label" for="native-ledger-mnemonic">Recovery phrase</label>
+                    <VaultMnemonicInput @bind-Value="_ledgerMnemonic" Disabled="@(_ledgerBusy || _runtimeReady != true)" />
+                }
+                else
+                {
+                    <label class="terminal-label" for="native-ledger-secret">Stellar secret key (S-key)</label>
+                    <input id="native-ledger-secret" class="terminal-input" type="password" autocomplete="off"
+                           spellcheck="false" maxlength="56" @bind="_ledgerSecretKey" @bind:event="oninput"
+                           disabled="@(_ledgerBusy || _runtimeReady != true)" />
+                    <p class="sv-native-subtle-status">Read-only linked-account inspection. Secret-key transaction signing and record access will be enabled after their authorization and recovery checks pass.</p>
+                    @if (_secretInspection is not null)
+                    {
+                        <section class="terminal-panel" aria-label="Verified secret-key account chain">
+                            <h3>Linked accounts</h3>
+                            <p>Root: <code>@_secretInspection.RootAccountId</code></p>
+                            <p>Verified accounts: @_secretInspection.Accounts.Count</p>
+                            <p>Tail: <code>@_secretInspection.TailAccountId</code></p>
+                            <p>No transaction was sent; this is not yet a record unlock.</p>
+                        </section>
+                    }
+                }
                 @if (_runtimeReady is null || (_runtimeReady == false && _ledgerBusy))
                 { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
 
@@ -485,8 +515,8 @@ else
                 {
                     <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
-                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerMnemonic) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
-                            @onclick="ConnectLedgerAsync">Connect Stellar</button>
+                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
+                            @onclick="@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? ConnectLedgerAsync : InspectNativeSecretChainAsync)">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
                 }
             }
             else if (_nativePage == "settings")
@@ -746,6 +776,18 @@ else
     }
 
     private string _ledgerNetwork => NetworkSelection.SelectedPreset;
+    private VaultCredentialMode _ledgerCredentialMode = VaultCredentialMode.MnemonicHd;
+    private string _ledgerSecretKey = string.Empty;
+    private VaultSecretChainInspection? _secretInspection;
+    private void SelectLedgerCredentialMode(VaultCredentialMode mode)
+    {
+        if (_ledgerBusy || mode == _ledgerCredentialMode) return;
+        _ledgerCredentialMode = mode;
+        _ledgerSecretKey = string.Empty;
+        _ledgerMnemonic = string.Empty;
+        _secretInspection = null;
+        _ledgerMessage = null;
+    }
     private string _ledgerMnemonic = string.Empty;
     private bool _ledgerBusy;
     private string? _ledgerMessage;
@@ -1271,6 +1313,42 @@ else
         _publishContent = string.Empty;
         _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
         _showPublishSecret = false;
+    }
+
+    private async Task InspectNativeSecretChainAsync()
+    {
+        if (_ledgerBusy || _runtimeReady != true ||
+            _ledgerCredentialMode != VaultCredentialMode.StellarSecretKeyChain ||
+            (_ledgerNetwork == "public" && !_confirmMainnetAccess) ||
+            (_ledgerNetwork == "custom" && !CustomNetworkReady)) return;
+        _ledgerBusy = true;
+        _secretInspection = null;
+        _ledgerMessage = null;
+        try
+        {
+            new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, _ledgerSecretKey).Validate();
+            var (url, passphrase) = _ledgerNetwork switch
+            {
+                "testnet" => ("https://horizon-testnet.stellar.org", "Test SDF Network ; September 2015"),
+                "public" => ("https://horizon.stellar.org", "Public Global Stellar Network ; September 2015"),
+                "custom" when CustomNetworkReady =>
+                    (NetworkSelection.CustomHorizonUrl, NetworkSelection.CustomPassphrase),
+                _ => throw new InvalidOperationException("Select a verified Stellar network.")
+            };
+            var readiness = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
+            if (!readiness.Ready) throw new InvalidOperationException("Stellar SDK is unavailable.");
+            _secretInspection = await SecretChain.InspectAsync(_ledgerSecretKey, url, passphrase);
+            _ledgerMessage = "Linked accounts inspected. This has not opened a write-enabled vault.";
+        }
+        catch
+        {
+            _ledgerMessage = "Unable to inspect linked accounts. Check the S-key, funded root, network and signer authorization.";
+        }
+        finally
+        {
+            _ledgerSecretKey = string.Empty;
+            _ledgerBusy = false;
+        }
     }
 
     private async Task ConnectLedgerAsync()
