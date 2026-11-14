@@ -15,7 +15,7 @@
     <label class="sv-secret-approval">
         <input type="checkbox" checked="@LinkedRetention.AllowsLocalPersistence"
                disabled="@_busy" @onchange="ChangeConsentAsync" />
-        I consent to retaining encrypted vault data on this device until I remove it.
+        I consent to encrypted local storage on this device. Locking or turning off consent does not delete previously saved encrypted data.
     </label>
     @if (LinkedRetention.AllowsLocalPersistence && Retention.AllowsLocalPersistence && Ledger.IsConnected)
     {
