@@ -29,3 +29,15 @@ public interface IVaultLinkedQueueSnapshotStore
     Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Local-only queued create/inspect/discard adapter for the independent S-key
+/// strategy. Implementations MUST use the existing authenticated queue store,
+/// a separately unlocked S-key key and a strategy-isolated storage namespace.
+/// No transaction submission or submission-state transition is exposed.
+/// </summary>
+public interface IVaultLinkedDraftStore : IVaultLinkedQueueSnapshotStore
+{
+    Task<bool> AddAsync(VaultPendingMutation mutation, CancellationToken ct = default);
+    Task<bool> TryDeleteAsync(VaultPendingMutation expected, CancellationToken ct = default);
+}
