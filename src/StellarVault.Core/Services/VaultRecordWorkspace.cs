@@ -7,7 +7,7 @@ namespace StellarVault.Core.Services;
 /// <summary>Shared PWA/MAUI application service for encrypted UTF-8 records.
 /// All operations are guarded by the active session and use the encrypted catalog.
 /// It never caches data keys or persists plaintext.</summary>
-public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStorageModeGate storageMode)
+public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStorageModeGate storageMode, IVaultRecordTypeFactory recordTypes)
 {
     public sealed record RecordSummary(string Name, string? ContentType, long UpdatedUnixSeconds);
     public sealed record TextRecord(string Name, string Text, VaultRecordPointer Version);
@@ -66,6 +66,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
         {
             storageMode.Require(VaultStorageMode.LocalEncrypted);
             ArgumentNullException.ThrowIfNull(text);
+            var recordDefinition = recordTypes.Create(VaultRecordTypeFactory.Text, name);
             // A text edit must never silently replace a file with the same name.
             // Catalog metadata is encrypted and scoped to the unlocked account.
             var catalog = await db.Catalog.ListAsync(key, token);
@@ -79,7 +80,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
                     throw new InvalidDataException("Record exceeds supported size.");
                 using var plaintext = new MemoryStream(bytes, writable: false);
                 storageMode.Require(VaultStorageMode.LocalEncrypted);
-                return await db.PutIndexedAsync(name, expectedVersion, plaintext, key, "text/plain; charset=utf-8", token);
+                return await db.PutIndexedAsync(name, expectedVersion, plaintext, key, recordDefinition.ContentType, token);
             }
             finally { CryptographicOperations.ZeroMemory(bytes); }
         }, ct);
