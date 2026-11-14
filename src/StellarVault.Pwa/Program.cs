@@ -64,6 +64,7 @@ builder.Services.AddScoped<VaultConnectedStellarAccountInventory>();
 builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarHdAccountStrategy>();
 builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarLinkedAccountStrategy>();
 builder.Services.AddScoped<VaultAccountStrategyFactory>();
+builder.Services.AddScoped<VaultLinkedAccountExpansion>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
 builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IStellarUploadCheckpointStore, BrowserStellarUploadCheckpointStore>();
