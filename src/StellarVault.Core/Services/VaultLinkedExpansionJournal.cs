@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace StellarVault.Core.Services;
@@ -83,6 +84,18 @@ public sealed class VaultLinkedExpansionJournal(
 
             await RequireNoUnresolvedAsync(root, scope, ct);
             RequireSession(root, scope, epoch);
+            var chain = await ledger.InspectAccountInfoAsync(ct);
+            RequireSession(root, scope, epoch);
+            if (chain.RootAccountId != root || !StellarAccountAddress.IsValid(chain.TailAccountId))
+                throw new InvalidOperationException("Unable to establish the linked tail before journaling.");
+            // Different tabs planning expansion of the SAME tail must race for
+            // exactly one durable CAS slot. A random mutation ID would allow
+            // concurrent, independently submitted account creations.
+            byte[] digest = SHA256.HashData(Encoding.UTF8.GetBytes(
+                "sv:linked-expansion-intent:v1:" + scope + ":" + root + ":" + chain.TailAccountId));
+            string reservationId;
+            try { reservationId = Convert.ToHexStringLower(digest.AsSpan(0, 16)); }
+            finally { CryptographicOperations.ZeroMemory(digest); }
             var intent = new Intent(approvedQuote.QuoteId,
                 approvedQuote.TargetAccountId, root, scope, epoch,
                 DateTimeOffset.UtcNow);
@@ -95,6 +108,7 @@ public sealed class VaultLinkedExpansionJournal(
                     VaultMutationKind.ExtendLinkedChain,
                     approvedQuote.TargetAccountId, payload) with
                 {
+                    Id = reservationId,
                     OriginStrategyId = VaultMutationStrategyPolicy.Linked
                 };
                 RequireSession(root, scope, epoch);
