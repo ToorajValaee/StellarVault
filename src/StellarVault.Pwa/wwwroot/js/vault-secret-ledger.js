@@ -254,15 +254,12 @@ window.stellarVaultSecretLedger = (() => {
     const count=cipher?Math.ceil(cipher.length/64):0;
     const newKeys=cipher?Array.from({length:count},(_,i)=>recordKey(recordId,i,gen)):[];
     const priorKeys=oldM?Array.from({length:oldM.count},(_,i)=>recordKey(recordId,i,oldM.gen)):[];
-    const opCount=(kind==='delete'?1:count+1)+priorKeys.length;
-    if(opCount>MAX_OPS){cipher?.fill(0);fail('Record exceeds atomic transaction limit.');}
-    const data=node.data_attr||{};
+    const writeOps=(kind==='delete'?1:count+1)+priorKeys.length;
     const newUnits=(kind==='create'?1:0)+newKeys.length;
     const unitsReclaimed=priorKeys.length+(kind==='delete'?1:0);
     // Newly staged keys consume reserve before old keys are removed;
-    // require full peak headroom even if the net change is negative.
+    // require peak headroom even if the net change is negative.
     const additional=BigInt(newUnits)*s.net.reserve;
-    const fees=BigInt(opCount)*s.net.fee;
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
     const bal=decimalStroops(native?.balance);
     const used=BigInt(2+Number(root.subentry_count||0)+Number(root.num_sponsoring||0)-
@@ -275,19 +272,26 @@ window.stellarVaultSecretLedger = (() => {
     const ownerMin=BigInt(2+Number(node.subentry_count||0)+Number(node.num_sponsoring||0)-
       Number(node.num_sponsored||0))*s.net.reserve;
     const ownerFree=ownerBalance-ownerMin-decimalStroops(ownerNative?.selling_liabilities||'0');
-    if(ownerFree<additional || spend<fees+(node.account_id===s.root?additional:0n)) {
+    // The root can fund its child using a Payment operation in the *same*
+    // atomic transaction. This avoids creating unusable minimum-funded nodes.
+    const topUp=node.account_id===s.root?0n:(ownerFree<additional?additional-ownerFree:0n);
+    const opCount=writeOps+(topUp>0n?1:0);
+    if(opCount>MAX_OPS){cipher?.fill(0);fail('Record exceeds atomic transaction limit.');}
+    const fees=BigInt(opCount)*s.net.fee;
+    if((node.account_id===s.root && ownerFree<additional) ||
+       spend<fees+topUp+(node.account_id===s.root?additional:0n)) {
       cipher?.fill(0);
-      fail('Insufficient available XLM reserve or fees for atomic record operation. Expand funding before retrying.');
+      fail('Insufficient root XLM for account reserve top-up and network fees.');
     }
     const fingerprint=old?.rawHeader||null;
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     const quote={kind,recordId,draft,gen,cipher,count,newKeys,priorKeys,node:node.account_id,
-      fingerprint,opCount,created:Date.now(),fee:fees,reserve:additional,root:s.root};
+      fingerprint,opCount,topUp,created:Date.now(),fee:fees,reserve:additional,root:s.root};
     clearQuotes(s);s.quotes.set(quoteId,quote);
     return {QuoteId:quoteId,Kind:kind,Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(additional),
       NetReserveChangeXlm:toXlm(BigInt(newUnits-unitsReclaimed)*s.net.reserve),
-      CreatesChildNode:false,TargetAccountId:node.account_id};
+      FundingTopUpXlm:toXlm(topUp),CreatesChildNode:false,TargetAccountId:node.account_id};
   }
   async function quoteExpansion(s,v,id) {
     if(v.nodes.length>=MAX_CHAIN)fail('Chain already reached the supported limit.');
@@ -310,7 +314,7 @@ window.stellarVaultSecretLedger = (() => {
     return {QuoteId:quoteId,Kind:'expand',Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(childFunding+pointerReserve),
       NetReserveChangeXlm:toXlm(childFunding+pointerReserve),
-      CreatesChildNode:true,TargetAccountId:childId};
+      CreatesChildNode:true,TargetAccountId:childId,FundingTopUpXlm:"0.0000000"};
   }
   async function submit(id,quoteId) {
     const s=session(id),q=s.quotes.get(quoteId);
@@ -357,6 +361,11 @@ window.stellarVaultSecretLedger = (() => {
           fail('Record changed before approval. Reconcile the ledger first.');
         if(!current.nodes.some(x=>x.account_id===q.node))
           fail('Record storage account no longer belongs to this chain.');
+        if(q.topUp>0n) {
+          builder.addOperation(s.sdk.Operation.payment({
+            source:s.root,destination:q.node,asset:s.sdk.Asset.native(),amount:toXlm(q.topUp)
+          }));
+        }
         const writes=[];
         if(q.kind==='delete')
           writes.push({name:header(q.recordId),value:null});
