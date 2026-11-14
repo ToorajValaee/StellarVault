@@ -6,6 +6,7 @@
 @inject VaultLinkedDraftWorkspace DraftWorkspace
 @inject VaultLinkedDraftPublication Publisher
 @inject VaultLinkedAccountExpansion LinkedExpansion
+@inject VaultLinkedExpansionJournal ExpansionJournal
 @inject VaultLinkedDraftRecoveryReview RecoveryReview
 @implements IAsyncDisposable
 
@@ -322,7 +323,7 @@
         _busy = true;
         try
         {
-            _expandQuote = await LinkedExpansion.PrepareAsync();
+            _expandQuote = await ExpansionJournal.PrepareAsync();
             _approveExpand = false;
             _manualSyncPlan = null;
             _message = "Review a separate linked-account transaction. Draft publication will require its own quote afterward.";
@@ -344,7 +345,7 @@
         _busy = true;
         try
         {
-            var hash = await LinkedExpansion.SubmitApprovedAsync(quote, true);
+            var hash = await ExpansionJournal.SubmitApprovedAsync(quote, true);
             _manualSyncPlan = null;
             _message = "Additional storage account observed after approved transaction " +
                 hash + ". Review the pending draft and its fee separately.";
