@@ -52,13 +52,11 @@ public static class MauiProgram
             new FileSystemVaultLinkedPassphraseCredentialStore(
                 Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-credentials"),
                 sp.GetRequiredService<VaultNetworkSelection>(),
-                sp.GetRequiredService<VaultDeviceRetentionGate>(),
                 sp.GetRequiredService<VaultLinkedLocalRetentionGate>()));
         builder.Services.AddScoped<VaultLinkedQueueKeySession>();
         builder.Services.AddScoped<IVaultLinkedDraftStore>(sp =>
             new FileSystemVaultLinkedQueueSnapshotStore(
                 sp.GetRequiredService<VaultLinkedQueueKeySession>(),
-                sp.GetRequiredService<VaultDeviceRetentionGate>(),
                 sp.GetRequiredService<VaultLinkedLocalRetentionGate>(),
                 Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-pending-queue"),
                 sp.GetRequiredService<VaultNetworkSelection>()));
