@@ -207,6 +207,66 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunUncertainExpansionSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-expansion-journal-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            const string passphrase = "independent expansion journal passphrase";
+            await keys.CreateAsync(passphrase);
+            var queuePath = Path.Combine(directory, "encrypted-queue");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, queuePath, network);
+            var expansion = new VaultLinkedAccountExpansion(ledger, network,
+                new VaultAccountStrategyFactory([new FakeLinkedAccountStrategy(ledger)]));
+            var journal = new VaultLinkedExpansionJournal(
+                expansion, ledger, store, keys, consent, network);
+
+            var approved = await journal.PrepareAsync();
+            ledger.FailNextSubmission = true;
+            await MustRejectAsync(
+                () => journal.SubmitApprovedAsync(approved, true),
+                "Unknown linked expansion outcome incorrectly returned success.");
+            Require(ledger.Submissions == 1,
+                "Unknown expansion outcome was automatically retried.");
+
+            var reopenedStore = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, queuePath, network);
+            var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
+            Require(durable.Count(x => x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) == 1,
+                "Unknown account expansion was not preserved in encrypted queue.");
+            Require(!VaultLinkedManualSyncPlan.Build(durable, true).CanReviewNext,
+                "Unresolved expansion failed to block manual record publication.");
+            foreach (var entry in durable)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+
+            await keys.LockAsync();
+            await keys.UnlockAsync(passphrase);
+            await MustRejectAsync(
+                () => journal.PrepareAsync(),
+                "Restarted signer and encrypted queue permitted another account expansion despite an unresolved journal.");
+            Require(ledger.Submissions == 1,
+                "Linked account expansion journal caused duplicate network transmission.");
+            Console.WriteLine("PASS: durable encrypted expansion journal blocks unsafe retry after reconnect");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static void Require(bool condition, string message)
