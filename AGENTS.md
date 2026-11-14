@@ -481,3 +481,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - `VaultScopedQueueReview` is the read-only shared queue+folder snapshot used by HD `VaultHybridSyncReviewService`; it delegates to existing encrypted queue/CAS, does not persist anything or publish. Recheck the active local vault epoch and exact network/consent after async reading.
 - `VaultLinkedQueueInspection` is strictly read-only and `CanPublish=false`. Matching public account address does not authenticate queue format or authorize imported S-key signing. It is not a linked-sync UI workflow; do not silently reinterpret HD-format queued data as S-key drafts. Both hosts register it.
 - Next use existing CAS, queue state policy, folder graph and file mechanisms, after strategy-tagged authenticated local credential/key lifecycle and a protocol-specific approval transport. No builds/tests for this source batch. EVM last.
+
+## Shared queue strategy discriminator (2026-11-15)
+- `VaultPendingMutation.OriginStrategyId` is optional trailing metadata. Null always means existing legacy HD; only `stellar-hd-v2` and `stellar-secret-key-chain` are recognized. Reject unknown IDs. Authenticated encrypted store CAS equality includes this value, and it cannot change during transitions.
+- HD queue enqueue/fee review must not accept tagged linked intents; linked read-only inspection must never count legacy entries as S-key. Strategy metadata is **not signer ownership evidence**. No linked local persistence/sync is enabled without a separately authenticated encryption key, local-storage consent and historical operation verification.
+- Keep reusing existing queue, folder graph and file infrastructure; regression source not executed. EVM is last priority.
