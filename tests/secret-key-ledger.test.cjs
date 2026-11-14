@@ -1009,3 +1009,12 @@ test('linked expansion abandon is limited to pre-transport journal failures',()=
   assert.match(audit,/Already implemented/);
   assert.match(audit,/Do not rebuild/);
 });
+
+
+test('linked read-only inspection clears decrypted queue payloads after counting',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','src',
+    'StellarVault.Core','Services','VaultLinkedQueueInspection.cs'),'utf8');
+  assert.match(source,/using System\.Security\.Cryptography/);
+  assert.match(source,/var mutations = await store\.ListAsync\(root, scope, ct\)/);
+  assert.match(source,/finally\s*\{[\s\S]*?CryptographicOperations\.ZeroMemory\(mutation\.EncryptedPayload\)/);
+});
