@@ -222,7 +222,11 @@ public sealed class VaultLinkedDraftPublication(
                         var published = observed.SingleOrDefault(x => x.Id == original.EntityId);
                         if (published is null || published.IsFolder != draft.IsFolder ||
                             published.Title != draft.Title || published.Content != draft.Content ||
-                            published.FolderId != draft.FolderId)
+                            published.FolderId != draft.FolderId ||
+                            published.UserName != draft.UserName ||
+                            published.Url != draft.Url ||
+                            published.Notes != draft.Notes ||
+                            !(published.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal))
                             throw new InvalidDataException(
                                 "Confirmed transaction hash did not match the published draft.");
                         var confirmed = reserved with
