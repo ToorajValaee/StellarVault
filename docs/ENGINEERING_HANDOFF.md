@@ -798,3 +798,11 @@ Follow-up priorities: (1) run .NET 10 builds and both Node suites, (2) perform c
 - HD ledger draft estimate/publish/update and linked-key quoted drafts now validate logical credential/folder types using the same record factory; on-chain wire formats are unchanged.
 - Local binary files with MIME text/plain are rejected because the historical encrypted catalog lacks an explicit file-vs-text discriminator.
 - No builds, tests, EVM implementations, sharing or import/export performed. Source-only draft PR; preserve Mainnet and Sync safety restrictions.
+
+
+## 2026-11-14 continuation: explicit reviewed linked-account expansion in shared Core
+- Introduced scoped `VaultLinkedAccountExpansion` and registered it in PWA + MAUI. Linked-key UI now uses shared `PrepareAsync`, `SubmitApprovedAsync`, and `CancelAsync` for **chain expansion only**. Record create/update/delete retain the existing dedicated quote/submit transport.
+- Expansion keeps exactly one outstanding quote per coordinator, binds the entire reviewed quote including fees/reserves, current root, selected network and credential scope (custom passphrase digest namespace), and checks connected chain count/tail before submission. An explicit user checkbox is still required; no automatic network calls are triggered by a factory CreateNext request.
+- Consumes pending expansion intent before transmission; if submission or subsequent connected-state verification fails, treat status as uncertain and reconcile before retrying. On success checks that connected account count increased by exactly one with a changed tail; this **does not** independently prove signer authorization, full historical registry or consensus.
+- Linked workspace revalidates selected factory inventory after a mutation and avoids claiming independent historical verification from a transaction hash.
+- Current limitations: only in-memory per-scoped-session gating, no cross-tab/process coordination, durable in-flight journal or authenticated historical child discovery; connected session verification still relies on transport. Mainnet restrictions are unchanged. No .NET build/tests, real Testnet trial or device verification executed. EVM remains last priority.
