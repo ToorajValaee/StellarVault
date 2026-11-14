@@ -23,6 +23,40 @@ public sealed class VaultLinkedExpansionJournal(
         string RootAddress, string NetworkScope, long SignerEpoch,
         DateTimeOffset CreatedUtc);
 
+    public async Task<VaultSecretLedgerQuote> PrepareAsync(CancellationToken ct = default)
+    {
+        consent.RequireLocalPersistence();
+        if (!keys.CanPublish || !ledger.IsConnected ||
+            ledger.RootAccountId is not string root)
+            throw new UnauthorizedAccessException(
+                "A fresh live signer-backed S-key queue unlock is required.");
+        var scope = network.CredentialKey(root);
+        var epoch = ledger.ConnectionEpoch;
+        await RequireNoUnresolvedAsync(root, scope, ct);
+        RequireSession(root, scope, epoch);
+        return await expansion.PrepareAsync(ct);
+    }
+
+    private async Task RequireNoUnresolvedAsync(
+        string root, string scope, CancellationToken ct)
+    {
+        var entries = await store.ListAsync(root, scope, ct);
+        try
+        {
+            if (entries.Any(x => x.State is VaultSyncState.Submitting or
+                VaultSyncState.Uncertain or VaultSyncState.Conflict ||
+                x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                x.State != VaultSyncState.Confirmed))
+                throw new InvalidOperationException(
+                    "An earlier linked submission or expansion needs verified reconciliation.");
+        }
+        finally
+        {
+            foreach (var entry in entries)
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+        }
+    }
+
     public async Task<string> SubmitApprovedAsync(
         VaultSecretLedgerQuote approvedQuote, bool userApproved,
         CancellationToken ct = default)
@@ -47,21 +81,7 @@ public sealed class VaultLinkedExpansionJournal(
             var scope = network.CredentialKey(root);
             var epoch = ledger.ConnectionEpoch;
 
-            var before = await store.ListAsync(root, scope, ct);
-            try
-            {
-                if (before.Any(x => x.State is VaultSyncState.Submitting or
-                    VaultSyncState.Uncertain or VaultSyncState.Conflict ||
-                    x.Kind == VaultMutationKind.ExtendLinkedChain &&
-                    x.State != VaultSyncState.Confirmed))
-                    throw new InvalidOperationException(
-                        "An earlier linked submission or expansion needs verified reconciliation.");
-            }
-            finally
-            {
-                foreach (var entry in before)
-                    CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
-            }
+            await RequireNoUnresolvedAsync(root, scope, ct);
             RequireSession(root, scope, epoch);
             var intent = new Intent(approvedQuote.QuoteId,
                 approvedQuote.TargetAccountId, root, scope, epoch,
