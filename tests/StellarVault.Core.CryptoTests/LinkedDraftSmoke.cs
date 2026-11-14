@@ -41,6 +41,18 @@ internal static class LinkedDraftSmoke
 
             Require((await drafts.ListAsync()).Count == 2,
                 "Independent encrypted queue failed to persist local drafts.");
+            var childRevision = await drafts.OpenDraftAsync(child.MutationId);
+            await drafts.ReviseAsync(child.MutationId,
+                childRevision.Draft with { Notes = "updated encrypted note" },
+                childRevision.PayloadSha256);
+            await MustRejectAsync(
+                () => drafts.ReviseAsync(child.MutationId,
+                    childRevision.Draft with { Notes = "stale conflicting change" },
+                    childRevision.PayloadSha256),
+                "A stale linked draft edit incorrectly overwrote a newer CAS revision.");
+            Require((await drafts.OpenDraftAsync(child.MutationId)).Draft.Notes ==
+                "updated encrypted note",
+                "Revised encrypted record draft content was not retained.");
             await MustRejectAsync(() => drafts.DiscardAsync(folder.MutationId),
                 "Deleting a pending parent with dependent records was permitted.");
             await MustRejectAsync(() => publisher.PrepareAsync(child.MutationId),
@@ -119,6 +131,24 @@ internal static class LinkedDraftSmoke
                 "Returning to the original verified local account/network scope failed.");
             var offlineRecord = await drafts.CreateAsync(
                 new LedgerRecordDraft("Offline personal draft", "local secret"));
+            var editOffline = await drafts.OpenDraftAsync(offlineRecord.MutationId);
+            await drafts.ReviseAsync(offlineRecord.MutationId,
+                editOffline.Draft with { Content = "edited without Horizon" },
+                editOffline.PayloadSha256);
+            Require((await drafts.OpenDraftAsync(offlineRecord.MutationId)).Draft.Content ==
+                "edited without Horizon",
+                "Offline encrypted draft revision depended on Horizon.");
+            var folderA = await drafts.CreateAsync(
+                new LedgerRecordDraft("Local folder A", "folder", IsFolder: true));
+            var folderB = await drafts.CreateAsync(
+                new LedgerRecordDraft("Local folder B", "folder",
+                    folderA.EntityId, IsFolder: true));
+            var folderAOpen = await drafts.OpenDraftAsync(folderA.MutationId);
+            await MustRejectAsync(
+                () => drafts.ReviseAsync(folderA.MutationId,
+                    folderAOpen.Draft with { FolderId = folderB.EntityId },
+                    folderAOpen.PayloadSha256),
+                "Editing a local folder created a parent-dependency cycle.");
             Require((await drafts.ListAsync()).Any(x => x.MutationId == offlineRecord.MutationId),
                 "Encrypted local draft failed with disconnected network.");
             var offlineReport = new VaultLinkedQueueInspection(ledger, store, keys,
