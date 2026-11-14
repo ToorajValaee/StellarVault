@@ -4789,3 +4789,141 @@ html[data-theme="dark"] .sv-web-shell .sv-workspace-surface .sv-hybrid-panel .sv
  }
  html[data-theme="dark"] .sv-web-shell .sv-mobile-folder-back {color:#a8f2cf!important;}
 }
+
+
+/* 2026-11-14 — inspector is a nonmodal third column: never override the
+   user's saved list/grid choice, and give both panes independent scroll. */
+html .sv-web-shell .sv-settings-help-link {
+  display:flex!important;align-items:center!important;gap:13px!important;
+  width:100%!important;min-height:62px!important;margin:0 0 17px!important;
+  padding:12px 16px!important;border:1px solid var(--sv-work-line)!important;
+  border-radius:11px!important;background:var(--sv-work-panel)!important;
+  color:var(--sv-work-text)!important;box-shadow:none!important;
+  text-align:left!important;cursor:pointer;
+  font:500 13px/1.45 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+html .sv-web-shell .sv-settings-help-link:hover {
+  background:var(--sv-work-hover)!important;border-color:var(--sv-work-green)!important;
+}
+html .sv-web-shell .sv-settings-help-icon {
+  display:grid;place-items:center;flex:0 0 38px!important;
+  width:38px;height:38px;border-radius:9px!important;
+  background:var(--sv-work-selection)!important;
+  color:var(--sv-work-green)!important;font-size:21px!important;
+}
+html .sv-web-shell .sv-settings-help-link > span:nth-child(2) {
+  display:flex;flex:1;flex-direction:column;align-items:flex-start;min-width:0;
+}
+html .sv-web-shell .sv-settings-help-link strong {
+  color:var(--sv-work-text)!important;font:700 13px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+html .sv-web-shell .sv-settings-help-link small {
+  color:var(--sv-work-muted)!important;font:500 11px/1.5 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+html .sv-web-shell .sv-settings-help-chevron {color:var(--sv-work-muted)!important;font-size:24px;}
+html[data-theme="dark"] .sv-web-shell .sv-settings-help-link {
+  background:#1c2e32!important;color:#e4f2ef!important;border-color:#3e5b5d!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-settings-help-link:hover {
+  background:#294942!important;
+}
+@media(min-width:1100px) {
+  html .sv-web-shell:has(.sv-record-inspector) .sv-pwa-app {
+    height:calc(100dvh - 74px)!important;min-height:0!important;
+    overflow:hidden!important;
+    grid-template-columns:245px minmax(0,1fr) var(--sv-record-inspector-width)!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-pwa-stage {
+    grid-column:2!important;grid-row:1!important;
+    min-height:0!important;height:calc(100dvh - 74px)!important;
+    max-height:calc(100dvh - 74px)!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    overscroll-behavior-y:contain!important;
+    padding:22px 18px 34px!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-layout {
+    min-height:0!important;max-width:100%!important;overflow:visible!important;
+    grid-template-columns:minmax(165px,210px) minmax(0,1fr)!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main {
+    min-width:0!important;overflow:visible!important;
+  }
+  html .sv-web-shell .sv-pwa-app > .sv-record-inspector-backdrop {
+    grid-column:3!important;grid-row:1!important;
+    min-height:0!important;height:calc(100dvh - 74px)!important;
+    max-height:calc(100dvh - 74px)!important;overflow:hidden!important;
+  }
+  html .sv-web-shell .sv-pwa-app > .sv-record-inspector-backdrop .sv-record-inspector:has(#sv-record-title) {
+    position:relative!important;top:auto!important;
+    height:100%!important;max-height:100%!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    overscroll-behavior-y:contain!important;scrollbar-gutter:stable!important;
+  }
+  /* Grid is an explicit user preference; inspector presence must not downgrade it. */
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid .sv-folder-grid,
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid .record-list,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid .sv-folder-grid,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid .record-list {
+    display:grid!important;grid-template-columns:repeat(auto-fill,minmax(min(100%,155px),1fr))!important;
+    gap:10px!important;padding:10px 0!important;align-content:start!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid .sv-folder-tile,
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid .sv-object-row,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid .sv-folder-tile,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid .sv-object-row {
+    display:flex!important;flex-direction:column!important;
+    align-items:stretch!important;justify-content:flex-start!important;
+    min-width:0!important;min-height:128px!important;gap:8px!important;
+    border:1px solid var(--sv-work-line)!important;border-radius:10px!important;
+    padding:12px!important;background:var(--sv-work-panel)!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid :is(.sv-folder-open,.sv-modern-record),
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid :is(.sv-folder-open,.sv-modern-record) {
+    flex-direction:column!important;align-items:flex-start!important;text-align:left!important;
+    width:100%!important;gap:9px!important;
+  }
+  html .sv-web-shell:has(.sv-record-inspector) .sv-explorer-main.sv-view-grid .sv-object-actions,
+  html .sv-web-shell:has(.sv-editor-sidecar) .sv-explorer-main.sv-view-grid .sv-object-actions {
+    position:absolute!important;top:7px!important;right:7px!important;
+    margin:0!important;align-self:auto!important;
+  }
+}
+/* Shared hybrid screens previously had extra bright background from nested
+   legacy .terminal-panel, action strips and native selector rules. */
+html[data-theme="dark"] .sv-web-shell .sv-sync-workspace,
+html[data-theme="dark"] .sv-web-shell .sv-drafts-workspace,
+html[data-theme="dark"] .sv-web-shell .sv-sync-workspace :is(
+ .sv-pwa-task-tabs,.sv-pwa-task-tabs button,.sv-access-actions,.panel-heading,
+ .sv-hybrid-heading,.terminal-panel,.data-field,.sv-hybrid-item,.sv-hybrid-subsection,
+ .record-card,details,summary,.sv-native-segments,.sv-native-segments button) {
+  background:#1c2e32!important;background-image:none!important;
+  color:#e4f2ef!important;border-color:#3e5b5d!important;box-shadow:none!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-sync-workspace .sv-pwa-task-tabs button.selected,
+html[data-theme="dark"] .sv-web-shell .sv-sync-workspace .sv-native-segments button.selected {
+  background:#245343!important;color:#bbf8dd!important;border-color:#439a75!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-workspace-surface :is(
+ label,.terminal-label,.field-label,.advanced-help,.notice,.panel-kicker,
+ .record-card small,.sv-hybrid-item small,.sv-native-subtle-status) {
+  color:#b3ceca!important;background:transparent!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-workspace-surface :is(
+ h2,h3,h4,strong,code,.terminal-value,.record-card strong,.data-field strong) {
+  color:#e5f4ee!important;background:transparent!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-workspace-surface :is(
+ input:not([type="checkbox"]):not([type="radio"]),select,textarea,.terminal-input) {
+  background:#263b40!important;color:#e5f4ee!important;border-color:#456164!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-sync-workspace :is(
+ .sv-access-actions button,.pixel-button:not(.primary),.mini-button) {
+  background:#243b3d!important;color:#e4f2ef!important;border-color:#486266!important;
+}
+@media(max-width:1099px) {
+  /* The mobile/tablet sheet retains its independent scrolling. */
+  html .sv-web-shell .sv-record-inspector-backdrop .sv-record-inspector {
+    overflow-y:auto!important;overscroll-behavior:contain!important;
+    -webkit-overflow-scrolling:touch;
+  }
+}
