@@ -1,6 +1,14 @@
 namespace StellarVault.Core.Services;
 
 /// <summary>
+/// A linked expansion was rejected before the underlying transport was called.
+/// The reviewed quote was discarded, so the user must request a new review.
+/// This does NOT attest to any previous or concurrent network submission.
+/// </summary>
+public sealed class VaultLinkedExpansionPreflightException(string message, Exception innerException)
+    : InvalidOperationException(message, innerException);
+
+/// <summary>
 /// Shared, single-use review boundary for independent Stellar linked-account expansion.
 /// Quotes are scoped to one currently connected S-key root and selected network.
 /// It never receives secret material, creates a child autonomously or retries an
@@ -109,16 +117,39 @@ public sealed class VaultLinkedAccountExpansion(
                 !reviewedQuote.CreatesChildNode)
                 throw new InvalidOperationException("Reviewed expansion quote differs from the prepared quote.");
 
-            RequireSameSession(pending);
-            var before = await strategies.InspectConnectedAsync(
-                Request(pending.Root, pending.Network), ct);
-            if (before.AccountCount != pending.PreviousCount ||
-                before.TailAddress != pending.PreviousTail)
-                throw new InvalidOperationException("The account chain changed. Cancel and review a new quote.");
+            // No network submission is initiated until all context, chain
+            // inventory and quote freshness checks have completed. Any error
+            // in this block can safely discard this PARTICULAR approval, but
+            // never clears an older or concurrent unresolved ledger submission.
+            try
+            {
+                RequireSameSession(pending);
+                var before = await strategies.InspectConnectedAsync(
+                    Request(pending.Root, pending.Network), ct);
+                if (before.AccountCount != pending.PreviousCount ||
+                    before.TailAddress != pending.PreviousTail)
+                    throw new InvalidOperationException(
+                        "The account chain changed. Cancel and review a new quote.");
 
-            ct.ThrowIfCancellationRequested();
-            RequireSameSession(pending);
-            // This is the no-retry boundary even if network submission fails or is cancelled.
+                ct.ThrowIfCancellationRequested();
+                RequireSameSession(pending);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                _pending = null;
+                await TryCancelUnsubmittedAsync(pending.Quote.QuoteId);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _pending = null;
+                await TryCancelUnsubmittedAsync(pending.Quote.QuoteId);
+                throw new VaultLinkedExpansionPreflightException(
+                    "Linked account expansion was not submitted. Refresh the vault and request a new review.", ex);
+            }
+
+            // The preflight quote is single-use. From here onward a transport
+            // failure may be uncertain and MUST NOT be reclassified as preflight.
             _pending = null;
             var hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
@@ -136,6 +167,16 @@ public sealed class VaultLinkedAccountExpansion(
             return hash;
         }
         finally { _gate.Release(); }
+    }
+
+    private async Task TryCancelUnsubmittedAsync(string quoteId)
+    {
+        try { await ledger.CancelQuoteAsync(quoteId); }
+        catch
+        {
+            // The Core quote has already been invalidated. The transport
+            // remains single-use and must not submit an abandoned quote.
+        }
     }
 
     public async Task CancelAsync(string quoteId, CancellationToken ct = default)
