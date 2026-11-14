@@ -1353,3 +1353,37 @@ html,body {background:var(--sv-native-bg);color:var(--sv-native-text);
   }
 }
 /* Phone rules above intentionally have greater specificity and win. */
+
+
+/* 2026-11-14 — native shared hybrid review panels and Settings obey dark mode. */
+html[data-theme="dark"] .sv-native-shell :is(
+ .sv-native-segments,.sv-native-segments button,.sv-native-help,
+ .sv-native-settings .terminal-panel,.sv-native-setting-row,
+ .sv-native-content > .terminal-panel,
+ .sv-hybrid-panel,.sv-hybrid-panel .terminal-panel,
+ .sv-hybrid-panel .data-field,.sv-hybrid-panel .sv-hybrid-item,
+ .sv-hybrid-panel .sv-hybrid-subsection) {
+  background:#1c2f33!important;background-image:none!important;
+  color:#e6f3ed!important;border-color:#3e595d!important;
+  box-shadow:none!important;
+}
+html[data-theme="dark"] .sv-native-shell :is(
+ .sv-native-segments button.selected,.sv-native-setting-row > span) {
+  background:#245441!important;color:#bbf6d9!important;
+  border-color:#499f79!important;
+}
+html[data-theme="dark"] .sv-native-shell :is(
+ .sv-hybrid-panel h3,.sv-hybrid-panel strong,.sv-native-settings strong,
+ .sv-native-settings h2,.sv-hybrid-panel .terminal-label) {
+  color:#e6f3ed!important;background:transparent!important;
+}
+html[data-theme="dark"] .sv-native-shell :is(
+ .sv-hybrid-panel label,.sv-hybrid-panel p,.sv-native-help summary,
+ .sv-native-setting-row p,.sv-native-subtle-status) {
+  color:#b4cfc8!important;background:transparent!important;
+}
+html[data-theme="dark"] .sv-native-shell :is(
+ .sv-hybrid-panel input:not([type="checkbox"]),.sv-hybrid-panel textarea,
+ .sv-hybrid-panel select,.sv-hybrid-panel .terminal-input) {
+  background:#243c40!important;color:#e9f5f0!important;border-color:#486568!important;
+}
