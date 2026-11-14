@@ -849,6 +849,8 @@ test('existing S-key credentials unlock local encrypted drafts without Horizon o
   assert.match(session,/public bool IsOfflineOnly => IsUnlocked && _offlineOnly/);
   assert.match(session,/public string\? ActiveRootAccountId => IsUnlocked \? _root : null/);
   assert.match(session,/if \(_offlineOnly\)/);
+  assert.match(session,/MatchesSelectedNetwork\(\)/);
+  assert.match(session,/public bool CanPublish => IsUnlocked && !_offlineOnly/);
   assert.match(session,/localResult = await operation\(copy, ct\)/);
   assert.match(workspace,/IReadOnlyList<LedgerRecordItem> remote = keys\.IsOfflineOnly/);
   assert.match(workspace,/keys\.ActiveRootAccountId/);
