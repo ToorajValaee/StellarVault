@@ -77,6 +77,7 @@ public static class MauiProgram
         builder.Services.AddScoped<VaultHybridFileWorkspace>();
         builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
         builder.Services.AddScoped<VaultHybridRemoteMutationWorkspace>();
+        builder.Services.AddScoped<VaultConnectedStellarAccountInventory>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
