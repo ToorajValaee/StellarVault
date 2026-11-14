@@ -150,6 +150,7 @@ else
                 <button type="button" class="pixel-button compact" @onclick="PrepareLocalSyncReviewAsync" disabled="@_pendingLoading">Review changes</button>
                 <VaultHybridSyncReview />
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
+                @if (!string.IsNullOrWhiteSpace(_syncEstimateNote)) { <p class="advanced-help" role="status">@_syncEstimateNote</p> }
                 @if (_pendingItems.Count > 0)
                 {
                     <p role="status">PENDING: @_pendingItems.Count(x => x.State == VaultSyncState.Pending) · UNCERTAIN: @_pendingItems.Count(x => x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) · CONFLICTS: @_pendingItems.Count(x => x.State == VaultSyncState.Conflict)</p>
