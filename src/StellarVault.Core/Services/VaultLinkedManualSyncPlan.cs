@@ -22,9 +22,9 @@ public static class VaultLinkedManualSyncPlan
     {
         ArgumentNullException.ThrowIfNull(entries);
         var hasUnresolved = entries.Any(x =>
-            x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting or VaultSyncState.Conflict ||
-            x.Kind == VaultMutationKind.ExtendLinkedChain &&
-            x.State != VaultSyncState.Confirmed);
+            (x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting or VaultSyncState.Conflict) ||
+            (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+             x.State != VaultSyncState.Confirmed));
         var result = new List<Item>(entries.Count);
         foreach (var mutation in entries.OrderBy(x => x.CreatedUtc)
                      .ThenBy(x => x.Id, StringComparer.Ordinal))
