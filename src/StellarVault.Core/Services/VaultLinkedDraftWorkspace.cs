@@ -56,13 +56,22 @@ public sealed class VaultLinkedDraftWorkspace(
         Context c, CancellationToken ct)
     {
         var all = await store.ListAsync(c.Root, c.Scope, ct);
-        Check(c);
-        if (all.Any(x => x.AccountId != c.Root ||
-            x.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(c.Scope) ||
-            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) !=
-                VaultMutationStrategyPolicy.Linked))
-            throw new InvalidDataException("Encrypted queue contains a foreign linked-account draft.");
-        return all;
+        try
+        {
+            Check(c);
+            if (all.Any(x => x.AccountId != c.Root ||
+                x.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(c.Scope) ||
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) !=
+                    VaultMutationStrategyPolicy.Linked))
+                throw new InvalidDataException(
+                    "Encrypted queue contains a foreign linked-account draft.");
+            return all;
+        }
+        catch
+        {
+            ClearEntries(all);
+            throw;
+        }
     }
 
     private static void ClearEntries(IEnumerable<VaultPendingMutation> entries)
