@@ -40,6 +40,12 @@ public sealed class VaultHybridSyncReviewService(
         var snapshot = await scopedQueue.ReadAsync(accountId, ct);
         if (snapshot.NetworkId != networkId || snapshot.LocalSessionEpoch != sessionEpoch)
             throw new InvalidOperationException("Encrypted queue scope changed during review.");
+        // Legacy untagged entries retain HD semantics. A tagged independent
+        // S-key intent cannot be silently interpreted as an HD mutation.
+        if (snapshot.Mutations.Any(x =>
+            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) != VaultMutationStrategyPolicy.Hd))
+            throw new InvalidOperationException(
+                "Mixed account-strategy queue requires independent review; HD publishing is blocked.");
         var review = snapshot.Queue;
         var canEstimate = estimateFees && ledger.IsConnected &&
             review.NeedsReconciliation == 0 && review.Conflicts == 0;
