@@ -38,6 +38,22 @@ public sealed class VaultLinkedQueueKeySession(
     public bool IsOfflineOnly => IsUnlocked && _offlineOnly;
     public string? ActiveRootAccountId => IsUnlocked ? _root : null;
 
+    /// <summary>
+    /// An offline passphrase unlock grants encrypted local operations ONLY.
+    /// Publication requires a NEW live signer-backed queue unlock with the
+    /// exact selected Stellar network, not merely a later connection.
+    /// </summary>
+    public bool CanPublish => IsUnlocked && !_offlineOnly &&
+        _networkPassphrase is not null &&
+        _networkPassphrase == (network.Network switch
+        {
+            "testnet" => "Test SDF Network ; September 2015",
+            "public" => "Public Global Stellar Network ; September 2015",
+            "custom" => network.CustomPassphrase,
+            _ => null
+        }) &&
+        ledger.ConnectedNetworkPassphrase == _networkPassphrase;
+
     private (string Root, string Scope, string Passphrase, long Epoch) RequireSigner()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VaultLinkedQueueKeySession));
