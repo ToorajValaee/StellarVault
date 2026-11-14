@@ -609,8 +609,8 @@ test('independent S-key local queue key and ciphertext namespaces never alias HD
   assert.match(credentialPwa,/retention\.RequireLocalPersistence\(\)/);
   assert.match(credentialNative,/secret-chain:queue-key:v1:/);
   assert.match(credentialNative,/FileSystemVaultPassphraseCredentialStore/);
-  assert.match(snapshotPwa,/new IndexedDbVaultPendingMutationStore\(js, keys, retention\)/);
-  assert.match(snapshotNative,/new FileSystemVaultPendingMutationStore\(keys, retention, directory\)/);
+  assert.match(snapshotPwa,/new\(js, keys, retention\)/);
+  assert.match(snapshotNative,/new\(keys, retention, directory\)/);
   for(const value of [snapshotPwa,snapshotNative]){
     assert.match(value,/VaultLinkedQueueStorageScope\.FromNetworkScope\(linkedNetworkScope\)/);
     assert.match(value,/VaultMutationStrategyPolicy\.Linked/);
@@ -697,4 +697,67 @@ test('no GitHub Actions workflow definitions remain on the active branch',()=>{
   const root=path.join(__dirname,'..','.github','workflows');
   if(fs.existsSync(root))
     assert.equal(fs.readdirSync(root).filter(x=>/\.ya?ml$/.test(x)).length,0);
+});
+
+
+test('independent linked staging reuses original encrypted stores and parent dependency rules',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const pwa=path.join(src,'StellarVault.Pwa','Services');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const interfaceSource=fs.readFileSync(path.join(core,'VaultLinkedQueueStorageScope.cs'),'utf8');
+  const browserStore=fs.readFileSync(path.join(pwa,'IndexedDbVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const nativeStore=fs.readFileSync(path.join(core,'FileSystemVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  assert.match(interfaceSource,/interface IVaultLinkedDraftStore : IVaultLinkedQueueSnapshotStore/);
+  assert.match(workspace,/VaultPendingMutation\.Create\(/);
+  assert.match(workspace,/OriginStrategyId = VaultMutationStrategyPolicy\.Linked/);
+  assert.match(workspace,/VaultQueuedCreatePolicy\.ParentCandidates/);
+  assert.match(workspace,/deps = \[parent\.Id\]/);
+  assert.match(workspace,/store\.AddAsync\(item, ct\)/);
+  assert.match(workspace,/store\.TryDeleteAsync\(item, ct\)/);
+  assert.match(workspace,/Cannot|Discard dependent local drafts before deleting their parent folder/);
+  assert.match(workspace,/CryptographicOperations\.ZeroMemory\(item\.EncryptedPayload\)/);
+  for(const adapter of [browserStore,nativeStore]){
+    assert.match(adapter,/IVaultLinkedDraftStore/);
+    assert.match(adapter,/linkedRetention\.RequireLocalPersistence\(\)/);
+    assert.match(adapter,/VaultLinkedQueueStorageScope\.FromNetworkScope/);
+    assert.match(adapter,/ExistingStore\(\)\.AddAsync\(entry, ct\)/);
+    assert.match(adapter,/ExistingStore\(\)\.TryDeleteAsync\(expected, ct\)/);
+    assert.match(adapter,/ExistingStore\(\)\.TryReplaceAsync\(previous, next, ct\)/);
+  }
+  assert.match(panel,/DraftWorkspace\.CreateAsync\(draft\)/);
+  assert.match(panel,/DraftWorkspace\.ListAsync\(\)/);
+  assert.match(panel,/DraftWorkspace\.DiscardAsync\(id\)/);
+  assert.match(panel,/Save encrypted local draft/);
+});
+
+test('manual linked draft publication reserves durable queue state before network broadcast',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const pwa=fs.readFileSync(path.join(src,'StellarVault.Pwa','Program.cs'),'utf8');
+  const native=fs.readFileSync(path.join(src,'StellarVault.Maui','MauiProgram.cs'),'utf8');
+  const reserve=publisher.indexOf('store.TryReplaceAsync(original, reserved, ct)');
+  const broadcast=publisher.indexOf('ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct)');
+  assert.ok(reserve>=0 && broadcast>reserve);
+  assert.match(publisher,/pending\.Quote, approvedQuote/);
+  assert.match(publisher,/VaultQueuedCreatePolicy\.Problems/);
+  assert.match(publisher,/CryptographicOperations\.FixedTimeEquals/);
+  assert.match(publisher,/Fingerprint\(original\)/);
+  assert.match(publisher,/State = VaultSyncState\.Submitting/);
+  assert.match(publisher,/State = VaultSyncState\.Uncertain/);
+  assert.match(publisher,/State = VaultSyncState\.Confirmed/);
+  assert.match(publisher,/ledger\.ReadAsync\(ct\)/);
+  assert.match(publisher,/store\.TryReplaceAsync\(reserved, uncertain, CancellationToken\.None\)/);
+  assert.doesNotMatch(publisher,/VaultSessionManager|MnemonicHd|StellarHdAccountStrategy/);
+  assert.match(panel,/Publisher\.PrepareAsync\(id\)/);
+  assert.match(panel,/Publisher\.SubmitAsync\(approved\.Quote, true\)/);
+  assert.match(panel,/Publisher\.CancelAsync\(\)/);
+  assert.match(panel,/I approve this specific Stellar transaction/);
+  for(const host of [pwa,native]){
+    assert.match(host,/AddScoped<VaultLinkedDraftWorkspace>/);
+    assert.match(host,/AddScoped<VaultLinkedDraftPublication>/);
+  }
 });
