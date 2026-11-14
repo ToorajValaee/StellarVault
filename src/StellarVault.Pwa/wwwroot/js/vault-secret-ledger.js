@@ -270,6 +270,10 @@ window.stellarVaultSecretLedger = (() => {
     // Newly staged keys consume reserve before old keys are removed;
     // require peak headroom even if the net change is negative.
     const additional=BigInt(newUnits)*s.net.reserve;
+    if(Number(node.subentry_count||0)+newUnits>1000) {
+      cipher?.fill(0);
+      fail('The target account would exceed Stellar subentry limits. Extend the vault chain before saving.');
+    }
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
     const bal=decimalStroops(native?.balance);
     const used=BigInt(2+Number(root.subentry_count||0)+Number(root.num_sponsoring||0)-
