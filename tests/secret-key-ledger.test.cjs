@@ -555,5 +555,25 @@ test('linked expansion preflight cancellation is structurally distinct from tran
   assert.match(ui,/catch \(VaultLinkedExpansionPreflightException\)/);
   assert.match(ui,/await Ledger\.InspectUncertainSubmissionAsync\(\)/);
   assert.match(ui,/No expansion transaction was submitted for this review/);
+  assert.match(expansion,/public async Task AbandonUnsubmittedAsync\(CancellationToken ct = default\)/);
+  assert.match(ui,/await LinkedExpansion\.AbandonUnsubmittedAsync\(\)/);
   assert.match(ui,/catch\s*\{\s*_capacityRolloverPending = false;\s*_submissionUncertain = true;/);
+});
+
+
+test('linked vault cannot silently treat one session sibling uncertainty as safe to unlock',async()=>{
+  const h=harness();await h.open();
+  const parallel='read-only-parallel';
+  await h.api.open(parallel,SECRET,'https://horizon-testnet.stellar.org',TEST);
+  const quote=await h.plan('create',recordId,record);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(quote.QuoteId),/uncertain/);
+  const snapshot=h.api.inspectUncertain(parallel);
+  assert.equal(snapshot.RootAccountId,ROOT);
+  assert.equal(snapshot.RecordId,recordId);
+  assert.equal(snapshot.NetworkPassphrase,TEST);
+  snapshot.Kind='updated-by-user';
+  assert.equal(h.api.inspectUncertain(parallel).Kind,'create');
+  await assert.rejects(h.api.plan(parallel,'expand',null,null),/unresolved/);
+  h.api.close(parallel);h.close();
 });
