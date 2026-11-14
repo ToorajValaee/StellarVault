@@ -1519,10 +1519,13 @@ else
         Retention.Reset();
         Workflow.Lock();
         ClearLedgerView();
-        var disconnected = !Ledger.IsConnected;
+        var disconnected = !Ledger.IsConnected && !SecretLedger.IsConnected;
         try
         {
-            if (!disconnected) await Ledger.DisconnectAsync();
+            if (Ledger.IsConnected) await Ledger.DisconnectAsync();
+            if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync();
+            _ledgerSecretKey = string.Empty;
+            _secretInspection = null;
             disconnected = true;
         }
         catch
@@ -1614,5 +1617,15 @@ else
                 // The native WebView may already be gone during app shutdown.
             }
         }
+        if (SecretLedger.IsConnected)
+        {
+            try { await SecretLedger.DisconnectAsync(); }
+            catch (Microsoft.JSInterop.JSDisconnectedException)
+            {
+                // The native WebView may already be gone during app shutdown.
+            }
+        }
+        _ledgerSecretKey = string.Empty;
+        _secretInspection = null;
     }
 }
