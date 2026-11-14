@@ -596,7 +596,7 @@ test('independent S-key local queue key and ciphertext namespaces never alias HD
   assert.match(scope,/interface IVaultLinkedQueueSnapshotStore/);
   assert.match(session,/VaultPassphraseLifecycle _credentials/);
   assert.match(session,/IVaultLinkedPassphraseCredentialStore credentialStore/);
-  assert.match(session,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(session,/linkedRetention\.DeviceRetention\.RequireLocalPersistence\(\)/);
   assert.match(session,/ledger\.InspectAccountInfoAsync\(ct\)/);
   assert.match(session,/var before = await ledger\.InspectAccountInfoAsync\(ct\)/);
   assert.match(session,/var after = await ledger\.InspectAccountInfoAsync\(ct\)/);
@@ -606,11 +606,11 @@ test('independent S-key local queue key and ciphertext namespaces never alias HD
   assert.match(session,/CryptographicOperations\.ZeroMemory\(copy\)/);
   assert.match(session,/return entry is not null/);
   assert.match(credentialPwa,/secret-chain:queue-key:v1:/);
-  assert.match(credentialPwa,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(credentialPwa,/linkedRetention\.DeviceRetention\.RequireLocalPersistence\(\)/);
   assert.match(credentialNative,/secret-chain:queue-key:v1:/);
   assert.match(credentialNative,/FileSystemVaultPassphraseCredentialStore/);
-  assert.match(snapshotPwa,/new\(js, keys, retention\)/);
-  assert.match(snapshotNative,/new\(keys, retention, directory\)/);
+  assert.match(snapshotPwa,/new\(js, keys, linkedRetention\.DeviceRetention\)/);
+  assert.match(snapshotNative,/new\(keys, linkedRetention\.DeviceRetention, directory\)/);
   for(const value of [snapshotPwa,snapshotNative]){
     assert.match(value,/VaultLinkedQueueStorageScope\.FromNetworkScope\(linkedNetworkScope\)/);
     assert.match(value,/VaultMutationStrategyPolicy\.Linked/);
@@ -648,7 +648,7 @@ test('linked S-key device UI requires consent and separate fee-reviewed publicat
   const workspace=fs.readFileSync(path.join(root,'VaultSecretKeyWorkspace.razor'),'utf8');
   const native=fs.readFileSync(path.join(root,'NativeVaultWorkspace.razor'),'utf8');
   assert.match(panel,/I consent to encrypted local storage on this device/);
-  assert.match(panel,/VaultDeviceRetentionPolicy\.EncryptedLocalWithManualSync/);
+  assert.match(panel,/LinkedRetention\.DeviceRetention\.AllowsLocalPersistence/);
   assert.match(panel,/LinkedRetention\.GrantExplicitConsent\(\)/);
   assert.match(panel,/LinkedRetention\.Reset\(\)/);
   assert.match(panel,/checked="@LinkedRetention\.AllowsLocalPersistence"/);
@@ -683,6 +683,11 @@ test('independent S-key local retention is not granted by mnemonic-HD consent',(
   assert.match(gate,/private set/);
   assert.match(gate,/GrantExplicitConsent/);
   assert.match(gate,/RequireLocalPersistence/);
+  assert.match(gate,/DeviceRetention \{ get; \} = new\(\)/);
+  assert.match(gate,/DeviceRetention\.Select\(VaultDeviceRetentionPolicy\.EncryptedLocalWithManualSync\)/);
+  assert.match(gate,/DeviceRetention\.Reset\(\)/);
+  assert.doesNotMatch(session,/VaultDeviceRetentionGate retention/);
+  assert.doesNotMatch(pwaHost,/AddScoped<IVaultLinkedQueueKeySession>/);
   for(const file of [session,storePwa,storeNative,queuePwa,queueNative,inspector])
     assert.match(file,/linkedRetention\.RequireLocalPersistence\(\)/);
   for(const host of [pwaHost,mauiHost])
@@ -780,4 +785,19 @@ test('native Core smoke suite includes independent linked encrypted staging and 
   assert.match(smoke,/VaultSyncState\.Uncertain or VaultSyncState\.Submitting/);
   assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(pending\.MutationId\)/);
   assert.match(smoke,/keys\.LockAsync\(\)/);
+});
+
+
+test('independent S-key local storage never turns on the HD device-retention gate',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const gate=fs.readFileSync(path.join(core,'VaultLinkedLocalRetentionGate.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(panel,/LinkedRetention\.GrantExplicitConsent\(\)/);
+  assert.match(panel,/LinkedRetention\.Reset\(\)/);
+  assert.doesNotMatch(panel,/@inject VaultDeviceRetentionGate/);
+  assert.doesNotMatch(panel,/Retention\.Select\(VaultDeviceRetentionPolicy/);
+  assert.match(gate,/public VaultDeviceRetentionGate DeviceRetention \{ get; \} = new\(\)/);
+  assert.match(smoke,/hdRetention\.Policy == VaultDeviceRetentionPolicy\.OnChainOnly/);
 });
