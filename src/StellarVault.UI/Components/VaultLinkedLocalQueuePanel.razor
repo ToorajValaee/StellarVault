@@ -198,11 +198,15 @@
         try
         {
             var hash = await Publisher.SubmitAsync(approved.Quote, true);
-            _drafts = await DraftWorkspace.ListAsync();
-            await RefreshFolderOptionsAsync();
-            _report = await QueueInspection.InspectAsync();
             _message = "Connected Stellar record state and encrypted queue confirmed for transaction: " + hash +
                 ". Independent historical operation verification remains pending security review.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _message += " Screen refresh failed; do not repeat this submission."; }
         }
         catch (Exception ex)
         {
@@ -303,13 +307,18 @@
                 _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
             await DraftWorkspace.CreateAsync(draft);
             ClearDraftEditor();
-            _drafts = await DraftWorkspace.ListAsync();
-            _report = await QueueInspection.InspectAsync();
             _message = "Encrypted local draft saved. No transaction was submitted.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _message += " Screen refresh failed; inspect existing drafts before saving again."; }
         }
         catch (Exception ex)
         {
-            _message = "Unable to save encrypted local draft: " + ex.Message;
+            _message = "Local draft save could not be verified; it may already exist. Refresh before repeating: " + ex.Message;
         }
         finally { _busy = false; }
     }
@@ -321,11 +330,20 @@
         try
         {
             await DraftWorkspace.DiscardAsync(id);
-            _drafts = await DraftWorkspace.ListAsync();
-            _report = await QueueInspection.InspectAsync();
             _message = "Unpublished local draft discarded.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch
+            {
+                _drafts = [];
+                _message += " Screen refresh failed; inspect existing drafts before another change.";
+            }
         }
-        catch (Exception ex) { _message = "Draft was not discarded: " + ex.Message; }
+        catch (Exception ex) { _message = "Draft removal outcome could not be verified. Refresh first: " + ex.Message; }
         finally { _busy = false; }
     }
 
