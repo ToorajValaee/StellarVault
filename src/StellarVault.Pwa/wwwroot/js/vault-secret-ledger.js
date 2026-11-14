@@ -4,6 +4,10 @@
 window.stellarVaultSecretLedger = (() => {
   'use strict';
   const sessions = new Map();
+  // Public-only process-lifetime tombstones survive lock/reopen in this JS realm.
+  // They are deliberately NOT durable and never store a seed, quote, or payload.
+  const unresolvedByVault = new Map();
+  const vaultScope = (root, passphrase) => root+'|'+passphrase;
   const text = new TextEncoder(), decoder = new TextDecoder('utf-8', { fatal:true });
   const HDR='skh:', CHUNK='skc:', MAX_OPS=90, MAX_CHAIN=64;
   const MAINNET='Public Global Stellar Network ; September 2015';
@@ -105,7 +109,9 @@ window.stellarVaultSecretLedger = (() => {
         name:'HKDF',hash:'SHA-256',salt,info:text.encode('vault-records|skh/skc|v1')
       },ikm,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     } finally {seed.fill(0);}
-    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,needsReconciliation:false,uncertain:null};
+    const prior=unresolvedByVault.get(vaultScope(root,passphrase))||null;
+    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,
+      needsReconciliation:!!prior,uncertain:prior?{...prior}:null};
     await chain(state);
     sessions.set(id,state);
     return {RootAccountId:root};
@@ -428,10 +434,13 @@ window.stellarVaultSecretLedger = (() => {
         TargetAccountId:q.kind==='expand'?q.childId:q.node,
         RecordId:q.kind==='expand'?null:q.recordId,
         TransactionHash:null,NetworkPassphrase:s.passphrase};
+      unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
-      if(result?.hash && /^[0-9a-f]{64}$/i.test(result.hash))
+      if(result?.hash && /^[0-9a-f]{64}$/i.test(result.hash)) {
         s.uncertain.TransactionHash=result.hash;
+        unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
+      }
       if(!result?.hash || result.successful===false)
         fail('No confirmed Stellar transaction hash. Reconcile before retry.');
       // An accepted response must still be checked against the new ledger state.
@@ -451,6 +460,7 @@ window.stellarVaultSecretLedger = (() => {
       }
       s.needsReconciliation=false;
       s.uncertain=null;
+      unresolvedByVault.delete(vaultScope(s.root,s.passphrase));
       return result.hash;
     }finally {
       if(q.cipher)q.cipher.fill(0);
