@@ -436,7 +436,7 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
   const maui=fs.readFileSync(path.join(root,'src','StellarVault.Maui','MauiProgram.cs'),'utf8');
   assert.match(shared,/retention\.RequireLocalPersistence\(\)/);
   assert.match(shared,/sessions\.ActiveAccountId != accountId/);
-  assert.match(shared,/queue\.PrepareReviewAsync/);
+  assert.match(shared,/VaultPendingMutationReviewPolicy\.Build\(all\)/);
   assert.match(shared,/queue\.ReviewAllAsync/);
   assert.match(shared,/VaultHybridFolderSyncPlan\.Build/);
   assert.match(shared,/sessions\.Epoch != epoch/);
@@ -507,4 +507,20 @@ test('existing encrypted queue stores delegate transient key use to the shared s
   for (const host of [pwaHost,mauiHost]) {
     assert.match(host,/AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>/);
   }
+});
+
+
+test('queue readiness and folder graph use one authenticated mutation snapshot',()=>{
+  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const scoped=fs.readFileSync(path.join(root,'VaultScopedQueueReview.cs'),'utf8');
+  const queue=fs.readFileSync(path.join(root,'VaultPendingMutationQueue.cs'),'utf8');
+  const policy=fs.readFileSync(path.join(root,'VaultPendingMutationReviewPolicy.cs'),'utf8');
+  assert.match(scoped,/var all = await queue\.ReviewAllAsync\(accountId, scope, ct\)/);
+  assert.match(scoped,/VaultPendingMutationReviewPolicy\.Build\(all\)/);
+  assert.match(scoped,/VaultHybridFolderSyncPlan\.Build\(all, review\)/);
+  assert.doesNotMatch(scoped,/queue\.PrepareReviewAsync\(/);
+  assert.match(queue,/return VaultPendingMutationReviewPolicy\.Build\(all\)/);
+  assert.match(policy,/VaultMutationStrategyPolicy\.Resolve\(item\.OriginStrategyId\)/);
+  assert.match(policy,/Independent linked-key queue intent cannot be published/);
+  assert.match(policy,/VaultQueuedCreatePolicy\.Problems\(item, all\)/);
 });
