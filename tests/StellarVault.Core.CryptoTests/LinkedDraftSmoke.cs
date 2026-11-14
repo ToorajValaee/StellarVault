@@ -75,23 +75,6 @@ internal static class LinkedDraftSmoke
             Require(ledger.Submissions == 0,
                 "Rejected changed quote sent a network transaction.");
 
-            // Exercise approved capacity expansion before any unresolved record
-            // transaction blocks further writes.
-            var strategy = new FakeLinkedAccountStrategy(ledger);
-            var expansion = new VaultLinkedAccountExpansion(
-                ledger, network, new VaultAccountStrategyFactory([strategy]));
-            var journal = new VaultLinkedExpansionJournal(
-                expansion, ledger, store, keys, linkedRetention, network);
-            var extensionQuote = await journal.PrepareAsync();
-            Require(extensionQuote.Kind == "expand" && extensionQuote.CreatesChildNode &&
-                    ledger.Submissions == 0, "Preparing a linked expansion caused a broadcast.");
-            await journal.SubmitApprovedAsync(extensionQuote, true);
-            Require(ledger.AccountCount == 2 && ledger.Tail != Root &&
-                    (await drafts.ListAsync()).Any(x =>
-                        x.Title == "Linked account capacity expansion" &&
-                        x.State == VaultSyncState.Confirmed),
-                "Approved linked account expansion was not recorded durably.");
-
             var folderReview = await publisher.PrepareAsync(folder.MutationId);
             Require(ledger.Submissions == 0,
                 "Preparing a linked draft quote unexpectedly broadcast a transaction.");
@@ -107,7 +90,11 @@ internal static class LinkedDraftSmoke
                 "Unverified parent submission incorrectly unblocked its child.");
             await MustRejectAsync(() => publisher.PrepareAsync(child.MutationId),
                 "Child was offered for publication before independent parent proof.");
-            await MustRejectAsync(() => journal.PrepareAsync(),
+            var blockedExpansion = new VaultLinkedExpansionJournal(
+                new VaultLinkedAccountExpansion(ledger, network,
+                    new VaultAccountStrategyFactory([new FakeLinkedAccountStrategy(ledger)])),
+                ledger, store, keys, linkedRetention, network);
+            await MustRejectAsync(() => blockedExpansion.PrepareAsync(),
                 "Linked expansion was offered while an unresolved record submission exists.");
 
             var recovery = new VaultLinkedDraftRecoveryReview(ledger, store, keys,
@@ -188,7 +175,72 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunSuccessfulExpansionQuarantineSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-expansion-success-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            const string passphrase = "linked expansion success passphrase";
+            await keys.CreateAsync(passphrase);
+            var queuePath = Path.Combine(directory, "queue");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, queuePath, network);
+            var drafts = new VaultLinkedDraftWorkspace(
+                ledger, keys, store, consent, network);
+            var expansion = new VaultLinkedAccountExpansion(ledger, network,
+                new VaultAccountStrategyFactory([new FakeLinkedAccountStrategy(ledger)]));
+            var journal = new VaultLinkedExpansionJournal(
+                expansion, ledger, store, keys, consent, network);
+
+            var approved = await journal.PrepareAsync();
+            Require(ledger.Submissions == 0, "Preparing linked expansion caused a broadcast.");
+            var hash = await journal.SubmitApprovedAsync(approved, true);
+            var entries = await drafts.ListAsync();
+            Require(hash.Length == 64 && ledger.AccountCount == 2 &&
+                    entries.Count(x => x.IsJournal &&
+                        x.State == VaultSyncState.Uncertain) == 1,
+                "Successful linked expansion was confirmed without historical signer proof.");
+            await MustRejectAsync(() => journal.PrepareAsync(),
+                "Snapshot-visible expansion bypassed the durable quarantine.");
+
+            await keys.LockAsync();
+            await keys.UnlockAsync(passphrase);
+            var reopenedStore = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, queuePath, network);
+            var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
+            try
+            {
+                Require(durable.Any(x => x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                    x.State == VaultSyncState.Uncertain && x.TransactionHash == hash),
+                    "A successfully submitted expansion lost its quarantine after reopening.");
+            }
+            finally
+            {
+                foreach (var item in durable)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(item.EncryptedPayload);
+            }
+            await MustRejectAsync(() => journal.PrepareAsync(),
+                "A reopened linked expansion was offered for unsafe retry.");
+            Console.WriteLine("PASS: successful linked expansion remains unconfirmed pending historical proof");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunUncertainExpansionSmokeAsync()
