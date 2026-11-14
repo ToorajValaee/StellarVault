@@ -165,6 +165,11 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             (finding.Kind != "expand" && (finding.RecordId is not { Length: 16 } ||
                 !finding.RecordId.All(Uri.IsHexDigit))) ||
             string.IsNullOrWhiteSpace(finding.NetworkPassphrase) ||
+            finding.NetworkPassphrase.Length > 512 ||
+            !Uri.TryCreate(finding.HorizonUrl, UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme != Uri.UriSchemeHttps ||
+            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 ||
+            endpoint.Fragment.Length != 0 || endpoint.AbsolutePath != "/" ||
             (finding.TransactionHash is not null &&
                 (finding.TransactionHash.Length != 64 ||
                  !finding.TransactionHash.All(Uri.IsHexDigit))))
