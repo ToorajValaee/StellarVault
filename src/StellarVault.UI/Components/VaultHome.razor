@@ -9,6 +9,8 @@
 @inject IStellarSecretKeyLedger SecretLedger
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
@@ -75,6 +77,33 @@
                 <h1>Unlock your vault</h1>
                 <p>@(_credentialMode == VaultCredentialMode.MnemonicHd ? "Enter your recovery phrase to securely access your StellarVault workspace." : "Inspect an independent vault rooted in your existing Stellar secret key.")</p>
             </div>
+        @if (Platform == "WEB PWA")
+        {
+            <details class="sv-access-storage-settings sv-entry-storage-outside" open="@(_credentialMode == VaultCredentialMode.MnemonicHd ? _enableLocalStorage : LinkedRetention.AllowsLocalPersistence)">
+                <summary>Save encrypted items on this device (optional)</summary>
+                <fieldset class="sv-access-storage-choices" disabled="@_busy">
+                    <legend class="sr-only">Device storage preference</legend>
+                    <label class="sv-biometric-choice">
+                        <input type="radio" name="device-retention" checked="@(!CurrentDeviceStoragePreference)"
+                               @onchange="() => SelectDeviceStorageAsync(false)" />
+                        Stellar only — do not enable device storage
+                    </label>
+                    <label class="sv-biometric-choice">
+                        <input type="radio" name="device-retention" checked="@CurrentDeviceStoragePreference"
+                               @onchange="() => SelectDeviceStorageAsync(true)" />
+                        Save encrypted items on this device
+                    </label>
+                </fieldset>
+                @if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
+                {
+                    <p class="advanced-help">S-key vaults use their own encrypted storage, local passphrase and consent. After connecting, set up or unlock encrypted drafts in the Secret Key workspace. This selection does not store your S-key or enable automatic synchronization.</p>
+                }
+                else
+                {
+                    <p class="advanced-help">HD device storage is encrypted using your separate vault passphrase. Choosing Stellar only does not delete previously stored encrypted data.</p>
+                }
+            </details>
+        }
         <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
             @if (Platform == "WEB PWA")
@@ -108,17 +137,6 @@
                     </details>
                 }
 
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd)
-                {
-                <details class="sv-access-storage-settings" open="@_enableLocalStorage">
-                    <summary>Save encrypted items on this device (optional)</summary>
-                    <fieldset class="sv-access-storage-choices">
-                        <legend class="sr-only">Device storage choice</legend>
-                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> Stellar only — nothing saved on this device</label>
-                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Save encrypted items on this device</label>
-                    </fieldset>
-                </details>
-                }
                 @if (_credentialMode == VaultCredentialMode.MnemonicHd && _enableLocalStorage)
                 {
                 <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
@@ -540,6 +558,31 @@
         _postAccessUrl = null;
         if (destination is not null) Navigation.NavigateTo(destination);
     }
+    private bool CurrentDeviceStoragePreference =>
+        _credentialMode == VaultCredentialMode.MnemonicHd
+            ? _enableLocalStorage : LinkedRetention.AllowsLocalPersistence;
+
+    private async Task SelectDeviceStorageAsync(bool enabled)
+    {
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected)
+            return;
+        if (_credentialMode == VaultCredentialMode.MnemonicHd)
+        {
+            _enableLocalStorage = enabled;
+            if (!enabled) _requestBiometricEnrollment = false;
+            return;
+        }
+        if (enabled)
+        {
+            LinkedRetention.GrantExplicitConsent();
+        }
+        else
+        {
+            await LinkedQueueKeys.LockAsync();
+            LinkedRetention.Reset();
+        }
+    }
+
     private VaultCredentialMode _credentialMode = VaultCredentialMode.MnemonicHd;
     private string _secretKey = string.Empty;
     private VaultSecretChainInspection? _secretChainInspection;
