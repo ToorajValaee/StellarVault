@@ -5,6 +5,7 @@
 @inject VaultSessionWorkflow Workflow
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
+@inject IStellarSecretKeyVaultDiscovery SecretChain
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
@@ -71,15 +72,34 @@
             <div class="sv-entry-intro">
                 <span class="sv-entry-kicker">SECURE ACCESS</span>
                 <h1>Unlock your vault</h1>
-                <p>Enter your recovery phrase to securely access your StellarVault workspace.</p>
+                <p>@(_credentialMode == VaultCredentialMode.MnemonicHd ? "Enter your recovery phrase to securely access your StellarVault workspace." : "Inspect an independent vault rooted in your existing Stellar secret key.")</p>
             </div>
         <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
             @if (Platform == "WEB PWA")
             {
-                <div class="sv-entry-field-heading"><span class="terminal-label">Recovery phrase</span><span class="sv-entry-field-hint">12–24 words</span></div>
-                <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
-                @if (_recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
+                <div class="sv-credential-mode-picker" role="group" aria-label="Vault credential type">
+                    <button type="button" class="@(_credentialMode == VaultCredentialMode.MnemonicHd ? "selected" : "")"
+                            aria-pressed="@(_credentialMode == VaultCredentialMode.MnemonicHd)"
+                            disabled="@_busy" @onclick='() => SelectCredentialMode(VaultCredentialMode.MnemonicHd)'>Recovery phrase / HD</button>
+                    <button type="button" class="@(_credentialMode == VaultCredentialMode.StellarSecretKeyChain ? "selected" : "")"
+                            aria-pressed="@(_credentialMode == VaultCredentialMode.StellarSecretKeyChain)"
+                            disabled="@_busy" @onclick='() => SelectCredentialMode(VaultCredentialMode.StellarSecretKeyChain)'>Stellar secret key</button>
+                </div>
+                @if (_credentialMode == VaultCredentialMode.MnemonicHd)
+                {
+                    <div class="sv-entry-field-heading"><span class="terminal-label">Recovery phrase</span><span class="sv-entry-field-hint">12–24 words</span></div>
+                    <VaultMnemonicInput @bind-Value="_mnemonic" Disabled="@(_busy || Sessions.IsUnlocked)" />
+                }
+                else
+                {
+                    <label class="terminal-label" for="sv-secret-key">Stellar secret key (S-key)</label>
+                    <input id="sv-secret-key" class="terminal-input" type="password" autocomplete="off"
+                           autocapitalize="characters" spellcheck="false" maxlength="56"
+                           @bind="_secretKey" @bind:event="oninput" disabled="@_busy" />
+                    <p class="advanced-help">This is an independent account-chain architecture, not an HD wallet. Read-only account-chain and signer inspection is available first; creating, editing and submitting Secret Key vault records is not yet enabled.</p>
+                }
+                @if (_credentialMode == VaultCredentialMode.MnemonicHd && _recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
                     <details class="sv-access-learn"><summary>Saved device vault</summary>
                         <p>Encrypted items for @_recentAccount are stored in this browser. Enter your recovery phrase and vault passphrase to reopen them.</p>
@@ -87,6 +107,8 @@
                     </details>
                 }
 
+                @if (_credentialMode == VaultCredentialMode.MnemonicHd)
+                {
                 <details class="sv-access-storage-settings" open="@_enableLocalStorage">
                     <summary>Save encrypted items on this device (optional)</summary>
                     <fieldset class="sv-access-storage-choices">
@@ -95,7 +117,8 @@
                         <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Save encrypted items on this device</label>
                     </fieldset>
                 </details>
-                @if (_enableLocalStorage)
+                }
+                @if (_credentialMode == VaultCredentialMode.MnemonicHd && _enableLocalStorage)
                 {
                 <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
                 <input id="sv-passphrase" class="terminal-input" type="password"
@@ -113,7 +136,7 @@
                         </label>
                     </div>
                 }
-                @if (!Sessions.IsUnlocked && _enableLocalStorage)
+                @if (_credentialMode == VaultCredentialMode.MnemonicHd && !Sessions.IsUnlocked && _enableLocalStorage)
                 {
                     <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
                         Enable device unlock after signing in (optional)
@@ -147,7 +170,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit" disabled="@_busy"
-                                aria-describedby="sv-access-readiness">@(_busy ? "Opening…" : "Unlock vault")</button>
+                                aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Inspect linked accounts")</button>
                     }
                 </div>
                 @if (!Sessions.IsUnlocked)
@@ -196,6 +219,16 @@
             {
                 <p class="advanced-help" role="status">@_networkStatus</p>
             }
+            @if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain && _secretChainInspection is not null)
+            {
+                <section class="terminal-panel sv-secret-chain-summary" aria-label="Read-only linked account inspection">
+                    <h3>Linked account inspection</h3>
+                    <p>Root: <code>@_secretChainInspection.RootAccountId</code></p>
+                    <p>Verified account count: @_secretChainInspection.Accounts.Count</p>
+                    <p>Tail: <code>@_secretChainInspection.TailAccountId</code></p>
+                    <p class="advanced-help">Each account passed root-signer and chain-pointer checks. No secrets were stored and no Stellar transaction was sent. This is not yet a record unlock.</p>
+                </section>
+            }
             @if (!string.IsNullOrWhiteSpace(_message))
             {
                 <div class="terminal-alert warning" role="status">
@@ -203,7 +236,7 @@
                 </div>
             }
         </form>
-        <p class="sv-entry-privacy"><span aria-hidden="true">♧</span> Your recovery phrase is handled in this session. Never share it with anyone.</p>
+        <p class="sv-entry-privacy"><span aria-hidden="true">♧</span> Your recovery credential stays in this session. Never share it with anyone.</p>
         </div>
     </div>
     @if (Sessions.IsUnlocked && Platform != "WEB PWA")
@@ -506,6 +539,18 @@
         _postAccessUrl = null;
         if (destination is not null) Navigation.NavigateTo(destination);
     }
+    private VaultCredentialMode _credentialMode = VaultCredentialMode.MnemonicHd;
+    private string _secretKey = string.Empty;
+    private VaultSecretChainInspection? _secretChainInspection;
+    private void SelectCredentialMode(VaultCredentialMode mode)
+    {
+        if (_busy || _credentialMode == mode) return;
+        _credentialMode = mode;
+        _secretKey = string.Empty;
+        _secretChainInspection = null;
+        ClearMnemonic();
+        _message = null;
+    }
     private string _mnemonic = string.Empty;
     private readonly string[] _mnemonicWords = new string[24];
     private int _mnemonicWordCount = 12;
@@ -665,7 +710,10 @@
     {
         get
         {
-            if (_busy) return "Opening the vault…";
+            if (_busy) return "Checking vault credential…";
+            if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
+                return _secretKey.Length != 56 ? "Enter your existing 56-character Stellar S-key to inspect its account chain." :
+                    "Ready for read-only signer and chain inspection. No transaction will be sent.";
             if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
                 return $"Enter a complete 12, 15, 18, 21 or 24-word recovery phrase ({EnteredWordCount} words entered).";
             if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
@@ -683,6 +731,11 @@
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected) return;
+        if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
+        {
+            await InspectSecretKeyChainAsync();
+            return;
+        }
         if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
         {
             _message = "Enter a complete BIP-39 recovery phrase of 12, 15, 18, 21 or 24 words.";
@@ -862,6 +915,49 @@
         {
             ClearMnemonic();
             _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task InspectSecretKeyChainAsync()
+    {
+        _secretChainInspection = null;
+        _message = null;
+        _busy = true;
+        try
+        {
+            new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, _secretKey).Validate();
+            if (_network == "public" && !_confirmMainnetAccess)
+                throw new InvalidOperationException("Confirm the Mainnet risk notice first.");
+            if (_network == "custom" &&
+                (string.IsNullOrWhiteSpace(_customPassphrase) ||
+                 NetworkSelection.CustomPassphrase != _customPassphrase ||
+                 _detectedHorizon != _customHorizon.Trim()))
+                throw new InvalidOperationException("Detect the custom network first.");
+
+            var horizon = _network switch
+            {
+                "public" => "https://horizon.stellar.org",
+                "testnet" => "https://horizon-testnet.stellar.org",
+                _ => _customHorizon
+            };
+            var passphrase = _network switch
+            {
+                "public" => "Public Global Stellar Network ; September 2015",
+                "testnet" => "Test SDF Network ; September 2015",
+                _ => _customPassphrase ?? throw new InvalidOperationException("Custom network is not configured.")
+            };
+            _secretChainInspection = await SecretChain.InspectAsync(_secretKey, horizon, passphrase);
+            _message = "Account chain inspected successfully. Secret-key record access and signing are not yet enabled.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("Secret-key chain inspection unavailable: {ErrorType}", ex.GetType().Name);
+            _message = "Secret-key inspection failed. Verify the network, funded root account, linked-account pointers and root signer permissions.";
+        }
+        finally
+        {
+            _secretKey = string.Empty;
             _busy = false;
         }
     }
