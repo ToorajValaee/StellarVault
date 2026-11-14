@@ -1045,4 +1045,9 @@ test('PWA device storage choice stays outside credential tabs and keeps mode-sco
   assert.match(home,/LinkedRetention\.Reset\(\)/);
   assert.match(home,/_enableLocalStorage = enabled/);
   assert.match(css,/sv-entry-storage-outside/);
+  const actions=home.indexOf('class="sv-access-actions sv-entry-actions-outside"');
+  const formEnd=home.indexOf('</form>',form);
+  assert.ok(actions>formEnd,'Unlock action must remain outside credential form');
+  assert.match(home,/type="submit" form="sv-access-form"/);
+  assert.match(css,/sv-entry-actions-outside/);
 });
