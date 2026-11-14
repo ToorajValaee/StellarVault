@@ -17,7 +17,7 @@ public sealed class VaultLinkedDraftWorkspace(
 {
     public sealed record DraftItem(string MutationId, string EntityId,
         bool IsFolder, string Title, string? FolderId, VaultSyncState State,
-        DateTimeOffset CreatedUtc, bool IsCorrupt);
+        DateTimeOffset CreatedUtc, bool IsCorrupt, bool IsJournal = false);
 
     public sealed record DraftDetail(string MutationId,
         LedgerRecordDraft Draft, string PayloadSha256);
@@ -316,7 +316,7 @@ public sealed class VaultLinkedDraftWorkspace(
                     // not an encrypted record or an editable local folder.
                     result.Add(new(item.Id, item.EntityId, false,
                         "Linked account capacity expansion", null,
-                        item.State, item.CreatedUtc, true));
+                        item.State, item.CreatedUtc, false, true));
                     continue;
                 }
                 try
