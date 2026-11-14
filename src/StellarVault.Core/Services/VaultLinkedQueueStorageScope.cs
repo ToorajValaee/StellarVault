@@ -40,4 +40,6 @@ public interface IVaultLinkedDraftStore : IVaultLinkedQueueSnapshotStore
 {
     Task<bool> AddAsync(VaultPendingMutation mutation, CancellationToken ct = default);
     Task<bool> TryDeleteAsync(VaultPendingMutation expected, CancellationToken ct = default);
+    Task<bool> TryReplaceAsync(VaultPendingMutation previous, VaultPendingMutation next,
+        CancellationToken ct = default);
 }
