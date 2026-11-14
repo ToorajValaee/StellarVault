@@ -13,7 +13,7 @@ public enum VaultSyncState
     Failed = 5
 }
 
-public enum VaultMutationKind { CreateRecord, UpdateRecord, DeleteRecord, CreateFolder, UpdateFolder, DeleteFolder, UploadFile, DeleteFile }
+public enum VaultMutationKind { CreateRecord, UpdateRecord, DeleteRecord, CreateFolder, UpdateFolder, DeleteFolder, UploadFile, DeleteFile, ExtendLinkedChain }
 
 /// <summary>One signed deletion transaction for one deterministic HD manifest owner.
 /// Stored only within the account/network encrypted queue entry.</summary>
@@ -120,6 +120,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         // The current queue authoring path is HD-bound. Linked-key entries need
         // a separately authenticated key lifecycle before they may be created.
         VaultMutationStrategyPolicy.RequireHd(entry);
+        if (entry.Kind == VaultMutationKind.ExtendLinkedChain)
+            throw new InvalidOperationException(
+                "Linked-account expansion journals are never HD queue mutations.");
         if (entry.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile)
             VaultHybridFilePolicy.RequireEnabled();
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
