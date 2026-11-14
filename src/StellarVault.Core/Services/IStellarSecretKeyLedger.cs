@@ -22,6 +22,7 @@ public interface IStellarSecretKeyLedger
         CancellationToken cancellationToken = default);
     Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(
         CancellationToken cancellationToken = default);
+    Task CancelQuoteAsync(string quoteId);
     Task<string> SubmitApprovedAsync(string quoteId,
         CancellationToken cancellationToken = default);
     Task DisconnectAsync();
@@ -56,6 +57,7 @@ public sealed class UnavailableStellarSecretKeyLedger : IStellarSecretKeyLedger
         Task.FromException<VaultSecretLedgerQuote>(NotAvailable());
     public Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(CancellationToken cancellationToken=default) =>
         Task.FromException<VaultSecretLedgerQuote>(NotAvailable());
+    public Task CancelQuoteAsync(string quoteId) => Task.FromException(NotAvailable());
     public Task<string> SubmitApprovedAsync(string quoteId,CancellationToken cancellationToken=default) =>
         Task.FromException<string>(NotAvailable());
     public Task DisconnectAsync() => Task.CompletedTask;
