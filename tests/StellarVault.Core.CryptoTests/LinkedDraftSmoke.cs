@@ -95,12 +95,29 @@ internal static class LinkedDraftSmoke
                     ledger.Submissions == 2 && (await ledger.ReadAsync()).Count == 2,
                 "Linked child was not published after its confirmed parent.");
 
+            var strategy = new FakeLinkedAccountStrategy(ledger);
+            var expansion = new VaultLinkedAccountExpansion(
+                ledger, network, new VaultAccountStrategyFactory([strategy]));
+            var journal = new VaultLinkedExpansionJournal(
+                expansion, ledger, store, keys, linkedRetention, network);
+            var extensionQuote = await journal.PrepareAsync();
+            Require(extensionQuote.Kind == "expand" && extensionQuote.CreatesChildNode &&
+                    ledger.Submissions == 2, "Preparing a linked expansion caused a broadcast.");
+            await journal.SubmitApprovedAsync(extensionQuote, true);
+            Require(ledger.AccountCount == 2 && ledger.Tail != Root &&
+                    (await drafts.ListAsync()).Any(x =>
+                        x.Title == "Linked account capacity expansion" &&
+                        x.State == VaultSyncState.Confirmed),
+                "Approved linked account expansion was not recorded durably.");
+
             var pending = await drafts.CreateAsync(
                 new LedgerRecordDraft("Uncertain", "opaque", null, [], false));
             var uncertainReview = await publisher.PrepareAsync(pending.MutationId);
             ledger.FailNextSubmission = true;
             await MustRejectAsync(() => publisher.SubmitAsync(uncertainReview.Quote, true),
                 "Uncertain network transmission returned as a confirmed success.");
+            await MustRejectAsync(() => journal.PrepareAsync(),
+                "Linked account expansion was offered while an unresolved record submission exists.");
             var uncertainPlan = await drafts.ReviewManualSyncAsync();
             Require(uncertainPlan.UnresolvedCount > 0 && !uncertainPlan.CanReviewNext,
                 "Manual sync offered publishing while an unresolved transaction exists.");
@@ -204,12 +221,39 @@ internal static class LinkedDraftSmoke
         throw new Exception(message);
     }
 
+    private sealed class FakeLinkedAccountStrategy(FakeLinkedLedger ledger)
+        : IVaultAccountProvisioningStrategy
+    {
+        public string BlockchainId => ConnectedStellarAccountStrategy.StellarChain;
+        public string StrategyId => ConnectedStellarAccountStrategy.LinkedMode;
+
+        public Task<VaultAccountHandle> CreateNextAsync(
+            VaultAccountRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromException<VaultAccountHandle>(
+                new NotSupportedException("Fake account provisioning never signs."));
+
+        public Task<VaultAccountInspection> InspectConnectedAsync(
+            VaultAccountRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new VaultAccountInspection(
+                BlockchainId, request.NetworkId, request.VaultId, StrategyId,
+                FakeLinkedLedger.RootAddress, ledger.Tail, ledger.AccountCount));
+
+        public Task<IReadOnlyList<VaultAccountHandle>> DiscoverAsync(
+            VaultAccountRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<VaultAccountHandle>>([]);
+    }
+
     private sealed class FakeLinkedLedger : IStellarSecretKeyLedger
     {
+        public const string RootAddress = Root;
         private readonly List<LedgerRecordItem> _items = [];
         private string? _quotedId;
         private LedgerRecordDraft? _quotedDraft;
         private string? _quoteId;
+        private string? _quoteKind;
+        public string Tail { get; private set; } = Root;
+        public int AccountCount { get; private set; } = 1;
+        public const string ExpansionTarget = "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H";
 
         public bool IsConnected { get; private set; } = true;
         public string? RootAccountId => IsConnected ? Root : null;
@@ -231,7 +275,7 @@ internal static class LinkedDraftSmoke
 
         public Task<LedgerAccountInfo> InspectAccountInfoAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult(new LedgerAccountInfo(Root, Root, 1,
+            Task.FromResult(new LedgerAccountInfo(Root, Tail, AccountCount,
                 _items.Count(x => !x.IsFolder), _items.Count(x => x.IsFolder),
                 "500.0000000", "495.0000000", "0.0000000"));
 
@@ -240,6 +284,7 @@ internal static class LinkedDraftSmoke
         {
             _quotedId = recordId;
             _quotedDraft = draft;
+            _quoteKind = "create";
             _quoteId = Guid.NewGuid().ToString("N");
             return Task.FromResult(new VaultSecretLedgerQuote(
                 _quoteId, "create", 2, 1,
@@ -254,8 +299,14 @@ internal static class LinkedDraftSmoke
             CancellationToken cancellationToken = default) =>
             Task.FromException<VaultSecretLedgerQuote>(new NotSupportedException());
         public Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(
-            CancellationToken cancellationToken = default) =>
-            Task.FromException<VaultSecretLedgerQuote>(new NotSupportedException());
+            CancellationToken cancellationToken = default)
+        {
+            _quoteKind = "expand";
+            _quoteId = Guid.NewGuid().ToString("N");
+            return Task.FromResult(new VaultSecretLedgerQuote(
+                _quoteId, "expand", 4, 1, "0.0000400", "1.5000000",
+                "1.5000000", true, ExpansionTarget, "2.0000000"));
+        }
         public Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
             CancellationToken cancellationToken = default) =>
             Task.FromResult<VaultSecretSubmissionDiagnostic?>(null);
@@ -268,8 +319,9 @@ internal static class LinkedDraftSmoke
         public Task<string> SubmitApprovedAsync(string quoteId,
             CancellationToken cancellationToken = default)
         {
-            if (_quoteId != quoteId || _quotedId is null || _quotedDraft is null)
-                throw new InvalidOperationException("Quote not prepared for exact record.");
+            if (_quoteId != quoteId ||
+                (_quoteKind == "create" && (_quotedId is null || _quotedDraft is null)))
+                throw new InvalidOperationException("Quote not prepared for exact operation.");
             Submissions++;
             _quoteId = null;
             if (FailNextSubmission)
@@ -277,7 +329,13 @@ internal static class LinkedDraftSmoke
                 FailNextSubmission = false;
                 throw new IOException("Simulated unknown Stellar transmission result.");
             }
-            var draft = _quotedDraft;
+            if (_quoteKind == "expand")
+            {
+                Tail = ExpansionTarget;
+                AccountCount++;
+                return Task.FromResult(Submissions.ToString("x64"));
+            }
+            var draft = _quotedDraft!;
             _items.Add(new LedgerRecordItem(
                 _quotedId, draft.Title, draft.Content, draft.FolderId,
                 draft.Tags, draft.IsFolder, draft.UserName, draft.Url, draft.Notes));
