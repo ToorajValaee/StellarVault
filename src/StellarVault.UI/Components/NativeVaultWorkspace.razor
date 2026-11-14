@@ -74,7 +74,7 @@ else
                         }
                     </div>
                 </details>
-                <span class="sv-native-online-pill"><span aria-hidden="true">◉</span> @(Ledger.IsConnected ? "Online · Connected" : "Offline · Local")</span>
+                <span class="sv-native-online-pill"><span aria-hidden="true">◉</span> @(Ledger.IsConnected || SecretLedger.IsConnected ? "Online · Connected" : "Offline · Local")</span>
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
@@ -85,7 +85,7 @@ else
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
-            @if (_nativePage != "stellar" || Ledger.IsConnected)
+            @if (_nativePage != "stellar" || Ledger.IsConnected || SecretLedger.IsConnected)
             {
                 <div class="sv-native-page-heading">
                     <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : _nativePage == "settings" ? "Settings" : "Sync")</h1>
@@ -739,7 +739,7 @@ else
     private string _customHorizon = string.Empty;
     private string? _networkError;
     private bool _networkDiscovering;
-    private bool CanChangeNetwork => !_foregroundRevoked && !Ledger.IsConnected && !Sessions.IsUnlocked && !_ledgerBusy && !_networkDiscovering;
+    private bool CanChangeNetwork => !_foregroundRevoked && !Ledger.IsConnected && !SecretLedger.IsConnected && !Sessions.IsUnlocked && !_ledgerBusy && !_networkDiscovering;
     private string NetworkLabel => _ledgerNetwork switch
     {
         "testnet" => "Testnet", "public" => "Mainnet", _ => "Custom"
@@ -1350,7 +1350,7 @@ else
 
     private async Task InspectNativeSecretChainAsync()
     {
-        if (_ledgerBusy || _secretRuntimeReady != true ||
+        if (_ledgerBusy || Ledger.IsConnected || SecretLedger.IsConnected || _secretRuntimeReady != true ||
             _ledgerCredentialMode != VaultCredentialMode.StellarSecretKeyChain ||
             (_ledgerNetwork == "public" && !_confirmMainnetAccess) ||
             (_ledgerNetwork == "custom" && !CustomNetworkReady)) return;
@@ -1405,7 +1405,7 @@ else
 
     private async Task ConnectLedgerAsync()
     {
-        if (_ledgerBusy || Ledger.IsConnected || _runtimeReady != true ||
+        if (_ledgerBusy || Ledger.IsConnected || SecretLedger.IsConnected || _runtimeReady != true ||
             (_ledgerNetwork == "public" && !_confirmMainnetAccess) ||
             (_ledgerNetwork == "custom" && !CustomNetworkReady)) return;
         _ledgerBusy = true;
