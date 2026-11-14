@@ -42,11 +42,11 @@ public static class VaultSyncApprovalGuard
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(current);
-        if (maxAge <= TimeSpan.Zero || now < snapshot.QuotedUtc ||
-            now - snapshot.QuotedUtc > maxAge)
-            throw new InvalidOperationException("Sync quote expired. Review costs again.");
-        if (snapshot.AccountId != accountId || snapshot.NetworkId != networkId ||
-            current.AccountId != accountId || current.NetworkId != networkId ||
+        // Share the account/network and lifetime boundary with independent
+        // linked-account quote reviews, without sharing signing credentials.
+        VaultApprovalScopeGuard.RequireFresh(snapshot.AccountId, snapshot.NetworkId,
+            accountId, networkId, snapshot.QuotedUtc, now, maxAge);
+        if (current.AccountId != accountId || current.NetworkId != networkId ||
             snapshot.MutationId != current.Id || current.State != VaultSyncState.Pending ||
             current.TransactionHash is not null ||
             !string.Equals(snapshot.DraftSha256, Digest(current), StringComparison.Ordinal))
