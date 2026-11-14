@@ -453,8 +453,8 @@
         {
             _manualSyncPlan = null;
             var hash = await Publisher.SubmitAsync(approved.Quote, true);
-            _message = "Connected Stellar record state and encrypted queue confirmed for transaction: " + hash +
-                ". Independent historical operation verification remains pending security review.";
+            _message = "Transaction submitted; matching current record observed. Queue remains UNCERTAIN for transaction: " + hash +
+                ". Current state is not historical transaction proof. Do not retry until independently reconciled.";
             try
             {
                 _drafts = await DraftWorkspace.ListAsync();
