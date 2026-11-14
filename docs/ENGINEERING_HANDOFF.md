@@ -790,3 +790,11 @@ Follow-up priorities: (1) run .NET 10 builds and both Node suites, (2) perform c
 - New shared `VaultConnectedStellarAccountInventory` maps explicit credential mode to the already-connected HD or linked S-key ledger inventory; no mnemonic/S-key extraction, new transaction submission, or signer-chain proof. This is intentionally separate from the still-unwired `VaultAccountStrategyFactory`.
 - EVM is explicitly last priority; do not implement an EVM adapter before Stellar production blockers, record/file parity, sharing and import/export foundations.
 - All changes are source-only on `architecture/pluggable-vault-records-and-chains`; no build/tests or device validation run. Review for compile/runtime behavior and preserve existing Mainnet and sync safety gates.
+
+
+## 2026-11-14: Stellar strategy and typed ledger integration
+- Registered concrete HD and linked Stellar account strategies in PWA and MAUI, supporting explicitly selected, connected, read-only inventory inspection. Account creation and per-node discovery still fail closed until approved transaction and chain proof integrations are complete.
+- Linked-key workspace refresh and post-submit checks inspect account-count/tail through the selected strategy factory. The HD and secret-key ledger transports remain separate.
+- HD ledger draft estimate/publish/update and linked-key quoted drafts now validate logical credential/folder types using the same record factory; on-chain wire formats are unchanged.
+- Local binary files with MIME text/plain are rejected because the historical encrypted catalog lacks an explicit file-vs-text discriminator.
+- No builds, tests, EVM implementations, sharing or import/export performed. Source-only draft PR; preserve Mainnet and Sync safety restrictions.
