@@ -139,6 +139,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
         var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
         return entries.Where(x => x.State == VaultSyncState.Pending &&
+            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Hd &&
             // DeleteFile is staged only until a dedicated multi-record
             // tombstone journal and verifier are implemented.
             x.Kind is not (VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile) &&
@@ -167,10 +168,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             var missing = dependencies.Where(id => !byId.ContainsKey(id)).ToArray();
             var waiting = dependencies.Where(id => byId.TryGetValue(id, out var parent) &&
                 parent.State != VaultSyncState.Confirmed).ToArray();
-            var problems = item.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile
-                ? new[] { "Hybrid file operations are disabled. Keep any existing signed journal for read-only reconciliation; use direct on-chain files for new work." }
-                : item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
-                    ? VaultQueuedCreatePolicy.Problems(item, all) : [];
+            var problems = VaultMutationStrategyPolicy.Resolve(item.OriginStrategyId) != VaultMutationStrategyPolicy.Hd
+                ? new[] { "Independent linked-key queue intent cannot be published through the HD transport." }
+                : item.Kind is VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile
+                    ? new[] { "Hybrid file operations are disabled. Keep any existing signed journal for read-only reconciliation; use direct on-chain files for new work." }
+                    : item.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                        ? VaultQueuedCreatePolicy.Problems(item, all) : [];
             if (problems.Length == 0 && missing.Length == 0 && waiting.Length == 0)
                 ready.Add(item);
             else
