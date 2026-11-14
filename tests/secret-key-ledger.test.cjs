@@ -479,3 +479,32 @@ test('encrypted queue origin is versioned, immutable and not implicitly upgraded
     assert.match(store,/VaultMutationStrategyPolicy\.Validate\(item\.OriginStrategyId\)/);
   }
 });
+
+
+test('existing encrypted queue stores delegate transient key use to the shared session interface',()=>{
+  const root=path.join(__dirname,'..','src');
+  const core=path.join(root,'StellarVault.Core','Services');
+  const pwa=path.join(root,'StellarVault.Pwa','Services');
+  const seam=fs.readFileSync(path.join(core,'IVaultQueueKeySession.cs'),'utf8');
+  const native=fs.readFileSync(path.join(core,'FileSystemVaultPendingMutationStore.cs'),'utf8');
+  const browser=fs.readFileSync(path.join(pwa,'IndexedDbVaultPendingMutationStore.cs'),'utf8');
+  const queue=fs.readFileSync(path.join(core,'VaultPendingMutationQueue.cs'),'utf8');
+  const pwaHost=fs.readFileSync(path.join(root,'StellarVault.Pwa','Program.cs'),'utf8');
+  const mauiHost=fs.readFileSync(path.join(root,'StellarVault.Maui','MauiProgram.cs'),'utf8');
+  assert.match(seam,/interface IVaultQueueKeySession/);
+  assert.match(seam,/class VaultLocalQueueKeySession\(VaultSessionManager sessions\)/);
+  assert.match(seam,/sessions\.ExecuteAsync/);
+  assert.match(seam,/sessions\.ActiveAccountId != accountId/);
+  assert.match(native,/IVaultQueueKeySession keySession/);
+  assert.match(browser,/IVaultQueueKeySession keySession/);
+  assert.match(native,/keySession\.ExecuteAsync\(accountId, networkId/);
+  assert.match(browser,/keySession\.ExecuteAsync\(accountId, networkId/);
+  assert.match(native,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(browser,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(queue,/VaultMutationStrategyPolicy\.RequireHd\(item\)/);
+  assert.match(queue,/a\.OriginStrategyId == b\.OriginStrategyId/);
+  assert.match(queue,/VaultMutationStrategyPolicy\.Resolve\(x\.OriginStrategyId\) == VaultMutationStrategyPolicy\.Hd/);
+  for (const host of [pwaHost,mauiHost]) {
+    assert.match(host,/AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>/);
+  }
+});
