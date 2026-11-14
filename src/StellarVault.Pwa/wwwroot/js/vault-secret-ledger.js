@@ -330,7 +330,6 @@ window.stellarVaultSecretLedger = (() => {
     if(Number(tail.subentry_count||0)>=1000)
       fail('Tail account has no free entry for a chain link. Manual recovery is required; another account cannot be safely attached.');
     if(Object.hasOwn(tail.data_attr||{},'sv:next:v1'))fail('Tail link is occupied.');
-    const child=s.sdk.Keypair.random(),childId=child.publicKey();
     const childFunding=3n*s.net.reserve,pointerReserve=s.net.reserve;
     const opCount=tailId===s.root?3:4,fees=BigInt(opCount)*s.net.fee;
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
@@ -340,6 +339,8 @@ window.stellarVaultSecretLedger = (() => {
       decimalStroops(native?.selling_liabilities||'0');
     const required=childFunding+pointerReserve+fees;
     if(rootFree<required)fail('Root account cannot afford the child reserve, link and network fees.');
+    // Generate the temporary child signing key only after capacity/funding checks.
+    const child=s.sdk.Keypair.random(),childId=child.publicKey();
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     clearQuotes(s);s.quotes.set(quoteId,{kind:'expand',child,childId,tailId,created:Date.now(),
       opCount,fee:fees,reserve:childFunding+pointerReserve,required,
