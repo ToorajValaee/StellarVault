@@ -430,6 +430,10 @@ window.stellarVaultSecretLedger = (() => {
       tx.sign(s.pair);
       if(q.kind==='expand')tx.sign(q.child);
       let result;
+      // Recheck immediately before transmission: a different already-approved
+      // session may have submitted while this one was fetching network state.
+      if(unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+        fail('Another submission for this vault is unresolved; do not transmit a second transaction.');
       // From this point any network failure may mean the transaction was accepted.
       // Keep this session quarantined until the connected outcome is verified.
       s.needsReconciliation=true;
