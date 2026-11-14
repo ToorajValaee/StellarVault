@@ -598,6 +598,9 @@ test('independent S-key local queue key and ciphertext namespaces never alias HD
   assert.match(session,/IVaultLinkedPassphraseCredentialStore credentialStore/);
   assert.match(session,/retention\.RequireLocalPersistence\(\)/);
   assert.match(session,/ledger\.InspectAccountInfoAsync\(ct\)/);
+  assert.match(session,/var before = await ledger\.InspectAccountInfoAsync\(ct\)/);
+  assert.match(session,/var after = await ledger\.InspectAccountInfoAsync\(ct\)/);
+  assert.match(session,/after\.TailAccountId != before\.TailAccountId/);
   assert.match(session,/VaultLinkedQueueStorageScope\.FromNetworkScope\(_scope\)/);
   assert.match(session,/CryptographicOperations\.ZeroMemory\(_key\)/);
   assert.match(session,/CryptographicOperations\.ZeroMemory\(copy\)/);
