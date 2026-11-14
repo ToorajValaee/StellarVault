@@ -12,7 +12,6 @@ public sealed class VaultLinkedDraftWorkspace(
     IStellarSecretKeyLedger ledger,
     VaultLinkedQueueKeySession keys,
     IVaultLinkedDraftStore store,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     VaultNetworkSelection networks)
 {
@@ -24,7 +23,7 @@ public sealed class VaultLinkedDraftWorkspace(
 
     private Context RequireScope()
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || !ledger.IsConnected ||
             ledger.RootAccountId is not string root)
@@ -36,7 +35,7 @@ public sealed class VaultLinkedDraftWorkspace(
 
     private void Check(Context original)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || !ledger.IsConnected ||
             ledger.RootAccountId != original.Root ||
