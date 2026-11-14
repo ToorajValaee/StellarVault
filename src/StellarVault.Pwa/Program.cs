@@ -34,6 +34,8 @@ builder.Services.AddScoped<IVaultPreparedDeletionLedger>(
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
 builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore, IndexedDbVaultLinkedPassphraseCredentialStore>();
+builder.Services.AddScoped<VaultLinkedQueueKeySession>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
 builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
