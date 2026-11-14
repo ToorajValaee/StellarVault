@@ -486,3 +486,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - `VaultPendingMutation.OriginStrategyId` is optional trailing metadata. Null always means existing legacy HD; only `stellar-hd-v2` and `stellar-secret-key-chain` are recognized. Reject unknown IDs. Authenticated encrypted store CAS equality includes this value, and it cannot change during transitions.
 - HD queue enqueue/fee review must not accept tagged linked intents; linked read-only inspection must never count legacy entries as S-key. Strategy metadata is **not signer ownership evidence**. No linked local persistence/sync is enabled without a separately authenticated encryption key, local-storage consent and historical operation verification.
 - Keep reusing existing queue, folder graph and file infrastructure; regression source not executed. EVM is last priority.
+
+## Queue-key lifecycle seam and linked-origin isolation (2026-11-15)
+- Existing IndexedDB/MAUI encrypted queue stores now accept `IVaultQueueKeySession`; current `VaultLocalQueueKeySession` uses the existing local-vault unlock key, not imported S-key credentials. Do not register it as an S-key queue key source. The stores still enforce explicit device-storage consent and existing AES-GCM AAD/storage IDs.
+- `VaultPendingMutationQueue.SameDurableRevision` must compare origin; linked-origin entries must not enter HD state transitions or ready review. Read-only mixed-queue inspection remains allowed. The S-key provider requires independently authorized/derived keys and distinct namespace before enabling writes.
+- Source-only refactor, static regression cases not executed. Prefer adapting existing stores/CAS rather than another queue or file engine. EVM last.
