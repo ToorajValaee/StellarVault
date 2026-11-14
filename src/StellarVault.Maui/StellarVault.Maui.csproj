@@ -30,6 +30,8 @@
              Link="SharedStellarLedger/%(Filename)%(Extension)" />
     <Compile Include="../StellarVault.Pwa/Services/BrowserStellarLedgerRecords.cs"
              Link="SharedStellarLedger/BrowserStellarLedgerRecords.cs" />
+    <Compile Include="../StellarVault.Pwa/Services/BrowserSecretKeyVaultDiscovery.cs"
+             Link="SharedStellarLedger/BrowserSecretKeyVaultDiscovery.cs" />
     <!-- One host-neutral implementation of Horizon historical evidence,
          linked into native alongside the existing browser HD-v2 adapter. -->
     <Compile Include="../StellarVault.Pwa/Services/HorizonVault*Inspector.cs"
@@ -67,6 +69,8 @@
                LogicalName="wwwroot/js/hd-registry.js" />
     <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-v2-chain.js"
                LogicalName="wwwroot/js/vault-v2-chain.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-secret-chain.js"
+               LogicalName="wwwroot/js/vault-secret-chain.js" />
     <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/ledger-compat/*.js"
                LogicalName="wwwroot/js/ledger-compat/%(Filename)%(Extension)" />
   </ItemGroup>
