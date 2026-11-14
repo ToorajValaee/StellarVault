@@ -287,7 +287,11 @@ window.stellarVaultSecretLedger = (() => {
     }
     // A tail account needs one free ManageData entry for the future sv:next:v1 link.
     // For new records, reserve that slot rather than filling the last entry.
-    const reservedCeiling=kind==='create' ? 999 : 1000;
+    const isTail=node.account_id===v.nodes.at(-1).account_id;
+    // A tail must retain capacity for the next signed sv:next:v1 pointer even
+    // after an update. Existing non-tail nodes already have their pointer.
+    // Deletion cannot consume entries, so its peak capacity is unchanged.
+    const reservedCeiling=kind==='delete'||!isTail ? 1000 : 999;
     if(Number(node.subentry_count||0)+newUnits>reservedCeiling) {
       cipher?.fill(0);
       if(kind!=='create')
