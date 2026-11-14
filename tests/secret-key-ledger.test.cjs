@@ -640,3 +640,23 @@ test('linked queue key is revoked on PWA and MAUI app lifecycle boundaries',()=>
   assert.match(native,/await LinkedQueueKeys\.LockAsync\(\)/);
   assert.match(linked,/await LinkedQueueKeys\.LockAsync\(\)/);
 });
+
+
+test('linked S-key device UI requests explicit consent and separate local passphrase without publishing',()=>{
+  const root=path.join(__dirname,'..','src','StellarVault.UI','Components');
+  const panel=fs.readFileSync(path.join(root,'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const workspace=fs.readFileSync(path.join(root,'VaultSecretKeyWorkspace.razor'),'utf8');
+  const native=fs.readFileSync(path.join(root,'NativeVaultWorkspace.razor'),'utf8');
+  assert.match(panel,/I consent to retaining encrypted vault data on this device/);
+  assert.match(panel,/VaultDeviceRetentionPolicy\.EncryptedLocalWithManualSync/);
+  assert.match(panel,/Retention\.Reset\(\)/);
+  assert.match(panel,/minlength="12"/);
+  assert.match(panel,/QueueKeys\.HasLocalCredentialsAsync\(\)/);
+  assert.match(panel,/QueueKeys\.CreateAsync\(_passphrase\)/);
+  assert.match(panel,/QueueKeys\.UnlockAsync\(_passphrase\)/);
+  assert.match(panel,/QueueKeys\.LockAsync\(\)/);
+  assert.match(panel,/QueueInspection\.InspectAsync\(\)/);
+  assert.doesNotMatch(panel,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
+  assert.match(workspace,/<VaultLinkedLocalQueuePanel \/>/);
+  assert.match(native,/<VaultSecretKeyWorkspace \/>/);
+});
