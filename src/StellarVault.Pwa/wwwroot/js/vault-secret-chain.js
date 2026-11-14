@@ -65,9 +65,12 @@ window.stellarVaultSecretChain = (() => {
       if (seen.has(current)) throw new Error('A cycle was detected in the linked account chain.');
       seen.add(current);
       const account = await server.loadAccount(current);
+      if (index === 0 && Object.prototype.hasOwnProperty.call(
+          account.data_attr || {}, 'sv:registry:v2'))
+        throw new Error('This account is registered as an HD-v2 vault. Open it with its mnemonic instead.');
       const signer = signerStatus(account, root);
-      if (!signer.rootCanSign)
-        throw new Error('Account ' + index + ' is not authorized for root-key signing. Chain inspection stopped.');
+      if (!signer.rootCanSign || signer.medium < 1 || signer.high < 1)
+        throw new Error('Account ' + index + ' lacks safe root-signing authorization or signer thresholds. Chain inspection stopped.');
       nodes.push({
         AccountId: current,
         Position: index,
