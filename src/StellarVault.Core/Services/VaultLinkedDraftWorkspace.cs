@@ -25,21 +25,25 @@ public sealed class VaultLinkedDraftWorkspace(
     {
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
-        if (!keys.IsUnlocked || !ledger.IsConnected ||
-            ledger.RootAccountId is not string root)
+        if (!keys.IsUnlocked || keys.ActiveRootAccountId is not string root ||
+            ledger.IsConnected && ledger.RootAccountId != root)
             throw new UnauthorizedAccessException(
                 "Unlock the matching independent S-key encrypted local queue.");
         StellarAccountAddress.Validate(root);
-        return new(root, networks.CredentialKey(root), ledger.ConnectionEpoch);
+        return new(root, networks.CredentialKey(root),
+            keys.IsOfflineOnly ? -1 : ledger.ConnectionEpoch);
     }
 
     private void Check(Context original)
     {
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
-        if (!keys.IsUnlocked || !ledger.IsConnected ||
-            ledger.RootAccountId != original.Root ||
-            ledger.ConnectionEpoch != original.Epoch ||
+        if (!keys.IsUnlocked || keys.ActiveRootAccountId != original.Root ||
+            (original.Epoch == -1
+                ? !keys.IsOfflineOnly
+                : keys.IsOfflineOnly || !ledger.IsConnected ||
+                  ledger.RootAccountId != original.Root ||
+                  ledger.ConnectionEpoch != original.Epoch) ||
             networks.CredentialKey(original.Root) != original.Scope)
             throw new InvalidOperationException(
                 "Independent S-key session, consent or selected network changed.");
@@ -77,7 +81,12 @@ public sealed class VaultLinkedDraftWorkspace(
         {
             // Do not mistake a pending local parent for an already published
             // parent. The dependency edge is stored atomically with the draft.
-            var remote = await ledger.ReadAsync(ct);
+            // Existing queue credentials can be unlocked with the separate
+            // passphrase while Horizon is unavailable. Remote IDs/parents are
+            // verified again before any later manual publication.
+            IReadOnlyList<LedgerRecordItem> remote = keys.IsOfflineOnly
+                ? []
+                : await ledger.ReadAsync(ct);
             Check(context);
             var folderId = draft.FolderId;
             string[] deps = [];
@@ -94,9 +103,13 @@ public sealed class VaultLinkedDraftWorkspace(
                         throw new InvalidOperationException("The local parent folder is unavailable.");
                     if (parent.State == VaultSyncState.Pending) deps = [parent.Id];
                 }
-                else if (!remote.Any(x => x.Id == folderId && x.IsFolder))
+                else if (!keys.IsOfflineOnly &&
+                         !remote.Any(x => x.Id == folderId && x.IsFolder))
                     throw new InvalidOperationException(
                         "Parent folder does not exist on Stellar or in pending local folders.");
+                // In offline mode an unknown remote parent is merely a claimed
+                // parent ID. Publication must verify that it exists and is a
+                // folder on the connected ledger before broadcasting.
             }
 
             string entityId;
