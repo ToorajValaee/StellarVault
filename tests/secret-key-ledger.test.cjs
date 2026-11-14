@@ -865,3 +865,35 @@ test('existing S-key credentials unlock local encrypted drafts without Horizon o
   assert.match(smoke,/await keys\.UnlockOfflineAsync\(Root, "local S-key test passphrase 12345"\)/);
   assert.match(smoke,/Offline queue inspection authorized publication/);
 });
+
+
+test('linked unpublished encrypted draft edits reuse atomic CAS and reject cycles or stale fingerprints',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const browser=fs.readFileSync(path.join(src,'StellarVault.Pwa','Services',
+    'IndexedDbVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const native=fs.readFileSync(path.join(core,'FileSystemVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(policy,/previous\.State == VaultSyncState\.Pending && next\.State == VaultSyncState\.Pending/);
+  assert.match(policy,/EncryptedPayload = next\.EncryptedPayload/);
+  assert.match(policy,/DependsOn = next\.DependsOn/);
+  assert.match(policy,/Invalid linked queue state transition/);
+  for(const adapter of [browser,native])
+    assert.match(adapter,/VaultLinkedMutationTransitionPolicy\.RequireValid\(previous, next\)/);
+  assert.match(workspace,/OpenDraftAsync\(string mutationId/);
+  assert.match(workspace,/ReviseAsync\(/);
+  assert.match(workspace,/CryptographicOperations\.FixedTimeEquals\(actual, expected\)/);
+  assert.match(workspace,/The proposed folder move creates a dependency cycle/);
+  assert.match(workspace,/store\.TryReplaceAsync\(current, replacement, ct\)/);
+  assert.match(panel,/DraftWorkspace\.OpenDraftAsync\(id\)/);
+  assert.match(panel,/DraftWorkspace\.ReviseAsync\(editingId, draft, revision\)/);
+  assert.match(panel,/Edit local draft/);
+  assert.match(panel,/Unverified parent/);
+  assert.match(smoke,/stale linked draft edit incorrectly overwrote/);
+  assert.match(smoke,/Offline encrypted draft revision depended on Horizon/);
+});
