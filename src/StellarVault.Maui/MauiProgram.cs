@@ -64,6 +64,7 @@ public static class MauiProgram
             sp.GetRequiredService<IVaultLinkedDraftStore>());
         builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
         builder.Services.AddScoped<VaultLinkedDraftPublication>();
+        builder.Services.AddScoped<VaultLinkedExpansionJournal>();
         builder.Services.AddScoped<VaultLinkedDraftRecoveryReview>();
         builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
