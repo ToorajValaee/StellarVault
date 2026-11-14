@@ -698,7 +698,9 @@ else
             _secretRuntimeReady = await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret");
             if (!status.Ready) _ledgerMnemonic = string.Empty;
             _ledgerMessage = status.Ready ? null
-                : "Unable to prepare a secure connection. Restart the app or try again.";
+                : _secretRuntimeReady == true
+                    ? "HD runtime is unavailable. Independent Secret Key inspection is still available."
+                    : "Unable to prepare a secure connection. Restart the app or try again.";
         }
         catch
         {
@@ -706,7 +708,9 @@ else
             try { _secretRuntimeReady = await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"); }
             catch { _secretRuntimeReady = false; }
             _ledgerMnemonic = string.Empty;
-            _ledgerMessage = "Unable to prepare a secure connection. Restart the app or try again.";
+            _ledgerMessage = _secretRuntimeReady == true
+                ? "HD runtime is unavailable. Independent Secret Key inspection is still available."
+                : "Unable to prepare a secure connection. Restart the app or try again.";
         }
         finally { _ledgerBusy = false; }
     }
