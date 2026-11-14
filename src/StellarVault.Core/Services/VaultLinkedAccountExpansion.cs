@@ -15,7 +15,7 @@ public sealed class VaultLinkedAccountExpansion(
     private PendingExpansion? _pending;
 
     private sealed record PendingExpansion(
-        string Root, string Network, VaultSecretLedgerQuote Quote,
+        string Root, string Network, string CredentialScope, VaultSecretLedgerQuote Quote,
         string PreviousTail, int PreviousCount);
 
     private VaultAccountRequest Request(string root, string selectedNetwork) =>
@@ -33,7 +33,8 @@ public sealed class VaultLinkedAccountExpansion(
     private void RequireSameSession(PendingExpansion pending)
     {
         var (root, selectedNetwork) = RequireSession();
-        if (pending.Root != root || pending.Network != selectedNetwork)
+        if (pending.Root != root || pending.Network != selectedNetwork ||
+            pending.CredentialScope != network.CredentialKey(root))
             throw new InvalidOperationException("Linked-account session or network changed. Cancel and review again.");
     }
 
@@ -50,9 +51,10 @@ public sealed class VaultLinkedAccountExpansion(
                 throw new InvalidOperationException("Cancel the existing account expansion review first.");
 
             var (root, selectedNetwork) = RequireSession();
+            var scope = network.CredentialKey(root);
             var before = await strategies.InspectConnectedAsync(Request(root, selectedNetwork), ct);
             ct.ThrowIfCancellationRequested();
-            RequireSessionMatches(root, selectedNetwork);
+            RequireSessionMatches(root, selectedNetwork, scope);
 
             var quote = await ledger.QuoteExtendChainAsync(ct);
             try
@@ -69,7 +71,7 @@ public sealed class VaultLinkedAccountExpansion(
                     before.TailAddress != after.TailAddress)
                     throw new InvalidOperationException("Account chain changed while preparing the quote.");
 
-                _pending = new(root, selectedNetwork, quote,
+                _pending = new(root, selectedNetwork, scope, quote,
                     before.TailAddress, before.AccountCount);
                 return quote;
             }
@@ -146,10 +148,11 @@ public sealed class VaultLinkedAccountExpansion(
         finally { _gate.Release(); }
     }
 
-    private void RequireSessionMatches(string root, string selectedNetwork)
+    private void RequireSessionMatches(string root, string selectedNetwork, string expectedScope)
     {
         var current = RequireSession();
-        if (current.Root != root || current.Network != selectedNetwork)
+        if (current.Root != root || current.Network != selectedNetwork ||
+            network.CredentialKey(root) != expectedScope)
             throw new InvalidOperationException("Linked-account session or network changed.");
     }
 }
