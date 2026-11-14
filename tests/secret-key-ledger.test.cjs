@@ -23,7 +23,7 @@ function harness(passphrase=TEST) {
     thresholds:{low_threshold:1,med_threshold:1,high_threshold:1},
     subentry_count:0,num_sponsoring:0,num_sponsored:0
   });
-  let childCounter=0,submitted=0;
+  let childCounter=0,submitted=0,failSubmission=false;
   const format=v=>Number(v).toFixed(7);
   class Server {
     async loadAccount(id) {
@@ -32,6 +32,7 @@ function harness(passphrase=TEST) {
     }
     async submitTransaction(tx) {
       submitted++;
+      if(failSubmission)throw Error('Simulated Horizon timeout after submission attempt');
       assert.ok(tx.signed.includes(ROOT),'All writes require root signature');
       for(const op of tx.operations) {
         const sender=accounts.get(op.source||ROOT);
@@ -120,6 +121,7 @@ function harness(passphrase=TEST) {
     submit:id=>api.submit(session,id),
     close:()=>api.close(session),
     submissions:()=>submitted,
+    failNextSubmission:()=>{failSubmission=true;},
     session
   };
 }
@@ -246,10 +248,33 @@ test('historical record names are never silently interpreted as empty new-format
   assert.equal(h.submissions(),0);
 });
 
-test('source-account entry ceilings fail before transaction submission',async()=>{
+test('storage capacity is signaled by create planning without automatic transactions',async()=>{
   const h=harness();await h.open();
   h.accounts.get(ROOT).subentry_count=1000;
-  await assert.rejects(h.plan('create',recordId,record),/subentry limits/);
+  await assert.rejects(h.plan('create',recordId,record),/SV_ACCOUNT_CAPACITY_REQUIRED/);
   assert.equal(h.submissions(),0);
+  h.close();
+});
+
+
+test('existing-record update never allocates another account on subentry ceiling',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  await h.submit(q.QuoteId);
+  h.accounts.get(ROOT).subentry_count=1000;
+  await assert.rejects(h.plan('update',recordId,{...record,Content:'new content'}),
+    /updating it requires a separate migration protocol/);
+  assert.equal(h.submissions(),1);
+  h.close();
+});
+
+test('uncertain network submission quarantines same session until closure',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(q.QuoteId),/uncertain/);
+  await assert.rejects(h.plan('create','fedcba9876543210',record),/unresolved/);
+  await assert.rejects(h.plan('expand',null,null),/unresolved/);
+  assert.equal(h.submissions(),1);
   h.close();
 });
