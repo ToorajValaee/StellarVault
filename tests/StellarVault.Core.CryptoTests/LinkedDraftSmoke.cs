@@ -46,6 +46,16 @@ internal static class LinkedDraftSmoke
             await MustRejectAsync(() => publisher.PrepareAsync(child.MutationId),
                 "Pending child folder dependency was approved for publication.");
 
+            var rejectedQuote = await publisher.PrepareAsync(folder.MutationId);
+            await MustRejectAsync(
+                () => publisher.SubmitAsync(rejectedQuote.Quote with
+                {
+                    NetworkFeeXlm = "999.0000000"
+                }, true),
+                "A changed linked fee quote was accepted.");
+            Require(ledger.Submissions == 0,
+                "Rejected changed quote sent a network transaction.");
+
             var folderReview = await publisher.PrepareAsync(folder.MutationId);
             Require(ledger.Submissions == 0,
                 "Preparing a linked draft quote unexpectedly broadcast a transaction.");
@@ -74,6 +84,18 @@ internal static class LinkedDraftSmoke
                 "Interrupted network transmission silently returned to Pending.");
             await MustRejectAsync(() => publisher.PrepareAsync(pending.MutationId),
                 "An uncertain linked submission was offered for automatic retry.");
+
+            var recovery = new VaultLinkedDraftRecoveryReview(ledger, store, keys,
+                linkedRetention, network, new DenyVaultLinkedReceiptEvidence());
+            var finding = await recovery.InspectAsync(pending.MutationId);
+            Require(finding.DurableState is VaultSyncState.Uncertain or VaultSyncState.Submitting &&
+                    finding.CurrentRecordMatches is false &&
+                    !finding.HistoricalReceiptObserved,
+                "Read-only recovery falsely confirmed an unresolved S-key submission.");
+            var afterRecovery = (await drafts.ListAsync())
+                .Single(x => x.MutationId == pending.MutationId);
+            Require(afterRecovery.State is VaultSyncState.Uncertain or VaultSyncState.Submitting,
+                "Read-only recovery modified the durable uncertain queue state.");
 
             await keys.LockAsync();
             Require(!keys.IsUnlocked, "Linked queue encryption key remained unlocked.");
