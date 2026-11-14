@@ -100,7 +100,7 @@
                 </section>
             }
             <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
-                <h3>Save to encrypted device storage</h3>
+                <h3>@(_editingMutationId is null ? "Save to encrypted device storage" : "Edit unpublished encrypted draft")</h3>
                 <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
                 @if (QueueKeys.IsOfflineOnly)
                 {
@@ -109,7 +109,8 @@
                        Publishing remains disabled.</p>
                 }
                 <label class="sv-secret-approval">
-                    <input type="checkbox" @bind="_draftIsFolder" disabled="@_busy" />
+                    <input type="checkbox" @bind="_draftIsFolder"
+                           disabled="@(_busy || _editingMutationId is not null)" />
                     New folder instead of record
                 </label>
                 <label>Title
@@ -146,7 +147,12 @@
                 </label>
                 <button type="button" class="pixel-button primary"
                         disabled="@(_busy || string.IsNullOrWhiteSpace(_draftTitle) || (!_draftIsFolder && string.IsNullOrEmpty(_draftContent)))"
-                        @onclick="StageDraftAsync">Save encrypted local draft</button>
+                        @onclick="StageDraftAsync">@(_editingMutationId is null ? "Save encrypted local draft" : "Save encrypted changes")</button>
+                @if (_editingMutationId is not null)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ClearDraftEditor">Cancel editing</button>
+                }
             </section>
             @if (_drafts.Count > 0)
             {
@@ -167,6 +173,9 @@
                             }
                             @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
                             {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || _review is not null)"
+                                        @onclick="() => EditDraftAsync(draft.MutationId)">Edit local draft</button>
                                 <button type="button" class="pixel-button compact"
                                         disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
                                         @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
@@ -310,6 +319,38 @@
     private string _draftNotes = string.Empty;
     private string _draftTags = string.Empty;
     private string _draftFolderId = string.Empty;
+    private string? _editingMutationId;
+    private string? _editingPayloadSha256;
+
+    private async Task EditDraftAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked || _review is not null) return;
+        _busy = true;
+        try
+        {
+            // Explicit edit action decrypts only this draft into the local UI.
+            // The secret input remains masked and no remote write occurs.
+            var detail = await DraftWorkspace.OpenDraftAsync(id);
+            _editingMutationId = detail.MutationId;
+            _editingPayloadSha256 = detail.PayloadSha256;
+            _draftTitle = detail.Draft.Title;
+            _draftContent = detail.Draft.Content;
+            _draftFolderId = detail.Draft.FolderId ?? string.Empty;
+            _draftIsFolder = detail.Draft.IsFolder;
+            _draftUsername = detail.Draft.UserName ?? string.Empty;
+            _draftUrl = detail.Draft.Url ?? string.Empty;
+            _draftNotes = detail.Draft.Notes ?? string.Empty;
+            _draftTags = string.Join(", ", detail.Draft.Tags ?? []);
+            _message = "Local draft opened for editing. Changes remain encrypted on this device until separately published.";
+        }
+        catch
+        {
+            ClearDraftEditor();
+            _message = "Cannot open the unpublished draft. Refresh the encrypted queue.";
+        }
+        finally { _busy = false; }
+    }
+
     private sealed record FolderOption(string EntityId, string Title, bool Local);
     private IReadOnlyList<FolderOption> _availableFolders = [];
 
@@ -337,6 +378,8 @@
         _draftContent = _draftUsername = _draftUrl = _draftNotes = _draftTags = string.Empty;
         _draftTitle = _draftFolderId = string.Empty;
         _draftIsFolder = false;
+        _editingMutationId = null;
+        _editingPayloadSha256 = null;
     }
 
     private async Task LoadDraftsAsync()
@@ -370,7 +413,11 @@
                 _draftTags.Split(',', StringSplitOptions.RemoveEmptyEntries |
                     StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                 _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
-            await DraftWorkspace.CreateAsync(draft);
+            if (_editingMutationId is { } editingId &&
+                _editingPayloadSha256 is { } revision)
+                await DraftWorkspace.ReviseAsync(editingId, draft, revision);
+            else
+                await DraftWorkspace.CreateAsync(draft);
             ClearDraftEditor();
             _message = "Encrypted local draft saved. No transaction was submitted.";
             try
