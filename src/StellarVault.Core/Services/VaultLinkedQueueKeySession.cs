@@ -174,4 +174,6 @@ public sealed class VaultLinkedQueueKeySession(
 /// separate from all mnemonic/local HD vault credential records.
 /// The same authenticated credential format and CAS semantics are reused.
 /// </summary>
-public interface IVaultLinkedPassphraseCredentialStore : IVaultPassphraseCredentialStore;
+public interface IVaultLinkedPassphraseCredentialStore : IVaultPassphraseCredentialStore
+{
+}
