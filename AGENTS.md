@@ -467,3 +467,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Cross-session linked guard update
 - JS unresolvedByVault must be checked at plan start, submit start and immediately before network transmission across all sessions sharing exact root/network. Do not move the last guard earlier: async preflight can interleave. This protects only one JS realm, not reloads or devices.
 - New create requests against an already saturated tail must fail rather than triggering a new-account quote, because the tail cannot accept a chain pointer. Node regression cases added but not executed; no CI checks visible. EVM remains last priority.
+
+## Capability reuse directive — 2026-11-14
+- Before writing a new subsystem, consult `docs/architecture/capability-reuse-audit.md`: encrypted pending queue, consent, manual sync/reconciliation, folder graph, file staging/chunking, Horizon historical readers and shared PWA/MAUI UI ALREADY exist for parts of HD/hybrid. Report **wiring gaps**, **policy disables** and **verification gaps** separately from absent implementation.
+- `VaultStellarDraftClassification` reuses the existing record factory in BOTH HD and linked record planners. Preserve two independent account/signing strategies: never use HD-derived secrets, registry HMAC or unlocked HD device keys in imported S-key mode.
+- Prefer extracting cross-strategy logic from existing Core rather than adding parallel file, queue, approval or recovery engines. Neither build nor test was run for this batch. EVM remains last.
