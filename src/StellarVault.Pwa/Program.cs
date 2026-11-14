@@ -20,6 +20,7 @@ builder.Services.AddScoped<IVaultAccountAuthorizer, LocalOnlyVaultNamespaceAutho
 builder.Services.AddScoped<VaultNetworkSelection>();
 builder.Services.AddScoped<BrowserStellarLedgerRecords>();
 builder.Services.AddScoped<IStellarSecretKeyVaultDiscovery, BrowserSecretKeyVaultDiscovery>();
+builder.Services.AddScoped<IStellarSecretKeyLedger, BrowserSecretKeyLedger>();
 builder.Services.AddScoped<IStellarLedgerRecords>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<IVaultLedgerManifestCopyInventory>(sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<IVaultGuardedLedgerMutations>(
