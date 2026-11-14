@@ -54,7 +54,8 @@ public sealed class IndexedDbVaultPendingMutationStore(
         VaultPendingMutation replacement, CancellationToken ct = default)
     {
         if (previous.Id != replacement.Id || previous.AccountId != replacement.AccountId ||
-            previous.NetworkId != replacement.NetworkId)
+            previous.NetworkId != replacement.NetworkId ||
+            previous.OriginStrategyId != replacement.OriginStrategyId)
             throw new InvalidOperationException("Queue identity cannot change during state transition.");
 
         return WithKeyAsync(previous.AccountId, async key =>
