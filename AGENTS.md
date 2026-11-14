@@ -495,3 +495,10 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Single-snapshot encrypted queue review (2026-11-15)
 - Reuse pure `VaultPendingMutationReviewPolicy.Build(all)` for HD queue readiness. `VaultScopedQueueReview` must read `ReviewAllAsync` once and construct readiness and folder graph from that same authenticated snapshot; do not reintroduce separate asynchronous reads in one review.
 - Preserve HD-only readiness, linked-origin fail-closed, existing file policy and all consent/key-session requirements. Do not claim an S-key queue publisher exists yet. Source regression assertions were updated; tests not executed (no local checkout/dotnet).
+
+
+## S-key linked expansion preflight and lock safety (2026-11-15)
+- `VaultLinkedExpansionPreflightException` means Core did NOT invoke the linked ledger transport for that specific quote. It is safe to discard the unsubmitted review, but never infer that sibling or earlier transactions are confirmed/absent. After `ledger.SubmitApprovedAsync` any error is potentially uncertain; never retry blindly or classify that exception as preflight.
+- Lock must invoke `VaultLinkedAccountExpansion.AbandonUnsubmittedAsync` even if UI has already lost the visible quote. This only invalidates Core reviews still pending before transmission; runtime uncertainty markers remain intact.
+- Linked JS `inspectUncertain` checks the global same-runtime vault tombstone so parallel sessions see each other's unresolved writes. Tail UPDATE writes must preserve a spare entry for `sv:next:v1`; do not only reserve on CREATE.
+- Source regression cases added; no Node execution, .NET build or live Testnet confirmation. Continue reusing existing Core queue/folder/file machinery rather than creating parallel engines; EVM last.
