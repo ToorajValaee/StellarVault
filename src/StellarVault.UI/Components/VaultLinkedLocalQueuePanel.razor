@@ -237,6 +237,14 @@
                                 }
                                 else if (draft.IsCorrupt) { <em>Unreadable draft</em> }
                             </span>
+                            @if (draft.IsJournal && draft.State == VaultSyncState.Pending)
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || !QueueKeys.CanPublish)"
+                                        @onclick="() => DiscardUnreservedExpansionAsync(draft.MutationId)">
+                                    Discard never-submitted reservation
+                                </button>
+                            }
                             @if (draft.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
                             {
                                 <button type="button" class="pixel-button compact"
@@ -362,6 +370,24 @@
         catch
         {
             _message = "Expansion outcome may be uncertain. Do not repeat the account creation or any queued publication until ledger history is reconciled.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardUnreservedExpansionAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            await ExpansionJournal.DiscardNeverSubmittedIntentAsync(id);
+            _manualSyncPlan = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _message = "The never-reserved local expansion intent was discarded. No transaction was submitted by that journal.";
+        }
+        catch
+        {
+            _message = "Expansion journal was not discarded. Refresh its state; never discard uncertain or submitting transactions.";
         }
         finally { _busy = false; }
     }
