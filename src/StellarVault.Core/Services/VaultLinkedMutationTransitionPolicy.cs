@@ -14,12 +14,18 @@ public static class VaultLinkedMutationTransitionPolicy
         ArgumentNullException.ThrowIfNull(next);
         if (previous.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
             next.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
-            previous.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+            previous.Kind is not (VaultMutationKind.CreateRecord or
+                VaultMutationKind.CreateFolder or VaultMutationKind.ExtendLinkedChain) ||
             previous.Id != next.Id || previous.AccountId != next.AccountId ||
             previous.NetworkId != next.NetworkId || previous.EntityId != next.EntityId ||
             previous.Kind != next.Kind || previous.CreatedUtc != next.CreatedUtc ||
             previous.ExpectedRemoteVersion != next.ExpectedRemoteVersion)
             throw new InvalidOperationException("Linked queue identity or strategy changed.");
+
+        if (previous.Kind == VaultMutationKind.ExtendLinkedChain &&
+            next.State == VaultSyncState.Pending)
+            throw new InvalidOperationException(
+                "Linked expansion intent cannot be edited after it was journaled.");
 
         if (previous.State == VaultSyncState.Pending && next.State == VaultSyncState.Pending)
         {
