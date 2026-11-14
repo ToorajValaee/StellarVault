@@ -11,6 +11,11 @@ public sealed record VaultAccountHandle(
     string StrategyId,
     long? Sequence);
 
+/// <summary>Chain-neutral, read-only inspection result; contains no signing authority.</summary>
+public sealed record VaultAccountInspection(
+    string BlockchainId, string NetworkId, string VaultId, string StrategyId,
+    string RootAddress, string TailAddress, int AccountCount);
+
 public sealed record VaultAccountRequest(
     string BlockchainId,
     string NetworkId,
@@ -27,7 +32,7 @@ public interface IVaultAccountProvisioningStrategy
     string BlockchainId { get; }
     string StrategyId { get; }
     Task<VaultAccountHandle> CreateNextAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
-    Task<VaultConnectedAccountSummary> InspectConnectedAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
+    Task<VaultAccountInspection> InspectConnectedAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<VaultAccountHandle>> DiscoverAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -62,7 +67,7 @@ public sealed class VaultAccountStrategyFactory
             : throw new NotSupportedException("Account strategy is not registered for the requested blockchain.");
     }
 
-    public Task<VaultConnectedAccountSummary> InspectConnectedAsync(VaultAccountRequest request, CancellationToken ct = default) =>
+    public Task<VaultAccountInspection> InspectConnectedAsync(VaultAccountRequest request, CancellationToken ct = default) =>
         Resolve(request).InspectConnectedAsync(request, ct);
 
     public Task<VaultAccountHandle> CreateNextAsync(VaultAccountRequest request, CancellationToken ct = default) =>
