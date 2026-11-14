@@ -53,6 +53,11 @@ public static class MauiProgram
                 sp.GetRequiredService<VaultNetworkSelection>(),
                 sp.GetRequiredService<VaultDeviceRetentionGate>()));
         builder.Services.AddScoped<VaultLinkedQueueKeySession>();
+        builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp =>
+            new FileSystemVaultLinkedQueueSnapshotStore(
+                sp.GetRequiredService<VaultLinkedQueueKeySession>(),
+                sp.GetRequiredService<VaultDeviceRetentionGate>(),
+                Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-pending-queue")));
 builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
                 services.GetRequiredService<IVaultQueueKeySession>(),
