@@ -310,6 +310,15 @@ public sealed class VaultLinkedDraftWorkspace(
             foreach (var item in items)
             {
                 ct.ThrowIfCancellationRequested();
+                if (item.Kind == VaultMutationKind.ExtendLinkedChain)
+                {
+                    // The journal is a public-only account-expansion intent,
+                    // not an encrypted record or an editable local folder.
+                    result.Add(new(item.Id, item.EntityId, false,
+                        "Linked account capacity expansion", null,
+                        item.State, item.CreatedUtc, true));
+                    continue;
+                }
                 try
                 {
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
