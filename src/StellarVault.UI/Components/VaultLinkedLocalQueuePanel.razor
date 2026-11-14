@@ -14,11 +14,11 @@
        storage namespace from mnemonic-based vaults. No Stellar transaction is
        submitted by these controls.</p>
     <label class="sv-secret-approval">
-        <input type="checkbox" checked="@LinkedLinkedRetention.DeviceRetention.AllowsLocalPersistence"
+        <input type="checkbox" checked="@LinkedRetention.AllowsLocalPersistence"
                disabled="@_busy" @onchange="ChangeConsentAsync" />
         I consent to encrypted local storage on this device. Locking or turning off consent does not delete previously saved encrypted data.
     </label>
-    @if (LinkedLinkedRetention.DeviceRetention.AllowsLocalPersistence && LinkedRetention.DeviceRetention.AllowsLocalPersistence && Ledger.IsConnected)
+    @if (LinkedRetention.AllowsLocalPersistence && LinkedRetention.DeviceRetention.AllowsLocalPersistence && Ledger.IsConnected)
     {
         @if (_exists is null)
         {
@@ -372,7 +372,7 @@
 
     private async Task DiscoverAsync()
     {
-        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedLinkedRetention.DeviceRetention.AllowsLocalPersistence) return;
+        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence) return;
         _busy = true;
         _message = null;
         try
@@ -395,7 +395,7 @@
 
     private async Task ActivateAsync(bool create)
     {
-        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedLinkedRetention.DeviceRetention.AllowsLocalPersistence || _passphrase.Length < 12)
+        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence || _passphrase.Length < 12)
             return;
         _busy = true;
         _report = null;
