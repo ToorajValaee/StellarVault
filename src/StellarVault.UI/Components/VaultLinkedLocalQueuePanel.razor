@@ -102,6 +102,12 @@
             <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
                 <h3>Save to encrypted device storage</h3>
                 <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
+                @if (QueueKeys.IsOfflineOnly)
+                {
+                    <p role="status">Offline mode lists only locally staged folders.
+                       Published folder contents cannot be fetched or verified until reconnecting.
+                       Publishing remains disabled.</p>
+                }
                 <label class="sv-secret-approval">
                     <input type="checkbox" @bind="_draftIsFolder" disabled="@_busy" />
                     New folder instead of record
