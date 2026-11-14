@@ -516,7 +516,7 @@ else
                     <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
                             disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
-                            @onclick="@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? ConnectLedgerAsync : InspectNativeSecretChainAsync)">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
+                            @onclick="ConnectSelectedLedgerCredentialAsync">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
                 }
             }
             else if (_nativePage == "settings")
@@ -1314,6 +1314,11 @@ else
         _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
         _showPublishSecret = false;
     }
+
+    private Task ConnectSelectedLedgerCredentialAsync() =>
+        _ledgerCredentialMode == VaultCredentialMode.MnemonicHd
+            ? ConnectLedgerAsync()
+            : InspectNativeSecretChainAsync();
 
     private async Task InspectNativeSecretChainAsync()
     {
