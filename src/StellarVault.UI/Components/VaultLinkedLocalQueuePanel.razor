@@ -596,13 +596,16 @@
                 _draftTags.Split(',', StringSplitOptions.RemoveEmptyEntries |
                     StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                 _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
+            _manualSyncPlan = null;
             if (_editingMutationId is { } editingId &&
                 _editingPayloadSha256 is { } revision)
-            _manualSyncPlan = null;
+            {
                 await DraftWorkspace.ReviseAsync(editingId, draft, revision);
+            }
             else
-                _manualSyncPlan = null;
-            await DraftWorkspace.CreateAsync(draft);
+            {
+                await DraftWorkspace.CreateAsync(draft);
+            }
             ClearDraftEditor();
             _message = "Encrypted local draft saved. No transaction was submitted.";
             try
