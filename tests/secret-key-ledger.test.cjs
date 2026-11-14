@@ -385,6 +385,10 @@ test('uncertain write blocks a second previously opened session on the same vaul
   const second=await h.api.plan(other,'create','fedcba9876543210',record);
   h.failNextSubmission();
   await assert.rejects(h.submit(first.QuoteId),/uncertain/);
+  const siblingFinding=h.api.inspectUncertain(other);
+  assert.equal(siblingFinding.Kind,'create');
+  assert.equal(siblingFinding.RootAccountId,ROOT);
+  assert.equal(siblingFinding.RecordId,recordId);
   await assert.rejects(
     h.api.plan(other,'expand',null,null),/unresolved for this vault/);
   await assert.rejects(
@@ -523,4 +527,33 @@ test('queue readiness and folder graph use one authenticated mutation snapshot',
   assert.match(policy,/VaultMutationStrategyPolicy\.Resolve\(item\.OriginStrategyId\)/);
   assert.match(policy,/Independent linked-key queue intent cannot be published/);
   assert.match(policy,/VaultQueuedCreatePolicy\.Problems\(item, all\)/);
+});
+
+
+test('existing tail record update cannot consume the reserved next-account link slot',async()=>{
+  const h=harness();await h.open();
+  const created=await h.plan('create',recordId,record);
+  await h.submit(created.QuoteId);
+  h.accounts.get(ROOT).subentry_count=998;
+  await assert.rejects(h.plan('update',recordId,{...record,Content:'Changed secret'}),
+    /updating it requires a separate migration protocol/);
+  assert.equal(h.submissions(),1,'No second network write is broadcast');
+  h.close();
+});
+
+test('linked expansion preflight cancellation is structurally distinct from transport uncertainty',()=>{
+  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const expansion=fs.readFileSync(path.join(root,'VaultLinkedAccountExpansion.cs'),'utf8');
+  const ui=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.UI','Components',
+    'VaultSecretKeyWorkspace.razor'),'utf8');
+  const begin=expansion.indexOf('catch (Exception ex)');
+  const submit=expansion.indexOf('var hash = await ledger.SubmitApprovedAsync');
+  assert.ok(begin>0 && submit>begin,'Preflight error must precede transport');
+  assert.match(expansion,/VaultLinkedExpansionPreflightException/);
+  assert.match(expansion,/await TryCancelUnsubmittedAsync\(pending\.Quote\.QuoteId\)/);
+  assert.match(expansion,/\/\/ The preflight quote is single-use/);
+  assert.match(ui,/catch \(VaultLinkedExpansionPreflightException\)/);
+  assert.match(ui,/await Ledger\.InspectUncertainSubmissionAsync\(\)/);
+  assert.match(ui,/No expansion transaction was submitted for this review/);
+  assert.match(ui,/catch\s*\{\s*_capacityRolloverPending = false;\s*_submissionUncertain = true;/);
 });
