@@ -444,3 +444,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - The linked S-key UI must not require users to request another account. `VaultLinkedRecordWritePlanner` handles a typed create-only storage-capacity signal from the Stellar JS planner, preparing an expansion quote as part of the requested record save. The extra account and the record write each require their own explicit user-approved quote and verified outcome; never automatically broadcast the second transaction.
 - Do not treat insufficient funds, MAX_OPS, update-account exhaustion, or maximum chain length as permission to allocate another account. These require explicit failure or a separately audited migration/large-record protocol. Preserve in-memory draft handling and no-blind-retry uncertainty.
 - This integration is source-only, not build/run validated.
+
+## Linked-account safety update (2026-11-14)
+- Reserve one available tail ManageData slot for the next sv:next:v1 link when planning *new* records. Never extend a 1000-entry tail or allocate a child for a record that already exceeds the atomic transaction limit.
+- On submission uncertainty, the linked JS session and UI block further mutations. Read-only Refresh cannot unblock them. Cross-session durable reconciliation remains unimplemented and is required before production release.
+- Regression test source cases were added but not run; never report test pass without executing. EVM is still last priority.
