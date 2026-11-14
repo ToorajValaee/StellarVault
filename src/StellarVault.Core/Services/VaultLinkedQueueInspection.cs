@@ -28,15 +28,22 @@ public sealed class VaultLinkedQueueInspection(
         if (!keys.IsUnlocked)
             throw new UnauthorizedAccessException(
                 "Unlock the independent encrypted S-key queue before inspecting local drafts.");
-        if (!linked.IsConnected || linked.RootAccountId is not { } root)
-            throw new InvalidOperationException("Connect the imported S-key Stellar vault first.");
+        if (keys.ActiveRootAccountId is not { } root ||
+            linked.IsConnected && linked.RootAccountId != root)
+            throw new InvalidOperationException("Unlock the matching imported S-key encrypted queue.");
         StellarAccountAddress.Validate(root);
         var scope = networks.CredentialKey(root);
+        var offline = keys.IsOfflineOnly;
+        var epoch = linked.ConnectionEpoch;
         var expectedPassphrase = linked.ConnectedNetworkPassphrase;
 
-        var account = await linked.InspectAccountInfoAsync(ct);
-        if (account.RootAccountId != root)
-            throw new UnauthorizedAccessException("Linked signing root changed during queue inspection.");
+        LedgerAccountInfo? account = null;
+        if (!offline)
+        {
+            account = await linked.InspectAccountInfoAsync(ct);
+            if (account.RootAccountId != root)
+                throw new UnauthorizedAccessException("Linked signing root changed during queue inspection.");
+        }
 
         // The host-specific read-only adapter uses the ORIGINAL encrypted queue
         // implementation, but exclusively with its dedicated S-key key session
@@ -44,18 +51,25 @@ public sealed class VaultLinkedQueueInspection(
         var mutations = await store.ListAsync(root, scope, ct);
         ct.ThrowIfCancellationRequested();
         linkedRetention.DeviceRetention.RequireLocalPersistence();
-        if (!keys.IsUnlocked || !linked.IsConnected || linked.RootAccountId != root ||
-            linked.ConnectedNetworkPassphrase != expectedPassphrase ||
-            networks.CredentialKey(root) != scope)
+        if (!keys.IsUnlocked || keys.ActiveRootAccountId != root ||
+            keys.IsOfflineOnly != offline ||
+            networks.CredentialKey(root) != scope ||
+            linked.IsConnected && linked.RootAccountId != root)
             throw new InvalidOperationException(
                 "Independent S-key queue context changed during read-only inspection.");
 
-        var after = await linked.InspectAccountInfoAsync(ct);
-        if (after.RootAccountId != root || after.TailAccountId != account.TailAccountId ||
-            after.TotalAccounts != account.TotalAccounts ||
-            linked.ConnectedNetworkPassphrase != expectedPassphrase ||
-            networks.CredentialKey(root) != scope)
-            throw new InvalidOperationException("Linked chain or selected network changed during inspection.");
+        if (!offline)
+        {
+            var after = await linked.InspectAccountInfoAsync(ct);
+            if (account is null || after.RootAccountId != root ||
+                after.TailAccountId != account.TailAccountId ||
+                after.TotalAccounts != account.TotalAccounts ||
+                linked.ConnectionEpoch != epoch ||
+                linked.ConnectedNetworkPassphrase != expectedPassphrase ||
+                networks.CredentialKey(root) != scope)
+                throw new InvalidOperationException(
+                    "Linked chain or selected network changed during inspection.");
+        }
 
         var linkedCount = mutations.Count;
         return new(root, scope,
@@ -66,6 +80,8 @@ public sealed class VaultLinkedQueueInspection(
                 x.Kind is VaultMutationKind.CreateFolder or
                     VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder),
             0, linkedCount, false,
-            "Read-only inspection used a separately unlocked S-key encryption key and isolated queue namespace. No HD drafts are read. This report authorizes no mutation; the separate create-only publisher requires a fresh fee quote, explicit approval and durable reservation.");
+            offline
+                ? "Offline-only encrypted queue inspection used the local passphrase and selected public root/network. No signer authorization, ledger state or transaction publication was checked."
+                : "Read-only inspection used a separately unlocked S-key encryption key and isolated queue namespace. No HD drafts are read. Publication requires a fresh fee quote, explicit approval and durable reservation.");
     }
 }
