@@ -17,6 +17,7 @@ public sealed class VaultLinkedQueueInspection(
         string RootAccountId, string NetworkId,
         int Pending, int UncertainOrSubmitting, int Conflicts,
         int FolderEntries,
+        int LegacyHdEntries, int LinkedTaggedEntries,
         bool CanPublish,
         string Explanation);
 
@@ -49,12 +50,22 @@ public sealed class VaultLinkedQueueInspection(
             after.TotalAccounts != account.TotalAccounts)
             throw new InvalidOperationException("Linked account chain changed during local queue inspection.");
 
+        // These counts are diagnostics only. Legacy null tags mean HD;
+        // a claimed S-key tag does NOT prove the key lifecycle or signing authority.
+        var hd = snapshot.Mutations.Count(x =>
+            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Hd);
+        var linkedEntries = snapshot.Mutations.Count(x =>
+            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked);
         return new(root, scope,
-            snapshot.Mutations.Count(x => x.State == VaultSyncState.Pending),
-            snapshot.Queue.NeedsReconciliation,
-            snapshot.Queue.Conflicts,
-            snapshot.FolderPlan.Steps.Count,
-            false,
-            "Existing encrypted local queue was inspected read-only. It may contain HD-format drafts. No S-key publication, fee approval, or automatic migration is authorized.");
+            snapshot.Mutations.Count(x => x.State == VaultSyncState.Pending &&
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
+            snapshot.Mutations.Count(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain &&
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
+            snapshot.Mutations.Count(x => x.State == VaultSyncState.Conflict &&
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
+            snapshot.Mutations.Count(x => x.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder &&
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
+            hd, linkedEntries, false,
+            "Existing encrypted queue inspected read-only. Legacy HD entries are excluded from S-key counts. Tagged entries alone do not authorize S-key publishing.");
     }
 }
