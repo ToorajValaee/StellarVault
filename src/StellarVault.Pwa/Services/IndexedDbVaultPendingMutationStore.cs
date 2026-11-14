@@ -12,14 +12,14 @@ namespace StellarVault.Pwa.Services;
 /// only the account/network scope and random mutation ID for enumeration.
 /// </summary>
 public sealed class IndexedDbVaultPendingMutationStore(
-    IJSRuntime js, VaultSessionManager sessions, VaultDeviceRetentionGate retention)
+    IJSRuntime js, IVaultQueueKeySession keySession, VaultDeviceRetentionGate retention)
     : IVaultPendingMutationStore
 {
     private sealed record QueueEntry(string Id, byte[] Data);
 
     public Task<VaultPendingMutation?> GetAsync(
         string accountId, string networkId, string mutationId, CancellationToken ct = default) =>
-        WithKeyAsync(accountId, async key =>
+        WithKeyAsync(accountId, networkId, async key =>
         {
             var bytes = await js.InvokeAsync<byte[]?>("stellarVaultV2Db.readQueue", ct,
                 StorageId(accountId, networkId, mutationId));
@@ -39,7 +39,7 @@ public sealed class IndexedDbVaultPendingMutationStore(
         }, ct);
 
     public Task<bool> AddAsync(VaultPendingMutation entry, CancellationToken ct = default) =>
-        WithKeyAsync(entry.AccountId, async key =>
+        WithKeyAsync(entry.AccountId, entry.NetworkId, async key =>
         {
             byte[] blob = Encode(entry, key);
             try
@@ -58,7 +58,7 @@ public sealed class IndexedDbVaultPendingMutationStore(
             previous.OriginStrategyId != replacement.OriginStrategyId)
             throw new InvalidOperationException("Queue identity cannot change during state transition.");
 
-        return WithKeyAsync(previous.AccountId, async key =>
+        return WithKeyAsync(previous.AccountId, previous.NetworkId, async key =>
         {
             var id = StorageId(previous.AccountId, previous.NetworkId, previous.Id);
             byte[]? current = await js.InvokeAsync<byte[]?>("stellarVaultV2Db.readQueue", ct, id);
@@ -79,7 +79,7 @@ public sealed class IndexedDbVaultPendingMutationStore(
     }
 
     public Task<bool> TryDeleteAsync(VaultPendingMutation expected, CancellationToken ct = default) =>
-        WithKeyAsync(expected.AccountId, async key =>
+        WithKeyAsync(expected.AccountId, expected.NetworkId, async key =>
         {
             var id = StorageId(expected.AccountId, expected.NetworkId, expected.Id);
             byte[]? current = await js.InvokeAsync<byte[]?>("stellarVaultV2Db.readQueue", ct, id);
@@ -93,14 +93,13 @@ public sealed class IndexedDbVaultPendingMutationStore(
             finally { CryptographicOperations.ZeroMemory(current); }
         }, ct);
 
-    private Task<T> WithKeyAsync<T>(string accountId, Func<ReadOnlyMemory<byte>, Task<T>> work,
+    private Task<T> WithKeyAsync<T>(string accountId, string networkId,
+        Func<ReadOnlyMemory<byte>, Task<T>> work,
         CancellationToken ct)
     {
         retention.RequireLocalPersistence();
         StellarAccountAddress.Validate(accountId);
-        if (sessions.ActiveAccountId != accountId)
-            throw new UnauthorizedAccessException("Queue account differs from the unlocked local vault.");
-        return sessions.ExecuteAsync(async (_, key, token) =>
+        return keySession.ExecuteAsync(accountId, networkId, async (key, token) =>
         {
             token.ThrowIfCancellationRequested();
             return await work(key);
