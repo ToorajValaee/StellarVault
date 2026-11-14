@@ -11,6 +11,7 @@ on:
       - 'src/StellarVault.Core/**'
       - 'tests/pwa-release-smoke.test.cjs'
       - 'tests/recent-vault.test.cjs'
+      - 'tests/secret-key-ledger.test.cjs'
       - 'tests/upload-checkpoint.test.cjs'
       - 'tests/StellarVault.Core.CryptoTests/**'
 
@@ -57,6 +58,7 @@ jobs:
           test -s "$root/css/modern-app.css"
           test -s "$root/js/vault-v2-keywrap.js"
           test -s "$root/js/vault-v2-indexeddb.js"
+          test -s "$root/js/vault-secret-ledger.js"
           test -s "$root/js/ledger-compat/app.js"
           grep -q 'blazor.webassembly.js' "$root/index.html"
           grep -q 'service-worker-assets.js' "$root/service-worker.js"
@@ -78,7 +80,7 @@ jobs:
       - name: Run .NET 10 authenticated encryption tests
         run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
       - name: Run PWA and encrypted storage regressions
-        run: node --test tests/upload-checkpoint.test.cjs tests/recent-vault.test.cjs tests/pwa-release-smoke.test.cjs
+        run: node --test tests/upload-checkpoint.test.cjs tests/recent-vault.test.cjs tests/pwa-release-smoke.test.cjs tests/secret-key-ledger.test.cjs
       - name: Package verified PWA
         uses: actions/upload-artifact@v4
         with:
