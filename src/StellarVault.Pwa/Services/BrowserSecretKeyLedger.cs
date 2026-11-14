@@ -133,6 +133,12 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         CancellationToken cancellationToken = default) =>
         QuoteAsync("expand", null, null, cancellationToken);
 
+    public async Task CancelQuoteAsync(string quoteId)
+    {
+        if (_connected && !string.IsNullOrWhiteSpace(quoteId))
+            await js.InvokeVoidAsync("stellarVaultSecretLedger.cancelQuote", _sessionId, quoteId);
+    }
+
     public async Task<string> SubmitApprovedAsync(string quoteId,
         CancellationToken cancellationToken = default)
     {
