@@ -36,3 +36,9 @@ Export must use an authenticated, versioned format with stable logical record ID
 - `VaultConnectedStellarAccountInventory` is registered in both hosts and inspects the selected *already-connected* HD or S-key account inventory. It does not create accounts, traverse the full linked chain, validate root signer thresholds, authorize transactions, or claim independent receipt verification.
 - The new `VaultAccountStrategyFactory` remains an extension contract, not a live transaction route. A future `CreateNextAsync` implementation must preserve fresh quote/approval/fee/reserve checks and confirmed child authorization; never automatically submit because of a factory request.
 - **Priority order:** finish Stellar HD and S-key account workflow parity, recovery, records/files and synchronization first. Then sharing and import/export. EVM remains a last-priority architecture consideration, not an active implementation target.
+
+## Stellar-first integration increment
+- The factory now dispatches concrete HD and linked-key strategies for already-connected **read-only account inspection**, with chain-neutral output. The linked workspace uses this to validate root, count and tail against selected strategy. CreateNext and full per-node discovery deliberately reject until verified workflow support exists; no unapproved transaction may occur.
+- Existing HD record estimate/publish/update and linked-key quoted record drafts consult the shared logical type factory, with no payload format migration.
+- New local binary text/plain records are blocked because legacy MIME-only metadata cannot distinguish a plain-text file from editable text. A versioned type discriminator will remove this restriction later.
+- EVM is last priority: no EVM implementation is authorized in this phase.
