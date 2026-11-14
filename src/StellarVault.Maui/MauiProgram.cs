@@ -65,6 +65,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp =>
             sp.GetRequiredService<IVaultLinkedDraftStore>());
         builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
+        builder.Services.AddScoped<VaultLinkedDraftPublication>();
         builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
                 services.GetRequiredService<IVaultQueueKeySession>(),
