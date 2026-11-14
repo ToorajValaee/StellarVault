@@ -439,3 +439,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Reviewed linked expansion milestone
 - Linked chain expansion now routes through `VaultLinkedAccountExpansion`, retaining exact quote/approval and root/network scope; it consumes pending intent before the network operation, never retries an uncertain submission, and checks connected count/tail after. This is **not** production-safe cross-device deduplication or proof of historical signer authorization.
 - Do not replace the explicit S-key quote UI with an unapproved generic factory CreateNext; keep existing HD transaction behavior untouched. EVM is last priority. This work has not been compiled or device-tested.
+
+## Storage-driven chain capacity rule
+- The linked S-key UI must not require users to request another account. `VaultLinkedRecordWritePlanner` handles a typed create-only storage-capacity signal from the Stellar JS planner, preparing an expansion quote as part of the requested record save. The extra account and the record write each require their own explicit user-approved quote and verified outcome; never automatically broadcast the second transaction.
+- Do not treat insufficient funds, MAX_OPS, update-account exhaustion, or maximum chain length as permission to allocate another account. These require explicit failure or a separately audited migration/large-record protocol. Preserve in-memory draft handling and no-blind-retry uncertainty.
+- This integration is source-only, not build/run validated.
