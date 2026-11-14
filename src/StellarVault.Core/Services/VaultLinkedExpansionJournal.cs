@@ -102,6 +102,10 @@ public sealed class VaultLinkedExpansionJournal(
                 DateTimeOffset.UtcNow);
             byte[] payload = JsonSerializer.SerializeToUtf8Bytes(intent);
             VaultPendingMutation? draft = null;
+            // This flag flips immediately before handing the approved quote to
+            // the ledger-backed expansion transport. Earlier failures may safely
+            // abandon the unused quote; later failures MUST stay quarantined.
+            var transportInvoked = false;
             try
             {
                 draft = VaultPendingMutation.Create(root,
@@ -127,6 +131,7 @@ public sealed class VaultLinkedExpansionJournal(
                 string? hash = null;
                 try
                 {
+                    transportInvoked = true;
                     hash = await expansion.SubmitApprovedAsync(approvedQuote, true, ct);
                     RequireSession(root, scope, epoch);
                     var confirmed = reserved with
@@ -158,6 +163,19 @@ public sealed class VaultLinkedExpansionJournal(
                     throw new InvalidOperationException(
                         "Linked account expansion may have reached Stellar. Do not retry. Review the durable journal and historical transaction evidence.");
                 }
+            }
+            catch
+            {
+                if (!transportInvoked)
+                {
+                    // Persisting a Pending intent or failing its CAS reservation
+                    // happened before any transport call. Release only this
+                    // never-submitted quote; do not erase its durable journal
+                    // because another tab may have observed the reservation.
+                    try { await expansion.AbandonUnsubmittedAsync(CancellationToken.None); }
+                    catch { /* Preserve the original journal failure. */ }
+                }
+                throw;
             }
             finally
             {
