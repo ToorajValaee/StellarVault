@@ -13,6 +13,8 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
+    private long _connectionEpoch;
+    public long ConnectionEpoch => _connectionEpoch;
     private string? _root;
     private string? _connectedPassphrase;
     public string? ConnectedNetworkPassphrase => _connected ? _connectedPassphrase : null;
@@ -29,6 +31,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         CancellationToken cancellationToken = default)
     {
         if (_connected) throw new InvalidOperationException("A Secret Key vault is already open.");
+        _connectionEpoch++;
         new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, secretKey).Validate();
         if (string.IsNullOrWhiteSpace(networkPassphrase))
             throw new ArgumentException("A network passphrase is required.", nameof(networkPassphrase));
@@ -203,6 +206,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
 
     public async Task DisconnectAsync()
     {
+        _connectionEpoch++;
         _root = null;
         _connectedPassphrase = null;
         _connected = false;
