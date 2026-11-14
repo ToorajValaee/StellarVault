@@ -153,7 +153,7 @@ else
                     <label class="terminal-label" for="native-ledger-secret">Stellar secret key (S-key)</label>
                     <input id="native-ledger-secret" class="terminal-input" type="password" autocomplete="off"
                            spellcheck="false" maxlength="56" @bind="_ledgerSecretKey" @bind:event="oninput"
-                           disabled="@(_ledgerBusy || _runtimeReady != true)" />
+                           disabled="@(_ledgerBusy || _secretRuntimeReady != true)" />
                     <p class="sv-native-subtle-status">Read-only linked-account inspection. Secret-key transaction signing and record access will be enabled after their authorization and recovery checks pass.</p>
                     @if (_secretInspection is not null)
                     {
@@ -515,7 +515,7 @@ else
                 {
                     <span class="sv-native-command-hint">@(_runtimeReady == false ? "Connection unavailable" : "Your vault")</span>
                     <button type="button" class="sv-native-command primary"
-                            disabled="@(_ledgerBusy || _runtimeReady != true || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
+                            disabled="@(_ledgerBusy || (_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _runtimeReady != true : _secretRuntimeReady != true) || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                             @onclick="ConnectSelectedLedgerCredentialAsync">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
                 }
             }
@@ -653,6 +653,7 @@ else
     }
 
     private bool? _runtimeReady;
+    private bool? _secretRuntimeReady;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -694,6 +695,7 @@ else
             await JS.InvokeVoidAsync("stellarVaultNativeRuntime.load");
             var status = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
             _runtimeReady = status.Ready;
+            _secretRuntimeReady = await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret");
             if (!status.Ready) _ledgerMnemonic = string.Empty;
             _ledgerMessage = status.Ready ? null
                 : "Unable to prepare a secure connection. Restart the app or try again.";
@@ -701,6 +703,8 @@ else
         catch
         {
             _runtimeReady = false;
+            try { _secretRuntimeReady = await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"); }
+            catch { _secretRuntimeReady = false; }
             _ledgerMnemonic = string.Empty;
             _ledgerMessage = "Unable to prepare a secure connection. Restart the app or try again.";
         }
@@ -1322,7 +1326,7 @@ else
 
     private async Task InspectNativeSecretChainAsync()
     {
-        if (_ledgerBusy || _runtimeReady != true ||
+        if (_ledgerBusy || _secretRuntimeReady != true ||
             _ledgerCredentialMode != VaultCredentialMode.StellarSecretKeyChain ||
             (_ledgerNetwork == "public" && !_confirmMainnetAccess) ||
             (_ledgerNetwork == "custom" && !CustomNetworkReady)) return;
@@ -1340,8 +1344,8 @@ else
                     (NetworkSelection.CustomHorizonUrl, NetworkSelection.CustomPassphrase),
                 _ => throw new InvalidOperationException("Select a verified Stellar network.")
             };
-            var readiness = await JS.InvokeAsync<RuntimeStatus>("stellarVaultNativeRuntime.inspect");
-            if (!readiness.Ready) throw new InvalidOperationException("Stellar SDK is unavailable.");
+            if (!await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"))
+                throw new InvalidOperationException("Stellar S-key runtime is unavailable.");
             _secretInspection = await SecretChain.InspectAsync(_ledgerSecretKey, url, passphrase);
             _ledgerMessage = "Linked accounts inspected. This has not opened a write-enabled vault.";
         }
