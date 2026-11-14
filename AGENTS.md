@@ -449,3 +449,7 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - Reserve one available tail ManageData slot for the next sv:next:v1 link when planning *new* records. Never extend a 1000-entry tail or allocate a child for a record that already exceeds the atomic transaction limit.
 - On submission uncertainty, the linked JS session and UI block further mutations. Read-only Refresh cannot unblock them. Cross-session durable reconciliation remains unimplemented and is required before production release.
 - Regression test source cases were added but not run; never report test pass without executing. EVM is still last priority.
+
+## Read-only linked submission diagnostic
+- Linked S-key JS transport now retains a volatile public-only unresolved submission snapshot, exposed through InspectUncertainSubmissionAsync and read-only UI. No signing material, plaintext, ciphertext or original draft enters this diagnostic.
+- This is not a durable journal or independent historical proof; a missing snapshot must not be treated as completed or failed transaction. No tests/builds executed in this batch.
