@@ -463,3 +463,7 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - Same-runtime S-key lock/reopen no longer drops an unresolved public-only marker; connected UI checks this before enabling writes. Full reload and other devices are NOT protected. Never claim durable recovery.
 - Read-only Horizon-linked receipt adapter checks selected HTTPS network identity, receipt and root source. It is advisory and cannot confirm exact operation or record, cannot clear quarantine, and never submits. Native host explicitly links adapter. Tests were added but not executed.
 - Keep explicit local-storage consent and independent S-key encryption lifecycle as blockers for durable journal; no plaintext localStorage shortcuts. EVM last.
+
+## Cross-session linked guard update
+- JS unresolvedByVault must be checked at plan start, submit start and immediately before network transmission across all sessions sharing exact root/network. Do not move the last guard earlier: async preflight can interleave. This protects only one JS realm, not reloads or devices.
+- New create requests against an already saturated tail must fail rather than triggering a new-account quote, because the tail cannot accept a chain pointer. Node regression cases added but not executed; no CI checks visible. EVM remains last priority.
