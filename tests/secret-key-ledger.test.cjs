@@ -444,7 +444,7 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
   assert.match(shared,/queue\.ReviewAllAsync/);
   assert.match(shared,/VaultHybridFolderSyncPlan\.Build/);
   assert.match(shared,/sessions\.Epoch != epoch/);
-  assert.match(linked,/queue\.ReadAsync\(root, ct\)/);
+  assert.match(linked,/store\.ListAsync\(root, scope, ct\)/);
   assert.match(linked,/CanPublish/);
   assert.match(linked,/\n            false,/);
   assert.doesNotMatch(linked,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
@@ -476,7 +476,7 @@ test('encrypted queue origin is versioned, immutable and not implicitly upgraded
   assert.match(guard,/VaultMutationStrategyPolicy\.Resolve\(item\.OriginStrategyId\)/);
   assert.match(hd,/Mixed account-strategy queue/);
   assert.match(linked,/LegacyHdEntries, int LinkedTaggedEntries/);
-  assert.match(linked,/hd, linkedEntries, false/);
+  assert.match(linked,/0, linkedCount, false/);
   for (const store of [native,browser]) {
     assert.match(store,/previous\.OriginStrategyId != replacement\.OriginStrategyId/);
     assert.match(store,/a\.OriginStrategyId == b\.OriginStrategyId/);
@@ -576,4 +576,64 @@ test('linked vault cannot silently treat one session sibling uncertainty as safe
   assert.equal(h.api.inspectUncertain(parallel).Kind,'create');
   await assert.rejects(h.api.plan(parallel,'expand',null,null),/unresolved/);
   h.api.close(parallel);h.close();
+});
+
+
+test('independent S-key local queue key and ciphertext namespaces never alias HD storage',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const browser=path.join(src,'StellarVault.Pwa','Services');
+  const scope=fs.readFileSync(path.join(core,'VaultLinkedQueueStorageScope.cs'),'utf8');
+  const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
+  const credentialPwa=fs.readFileSync(path.join(browser,'IndexedDbVaultLinkedPassphraseCredentialStore.cs'),'utf8');
+  const credentialNative=fs.readFileSync(path.join(core,'FileSystemVaultLinkedPassphraseCredentialStore.cs'),'utf8');
+  const snapshotPwa=fs.readFileSync(path.join(browser,'IndexedDbVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const snapshotNative=fs.readFileSync(path.join(core,'FileSystemVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const inspector=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
+  const hostPwa=fs.readFileSync(path.join(src,'StellarVault.Pwa','Program.cs'),'utf8');
+  const hostNative=fs.readFileSync(path.join(src,'StellarVault.Maui','MauiProgram.cs'),'utf8');
+  assert.match(scope,/secret-chain:queue:v1:/);
+  assert.match(scope,/interface IVaultLinkedQueueSnapshotStore/);
+  assert.match(session,/VaultPassphraseLifecycle _credentials/);
+  assert.match(session,/IVaultLinkedPassphraseCredentialStore credentialStore/);
+  assert.match(session,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(session,/ledger\.InspectAccountInfoAsync\(ct\)/);
+  assert.match(session,/VaultLinkedQueueStorageScope\.FromNetworkScope\(_scope\)/);
+  assert.match(session,/CryptographicOperations\.ZeroMemory\(_key\)/);
+  assert.match(session,/CryptographicOperations\.ZeroMemory\(copy\)/);
+  assert.match(session,/return entry is not null/);
+  assert.match(credentialPwa,/secret-chain:queue-key:v1:/);
+  assert.match(credentialPwa,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(credentialNative,/secret-chain:queue-key:v1:/);
+  assert.match(credentialNative,/FileSystemVaultPassphraseCredentialStore/);
+  assert.match(snapshotPwa,/new IndexedDbVaultPendingMutationStore\(js, keys, retention\)/);
+  assert.match(snapshotNative,/new FileSystemVaultPendingMutationStore\(keys, retention, directory\)/);
+  for(const value of [snapshotPwa,snapshotNative]){
+    assert.match(value,/VaultLinkedQueueStorageScope\.FromNetworkScope\(linkedNetworkScope\)/);
+    assert.match(value,/VaultMutationStrategyPolicy\.Linked/);
+  }
+  assert.match(inspector,/IVaultLinkedQueueSnapshotStore store/);
+  assert.match(inspector,/store\.ListAsync\(root, scope, ct\)/);
+  assert.match(inspector,/0, linkedCount, false/);
+  assert.doesNotMatch(inspector,/VaultScopedQueueReview|VaultSessionManager|SubmitApprovedAsync/);
+  assert.match(hostPwa,/IndexedDbVaultLinkedPassphraseCredentialStore/);
+  assert.match(hostPwa,/IndexedDbVaultLinkedQueueSnapshotStore/);
+  assert.match(hostNative,/FileSystemVaultLinkedPassphraseCredentialStore/);
+  assert.match(hostNative,/FileSystemVaultLinkedQueueSnapshotStore/);
+  assert.match(hostNative,/vault-secret-chain-pending-queue/);
+  assert.match(hostNative,/vault-secret-chain-credentials/);
+});
+
+test('linked queue key is revoked on PWA and MAUI app lifecycle boundaries',()=>{
+  const src=path.join(__dirname,'..','src');
+  const pwa=fs.readFileSync(path.join(src,'StellarVault.Pwa','App.razor'),'utf8');
+  const native=fs.readFileSync(path.join(src,'StellarVault.UI','Components','NativeVaultWorkspace.razor'),'utf8');
+  const linked=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultSecretKeyWorkspace.razor'),'utf8');
+  const transport=fs.readFileSync(path.join(src,'StellarVault.Pwa','Services','BrowserSecretKeyLedger.cs'),'utf8');
+  const interfaceSource=fs.readFileSync(path.join(src,'StellarVault.Core','Services','IStellarSecretKeyLedger.cs'),'utf8');
+  assert.match(interfaceSource,/ConnectedNetworkPassphrase/);
+  assert.match(transport,/ConnectedNetworkPassphrase => _connected/);
+  assert.match(pwa,/await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(native,/await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(linked,/await LinkedQueueKeys\.LockAsync\(\)/);
 });
