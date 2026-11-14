@@ -12,7 +12,8 @@ public sealed class VaultHybridSyncReviewService(
     IStellarLedgerRecords ledger,
     VaultNetworkSelection networks,
     VaultDeviceRetentionGate retention,
-    VaultSessionManager sessions)
+    VaultSessionManager sessions,
+    VaultScopedQueueReview scopedQueue)
 {
     public sealed record Item(string MutationId, VaultMutationKind Kind, string Title,
         string Explanation, VaultSyncApprovalSnapshot? Quote = null);
@@ -34,7 +35,12 @@ public sealed class VaultHybridSyncReviewService(
         var selectedNetwork = networks.Network;
         var selectedPassphrase = networks.CustomPassphrase;
         var selectedEndpoint = networks.CustomHorizonUrl;
-        var review = await queue.PrepareReviewAsync(accountId, networkId, ct);
+        // Reuse the same consent-bound encrypted queue and folder-graph
+        // inspection as any other Stellar account strategy.
+        var snapshot = await scopedQueue.ReadAsync(accountId, ct);
+        if (snapshot.NetworkId != networkId || snapshot.LocalSessionEpoch != sessionEpoch)
+            throw new InvalidOperationException("Encrypted queue scope changed during review.");
+        var review = snapshot.Queue;
         var canEstimate = estimateFees && ledger.IsConnected &&
             review.NeedsReconciliation == 0 && review.Conflicts == 0;
         var details = new List<Item>();
@@ -61,7 +67,7 @@ public sealed class VaultHybridSyncReviewService(
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception) { canEstimate = false; remote = null; }
         }
-        var all = await queue.ReviewAllAsync(accountId, networkId, ct);
+        var all = snapshot.Mutations;
 
         foreach (var mutation in review.Ready)
         {
@@ -196,6 +202,6 @@ public sealed class VaultHybridSyncReviewService(
                 "Unlocked vault session or selected network changed during hybrid review.");
 
         return new(accountId, networkId, review, details, ledger.IsConnected,
-            VaultHybridFolderSyncPlan.Build(all, review));
+            snapshot.FolderPlan);
     }
 }
