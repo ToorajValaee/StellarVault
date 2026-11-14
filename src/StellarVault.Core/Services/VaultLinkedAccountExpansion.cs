@@ -15,7 +15,7 @@ public sealed class VaultLinkedAccountExpansion(
     private PendingExpansion? _pending;
 
     private sealed record PendingExpansion(
-        string Root, string Network, string QuoteId,
+        string Root, string Network, VaultSecretLedgerQuote Quote,
         string PreviousTail, int PreviousCount);
 
     private VaultAccountRequest Request(string root, string selectedNetwork) =>
@@ -69,7 +69,7 @@ public sealed class VaultLinkedAccountExpansion(
                     before.TailAddress != after.TailAddress)
                     throw new InvalidOperationException("Account chain changed while preparing the quote.");
 
-                _pending = new(root, selectedNetwork, quote.QuoteId,
+                _pending = new(root, selectedNetwork, quote,
                     before.TailAddress, before.AccountCount);
                 return quote;
             }
@@ -100,7 +100,7 @@ public sealed class VaultLinkedAccountExpansion(
         {
             var pending = _pending ??
                 throw new InvalidOperationException("There is no prepared account expansion to approve.");
-            if (reviewedQuote.Kind != "expand" || reviewedQuote.QuoteId != pending.QuoteId ||
+            if (reviewedQuote.Kind != "expand" || reviewedQuote != pending.Quote ||
                 !reviewedQuote.CreatesChildNode)
                 throw new InvalidOperationException("Reviewed expansion quote differs from the prepared quote.");
 
@@ -115,7 +115,7 @@ public sealed class VaultLinkedAccountExpansion(
             RequireSameSession(pending);
             // This is the no-retry boundary even if network submission fails or is cancelled.
             _pending = null;
-            var hash = await ledger.SubmitApprovedAsync(pending.QuoteId, ct);
+            var hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
                 throw new InvalidDataException("Account expansion receipt is invalid; reconcile before retry.");
 
@@ -138,10 +138,10 @@ public sealed class VaultLinkedAccountExpansion(
         await _gate.WaitAsync(ct);
         try
         {
-            if (_pending is not { } pending || pending.QuoteId != quoteId)
+            if (_pending is not { } pending || pending.Quote.QuoteId != quoteId)
                 throw new InvalidOperationException("There is no matching account expansion review.");
             _pending = null;
-            await ledger.CancelQuoteAsync(pending.QuoteId);
+            await ledger.CancelQuoteAsync(pending.Quote.QuoteId);
         }
         finally { _gate.Release(); }
     }
