@@ -4,6 +4,7 @@
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession QueueKeys
 @inject VaultLinkedQueueInspection QueueInspection
+@inject VaultLinkedDraftWorkspace DraftWorkspace
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
@@ -53,8 +54,68 @@
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="InspectAsync">Inspect encrypted draft queue</button>
                 <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="LoadDraftsAsync">Refresh local drafts</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LockAsync">Lock local drafts</button>
             </div>
+            <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
+                <h3>Save to encrypted device storage</h3>
+                <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
+                <label class="sv-secret-approval">
+                    <input type="checkbox" @bind="_draftIsFolder" disabled="@_busy" />
+                    New folder instead of record
+                </label>
+                <label>Title
+                    <input maxlength="256" @bind="_draftTitle" @bind:event="oninput" disabled="@_busy" />
+                </label>
+                @if (!_draftIsFolder)
+                {
+                    <label>Username
+                        <input @bind="_draftUsername" @bind:event="oninput" disabled="@_busy" />
+                    </label>
+                    <label>URL
+                        <input type="url" @bind="_draftUrl" @bind:event="oninput" disabled="@_busy" />
+                    </label>
+                    <label>Secret
+                        <input type="password" autocomplete="off" spellcheck="false"
+                               @bind="_draftContent" @bind:event="oninput" disabled="@_busy" />
+                    </label>
+                    <label>Notes
+                        <textarea rows="3" @bind="_draftNotes" @bind:event="oninput"
+                                  disabled="@_busy"></textarea>
+                    </label>
+                    <label>Tags (comma-separated)
+                        <input @bind="_draftTags" @bind:event="oninput" disabled="@_busy" />
+                    </label>
+                }
+                <label>Parent folder record ID (optional)
+                    <input maxlength="16" @bind="_draftFolderId" @bind:event="oninput"
+                           disabled="@_busy" />
+                </label>
+                <button type="button" class="pixel-button primary"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_draftTitle) || (!_draftIsFolder && string.IsNullOrEmpty(_draftContent)))"
+                        @onclick="StageDraftAsync">Save encrypted local draft</button>
+            </section>
+            @if (_drafts.Count > 0)
+            {
+                <section class="sv-secret-review" aria-label="Pending encrypted local records and folders">
+                    <h3>Local drafts — not on Stellar (@_drafts.Count)</h3>
+                    @foreach (var draft in _drafts)
+                    {
+                        <div class="sv-secret-workspace-actions" @key="draft.MutationId">
+                            <span><strong>@draft.Title</strong> — @(draft.IsFolder ? "Folder" : "Record")
+                                · @draft.State
+                                @if (draft.IsCorrupt) { <em>Unreadable draft</em> }
+                            </span>
+                            @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
+                            {
+                                <button type="button" class="pixel-button compact" disabled="@_busy"
+                                        @onclick="() => DiscardDraftAsync(draft.MutationId)">Discard local draft</button>
+                            }
+                        </div>
+                    }
+                </section>
+            }
         }
         @if (_report is not null && QueueKeys.IsUnlocked)
         {
@@ -79,11 +140,84 @@
     private string _passphrase = string.Empty;
     private string? _message;
     private VaultLinkedQueueInspection.Report? _report;
+    private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
+    private bool _draftIsFolder;
+    private string _draftTitle = string.Empty;
+    private string _draftContent = string.Empty;
+    private string _draftUsername = string.Empty;
+    private string _draftUrl = string.Empty;
+    private string _draftNotes = string.Empty;
+    private string _draftTags = string.Empty;
+    private string _draftFolderId = string.Empty;
+
+    private void ClearDraftEditor()
+    {
+        _draftContent = _draftUsername = _draftUrl = _draftNotes = _draftTags = string.Empty;
+        _draftTitle = _draftFolderId = string.Empty;
+        _draftIsFolder = false;
+    }
+
+    private async Task LoadDraftsAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        try { _drafts = await DraftWorkspace.ListAsync(); }
+        catch
+        {
+            _drafts = [];
+            _message = "The encrypted drafts could not be read. Check the local queue and connected signer.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task StageDraftAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked ||
+            string.IsNullOrWhiteSpace(_draftTitle) ||
+            (!_draftIsFolder && string.IsNullOrEmpty(_draftContent))) return;
+        _busy = true;
+        try
+        {
+            var draft = new LedgerRecordDraft(
+                _draftTitle.Trim(), _draftIsFolder ? "folder" : _draftContent,
+                string.IsNullOrWhiteSpace(_draftFolderId) ? null : _draftFolderId.Trim(),
+                _draftTags.Split(',', StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
+            await DraftWorkspace.CreateAsync(draft);
+            ClearDraftEditor();
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = "Encrypted local draft saved. No transaction was submitted.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Unable to save encrypted local draft: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardDraftAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            await DraftWorkspace.DiscardAsync(id);
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = "Unpublished local draft discarded.";
+        }
+        catch (Exception ex) { _message = "Draft was not discarded: " + ex.Message; }
+        finally { _busy = false; }
+    }
 
     private async Task ChangeConsentAsync(ChangeEventArgs args)
     {
         if (_busy) return;
         _report = null;
+        _drafts = [];
+        ClearDraftEditor();
         _exists = null;
         _passphrase = string.Empty;
         var consented = args.Value is true ||
@@ -142,6 +276,7 @@
             else
                 await QueueKeys.UnlockAsync(_passphrase);
             _exists = true;
+            _drafts = await DraftWorkspace.ListAsync();
             _message = "Independent encrypted device storage is unlocked. Review is read-only; on-chain publishing remains separate.";
         }
         catch
@@ -163,6 +298,7 @@
         try
         {
             _report = await QueueInspection.InspectAsync();
+            _drafts = await DraftWorkspace.ListAsync();
             _message = "Read-only inspection completed. No transactions were broadcast.";
         }
         catch
@@ -180,6 +316,8 @@
         {
             await QueueKeys.LockAsync();
             _report = null;
+            _drafts = [];
+            ClearDraftEditor();
             _passphrase = string.Empty;
             _message = "Independent local encryption key cleared from memory.";
         }
@@ -190,6 +328,8 @@
     {
         _passphrase = string.Empty;
         _report = null;
+        _drafts = [];
+        ClearDraftEditor();
         await QueueKeys.LockAsync();
         LinkedRetention.Reset();
         if (_enabledGeneralRetention) Retention.Reset();
