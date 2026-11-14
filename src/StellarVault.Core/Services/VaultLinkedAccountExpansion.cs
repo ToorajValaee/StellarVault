@@ -65,7 +65,7 @@ public sealed class VaultLinkedAccountExpansion(
                     !StellarAccountAddress.IsValid(quote.TargetAccountId))
                     throw new InvalidDataException("Invalid linked-account expansion quote.");
 
-                RequireSessionMatches(root, selectedNetwork);
+                RequireSessionMatches(root, selectedNetwork, scope);
                 var after = await strategies.InspectConnectedAsync(Request(root, selectedNetwork), ct);
                 if (before.AccountCount != after.AccountCount ||
                     before.TailAddress != after.TailAddress)
