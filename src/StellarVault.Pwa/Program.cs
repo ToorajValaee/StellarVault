@@ -41,6 +41,7 @@ builder.Services.AddScoped<IVaultLinkedDraftStore, IndexedDbVaultLinkedQueueSnap
 builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp => sp.GetRequiredService<IVaultLinkedDraftStore>());
 builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
         builder.Services.AddScoped<VaultLinkedDraftPublication>();
+        builder.Services.AddScoped<VaultLinkedDraftRecoveryReview>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
 builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
