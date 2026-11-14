@@ -762,7 +762,8 @@ test('manual linked draft publication reserves durable queue state before networ
   assert.match(publisher,/Fingerprint\(original\)/);
   assert.match(publisher,/State = VaultSyncState\.Submitting/);
   assert.match(publisher,/State = VaultSyncState\.Uncertain/);
-  assert.match(publisher,/State = VaultSyncState\.Confirmed/);
+  assert.doesNotMatch(publisher,/State = VaultSyncState\.Confirmed/);
+  assert.match(publisher,/Current account snapshot does not prove|matching CURRENT account snapshot/);
   assert.match(publisher,/ledger\.ReadAsync\(ct\)/);
   assert.match(publisher,/store\.TryReplaceAsync\(reserved, uncertain, CancellationToken\.None\)/);
   assert.doesNotMatch(publisher,/VaultSessionManager|MnemonicHd|StellarHdAccountStrategy/);
