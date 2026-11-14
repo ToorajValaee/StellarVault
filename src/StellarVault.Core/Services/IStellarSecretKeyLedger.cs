@@ -62,3 +62,14 @@ public sealed class UnavailableStellarSecretKeyLedger : IStellarSecretKeyLedger
         Task.FromException<string>(NotAvailable());
     public Task DisconnectAsync() => Task.CompletedTask;
 }
+
+/// <summary>
+/// The storage planner cannot fit a newly created record on the current tail.
+/// The caller may prepare a reviewed new account and then re-plan the record,
+/// but must never submit a second transaction automatically.
+/// </summary>
+public sealed class VaultAccountCapacityRequiredException : InvalidOperationException
+{
+    public VaultAccountCapacityRequiredException()
+        : base("The selected Stellar storage account is full. Review adding another account to save this record.") { }
+}
