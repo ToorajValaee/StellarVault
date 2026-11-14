@@ -8,12 +8,14 @@ namespace StellarVault.Core.Services;
 public sealed class FileSystemVaultLinkedQueueSnapshotStore(
     VaultLinkedQueueKeySession keys,
     VaultDeviceRetentionGate retention,
+    VaultLinkedLocalRetentionGate linkedRetention,
     string directory) : IVaultLinkedQueueSnapshotStore
 {
     public async Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        linkedRetention.RequireLocalPersistence();
         var storageScope = VaultLinkedQueueStorageScope.FromNetworkScope(linkedNetworkScope);
         var storage = new FileSystemVaultPendingMutationStore(keys, retention, directory);
         var mutations = await storage.ListAsync(accountId, storageScope, ct);
