@@ -1,6 +1,6 @@
-# Design option — Stellar secret-key vault chain (not yet implemented)
+# Independent Secret Key / Linked-Account Vault — implementation plan
 
-Status: proposal only. The current production-path IStellarLedgerRecords.ConnectAsync expects a BIP-39 mnemonic, and HD v2 uses SEP-5 derivation, an authenticated root registry, and sponsored child allocation. Do **not** silently treat a secret key as a mnemonic.
+Status as of 2026-11-14: **Phase 1 implemented, full Secret Key vault not yet implemented.** HD v2 remains operational as before. The new independent S-key type, checksum-gated read-only chain inspection, signer and threshold verification, cycle/length checks, and account-provisioning cost planner are committed in Core/PWA/MAUI. Both hosts now offer explicit Recovery Phrase / Stellar Secret Key selection. The Secret Key action is labeled **Inspect linked accounts**, not Unlock or Connect, because record encryption, live writes, child provisioning, and recovery have **not** been enabled. The current production-path IStellarLedgerRecords.ConnectAsync still expects a BIP-39 mnemonic. Never interpret an S-key as a mnemonic.
 
 ## Product choice
 
@@ -40,3 +40,18 @@ Non-smart-contract operations have a network minimum inclusion fee of 100 stroop
 - Review docs/legacy-ledger-reference/app.js and src/StellarVault.Pwa/wwwroot/js/ledger-compat/app.js for legacy secret-key connect/encryption code; do not mistake those references for production-ready linked-chain authorization.
 
 Implementation/safety work is substantial: core credential abstraction, secret-key signer transport, account-chain discovery and integrity, funding/sponsorship estimator, onboarding UI, local-key cleanup, error reconciliation, testnet recovery tests, and independent security review. No feature implementation, signing or network transactions are performed as part of this proposal.
+
+## Current implementation (phase 1)
+
+- `src/StellarVault.Core/Services/VaultCredentialMode.cs`: explicit credential discriminator and in-memory typed input, plus chain-inspection data contract. Secret values are not serialized, logged or persisted.
+- `src/StellarVault.Core/Services/VaultSecretChainProvisioningPlan.cs`: pure, checked-stroops funded-child reserve and operation-fee budget. This is a planning model; not an operation, signed quote or authorization.
+- `src/StellarVault.Pwa/wwwroot/js/vault-secret-chain.js`: read-only network-bound S-key inspector. It verifies Stellar StrKey checksum, Horizon network passphrase, bounded 64-account traversal, `sv:next:v1` or `sv:next` pointers (base64-encoded G-address), no duplicate conflicting pointers, root signer weights against medium/high thresholds, minimum positive thresholds, no cycles, and rejects roots with an HD-v2 registry. **This newly recognized link format is not proof of compatibility with unverified historical secret-key vaults.**
+- `src/StellarVault.Pwa/Services/BrowserSecretKeyVaultDiscovery.cs`: typed JS interop adapter with post-deserialization validation. Registered in PWA and linked/registered in MAUI.
+- `VaultHome.razor` and `NativeVaultWorkspace.razor`: separate credential selectors and explicitly read-only inspection. Clear S-key input after every attempt; do not alter HD login and transaction workflow.
+- `tests/secret-key-chain.test.cjs`: mocked inspection tests including valid root/chain, unauthorized signer, cycles, network mismatch, checksum, HD-v2 registry rejection and zero signer thresholds.
+
+**Not yet implemented:** production S-key record encryption format/AAD, independent on-chain manifest reader and signer transport, live funding/atomic child allocation, explicit fee approval, update/delete/cleanup, history-based recovery, hybrid mutation authorization, on-device consent/retention, native/pwa end-to-end recovery, production security review. Do not describe or present the mode as read/write capable until these are done.
+
+### Critical recovery edge
+
+A root public signer on a child authorizes specific child operations, but an account address link does not. All write paths must validate exact required signer weights, security thresholds, correct network, root registry mode and current tail. Child master-key policy must be resolved explicitly during atomic provisioning; a failed or uncertain write requires fresh independent network evidence before retry. Legacy linked-account formatting remains unverified and must never be silently upgraded.
