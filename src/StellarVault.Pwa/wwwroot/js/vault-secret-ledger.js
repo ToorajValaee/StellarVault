@@ -278,7 +278,10 @@ window.stellarVaultSecretLedger = (() => {
       cipher?.fill(0);
       fail('Record exceeds atomic transaction limit; allocating another account cannot fix it.');
     }
-    if(Number(node.subentry_count||0)+newUnits>1000) {
+    // A tail account needs one free ManageData entry for the future sv:next:v1 link.
+    // For new records, reserve that slot rather than filling the last entry.
+    const reservedCeiling=kind==='create' ? 999 : 1000;
+    if(Number(node.subentry_count||0)+newUnits>reservedCeiling) {
       cipher?.fill(0);
       if(kind!=='create')
         fail('Original record account has insufficient subentry capacity; updating it requires a separate migration protocol.');
@@ -324,6 +327,8 @@ window.stellarVaultSecretLedger = (() => {
     if(v.nodes.length>=MAX_CHAIN)fail('Chain already reached the supported limit.');
     const tail=v.nodes.at(-1),tailId=tail.account_id;
     if(next(tail,s.sdk))fail('Tail was modified; refresh first.');
+    if(Number(tail.subentry_count||0)>=1000)
+      fail('Tail account has no free entry for a chain link. Manual recovery is required; another account cannot be safely attached.');
     if(Object.hasOwn(tail.data_attr||{},'sv:next:v1'))fail('Tail link is occupied.');
     const child=s.sdk.Keypair.random(),childId=child.publicKey();
     const childFunding=3n*s.net.reserve,pointerReserve=s.net.reserve;
