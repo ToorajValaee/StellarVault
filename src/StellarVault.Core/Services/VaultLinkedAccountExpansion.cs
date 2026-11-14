@@ -181,6 +181,24 @@ public sealed class VaultLinkedAccountExpansion(
         }
     }
 
+    /// <summary>
+    /// Abandon any never-submitted expansion review when its owning UI session
+    /// locks or disconnects. Once transport was invoked, _pending is already
+    /// null, so this method cannot undo or authorize retry of an uncertain write.
+    /// </summary>
+    public async Task AbandonUnsubmittedAsync(CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var pending = _pending;
+            _pending = null;
+            if (pending is not null)
+                await TryCancelUnsubmittedAsync(pending.Quote.QuoteId);
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task CancelAsync(string quoteId, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct);
