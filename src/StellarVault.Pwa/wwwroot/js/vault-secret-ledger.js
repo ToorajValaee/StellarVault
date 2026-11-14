@@ -105,7 +105,7 @@ window.stellarVaultSecretLedger = (() => {
         name:'HKDF',hash:'SHA-256',salt,info:text.encode('vault-records|skh/skc|v1')
       },ikm,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     } finally {seed.fill(0);}
-    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,needsReconciliation:false};
+    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,needsReconciliation:false,uncertain:null};
     await chain(state);
     sessions.set(id,state);
     return {RootAccountId:root};
@@ -423,8 +423,15 @@ window.stellarVaultSecretLedger = (() => {
       // From this point any network failure may mean the transaction was accepted.
       // Keep this session quarantined until the connected outcome is verified.
       s.needsReconciliation=true;
+      // Public-only, session-lifetime diagnostic. No record plaintext, keys, or ciphertext.
+      s.uncertain={Kind:q.kind,RootAccountId:s.root,
+        TargetAccountId:q.kind==='expand'?q.childId:q.node,
+        RecordId:q.kind==='expand'?null:q.recordId,
+        TransactionHash:null,NetworkPassphrase:s.passphrase};
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
+      if(result?.hash && /^[0-9a-f]{64}$/i.test(result.hash))
+        s.uncertain.TransactionHash=result.hash;
       if(!result?.hash || result.successful===false)
         fail('No confirmed Stellar transaction hash. Reconcile before retry.');
       // An accepted response must still be checked against the new ledger state.
@@ -443,12 +450,19 @@ window.stellarVaultSecretLedger = (() => {
         fail('Transaction accepted ('+result.hash+') but state verification is pending. Do not retry blindly.');
       }
       s.needsReconciliation=false;
+      s.uncertain=null;
       return result.hash;
     }finally {
       if(q.cipher)q.cipher.fill(0);
       if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
       s.inFlight=false;
     }
+  }
+  function inspectUncertain(id) {
+    const s=session(id);
+    // Return a defensive public-only copy. Presence does NOT prove that the
+    // transaction reached the network, nor that its contents were confirmed.
+    return s.uncertain ? {...s.uncertain} : null;
   }
   function cancelQuote(id,quoteId) {
     const s=session(id),q=s.quotes.get(quoteId);
@@ -468,5 +482,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,inspectUncertain,cancelQuote,revokeAll});
 })();
