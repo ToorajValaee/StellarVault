@@ -250,7 +250,8 @@ window.stellarVaultSecretLedger = (() => {
     const s=session(id);
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     if(s.inFlight)fail('A ledger operation is already in progress.');
-    if(s.needsReconciliation)fail('A previous submission is unresolved; reconcile ledger history before starting a new session.');
+    if(s.needsReconciliation || unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+      fail('A previous submission is unresolved for this vault; reconcile ledger history before another write.');
     if(!['create','update','delete','expand'].includes(kind))fail('Invalid ledger operation.');
     if(kind!=='expand'&&!validId(recordId))fail('Record identifier is invalid.');
     if(kind==='create'||kind==='update')validateDraft(draft);
@@ -293,6 +294,8 @@ window.stellarVaultSecretLedger = (() => {
         fail('Original record account has insufficient subentry capacity; updating it requires a separate migration protocol.');
       if(newUnits>997)
         fail('Record needs too many Stellar data entries to fit on a fresh account.');
+      if(Number(node.subentry_count||0)>=1000)
+        fail('Tail account has no free entry for a chain link. Manual recovery is required; a new account cannot be safely attached.');
       fail('SV_ACCOUNT_CAPACITY_REQUIRED: Current account cannot hold this record; account capacity must be reviewed before saving.');
     }
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
@@ -360,7 +363,8 @@ window.stellarVaultSecretLedger = (() => {
     const s=session(id),q=s.quotes.get(quoteId);
     if(!q)fail('No matching reviewed quote. Estimate again.');
     if(s.inFlight)fail('Another ledger submission is in progress.');
-    if(s.needsReconciliation)fail('An earlier submission requires reconciliation before another transaction.');
+    if(s.needsReconciliation || unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+      fail('An earlier submission for this vault requires reconciliation before another transaction.');
     s.quotes.delete(quoteId);
     if(Date.now()-q.created>120000) {
       if(q.cipher)q.cipher.fill(0);
