@@ -44,12 +44,39 @@ jobs:
       - name: Check independent S-key ledger JavaScript syntax
         run: node --check src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js
       - name: Run independent S-key regression suite
-        run: node --test tests/secret-key-ledger.test.cjs
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/secret-key-ledger.test.cjs 2>&1 | tee linked-node.log
       - name: Build shared Core
-        run: dotnet build src/StellarVault.Core/StellarVault.Core.csproj --configuration Release
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.Core/StellarVault.Core.csproj --configuration Release 2>&1 | tee linked-core-build.log
       - name: Build shared UI
-        run: dotnet build src/StellarVault.UI/StellarVault.UI.csproj --configuration Release
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.UI/StellarVault.UI.csproj --configuration Release 2>&1 | tee linked-ui-build.log
       - name: Build PWA host
-        run: dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release 2>&1 | tee linked-pwa-build.log
       - name: Run Core cryptography regressions
-        run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release 2>&1 | tee linked-core-tests.log
+      - name: Upload linked-vault diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linked-vault-validation-logs
+          path: |
+            linked-node.log
+            linked-core-build.log
+            linked-ui-build.log
+            linked-pwa-build.log
+            linked-core-tests.log
+          if-no-files-found: ignore
