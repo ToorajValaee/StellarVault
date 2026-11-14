@@ -425,3 +425,28 @@ test('HD and independent linked approval workflows reuse the same scope freshnes
   assert.match(linked,/ledger\.SubmitApprovedAsync\(pending\.Quote\.QuoteId/);
   assert.doesNotMatch(shared,/secretKey|mnemonic|submitTransaction|SubmitApprovedAsync/);
 });
+
+test('both hosts reuse the existing consent-bound queue review without S-key publication',()=>{
+  const root=path.join(__dirname,'..');
+  const core=path.join(root,'src','StellarVault.Core','Services');
+  const shared=fs.readFileSync(path.join(core,'VaultScopedQueueReview.cs'),'utf8');
+  const linked=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
+  const hd=fs.readFileSync(path.join(core,'VaultHybridSyncReviewService.cs'),'utf8');
+  const pwa=fs.readFileSync(path.join(root,'src','StellarVault.Pwa','Program.cs'),'utf8');
+  const maui=fs.readFileSync(path.join(root,'src','StellarVault.Maui','MauiProgram.cs'),'utf8');
+  assert.match(shared,/retention\.RequireLocalPersistence\(\)/);
+  assert.match(shared,/sessions\.ActiveAccountId != accountId/);
+  assert.match(shared,/queue\.PrepareReviewAsync/);
+  assert.match(shared,/queue\.ReviewAllAsync/);
+  assert.match(shared,/VaultHybridFolderSyncPlan\.Build/);
+  assert.match(shared,/sessions\.Epoch != epoch/);
+  assert.match(linked,/queue\.ReadAsync\(root, ct\)/);
+  assert.match(linked,/CanPublish/);
+  assert.match(linked,/\n            false,/);
+  assert.doesNotMatch(linked,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync|secretKey|mnemonic/);
+  assert.match(hd,/scopedQueue\.ReadAsync\(accountId, ct\)/);
+  for(const host of [pwa,maui]){
+    assert.match(host,/AddScoped<VaultScopedQueueReview>/);
+    assert.match(host,/AddScoped<VaultLinkedQueueInspection>/);
+  }
+});
