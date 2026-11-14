@@ -9,7 +9,6 @@ window.stellarVaultSecretLedger = (() => {
   const MAINNET='Public Global Stellar Network ; September 2015';
   const bytes = value => Uint8Array.from(atob(value), c=>c.charCodeAt(0));
   const b64 = value => btoa(String.fromCharCode(...value));
-  const xlm = n => (BigInt(n) * 10000000n).toString();
   const toXlm = n => {
     const v=BigInt(n), abs=v<0n?-v:v;
     return (v<0n?'-':'')+(abs/10000000n).toString()+'.'+(abs%10000000n).toString().padStart(7,'0');
@@ -103,10 +102,17 @@ window.stellarVaultSecretLedger = (() => {
     sessions.set(id,state);
     return {RootAccountId:root};
   }
+  function clearQuotes(s) {
+    for(const q of s.quotes.values()) {
+      if(q.cipher)q.cipher.fill(0);
+      if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
+    }
+    s.quotes.clear();
+  }
   function close(id) {
     const s=sessions.get(id);
     if(s) {
-      s.quotes.clear();
+      clearQuotes(s);
       try{s.pair.rawSecretKey().fill(0);}catch{}
       sessions.delete(id);
     }
@@ -277,7 +283,7 @@ window.stellarVaultSecretLedger = (() => {
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     const quote={kind,recordId,draft,gen,cipher,count,newKeys,priorKeys,node:node.account_id,
       fingerprint,opCount,created:Date.now(),fee:fees,reserve:additional,root:s.root};
-    s.quotes.clear();s.quotes.set(quoteId,quote);
+    clearQuotes(s);s.quotes.set(quoteId,quote);
     return {QuoteId:quoteId,Kind:kind,Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(additional),
       NetReserveChangeXlm:toXlm(BigInt(newUnits-unitsReclaimed)*s.net.reserve),
@@ -299,7 +305,7 @@ window.stellarVaultSecretLedger = (() => {
     const required=childFunding+pointerReserve+fees;
     if(rootFree<required)fail('Root account cannot afford the child reserve, link and network fees.');
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
-    s.quotes.clear();s.quotes.set(quoteId,{kind:'expand',child,childId,tailId,created:Date.now(),
+    clearQuotes(s);s.quotes.set(quoteId,{kind:'expand',child,childId,tailId,created:Date.now(),
       opCount,fee:fees,reserve:childFunding+pointerReserve,required});
     return {QuoteId:quoteId,Kind:'expand',Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(childFunding+pointerReserve),
@@ -311,7 +317,11 @@ window.stellarVaultSecretLedger = (() => {
     if(!q)fail('No matching reviewed quote. Estimate again.');
     if(s.inFlight)fail('Another ledger submission is in progress.');
     s.quotes.delete(quoteId);
-    if(Date.now()-q.created>120000)fail('Fee quote expired; review again.');
+    if(Date.now()-q.created>120000) {
+      if(q.cipher)q.cipher.fill(0);
+      if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
+      fail('Fee quote expired; review again.');
+    }
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     s.inFlight=true;
     try{
