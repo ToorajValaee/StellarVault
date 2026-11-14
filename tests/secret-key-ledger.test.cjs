@@ -1028,3 +1028,21 @@ test('linked queue scope rejection zeroes decrypted snapshots before throwing',(
   assert.match(workspace,/catch\s*\{\s*ClearEntries\(all\);\s*throw;/);
   assert.match(publisher,/catch\s*\{\s*Clear\(all\);\s*throw;/);
 });
+
+test('PWA device storage choice stays outside credential tabs and keeps mode-scoped consent',()=>{
+  const fs=require('node:fs'),path=require('node:path');
+  const root=path.join(__dirname,'..');
+  const home=fs.readFileSync(path.join(root,'src','StellarVault.UI','Components','VaultHome.razor'),'utf8');
+  const css=fs.readFileSync(path.join(root,'src','StellarVault.Pwa','wwwroot','css','modern-app.css'),'utf8');
+  const storage=home.indexOf('class="sv-access-storage-settings sv-entry-storage-outside"');
+  const form=home.indexOf('<form class="access-form terminal-panel"');
+  assert.ok(storage>0 && storage<form,'Storage preference must precede and remain outside credential form');
+  assert.match(home,/CurrentDeviceStoragePreference/);
+  assert.match(home,/SelectDeviceStorageAsync\(true\)/);
+  assert.match(home,/SelectDeviceStorageAsync\(false\)/);
+  assert.match(home,/LinkedRetention\.GrantExplicitConsent\(\)/);
+  assert.match(home,/await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(home,/LinkedRetention\.Reset\(\)/);
+  assert.match(home,/_enableLocalStorage = enabled/);
+  assert.match(css,/sv-entry-storage-outside/);
+});
