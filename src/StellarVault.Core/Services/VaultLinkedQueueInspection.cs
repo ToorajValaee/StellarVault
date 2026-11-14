@@ -67,6 +67,6 @@ public sealed class VaultLinkedQueueInspection(
                 x.Kind is VaultMutationKind.CreateFolder or
                     VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder),
             0, linkedCount, false,
-            "Read-only inspection used a separately unlocked S-key encryption key and an isolated queue namespace. No HD drafts are read. Publishing is not yet authorized.");
+            "Read-only inspection used a separately unlocked S-key encryption key and isolated queue namespace. No HD drafts are read. This report authorizes no mutation; the separate create-only publisher requires a fresh fee quote, explicit approval and durable reservation.");
     }
 }
