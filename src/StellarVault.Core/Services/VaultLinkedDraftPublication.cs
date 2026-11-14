@@ -14,7 +14,6 @@ public sealed class VaultLinkedDraftPublication(
     IStellarSecretKeyLedger ledger,
     IVaultLinkedDraftStore store,
     VaultLinkedQueueKeySession keys,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     VaultNetworkSelection networks)
 {
@@ -29,7 +28,7 @@ public sealed class VaultLinkedDraftPublication(
 
     private (string Root, string Scope, long Epoch) RequireScope()
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || !ledger.IsConnected ||
             ledger.RootAccountId is not string root)
