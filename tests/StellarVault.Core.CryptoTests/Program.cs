@@ -441,6 +441,10 @@ Check(!sep53Verifier.Verify(vectorSigner, "Hello, World!"u8, vectorSignature), "
 CryptographicOperations.ZeroMemory(vectorSignature);
 Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
 
+// Uses the real native encrypted queue and isolated S-key key lifecycle,
+// but a fake Stellar ledger: no transactions or GitHub CI are involved.
+await LinkedDraftSmoke.RunAsync();
+
 sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
 {
     public Task PutAsync(string objectId, ReadOnlyMemory<byte> ciphertext, CancellationToken cancellationToken = default)
