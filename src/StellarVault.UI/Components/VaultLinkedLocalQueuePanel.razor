@@ -76,8 +76,41 @@
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LoadDraftsAsync">Refresh local drafts</button>
                 <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="ReviewManualSyncAsync">Review manual sync order</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LockAsync">Lock local drafts</button>
             </div>
+            @if (_manualSyncPlan is not null)
+            {
+                <section class="sv-secret-review" aria-label="Manual linked draft synchronization order">
+                    <h3>Manual sync review</h3>
+                    <p><strong>Pending:</strong> @_manualSyncPlan.PendingCount
+                       · <strong>Unresolved:</strong> @_manualSyncPlan.UnresolvedCount</p>
+                    <p>Each draft requires a separate Stellar quote and fee approval.
+                       No automatic publication, retry, or submission is performed here.</p>
+                    @foreach (var draft in _manualSyncPlan.Items)
+                    {
+                        <p @key="draft.MutationId">
+                            <strong>@draft.Title</strong> · @draft.State
+                            @if (draft.Blockers.Length > 0)
+                            {
+                                <span> — @string.Join(", ", draft.Blockers)</span>
+                            }
+                            else
+                            {
+                                <span> — Ready for an individual review</span>
+                            }
+                        </p>
+                    }
+                    @if (_manualSyncPlan.CanReviewNext &&
+                         _manualSyncPlan.NextReadyMutationId is { } nextId)
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
+                                @onclick="() => ReviewDraftAsync(nextId)">Review next ready draft</button>
+                    }
+                </section>
+            }
             @if (_review is not null)
             {
                 <section class="sv-secret-review" aria-label="Review encrypted local draft publication">
@@ -229,6 +262,25 @@
     private string? _message;
     private VaultLinkedQueueInspection.Report? _report;
     private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
+    private VaultLinkedManualSyncPlan.Review? _manualSyncPlan;
+
+    private async Task ReviewManualSyncAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _manualSyncPlan = null;
+        try
+        {
+            _manualSyncPlan = await DraftWorkspace.ReviewManualSyncAsync();
+            _message = "Read-only manual sync ordering complete. Every transaction requires its own fresh fee approval.";
+        }
+        catch
+        {
+            _message = "Manual sync ordering failed. Refresh the encrypted queue and connected signer.";
+        }
+        finally { _busy = false; }
+    }
+
     private VaultLinkedDraftPublication.Review? _review;
     private bool _approvePublish;
     private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
@@ -254,6 +306,7 @@
     private async Task ReviewDraftAsync(string id)
     {
         if (_busy || _review is not null || !QueueKeys.CanPublish) return;
+        _manualSyncPlan = null;
         _busy = true;
         try
         {
@@ -274,6 +327,7 @@
         _busy = true;
         try
         {
+            _manualSyncPlan = null;
             var hash = await Publisher.SubmitAsync(approved.Quote, true);
             _message = "Connected Stellar record state and encrypted queue confirmed for transaction: " + hash +
                 ". Independent historical operation verification remains pending security review.";
@@ -420,9 +474,11 @@
                 _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
             if (_editingMutationId is { } editingId &&
                 _editingPayloadSha256 is { } revision)
+            _manualSyncPlan = null;
                 await DraftWorkspace.ReviseAsync(editingId, draft, revision);
             else
-                await DraftWorkspace.CreateAsync(draft);
+                _manualSyncPlan = null;
+            await DraftWorkspace.CreateAsync(draft);
             ClearDraftEditor();
             _message = "Encrypted local draft saved. No transaction was submitted.";
             try
@@ -446,6 +502,7 @@
         _busy = true;
         try
         {
+            _manualSyncPlan = null;
             await DraftWorkspace.DiscardAsync(id);
             _message = "Unpublished local draft discarded.";
             try
