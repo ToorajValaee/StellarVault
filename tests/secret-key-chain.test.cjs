@@ -112,7 +112,7 @@ test('neither host silently substitutes a secret for an HD mnemonic', () => {
 test('zero signer thresholds are rejected rather than treated as root-only authorization', async () => {
   const fixture = start();
   fixture.records[childId].thresholds.med_threshold = 0;
-  await assert.rejects(fixture.inspect(), /signer thresholds/);
+  await assert.rejects(fixture.inspect(), /Invalid Stellar signer or threshold state/);
 });
 
 test('an HD-v2 registered root cannot be mistaken for an independent S-key chain', async () => {
