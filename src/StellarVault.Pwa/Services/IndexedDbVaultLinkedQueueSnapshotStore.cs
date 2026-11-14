@@ -35,8 +35,10 @@ public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
         RequireEntry(entry);
         if (entry.State != VaultSyncState.Pending || entry.TransactionHash is not null ||
             entry.SignedFileEntries is { Length: > 0 } ||
-            entry.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
-            throw new InvalidOperationException("Only unpublished linked record/folder drafts can be staged.");
+            entry.Kind is not (VaultMutationKind.CreateRecord or
+                VaultMutationKind.CreateFolder or VaultMutationKind.ExtendLinkedChain))
+            throw new InvalidOperationException(
+                "Only unpublished linked drafts or immutable chain-expansion intents can be journaled.");
         return await ExistingStore().AddAsync(entry, ct);
     }
 
