@@ -5082,3 +5082,46 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
  .sv-secret-workspace .sv-secret-details{position:relative;border-radius:22px 22px 0 0;
   box-shadow:0 -5px 22px rgba(12,58,49,.08)}
 }
+
+
+/* Secret Key mode uses the same mobile record-sheet and focused editor model
+   as the redesigned primary vault; inspector scroll never locks the list. */
+@media(max-width:699px) {
+ .sv-secret-workspace .sv-secret-details {
+   position:fixed!important;inset:auto 0 0 0!important;z-index:345!important;
+   width:100%!important;max-width:none!important;max-height:59dvh!important;
+   overflow-y:auto!important;overscroll-behavior:contain!important;
+   border-radius:23px 23px 0 0!important;padding:25px 18px 19px!important;
+   background:var(--sk-panel)!important;
+   box-shadow:0 -12px 34px rgba(5,46,41,.16)!important;
+ }
+ .sv-secret-workspace .sv-secret-details::before {
+   content:"";position:absolute;top:8px;left:calc(50% - 25px);
+   width:50px;height:5px;background:#b9c8c5;border-radius:9px;
+ }
+ .sv-native-shell .sv-secret-workspace .sv-secret-details {
+   bottom:calc(69px + env(safe-area-inset-bottom,0px))!important;
+ }
+ .sv-secret-workspace .sv-secret-editor {
+   position:fixed!important;inset:0!important;z-index:650!important;
+   max-height:100dvh!important;height:100dvh!important;
+   overflow-y:auto!important;overscroll-behavior:contain!important;
+   border:0!important;border-radius:0!important;margin:0!important;
+   padding:calc(20px + env(safe-area-inset-top,0px)) 18px
+     calc(28px + env(safe-area-inset-bottom,0px))!important;
+   background:var(--sk-panel)!important;
+ }
+ .sv-secret-workspace .sv-secret-review {
+   position:fixed!important;inset:auto 0 0 0!important;
+   z-index:660!important;width:100%!important;
+   max-height:85dvh!important;overflow-y:auto!important;
+   overscroll-behavior:contain!important;
+   border-radius:23px 23px 0 0!important;
+   padding:22px 18px calc(18px + env(safe-area-inset-bottom,0px))!important;
+   background:var(--sk-panel)!important;
+   box-shadow:0 -10px 34px rgba(8,44,39,.18)!important;
+ }
+ .sv-native-shell .sv-secret-workspace .sv-secret-review {
+   bottom:calc(69px + env(safe-area-inset-bottom,0px))!important;
+ }
+}
