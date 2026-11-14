@@ -28,7 +28,7 @@ public sealed class IndexedDbVaultPendingMutationStore(
 
     public Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string networkId, CancellationToken ct = default) =>
-        WithKeyAsync<IReadOnlyList<VaultPendingMutation>>(accountId, async key =>
+        WithKeyAsync<IReadOnlyList<VaultPendingMutation>>(accountId, networkId, async key =>
         {
             var entries = await js.InvokeAsync<QueueEntry[]>("stellarVaultV2Db.listQueue", ct,
                 ScopeId(accountId, networkId));
