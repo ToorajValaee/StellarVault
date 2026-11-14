@@ -33,8 +33,10 @@ public sealed class VaultScopedQueueReview(
         var selectedPassphrase = networks.CustomPassphrase;
         var selectedEndpoint = networks.CustomHorizonUrl;
         var scope = networks.CredentialKey(accountId);
-        var review = await queue.PrepareReviewAsync(accountId, scope, ct);
+        // Read the authenticated queue exactly once. Readiness and folder
+        // dependency decisions must describe the same immutable snapshot.
         var all = await queue.ReviewAllAsync(accountId, scope, ct);
+        var review = VaultPendingMutationReviewPolicy.Build(all);
 
         ct.ThrowIfCancellationRequested();
         retention.RequireLocalPersistence();
