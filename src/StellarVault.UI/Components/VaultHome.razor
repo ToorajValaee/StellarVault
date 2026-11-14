@@ -961,7 +961,9 @@
             Logger.LogWarning("Secret Key ledger opening failed: {ErrorType}", ex.GetType().Name);
             try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
             catch { /* Do not mask the original failure. */ }
-            _message = "Secret Key vault could not be recovered. Check the network, linked signers, record integrity and funding. No transaction was sent.";
+            _message = ex.Message.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase)
+                ? "An older StellarVault record format was detected. It requires read-only migration verification before this version can unlock it; no records were overwritten."
+                : "Secret Key vault could not be recovered. Check the network, linked signers, record integrity and funding. No transaction was sent.";
         }
         finally
         {
