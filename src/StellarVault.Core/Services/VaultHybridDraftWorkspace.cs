@@ -25,7 +25,8 @@ public sealed class VaultHybridDraftWorkspace(
         var context = RequireScope();
         var account = context.Account;
         var scope = context.NetworkId;
-        var kind = draft?.IsFolder == true
+        ArgumentNullException.ThrowIfNull(draft);
+        var kind = draft.IsFolder
             ? VaultMutationKind.CreateFolder : VaultMutationKind.CreateRecord;
         ValidateDraft(draft, kind);
         var entries = await queue.ReviewAllAsync(account, scope, ct);
