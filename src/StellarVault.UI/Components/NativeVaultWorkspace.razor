@@ -416,7 +416,16 @@ else
             }
         </section>
         }
-        @if (_nativePage is "local" or "sync")
+        @if (_nativePage == "sync" && SecretLedger.IsConnected)
+        {
+            <section class="terminal-panel" aria-label="Secret Key synchronization status">
+                <h3>Secret Key vault synchronization</h3>
+                <p>On-chain encrypted records and folders are available in the Home vault workspace. Offline draft synchronization for this independent account-chain mode is not enabled yet.</p>
+                <p>No local draft will be submitted through the HD transaction signer.</p>
+                <button type="button" class="pixel-button compact" @onclick='() => NavigateNative("stellar")'>Return to Secret Key vault</button>
+            </section>
+        }
+        else if (_nativePage is "local" or "sync")
         {
         <section class="terminal-panel" aria-label="Local encrypted vault status">
             <h3>@(Sessions.IsUnlocked ? "Your saved items" : "Unlock local storage")</h3>
