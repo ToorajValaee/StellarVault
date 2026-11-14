@@ -51,24 +51,37 @@ public sealed class VaultLinkedDraftRecoveryReview(
             var receipt = false;
             try
             {
-                var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload);
-                var current = await ledger.ReadAsync(ct);
-                RequireSameScope(root, scope, epoch);
-                if (draft is not null && item.Kind is
-                    (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                if (item.Kind == VaultMutationKind.ExtendLinkedChain)
                 {
-                    var found = current.SingleOrDefault(x => x.Id == item.EntityId);
-                    matches = found is not null &&
-                        found.IsFolder == draft.IsFolder &&
-                        found.Title == draft.Title &&
-                        found.Content == draft.Content &&
-                        found.FolderId == draft.FolderId &&
-                        (found.UserName ?? "") == (draft.UserName ?? "") &&
-                        (found.Url ?? "") == (draft.Url ?? "") &&
-                        (found.Notes ?? "") == (draft.Notes ?? "") &&
-                        (found.Tags ?? []).SequenceEqual(
-                            draft.Tags ?? [], StringComparer.Ordinal);
+                    // Tail visibility is current-state evidence only. A later
+                    // expansion could have moved the tail again, and even a
+                    // matching tail is not historical operation proof.
+                    var chain = await ledger.InspectAccountInfoAsync(ct);
+                    matches = chain.TotalAccounts > 1 &&
+                        string.Equals(chain.TailAccountId, item.EntityId,
+                            StringComparison.Ordinal);
                 }
+                else
+                {
+                    var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload);
+                    var current = await ledger.ReadAsync(ct);
+                    if (draft is not null && item.Kind is
+                        (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                    {
+                        var found = current.SingleOrDefault(x => x.Id == item.EntityId);
+                        matches = found is not null &&
+                            found.IsFolder == draft.IsFolder &&
+                            found.Title == draft.Title &&
+                            found.Content == draft.Content &&
+                            found.FolderId == draft.FolderId &&
+                            (found.UserName ?? "") == (draft.UserName ?? "") &&
+                            (found.Url ?? "") == (draft.Url ?? "") &&
+                            (found.Notes ?? "") == (draft.Notes ?? "") &&
+                            (found.Tags ?? []).SequenceEqual(
+                                draft.Tags ?? [], StringComparer.Ordinal);
+                    }
+                }
+                RequireSameScope(root, scope, epoch);
 
                 // Only a matching public-only diagnostic can supply advisory
                 // receipt evidence. A hash by itself does not bind operations.
@@ -78,7 +91,10 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     string.Equals(diagnostic.TransactionHash, hash,
                         StringComparison.OrdinalIgnoreCase) &&
                     diagnostic.RootAccountId == root &&
-                    diagnostic.RecordId == item.EntityId)
+                    (item.Kind == VaultMutationKind.ExtendLinkedChain
+                        ? diagnostic.Kind == "expand" &&
+                          diagnostic.TargetAccountId == item.EntityId
+                        : diagnostic.RecordId == item.EntityId))
                 {
                     var evidence = await receipts.InspectAsync(diagnostic, ct);
                     receipt = evidence.ReceiptObserved;
@@ -95,7 +111,9 @@ public sealed class VaultLinkedDraftRecoveryReview(
 
             RequireSameScope(root, scope, epoch);
             return new(item.Id, item.EntityId, item.State, matches, receipt,
-                matches switch
+                item.Kind == VaultMutationKind.ExtendLinkedChain
+                    ? "Current linked tail inspection is advisory only. A matching or different tail does not prove the exact historical account-creation transaction, signer authorization, or permission to retry."
+                    : matches switch
                 {
                     true => "A matching record is visible now. This does NOT prove the exact submitted transaction or authorize retry, release or queue confirmation.",
                     false => "The expected record is not visible with matching fields. This does NOT prove the submission failed. Do not retry.",
