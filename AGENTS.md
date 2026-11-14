@@ -2,6 +2,13 @@
 
 Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying code. Update it with each meaningful repository change. Keep this file aligned with the product architecture and unresolved blockers.
 
+## Current validation policy — supersedes older CI prohibitions (2026-11-15)
+
+- User now **permits GitHub CI when useful**, but asked earlier to avoid unnecessary Actions/token use. One workflow, `.github/workflows/manual-verify.yml`, is registered on both `main` and this feature branch. Its ONLY trigger is `workflow_dispatch`: no push/PR triggers, no deployment, no network transactions. Do not add automatic runs without new user authorization.
+- Select `architecture/pluggable-vault-records-and-chains` in Actions → Manual StellarVault verification → Run workflow. Build/test failures must be investigated from actual logs; do not assert that source parsing equals a successful .NET build.
+- See `docs/verification/manual-validation.md` and `docs/architecture/implementation-reality-check.md`. Existing HD queue, file protocol, folder planner and verifier infrastructure must be reused instead of rebuilt. Ignore earlier historical instructions in this file saying GitHub Actions must *never* be recreated; they refer to the user's older instruction.
+- Linked encrypted queue read-only inspection and foreign-scope rejection paths must zero decrypted draft buffers before returning or throwing.
+
 ## Architecture and product contract
 
 - Shared .NET 10 domain/services: `src/StellarVault.Core`; PWA host: `src/StellarVault.Pwa`; reusable UI: `src/StellarVault.UI`.
