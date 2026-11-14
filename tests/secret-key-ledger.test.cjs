@@ -642,7 +642,7 @@ test('linked queue key is revoked on PWA and MAUI app lifecycle boundaries',()=>
 });
 
 
-test('linked S-key device UI requests explicit consent and separate local passphrase without publishing',()=>{
+test('linked S-key device UI requires consent and separate fee-reviewed publication',()=>{
   const root=path.join(__dirname,'..','src','StellarVault.UI','Components');
   const panel=fs.readFileSync(path.join(root,'VaultLinkedLocalQueuePanel.razor'),'utf8');
   const workspace=fs.readFileSync(path.join(root,'VaultSecretKeyWorkspace.razor'),'utf8');
@@ -659,7 +659,9 @@ test('linked S-key device UI requests explicit consent and separate local passph
   assert.match(panel,/QueueKeys\.UnlockAsync\(_passphrase\)/);
   assert.match(panel,/QueueKeys\.LockAsync\(\)/);
   assert.match(panel,/QueueInspection\.InspectAsync\(\)/);
-  assert.doesNotMatch(panel,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
+  assert.match(panel,/Publisher\.PrepareAsync\(id\)/);
+  assert.match(panel,/Publisher\.SubmitAsync\(approved\.Quote, true\)/);
+  assert.doesNotMatch(panel,/Ledger\.SubmitApprovedAsync|Ledger\.QuoteCreateAsync/);
   assert.match(workspace,/<VaultLinkedLocalQueuePanel \/>/);
   assert.match(native,/<VaultSecretKeyWorkspace \/>/);
 });
@@ -760,4 +762,22 @@ test('manual linked draft publication reserves durable queue state before networ
     assert.match(host,/AddScoped<VaultLinkedDraftWorkspace>/);
     assert.match(host,/AddScoped<VaultLinkedDraftPublication>/);
   }
+});
+
+
+test('native Core smoke suite includes independent linked encrypted staging and uncertain network scenario',()=>{
+  const root=path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests');
+  const smoke=fs.readFileSync(path.join(root,'LinkedDraftSmoke.cs'),'utf8');
+  const program=fs.readFileSync(path.join(root,'Program.cs'),'utf8');
+  assert.match(program,/await LinkedDraftSmoke\.RunAsync\(\)/);
+  assert.match(smoke,/FileSystemVaultLinkedQueueSnapshotStore/);
+  assert.match(smoke,/VaultLinkedDraftWorkspace/);
+  assert.match(smoke,/VaultLinkedDraftPublication/);
+  assert.match(smoke,/VaultLinkedLocalRetentionGate/);
+  assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
+  assert.match(smoke,/publisher\.SubmitAsync\(recordReview\.Quote, true\)/);
+  assert.match(smoke,/VaultSyncState\.Confirmed/);
+  assert.match(smoke,/VaultSyncState\.Uncertain or VaultSyncState\.Submitting/);
+  assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(pending\.MutationId\)/);
+  assert.match(smoke,/keys\.LockAsync\(\)/);
 });
