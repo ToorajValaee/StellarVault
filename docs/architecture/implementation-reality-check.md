@@ -43,3 +43,6 @@ The source inventory above was inspected through the connected repository. No `d
 
 ## 2026-11-15 linked draft confirmation hardening
 A current decrypted record matching an approved draft is not historical proof of a specific linked submission. The linked queue create publisher now leaves even successful, snapshot-matching submissions in `Uncertain`, with transaction hash retained, until independent signer/operation provenance can authorize confirmation. Parent/child queue progression stays blocked. This deliberately reduces availability to protect correctness and is not a finished reconciliation workflow. Verified only by source review so far; local Core smoke and Node suite must be rerun.
+
+## 2026-11-15 expansion journal confirmation guard
+Approved linked S-key account expansion now remains durably `Uncertain` even if the signer transport reports a successful transaction hash and a new tail is visible. The exact historical CreateAccount/SetOptions signer/pointer provenance is not yet proven. Queue replay and further dependent writes remain blocked until a separately reviewed reconciliation protocol is implemented. This is a deliberate fail-closed safety behavior, not a complete manual-sync or production solution. Local smoke execution is required.
