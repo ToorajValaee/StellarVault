@@ -30,7 +30,7 @@ public sealed class VaultLinkedDraftPublication(
     {
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
-        if (!keys.IsUnlocked || !ledger.IsConnected ||
+        if (!keys.CanPublish || !ledger.IsConnected ||
             ledger.RootAccountId is not string root)
             throw new UnauthorizedAccessException(
                 "Unlock the independent S-key signer and encrypted local drafts.");
