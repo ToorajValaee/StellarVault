@@ -46,19 +46,22 @@ public static class MauiProgram
         // All queue payloads and metadata are encrypted with the unlocked
         // device vault key; no native plaintext queue files are written.
         builder.Services.AddScoped<VaultDeviceRetentionGate>();
-                builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+        builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
+        builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
         builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore>(sp =>
             new FileSystemVaultLinkedPassphraseCredentialStore(
                 Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-credentials"),
                 sp.GetRequiredService<VaultNetworkSelection>(),
-                sp.GetRequiredService<VaultDeviceRetentionGate>()));
+                sp.GetRequiredService<VaultDeviceRetentionGate>(),
+                sp.GetRequiredService<VaultLinkedLocalRetentionGate>()));
         builder.Services.AddScoped<VaultLinkedQueueKeySession>();
         builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp =>
             new FileSystemVaultLinkedQueueSnapshotStore(
                 sp.GetRequiredService<VaultLinkedQueueKeySession>(),
                 sp.GetRequiredService<VaultDeviceRetentionGate>(),
+                sp.GetRequiredService<VaultLinkedLocalRetentionGate>(),
                 Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-pending-queue")));
-builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
+        builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
                 services.GetRequiredService<IVaultQueueKeySession>(),
                 services.GetRequiredService<VaultDeviceRetentionGate>(),
