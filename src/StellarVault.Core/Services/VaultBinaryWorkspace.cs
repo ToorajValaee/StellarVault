@@ -33,8 +33,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             // version for replacement; the initial UI uses create-only writes.
             var entries = await database.Catalog.ListAsync(key, ct);
             var existing = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (existing is not null && (existing.ContentType is null ||
-                existing.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+            if (existing is not null && (VaultRecordTypeFactory.IsLegacyText(existing.ContentType)))
                 throw new InvalidOperationException("This name belongs to a text record.");
             storageMode.Require(VaultStorageMode.LocalEncrypted);
             return await database.PutIndexedAsync(
@@ -54,8 +53,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             var entries = await database.Catalog.ListAsync(key, ct);
             var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (metadata is null) return null;
-            if (metadata.ContentType is null ||
-                metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (VaultRecordTypeFactory.IsLegacyText(metadata.ContentType))
                 throw new InvalidOperationException("This record contains text, not a binary file.");
             var before = await database.GetVersionAsync(name, key, ct);
             if (before is null) return null;
@@ -71,8 +69,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
                 // a stale read to return a file hidden from the active catalog.
                 var currentEntries = await database.Catalog.ListAsync(key, ct);
                 var current = currentEntries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-                if (current is null || current.ContentType is null ||
-                    current.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+                if (current is null || VaultRecordTypeFactory.IsLegacyText(current.ContentType))
                     throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
                 // Revalidate after checking catalog visibility to narrow the stale-read window.
                 if (await database.GetVersionAsync(name, key, ct) != before)
@@ -99,16 +96,14 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             var entries = await database.Catalog.ListAsync(key, ct);
             var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (entry is null) return null;
-            if (entry.ContentType is null ||
-                entry.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (VaultRecordTypeFactory.IsLegacyText(entry.ContentType))
                 throw new InvalidOperationException("This record is not an encrypted file.");
             var version = await database.GetVersionAsync(name, key, ct);
             if (version is null) return null;
             // Avoid returning a pointer after a concurrent catalog tombstone.
             var current = await database.Catalog.ListAsync(key, ct);
             var visible = current.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (visible is null || visible.ContentType is null ||
-                visible.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (visible is null || VaultRecordTypeFactory.IsLegacyText(visible.ContentType))
                 throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
             // The pointer may have changed while the catalog was being reloaded.
             // Do not hand the UI a stale revision for its later delete request.
@@ -129,8 +124,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             storageMode.Require(VaultStorageMode.LocalEncrypted);
             var entries = await database.Catalog.ListAsync(key, ct);
             var entry = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (entry is null || entry.ContentType is null ||
-                entry.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (entry is null || VaultRecordTypeFactory.IsLegacyText(entry.ContentType))
                 throw new InvalidOperationException("The selected file is no longer in the catalog.");
             var current = await database.GetVersionAsync(name, key, ct);
             if (current != expectedVersion)
