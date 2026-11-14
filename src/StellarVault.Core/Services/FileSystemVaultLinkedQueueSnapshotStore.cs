@@ -7,18 +7,17 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public sealed class FileSystemVaultLinkedQueueSnapshotStore(
     VaultLinkedQueueKeySession keys,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     string directory,
     VaultNetworkSelection networks) : IVaultLinkedDraftStore
 {
     private FileSystemVaultPendingMutationStore ExistingStore() =>
-        new(keys, retention, directory);
+        new(keys, linkedRetention.DeviceRetention, directory);
 
     private void RequireEntry(VaultPendingMutation entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         StellarAccountAddress.Validate(entry.AccountId);
         if (entry.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(
@@ -83,7 +82,7 @@ public sealed class FileSystemVaultLinkedQueueSnapshotStore(
     public async Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         var storageScope = VaultLinkedQueueStorageScope.FromNetworkScope(linkedNetworkScope);
         var storage = ExistingStore();
