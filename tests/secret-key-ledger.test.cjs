@@ -700,10 +700,16 @@ test('independent S-key local retention is not granted by mnemonic-HD consent',(
   assert.match(ledger,/ConnectionEpoch => _connectionEpoch/);
 });
 
-test('no GitHub Actions workflow definitions remain on the active branch',()=>{
+test('GitHub verification is manual-only and cannot consume Actions minutes on pushes',()=>{
   const root=path.join(__dirname,'..','.github','workflows');
-  if(fs.existsSync(root))
-    assert.equal(fs.readdirSync(root).filter(x=>/\.ya?ml$/.test(x)).length,0);
+  assert.ok(fs.existsSync(root),'Manual verification workflow is missing');
+  const workflows=fs.readdirSync(root).filter(x=>/\.ya?ml$/.test(x));
+  assert.deepEqual(workflows,['manual-verify.yml']);
+  const content=fs.readFileSync(path.join(root,workflows[0]),'utf8');
+  assert.match(content,/workflow_dispatch:/);
+  assert.doesNotMatch(content,/^\s*push:/m);
+  assert.doesNotMatch(content,/^\s*pull_request:/m);
+  assert.doesNotMatch(content,/deploy|stellar submit|dotnet publish.*-o/m);
 });
 
 
