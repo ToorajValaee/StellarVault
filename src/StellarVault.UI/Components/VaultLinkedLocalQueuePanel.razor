@@ -456,7 +456,7 @@
         catch
         {
             _exists = null;
-            _message = "Cannot verify device storage or connected signer. No local key was unlocked.";
+            _message = "Local encrypted credentials could not be verified for this public account and selected network.";
         }
         finally { _busy = false; }
     }
@@ -483,9 +483,20 @@
             else
                 await QueueKeys.UnlockOfflineAsync(_offlineRoot.Trim(), _passphrase);
             _exists = true;
-            _drafts = await DraftWorkspace.ListAsync();
-            await RefreshFolderOptionsAsync();
-            _message = "Independent encrypted device storage unlocked. Local drafts require separate fee-reviewed publication.";
+            _message = QueueKeys.IsOfflineOnly
+                ? "Local encrypted drafts unlocked without Horizon. No transaction can be submitted in this mode."
+                : "Independent encrypted device storage unlocked. Publication requires a separate fee review.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+            }
+            catch
+            {
+                _drafts = [];
+                _availableFolders = [];
+                _message += " Draft list refresh failed; the local key remains unlocked. Inspect drafts before making another change.";
+            }
         }
         catch
         {
@@ -512,7 +523,7 @@
         }
         catch
         {
-            _message = "Cannot inspect the encrypted local queue. Storage consent, signer and network must all remain valid.";
+            _message = "Cannot inspect the encrypted local queue. Check local consent, public account, selected network and key unlock.";
         }
         finally { _busy = false; }
     }
