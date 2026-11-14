@@ -26,10 +26,17 @@ public sealed class VaultLinkedQueueKeySession(
     private bool _offlineOnly;
     private bool _disposed;
 
+    private bool MatchesSelectedNetwork()
+    {
+        if (_root is null || _scope is null) return false;
+        try { return _scope == network.CredentialKey(_root); }
+        catch { return false; } // Invalid/unverified custom network must lock, not crash rendering.
+    }
+
     public bool IsUnlocked => !_disposed && _key is not null &&
         linkedRetention.DeviceRetention.AllowsLocalPersistence &&
         linkedRetention.AllowsLocalPersistence &&
-        _root is not null && _scope == network.CredentialKey(_root) &&
+        MatchesSelectedNetwork() &&
         (_offlineOnly
             ? (!ledger.IsConnected || ledger.RootAccountId == _root)
             : ledger.IsConnected &&
