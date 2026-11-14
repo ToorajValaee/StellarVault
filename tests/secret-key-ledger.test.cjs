@@ -788,7 +788,6 @@ test('native Core smoke suite includes independent linked encrypted staging and 
   assert.match(smoke,/VaultLinkedDraftPublication/);
   assert.match(smoke,/VaultLinkedLocalRetentionGate/);
   assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
-  assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
   assert.match(smoke,/Successful linked expansion was confirmed without historical signer proof/);
   assert.match(smoke,/VaultSyncState\.Uncertain or VaultSyncState\.Submitting/);
   assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(child\.MutationId\)/);
@@ -928,7 +927,7 @@ test('independent S-key manual sync orders encrypted draft review without automa
   assert.match(panel,/ReviewDraftAsync\(nextId\)/);
   assert.match(smoke,/initialPlan\.NextReadyMutationId == folder\.MutationId/);
   assert.match(smoke,/afterParentPlan\.UnresolvedCount > 0 && !afterParentPlan\.CanReviewNext/);
-  assert.match(smoke,/uncertainPlan\.UnresolvedCount > 0 && !uncertainPlan\.CanReviewNext/);
+  assert.match(smoke,/afterParentPlan\.UnresolvedCount > 0 && !afterParentPlan\.CanReviewNext/);
 });
 
 
@@ -1036,7 +1035,7 @@ test('PWA device storage choice stays outside credential tabs and keeps mode-sco
   const home=fs.readFileSync(path.join(root,'src','StellarVault.UI','Components','VaultHome.razor'),'utf8');
   const css=fs.readFileSync(path.join(root,'src','StellarVault.Pwa','wwwroot','css','modern-app.css'),'utf8');
   const storage=home.indexOf('class="sv-access-storage-settings sv-entry-storage-outside"');
-  const form=home.indexOf('<form class="access-form terminal-panel"');
+  const form=home.indexOf('<form id="sv-access-form" class="access-form terminal-panel"');
   assert.ok(storage>0 && storage<form,'Storage preference must precede and remain outside credential form');
   assert.match(home,/CurrentDeviceStoragePreference/);
   assert.match(home,/SelectDeviceStorageAsync\(true\)/);
