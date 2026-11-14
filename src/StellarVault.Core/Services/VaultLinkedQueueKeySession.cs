@@ -12,7 +12,6 @@ namespace StellarVault.Core.Services;
 public sealed class VaultLinkedQueueKeySession(
     IStellarSecretKeyLedger ledger,
     VaultNetworkSelection network,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     IVaultLinkedPassphraseCredentialStore credentialStore,
     IVaultKeyProtector protector) : IVaultQueueKeySession, IAsyncDisposable
@@ -27,7 +26,7 @@ public sealed class VaultLinkedQueueKeySession(
     private bool _disposed;
 
     public bool IsUnlocked => !_disposed && _key is not null &&
-        retention.AllowsLocalPersistence && linkedRetention.AllowsLocalPersistence &&
+        linkedRetention.DeviceRetention.AllowsLocalPersistence && linkedRetention.AllowsLocalPersistence &&
         ledger.IsConnected &&
         _connectionEpoch == ledger.ConnectionEpoch &&
         ledger.RootAccountId == _root;
@@ -35,7 +34,7 @@ public sealed class VaultLinkedQueueKeySession(
     private (string Root, string Scope, string Passphrase, long Epoch) RequireSigner()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VaultLinkedQueueKeySession));
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!ledger.IsConnected || ledger.RootAccountId is not { } root ||
             ledger.ConnectedNetworkPassphrase is not { Length: > 0 } selected)
