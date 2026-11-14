@@ -58,6 +58,13 @@ internal static class LinkedDraftSmoke
             await MustRejectAsync(() => publisher.PrepareAsync(child.MutationId),
                 "Pending child folder dependency was approved for publication.");
 
+            var initialPlan = await drafts.ReviewManualSyncAsync();
+            Require(initialPlan.PendingCount == 2 && initialPlan.CanReviewNext &&
+                    initialPlan.NextReadyMutationId == folder.MutationId &&
+                    initialPlan.Items.Single(x => x.MutationId == child.MutationId)
+                        .Blockers.Contains("unpublished-local-parent-folder"),
+                "Manual sync plan did not put the parent folder before its child.");
+
             var rejectedQuote = await publisher.PrepareAsync(folder.MutationId);
             await MustRejectAsync(
                 () => publisher.SubmitAsync(rejectedQuote.Quote with
@@ -77,6 +84,10 @@ internal static class LinkedDraftSmoke
                         .State == VaultSyncState.Confirmed,
                 "Folder publication did not persist a confirmed CAS revision.");
 
+            var afterParentPlan = await drafts.ReviewManualSyncAsync();
+            Require(afterParentPlan.NextReadyMutationId == child.MutationId,
+                "Manual sync did not make a child ready after its parent was confirmed.");
+
             var recordReview = await publisher.PrepareAsync(child.MutationId);
             await publisher.SubmitAsync(recordReview.Quote, true);
             var after = await drafts.ListAsync();
@@ -90,6 +101,9 @@ internal static class LinkedDraftSmoke
             ledger.FailNextSubmission = true;
             await MustRejectAsync(() => publisher.SubmitAsync(uncertainReview.Quote, true),
                 "Uncertain network transmission returned as a confirmed success.");
+            var uncertainPlan = await drafts.ReviewManualSyncAsync();
+            Require(uncertainPlan.UnresolvedCount > 0 && !uncertainPlan.CanReviewNext,
+                "Manual sync offered publishing while an unresolved transaction exists.");
             var uncertain = (await drafts.ListAsync())
                 .Single(x => x.MutationId == pending.MutationId);
             Require(uncertain.State is VaultSyncState.Uncertain or VaultSyncState.Submitting,
