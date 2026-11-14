@@ -427,5 +427,16 @@ window.stellarVaultSecretLedger = (() => {
     if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
     s.quotes.delete(quoteId);
   }
-  return Object.freeze({open,close,read,info,plan,submit,cancelQuote});
+  // Drop all in-memory keypairs and pending child keys when the host is
+  // backgrounded or leaves the page. A new S-key unlock is required after.
+  function revokeAll() {
+    for(const id of Array.from(sessions.keys())) close(id);
+  }
+  if(typeof document!=='undefined' && typeof document.addEventListener==='function')
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='hidden') revokeAll();
+    });
+  if(typeof window.addEventListener==='function')
+    window.addEventListener('pagehide',revokeAll);
+  return Object.freeze({open,close,read,info,plan,submit,cancelQuote,revokeAll});
 })();
