@@ -647,7 +647,7 @@ test('linked S-key device UI requests explicit consent and separate local passph
   const panel=fs.readFileSync(path.join(root,'VaultLinkedLocalQueuePanel.razor'),'utf8');
   const workspace=fs.readFileSync(path.join(root,'VaultSecretKeyWorkspace.razor'),'utf8');
   const native=fs.readFileSync(path.join(root,'NativeVaultWorkspace.razor'),'utf8');
-  assert.match(panel,/I consent to retaining encrypted vault data on this device/);
+  assert.match(panel,/I consent to encrypted local storage on this device/);
   assert.match(panel,/VaultDeviceRetentionPolicy\.EncryptedLocalWithManualSync/);
   assert.match(panel,/LinkedRetention\.GrantExplicitConsent\(\)/);
   assert.match(panel,/LinkedRetention\.Reset\(\)/);
