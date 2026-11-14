@@ -29,3 +29,10 @@ Export must use an authenticated, versioned format with stable logical record ID
 - Route existing text/file creation through the record factory and retain legacy classification until schema migration is designed and tested.
 - Introduce chain adapters behind current ledger transport and establish a cross-chain-independent encrypted record envelope.
 - Build authenticated sharing and portable import/export **after** versioned metadata, recovery, and remote commit verification are stable.
+
+## Implemented integration increment
+
+- PWA and MAUI register a shared `IVaultRecordTypeFactory`, and the current local encrypted `VaultRecordWorkspace.SaveTextAsync` and `VaultBinaryWorkspace.SaveAsync` obtain their media definitions through that factory. The existing indexed ciphertext writer and read contracts have not changed.
+- `VaultConnectedStellarAccountInventory` is registered in both hosts and inspects the selected *already-connected* HD or S-key account inventory. It does not create accounts, traverse the full linked chain, validate root signer thresholds, authorize transactions, or claim independent receipt verification.
+- The new `VaultAccountStrategyFactory` remains an extension contract, not a live transaction route. A future `CreateNextAsync` implementation must preserve fresh quote/approval/fee/reserve checks and confirmed child authorization; never automatically submit because of a factory request.
+- **Priority order:** finish Stellar HD and S-key account workflow parity, recovery, records/files and synchronization first. Then sharing and import/export. EVM remains a last-priority architecture consideration, not an active implementation target.
