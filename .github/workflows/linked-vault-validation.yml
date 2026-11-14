@@ -1,0 +1,55 @@
+name: Linked Stellar vault validation
+
+on:
+  push:
+    branches:
+      - architecture/pluggable-vault-records-and-chains
+    paths:
+      - '.github/workflows/linked-vault-validation.yml'
+      - 'src/StellarVault.Core/**'
+      - 'src/StellarVault.UI/**'
+      - 'src/StellarVault.Pwa/**'
+      - 'src/StellarVault.Maui/**'
+      - 'tests/secret-key-ledger.test.cjs'
+      - 'tests/StellarVault.Core.CryptoTests/**'
+  pull_request:
+    paths:
+      - '.github/workflows/linked-vault-validation.yml'
+      - 'src/StellarVault.Core/**'
+      - 'src/StellarVault.UI/**'
+      - 'src/StellarVault.Pwa/**'
+      - 'src/StellarVault.Maui/**'
+      - 'tests/secret-key-ledger.test.cjs'
+      - 'tests/StellarVault.Core.CryptoTests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linked-vault-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linked-vault-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check independent S-key ledger JavaScript syntax
+        run: node --check src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js
+      - name: Run independent S-key regression suite
+        run: node --test tests/secret-key-ledger.test.cjs
+      - name: Build shared Core
+        run: dotnet build src/StellarVault.Core/StellarVault.Core.csproj --configuration Release
+      - name: Build shared UI
+        run: dotnet build src/StellarVault.UI/StellarVault.UI.csproj --configuration Release
+      - name: Build PWA host
+        run: dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj --configuration Release
+      - name: Run Core cryptography regressions
+        run: dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj --configuration Release
