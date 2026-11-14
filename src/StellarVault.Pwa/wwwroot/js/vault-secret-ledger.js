@@ -272,7 +272,7 @@ window.stellarVaultSecretLedger = (() => {
     const additional=BigInt(newUnits)*s.net.reserve;
     if(Number(node.subentry_count||0)+newUnits>1000) {
       cipher?.fill(0);
-      fail('The target account would exceed Stellar subentry limits. Extend the vault chain before saving.');
+      fail('SV_ACCOUNT_CAPACITY_REQUIRED: Current account cannot hold this record; a new linked account must be reviewed before saving.');
     }
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
     const bal=decimalStroops(native?.balance);
