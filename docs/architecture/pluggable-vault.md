@@ -42,3 +42,9 @@ Export must use an authenticated, versioned format with stable logical record ID
 - Existing HD record estimate/publish/update and linked-key quoted record drafts consult the shared logical type factory, with no payload format migration.
 - New local binary text/plain records are blocked because legacy MIME-only metadata cannot distinguish a plain-text file from editable text. A versioned type discriminator will remove this restriction later.
 - EVM is last priority: no EVM implementation is authorized in this phase.
+
+## Account provisioning safety boundary — current implementation
+- `VaultLinkedAccountExpansion` is the shared Core coordinator for the existing S-key chain's explicit expansion action. The selected UI displays the exact quote (fees, reserve, top-up and signer change) and obtains fresh approval before invoking it; the coordinator verifies the same quote and current chain count/tail before transport submission.
+- It binds quotes to the selected Stellar network credential namespace, so changing custom-network passphrase invalidates pending reviews. Each review is single-use and not automatically retried if submission outcome becomes uncertain. An increase in connected chain count is only a session observation, not independent historical signer proof.
+- This does not make `VaultAccountStrategyFactory.CreateNextAsync` safe to invoke generically. HD child allocation remains bound to HD record publication, and linked-child creation needs its separate reviewed quote. Cross-tab/durable submission coordination and full child signer authorization proofs are still required.
+- EVM remains a future architecture consideration only.
