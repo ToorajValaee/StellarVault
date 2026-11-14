@@ -831,3 +831,35 @@ test('linked draft recovery remains read-only even when current record or receip
     assert.match(host,/AddScoped<VaultLinkedDraftRecoveryReview>/);
   }
 });
+
+
+test('existing S-key credentials unlock local encrypted drafts without Horizon or signing authority',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const pwaPage=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','SecretVault.razor'),'utf8');
+  const native=fs.readFileSync(path.join(src,'StellarVault.UI','Components','NativeVaultWorkspace.razor'),'utf8');
+  const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const inspector=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(session,/public async Task UnlockOfflineAsync\(string publicRoot, string localPassphrase/);
+  assert.match(session,/public async Task<bool> HasLocalCredentialsOfflineAsync\(string publicRoot/);
+  assert.match(session,/public bool IsOfflineOnly => IsUnlocked && _offlineOnly/);
+  assert.match(session,/public string\? ActiveRootAccountId => IsUnlocked \? _root : null/);
+  assert.match(session,/\?_offlineOnly|_offlineOnly\)/);
+  assert.match(session,/localResult = await operation\(copy, ct\)/);
+  assert.match(workspace,/IReadOnlyList<LedgerRecordItem> remote = keys\.IsOfflineOnly/);
+  assert.match(workspace,/keys\.ActiveRootAccountId/);
+  assert.match(inspector,/if \(!offline\)/);
+  assert.match(panel,/QueueKeys\.UnlockOfflineAsync\(_offlineRoot\.Trim\(\), _passphrase\)/);
+  assert.match(panel,/QueueKeys\.HasLocalCredentialsOfflineAsync\(_offlineRoot\.Trim\(\)\)/);
+  assert.match(panel,/QueueKeys\.IsOfflineOnly/);
+  assert.match(pwaPage,/<VaultLinkedLocalQueuePanel \/>/);
+  assert.match(native,/<VaultLinkedLocalQueuePanel \/>/);
+  assert.match(publisher,/!ledger\.IsConnected/);
+  assert.match(smoke,/await ledger\.DisconnectAsync\(\)/);
+  assert.match(smoke,/await keys\.UnlockOfflineAsync\(Root, "local S-key test passphrase 12345"\)/);
+  assert.match(smoke,/Offline queue inspection authorized publication/);
+});
