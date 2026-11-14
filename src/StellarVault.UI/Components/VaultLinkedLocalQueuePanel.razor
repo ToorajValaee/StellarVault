@@ -5,6 +5,7 @@
 @inject VaultLinkedQueueKeySession QueueKeys
 @inject VaultLinkedQueueInspection QueueInspection
 @inject VaultLinkedDraftWorkspace DraftWorkspace
+@inject VaultLinkedDraftPublication Publisher
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
@@ -58,6 +59,27 @@
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LockAsync">Lock local drafts</button>
             </div>
+            @if (_review is not null)
+            {
+                <section class="sv-secret-review" aria-label="Review encrypted local draft publication">
+                    <h3>Review local draft publication</h3>
+                    <p><strong>Record:</strong> @_review.Title (@(_review.IsFolder ? "Folder" : "Record"))</p>
+                    <p><strong>Target:</strong> <code>@_review.Quote.TargetAccountId</code></p>
+                    <p><strong>Network fee:</strong> @_review.Quote.NetworkFeeXlm XLM</p>
+                    <p><strong>Peak reserve:</strong> @_review.Quote.PeakReserveXlm XLM</p>
+                    <p><strong>Funding top-up:</strong> @_review.Quote.FundingTopUpXlm XLM</p>
+                    <p><strong>Operations:</strong> @_review.Quote.Operations</p>
+                    <label class="sv-secret-approval">
+                        <input type="checkbox" @bind="_approvePublish" disabled="@_busy" />
+                        I approve this specific Stellar transaction, fee and account reserve.
+                    </label>
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !_approvePublish)"
+                            @onclick="PublishReviewedDraftAsync">Sign and submit reviewed draft</button>
+                    <button type="button" class="pixel-button compact"
+                            disabled="@_busy" @onclick="CancelPublicationReviewAsync">Cancel review</button>
+                </section>
+            }
             <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
                 <h3>Save to encrypted device storage</h3>
                 <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
@@ -109,6 +131,9 @@
                             </span>
                             @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
                             {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || _review is not null)"
+                                        @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
                                 <button type="button" class="pixel-button compact" disabled="@_busy"
                                         @onclick="() => DiscardDraftAsync(draft.MutationId)">Discard local draft</button>
                             }
@@ -141,6 +166,68 @@
     private string? _message;
     private VaultLinkedQueueInspection.Report? _report;
     private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
+    private VaultLinkedDraftPublication.Review? _review;
+    private bool _approvePublish;
+
+    private async Task ReviewDraftAsync(string id)
+    {
+        if (_busy || _review is not null || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            _review = await Publisher.PrepareAsync(id);
+            _approvePublish = false;
+            _message = "Review the fresh account, fee and reserve before approving. No transaction has been sent.";
+        }
+        catch (Exception ex) { _message = "Draft publication review unavailable: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishReviewedDraftAsync()
+    {
+        if (_busy || !_approvePublish || _review is null) return;
+        var approved = _review;
+        _review = null;
+        _approvePublish = false;
+        _busy = true;
+        try
+        {
+            var hash = await Publisher.SubmitAsync(approved.Quote, true);
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = "Stellar transaction verified and encrypted queue updated: " + hash;
+        }
+        catch (Exception ex)
+        {
+            // Any failure after the durable reservation may represent an
+            // accepted transaction. Do not offer retry without new review
+            // and verified reconciliation of the queue state.
+            _message = "Publication cannot be confirmed. Do not retry an uncertain draft: " +
+                ex.Message;
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _drafts = []; _report = null; }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelPublicationReviewAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await Publisher.CancelAsync();
+            _review = null;
+            _approvePublish = false;
+            _message = "Unsubmitted publication quote canceled.";
+        }
+        finally { _busy = false; }
+    }
+
     private bool _draftIsFolder;
     private string _draftTitle = string.Empty;
     private string _draftContent = string.Empty;
@@ -215,6 +302,9 @@
     private async Task ChangeConsentAsync(ChangeEventArgs args)
     {
         if (_busy) return;
+        await Publisher.CancelAsync();
+        _review = null;
+        _approvePublish = false;
         _report = null;
         _drafts = [];
         ClearDraftEditor();
@@ -314,6 +404,9 @@
         _busy = true;
         try
         {
+            await Publisher.CancelAsync();
+            _review = null;
+            _approvePublish = false;
             await QueueKeys.LockAsync();
             _report = null;
             _drafts = [];
@@ -330,6 +423,7 @@
         _report = null;
         _drafts = [];
         ClearDraftEditor();
+        await Publisher.CancelAsync();
         await QueueKeys.LockAsync();
         LinkedRetention.Reset();
         if (_enabledGeneralRetention) Retention.Reset();
