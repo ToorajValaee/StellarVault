@@ -76,3 +76,8 @@ Test source covers policy, immutable CAS, HD exclusion, and distinct read-only i
 
 ### Linked queue signer-liveness enforcement
 The independently wrapped S-key local queue key cannot be used merely because the C# ledger bridge still reports a cached connection. Every encrypted queue key operation now performs a live linked ledger chain read before and after its callback, requiring unchanged root, chain length and tail, plus exact network/consent binding. This intentionally refuses local access while the network is unavailable; offline S-key unlock requires an independently verified local authorization mechanism that is not implemented. Do not claim offline parity.
+
+
+## 2026-11-15: User opt-in and disabled GitHub CI
+
+`VaultLinkedLocalQueuePanel` is an explicit opt-in, shared PWA/MAUI control for creating/unlocking the already implemented S-key-local Argon2id-wrapped queue key and inspecting the isolated encrypted queue. Separate `VaultLinkedLocalRetentionGate` prevents prior HD-device consent from being treated as permission for imported S-key encrypted persistence. `ConnectionEpoch` prevents same-account reconnects from retaining a previous local key unlock. No queued S-key publishing is authorized, and disabling consent does not delete previously saved encrypted data. GitHub Actions YAML workflows were deleted on feature and default branches at user request; perform Node/.NET builds and tests from local checkout instead.
