@@ -110,9 +110,14 @@
                         <input @bind="_draftTags" @bind:event="oninput" disabled="@_busy" />
                     </label>
                 }
-                <label>Parent folder record ID (optional)
-                    <input maxlength="16" @bind="_draftFolderId" @bind:event="oninput"
-                           disabled="@_busy" />
+                <label>Parent folder
+                    <select @bind="_draftFolderId" disabled="@_busy">
+                        <option value="">Root of vault</option>
+                        @foreach (var folder in _availableFolders)
+                        {
+                            <option value="@folder.EntityId">@folder.Title @(folder.Local ? "(local draft)" : "(on Stellar)")</option>
+                        }
+                    </select>
                 </label>
                 <button type="button" class="pixel-button primary"
                         disabled="@(_busy || string.IsNullOrWhiteSpace(_draftTitle) || (!_draftIsFolder && string.IsNullOrEmpty(_draftContent)))"
@@ -194,6 +199,7 @@
         {
             var hash = await Publisher.SubmitAsync(approved.Quote, true);
             _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
             _report = await QueueInspection.InspectAsync();
             _message = "Stellar transaction verified and encrypted queue updated: " + hash;
         }
@@ -236,6 +242,25 @@
     private string _draftNotes = string.Empty;
     private string _draftTags = string.Empty;
     private string _draftFolderId = string.Empty;
+    private sealed record FolderOption(string EntityId, string Title, bool Local);
+    private IReadOnlyList<FolderOption> _availableFolders = [];
+
+    private async Task RefreshFolderOptionsAsync()
+    {
+        if (!QueueKeys.IsUnlocked) { _availableFolders = []; return; }
+        var published = await Ledger.ReadAsync();
+        var remoteFolders = published.Where(x => x.IsFolder)
+            .Select(x => new FolderOption(x.Id, x.Title, false));
+        var localFolders = _drafts.Where(x => x.IsFolder &&
+                x.State is VaultSyncState.Pending or VaultSyncState.Confirmed &&
+                !x.IsCorrupt)
+            .Select(x => new FolderOption(x.EntityId, x.Title, true));
+        _availableFolders = remoteFolders.Concat(localFolders)
+            .GroupBy(x => x.EntityId, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     private void ClearDraftEditor()
     {
@@ -248,7 +273,11 @@
     {
         if (_busy || !QueueKeys.IsUnlocked) return;
         _busy = true;
-        try { _drafts = await DraftWorkspace.ListAsync(); }
+        try
+        {
+            _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
+        }
         catch
         {
             _drafts = [];
@@ -307,6 +336,7 @@
         _approvePublish = false;
         _report = null;
         _drafts = [];
+        _availableFolders = [];
         ClearDraftEditor();
         _exists = null;
         _passphrase = string.Empty;
@@ -367,6 +397,7 @@
                 await QueueKeys.UnlockAsync(_passphrase);
             _exists = true;
             _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
             _message = "Independent encrypted device storage is unlocked. Review is read-only; on-chain publishing remains separate.";
         }
         catch
@@ -389,6 +420,7 @@
         {
             _report = await QueueInspection.InspectAsync();
             _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
             _message = "Read-only inspection completed. No transactions were broadcast.";
         }
         catch
@@ -410,6 +442,7 @@
             await QueueKeys.LockAsync();
             _report = null;
             _drafts = [];
+            _availableFolders = [];
             ClearDraftEditor();
             _passphrase = string.Empty;
             _message = "Independent local encryption key cleared from memory.";
