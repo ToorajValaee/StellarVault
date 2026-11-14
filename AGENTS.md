@@ -513,3 +513,11 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Live S-key signer validation for encrypted local queue (2026-11-15)
 - `VaultLinkedQueueKeySession.ExecuteAsync` verifies live JS signer/linked chain via `ledger.InspectAccountInfoAsync` before and after key callbacks; cached `IsConnected` cannot authorize local encrypted queue access after JS signer revocation. Network outage fails closed. No true offline S-key unlocking until separate authenticated local proof is developed.
 - Branch and PWA release workflows run the S-key regression suite, but recent CI reports failure with no accessible logs via connector. Do not call the feature tested or production-ready. HD queue remains independent and no linked queue publisher is enabled.
+
+
+## GitHub CI disabled; shared S-key device panel (2026-11-15)
+
+- At explicit user request, **DO NOT recreate GitHub Actions CI workflows**: all four `.github/workflows/*.yml` files were removed from active feature branch and existing three from main. User wants to minimize GitHub workflow usage. Validation must be local/manual unless the user changes this requirement.
+- `VaultLinkedLocalQueuePanel` (shared PWA/MAUI) grants explicit independent S-key consent, supports separate local passphrase create/unlock/lock, and only allows read-only encrypted queue inspection. No local linked publish/Sync stage exists. Disabling consent is not deleting data.
+- `VaultLinkedLocalRetentionGate` is a separate required session consent barrier in S-key key/credential/queue read services; HD global device consent alone is insufficient.
+- `IStellarSecretKeyLedger.ConnectionEpoch` changes on connect/disconnect; `VaultLinkedQueueKeySession` binds unlock to that exact epoch so the local key cannot remain authorized after reconnecting the same imported account. Static tests added, builds/test execution remain unverified.
