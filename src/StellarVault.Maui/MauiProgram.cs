@@ -81,6 +81,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarHdAccountStrategy>();
         builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarLinkedAccountStrategy>();
         builder.Services.AddScoped<VaultAccountStrategyFactory>();
+        builder.Services.AddScoped<VaultLinkedAccountExpansion>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
