@@ -46,9 +46,10 @@ public static class MauiProgram
         // All queue payloads and metadata are encrypted with the unlocked
         // device vault key; no native plaintext queue files are written.
         builder.Services.AddScoped<VaultDeviceRetentionGate>();
-        builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
+                builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
-                services.GetRequiredService<VaultSessionManager>(),
+                services.GetRequiredService<IVaultQueueKeySession>(),
                 services.GetRequiredService<VaultDeviceRetentionGate>(),
                 Path.Combine(FileSystem.AppDataDirectory, "vault-pending-queue")));
         // Historical evidence adapter shares the PWA implementation; only
