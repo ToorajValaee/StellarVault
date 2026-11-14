@@ -430,3 +430,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Priority clarification — 2026-11-14
 - EVM is **last priority** and only motivates clean interfaces; do not build EVM functionality now. Complete and validate existing Stellar HD and independently linked S-key paths, common record/file handling and safe synchronization first; sharing and portable import/export come later.
 - The local record type factory is actively used for new text/binary saves. The account-strategy factory is **not** a live provider; `VaultConnectedStellarAccountInventory` only inspects already-connected sessions. No implicit account creation or transaction broadcast via factory calls.
+
+## 2026-11-14 integration note
+- Registered Stellar HD and linked provisioning-strategy implementations are read-only for connected inspection. CreateNext and per-node Discover fail closed; linked UI validates inventory via factory without bypassing transaction approval.
+- Record type factory now validates HD and linked on-chain drafts as credential/folder types. Existing on-chain serialization remains unchanged.
+- Local binary text/plain files are rejected until file-vs-text discriminator migration exists. Changes are not build/test verified.
