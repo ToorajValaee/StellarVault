@@ -225,7 +225,7 @@
             @if (_drafts.Count > 0)
             {
                 <section class="sv-secret-review" aria-label="Pending encrypted local records and folders">
-                    <h3>Local drafts — not on Stellar (@_drafts.Count)</h3>
+                    <h3>Encrypted queue — drafts and transaction history (@_drafts.Count)</h3>
                     @foreach (var draft in _drafts)
                     {
                         <div class="sv-secret-workspace-actions" @key="draft.MutationId">
