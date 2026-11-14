@@ -1,0 +1,186 @@
+@using StellarVault.Core.Services
+@inject IStellarSecretKeyLedger Ledger
+@inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedQueueKeySession QueueKeys
+@inject VaultLinkedQueueInspection QueueInspection
+@implements IAsyncDisposable
+
+<section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
+    <h3>Encrypted device drafts</h3>
+    <p>Optional local encrypted storage for this independent Stellar S-key vault.
+       This device uses a separate local passphrase, separate encryption key and separate
+       storage namespace from mnemonic-based vaults. No Stellar transaction is
+       submitted by these controls.</p>
+    <label class="sv-secret-approval">
+        <input type="checkbox" checked="@Retention.AllowsLocalPersistence"
+               disabled="@_busy" @onchange="ChangeConsentAsync" />
+        I consent to retaining encrypted vault data on this device until I remove it.
+    </label>
+    @if (Retention.AllowsLocalPersistence && Ledger.IsConnected)
+    {
+        @if (_exists is null)
+        {
+            <button type="button" class="pixel-button compact" disabled="@_busy"
+                    @onclick="DiscoverAsync">Check local encrypted storage</button>
+        }
+        else if (!QueueKeys.IsUnlocked)
+        {
+            <label>Separate local passphrase
+                <input type="password" autocomplete="new-password" minlength="12"
+                       spellcheck="false" @bind="_passphrase" @bind:event="oninput"
+                       disabled="@_busy" />
+            </label>
+            <div class="sv-secret-workspace-actions">
+                @if (_exists == true)
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || _passphrase.Length < 12)"
+                            @onclick="UnlockAsync">Unlock encrypted local drafts</button>
+                }
+                else
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || _passphrase.Length < 12)"
+                            @onclick="CreateAsync">Create encrypted device storage</button>
+                }
+            </div>
+        }
+        else
+        {
+            <p role="status">The independent local encryption key is unlocked in memory.</p>
+            <div class="sv-secret-workspace-actions">
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="InspectAsync">Inspect encrypted draft queue</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="LockAsync">Lock local drafts</button>
+            </div>
+        }
+        @if (_report is not null && QueueKeys.IsUnlocked)
+        {
+            <p><strong>Queued drafts:</strong> @_report.Pending</p>
+            <p><strong>Uncertain/submitting:</strong> @_report.UncertainOrSubmitting</p>
+            <p><strong>Conflicts:</strong> @_report.Conflicts</p>
+            <p><strong>Folder mutations:</strong> @_report.FolderEntries</p>
+            <p>These are local queue diagnostics only. Linked-account publishing
+               remains disabled until separate operation verification is implemented.</p>
+        }
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="sv-secret-status" role="status">@_message</p>
+    }
+</section>
+
+@code {
+    private bool _busy;
+    private bool? _exists;
+    private string _passphrase = string.Empty;
+    private string? _message;
+    private VaultLinkedQueueInspection.Report? _report;
+
+    private async Task ChangeConsentAsync(ChangeEventArgs args)
+    {
+        if (_busy) return;
+        _report = null;
+        _exists = null;
+        _passphrase = string.Empty;
+        var consented = args.Value is true ||
+            args.Value is string value && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        if (!consented)
+        {
+            await QueueKeys.LockAsync();
+            Retention.Reset();
+            _message = "Device retention disabled for this session. Previously encrypted data was not erased.";
+            return;
+        }
+        Retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
+        await DiscoverAsync();
+    }
+
+    private async Task DiscoverAsync()
+    {
+        if (_busy || !Retention.AllowsLocalPersistence) return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            _exists = await QueueKeys.HasLocalCredentialsAsync();
+            _message = _exists == true
+                ? "Encrypted device credentials found. Unlock with the separate local passphrase."
+                : "No local credentials found for this S-key account and network.";
+        }
+        catch
+        {
+            _exists = null;
+            _message = "Cannot verify device storage or connected signer. No local key was unlocked.";
+        }
+        finally { _busy = false; }
+    }
+
+    private Task CreateAsync() => ActivateAsync(create: true);
+    private Task UnlockAsync() => ActivateAsync(create: false);
+
+    private async Task ActivateAsync(bool create)
+    {
+        if (_busy || !Retention.AllowsLocalPersistence || _passphrase.Length < 12)
+            return;
+        _busy = true;
+        _report = null;
+        try
+        {
+            if (create)
+                await QueueKeys.CreateAsync(_passphrase);
+            else
+                await QueueKeys.UnlockAsync(_passphrase);
+            _exists = true;
+            _message = "Independent encrypted device storage is unlocked. Review is read-only; on-chain publishing remains separate.";
+        }
+        catch
+        {
+            _message = "Device encryption setup or unlock failed. Verify the local passphrase, network and signer session.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task InspectAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _report = null;
+        try
+        {
+            _report = await QueueInspection.InspectAsync();
+            _message = "Read-only inspection completed. No transactions were broadcast.";
+        }
+        catch
+        {
+            _message = "Cannot inspect the encrypted local queue. Storage consent, signer and network must all remain valid.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LockAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await QueueKeys.LockAsync();
+            _report = null;
+            _passphrase = string.Empty;
+            _message = "Independent local encryption key cleared from memory.";
+        }
+        finally { _busy = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _passphrase = string.Empty;
+        _report = null;
+        await QueueKeys.LockAsync();
+    }
+}
