@@ -46,6 +46,25 @@ public sealed class FileSystemVaultLinkedQueueSnapshotStore(
         return ExistingStore().TryDeleteAsync(expected, ct);
     }
 
+    public Task<bool> TryReplaceAsync(VaultPendingMutation previous,
+        VaultPendingMutation next, CancellationToken ct = default)
+    {
+        RequireEntry(previous);
+        RequireEntry(next);
+        if (previous.Id != next.Id || previous.EntityId != next.EntityId ||
+            previous.Kind != next.Kind || previous.AccountId != next.AccountId ||
+            previous.NetworkId != next.NetworkId ||
+            !previous.EncryptedPayload.AsSpan().SequenceEqual(next.EncryptedPayload) ||
+            previous.DependsOn is null || next.DependsOn is null ||
+            !previous.DependsOn.SequenceEqual(next.DependsOn) ||
+            (previous.State != VaultSyncState.Pending || next.State != VaultSyncState.Submitting) &&
+            (previous.State != VaultSyncState.Submitting ||
+                next.State is not (VaultSyncState.Uncertain or VaultSyncState.Confirmed)))
+            throw new InvalidOperationException(
+                "Only original S-key draft submission and immutable outcome transitions are allowed.");
+        return ExistingStore().TryReplaceAsync(previous, next, ct);
+    }
+
     public async Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default)
     {
