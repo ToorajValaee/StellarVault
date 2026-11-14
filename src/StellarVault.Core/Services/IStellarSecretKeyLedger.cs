@@ -22,11 +22,18 @@ public interface IStellarSecretKeyLedger
         CancellationToken cancellationToken = default);
     Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(
         CancellationToken cancellationToken = default);
+    Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
+        CancellationToken cancellationToken = default);
     Task CancelQuoteAsync(string quoteId);
     Task<string> SubmitApprovedAsync(string quoteId,
         CancellationToken cancellationToken = default);
     Task DisconnectAsync();
 }
+
+/// <summary>Public-only, volatile diagnostic; never proof of inclusion or permission to retry.</summary>
+public sealed record VaultSecretSubmissionDiagnostic(
+    string Kind, string RootAccountId, string TargetAccountId,
+    string? RecordId, string? TransactionHash, string NetworkPassphrase);
 
 public sealed record VaultSecretLedgerQuote(
     string QuoteId, string Kind, int Operations, int Transactions,
@@ -57,6 +64,9 @@ public sealed class UnavailableStellarSecretKeyLedger : IStellarSecretKeyLedger
         Task.FromException<VaultSecretLedgerQuote>(NotAvailable());
     public Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(CancellationToken cancellationToken=default) =>
         Task.FromException<VaultSecretLedgerQuote>(NotAvailable());
+    public Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<VaultSecretSubmissionDiagnostic?>(NotAvailable());
     public Task CancelQuoteAsync(string quoteId) => Task.FromException(NotAvailable());
     public Task<string> SubmitApprovedAsync(string quoteId,CancellationToken cancellationToken=default) =>
         Task.FromException<string>(NotAvailable());
