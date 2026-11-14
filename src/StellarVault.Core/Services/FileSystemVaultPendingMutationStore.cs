@@ -219,6 +219,7 @@ public sealed class FileSystemVaultPendingMutationStore : IVaultPendingMutationS
                 item.EncryptedPayload is not { Length: > 0 and <= 8_388_608 } ||
                 item.DependsOn is null)
                 throw new CryptographicException("Queue entry has invalid authenticated identity.");
+            VaultMutationStrategyPolicy.Validate(item.OriginStrategyId);
             return item;
         }
         finally { CryptographicOperations.ZeroMemory(plain); }
@@ -296,6 +297,7 @@ public sealed class FileSystemVaultPendingMutationStore : IVaultPendingMutationS
     private static bool Equivalent(VaultPendingMutation a, VaultPendingMutation b) =>
         a.Id == b.Id && a.AccountId == b.AccountId && a.NetworkId == b.NetworkId &&
         a.Kind == b.Kind && a.EntityId == b.EntityId &&
+        a.OriginStrategyId == b.OriginStrategyId &&
         a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
         a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
         a.DependsOn.SequenceEqual(b.DependsOn) && a.State == b.State &&
