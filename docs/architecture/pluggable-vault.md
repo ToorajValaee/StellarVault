@@ -70,3 +70,7 @@ The linked JS signing transport now retains public-only unresolved transaction i
 
 ## Cross-session uncertainty guard
 A single JavaScript runtime can contain multiple independently unlocked S-key ledger sessions for the same root/network. An unresolved submission marker is now checked at quote planning, at approval submission entry, and immediately before network transmission. This prevents another already-open session from writing once a submission is uncertain. The guard is not cross-tab, cross-WebView, cross-device or durable. A completely saturated tail cannot be rolled over by the existing pointer protocol; it fails with recovery guidance.
+
+
+## Linked expansion preflight and tail-capacity safety (2026-11-15)
+Linked expansion now has an explicit no-broadcast preflight result. Core invalidates an unsubmitted reviewed quote and the shared UI can show a fresh-review message without treating the rejected attempt as a broadcast. An already unresolved sibling session still sets the read-only quarantine. Lock/disconnect abandons never-submitted expansion quotes; it does not clear uncertain submissions. JS inspection is keyed to the vault's same-runtime root/network scope, so previously opened sessions can observe sibling uncertainty. Additionally, updates on the current tail account reserve a free ManageData slot for the next `sv:next:v1` link. Existing-record migration remains a separate, unimplemented reviewed protocol. Neither the quarantine nor these diagnostics are durable across a full restart.
