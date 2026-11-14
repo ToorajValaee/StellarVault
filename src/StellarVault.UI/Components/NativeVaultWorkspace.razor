@@ -1370,6 +1370,8 @@ else
                     (NetworkSelection.CustomHorizonUrl, NetworkSelection.CustomPassphrase),
                 _ => throw new InvalidOperationException("Select a verified Stellar network.")
             };
+            if (string.IsNullOrWhiteSpace(passphrase))
+                throw new InvalidOperationException("Select a verified Stellar network passphrase.");
             if (!await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"))
                 throw new InvalidOperationException("Stellar S-key runtime is unavailable.");
             _secretInspection = await SecretChain.InspectAsync(_ledgerSecretKey, url, passphrase);
