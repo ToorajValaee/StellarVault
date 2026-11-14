@@ -57,6 +57,16 @@ public sealed class VaultLinkedDraftPublication(
         return all;
     }
 
+    private static byte[] Fingerprint(VaultPendingMutation mutation)
+    {
+        // Bind the review to every immutable queue field, including record ID,
+        // origin, account, network, parent dependencies and full draft bytes.
+        // Payload-only hashes would allow a parent/target change after review.
+        byte[] serialized = JsonSerializer.SerializeToUtf8Bytes(mutation);
+        try { return SHA256.HashData(serialized); }
+        finally { CryptographicOperations.ZeroMemory(serialized); }
+    }
+
     private static void Clear(IEnumerable<VaultPendingMutation> all)
     {
         foreach (var x in all)
@@ -149,7 +159,7 @@ public sealed class VaultLinkedDraftPublication(
                     throw new InvalidDataException("Invalid linked create quote.");
                 RequireSameScope(root, scope, epoch);
                 _pending = new(item.Id, root, scope, epoch,
-                    SHA256.HashData(item.EncryptedPayload), quote, DateTimeOffset.UtcNow);
+                    Fingerprint(item), quote, DateTimeOffset.UtcNow);
                 return new(item.Id, item.EntityId, draft.Title, draft.IsFolder, quote,
                     "Review the exact XLM fee and reserve. Publishing is a separate explicit step.");
             }
@@ -182,7 +192,7 @@ public sealed class VaultLinkedDraftPublication(
                 {
                     var original = all.SingleOrDefault(x => x.Id == pending.MutationId)
                         ?? throw new KeyNotFoundException("Approved draft no longer exists.");
-                    var currentHash = SHA256.HashData(original.EncryptedPayload);
+                    var currentHash = Fingerprint(original);
                     try
                     {
                         if (!CryptographicOperations.FixedTimeEquals(
