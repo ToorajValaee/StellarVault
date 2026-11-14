@@ -3,6 +3,7 @@
 @using StellarVault.Core.Services
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject IStellarLedgerRecords LedgerRecords
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultSessionWorkflow Workflow
@@ -182,6 +183,9 @@ else
     {
         if (Privacy.IsSuspended)
         {
+            // A privacy suspension is an explicit lock for independent S-key
+            // local queue key material as well as existing HD/local keys.
+            await LinkedQueueKeys.LockAsync();
             try { _biometricEnrolled = Privacy.SuspendedAccountId is { } accountId &&
                 await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(accountId)); }
             catch (JSException) { _biometricEnrolled = false; }
@@ -217,6 +221,7 @@ else
     }
     private async Task FullLockAsync()
     {
+        await LinkedQueueKeys.LockAsync();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
         Privacy.Clear();
@@ -239,6 +244,7 @@ else
     public async Task LockForBrowserLifecycle()
     {
         Privacy.Clear();
+        await LinkedQueueKeys.LockAsync();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
     }
@@ -247,6 +253,7 @@ else
     {
         Privacy.Changed -= RefreshPrivacy;
         Privacy.Clear();
+        await LinkedQueueKeys.LockAsync();
         Sessions.Lock();
         await LedgerRecords.DisconnectAsync();
         try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
