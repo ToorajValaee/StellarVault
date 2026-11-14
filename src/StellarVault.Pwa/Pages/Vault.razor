@@ -98,7 +98,7 @@ else
         }
         @if (_appView == "settings")
         {
-            <button type="button" class="sv-mobile-help-entry" @onclick='() => SelectAppView("help")'>ⓘ Documentation &amp; Help</button>
+            <button type="button" class="sv-settings-help-link" @onclick='() => SelectAppView("help")'><span class="sv-settings-help-icon" aria-hidden="true">ⓘ</span><span><strong>Documentation &amp; Help</strong><small>Guides, vault security and open-source information</small></span><span class="sv-settings-help-chevron" aria-hidden="true">›</span></button>
             <section class="sv-modern-settings sv-workspace-surface" aria-label="Vault settings">
                 <div class="terminal-panel sv-modern-settings-section">
                     <h2>Connection</h2>
@@ -275,7 +275,7 @@ else
                 }
             }
         </aside>
-        <div class="sv-explorer-main @(_explorerLayout == "grid" ? "sv-view-grid" : "sv-view-list")">
+        <div class="sv-explorer-main @(_explorerLayout == "grid" ? "sv-view-grid" : "sv-view-list")" data-explorer-layout="@_explorerLayout">
         <section class="terminal-panel sv-explorer-folder-panel">
             <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
 
