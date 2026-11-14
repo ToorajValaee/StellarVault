@@ -435,3 +435,7 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - Registered Stellar HD and linked provisioning-strategy implementations are read-only for connected inspection. CreateNext and per-node Discover fail closed; linked UI validates inventory via factory without bypassing transaction approval.
 - Record type factory now validates HD and linked on-chain drafts as credential/folder types. Existing on-chain serialization remains unchanged.
 - Local binary text/plain files are rejected until file-vs-text discriminator migration exists. Changes are not build/test verified.
+
+## Reviewed linked expansion milestone
+- Linked chain expansion now routes through `VaultLinkedAccountExpansion`, retaining exact quote/approval and root/network scope; it consumes pending intent before the network operation, never retries an uncertain submission, and checks connected count/tail after. This is **not** production-safe cross-device deduplication or proof of historical signer authorization.
+- Do not replace the explicit S-key quote UI with an unapproved generic factory CreateNext; keep existing HD transaction behavior untouched. EVM is last priority. This work has not been compiled or device-tested.
