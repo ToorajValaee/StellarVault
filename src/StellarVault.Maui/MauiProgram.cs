@@ -47,6 +47,12 @@ public static class MauiProgram
         // device vault key; no native plaintext queue files are written.
         builder.Services.AddScoped<VaultDeviceRetentionGate>();
                 builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+        builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore>(sp =>
+            new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-credentials"),
+                sp.GetRequiredService<VaultNetworkSelection>(),
+                sp.GetRequiredService<VaultDeviceRetentionGate>()));
+        builder.Services.AddScoped<VaultLinkedQueueKeySession>();
 builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
                 services.GetRequiredService<IVaultQueueKeySession>(),
