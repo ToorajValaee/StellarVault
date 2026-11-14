@@ -16,12 +16,12 @@ function start({ linked = true, childAuthorized = true, cycle = false, rightNetw
   const records = {
     [rootId]: {
       signers: [{ type: 'ed25519_public_key', key: rootId, weight: 1 }],
-      thresholds: { med_threshold: 1, high_threshold: 1 },
+      thresholds: { low_threshold: 1, med_threshold: 1, high_threshold: 1 },
       data_attr: linked ? { 'sv:next:v1': btoa(childId) } : {},
     },
     [childId]: {
       signers: [{ type: 'ed25519_public_key', key: rootId, weight: childAuthorized ? 1 : 0 }],
-      thresholds: { med_threshold: 1, high_threshold: 1 },
+      thresholds: { low_threshold: 1, med_threshold: 1, high_threshold: 1 },
       data_attr: cycle ? { 'sv:next:v1': btoa(rootId) } : {},
     },
   };
@@ -119,4 +119,12 @@ test('an HD-v2 registered root cannot be mistaken for an independent S-key chain
   const fixture = start({ linked: false });
   fixture.records[rootId].data_attr['sv:registry:v2'] = btoa('registry');
   await assert.rejects(fixture.inspect(), /HD-v2 vault/);
+});
+
+test('an additional active child signer blocks single-secret chain recovery',async()=>{
+  const fixture=start();
+  fixture.records[childId].signers.push({
+    type:'ed25519_public_key',key:'G'+'D'.repeat(55),weight:1
+  });
+  await assert.rejects(fixture.inspect(),/additional active signer/);
 });
