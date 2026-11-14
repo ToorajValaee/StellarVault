@@ -5,6 +5,7 @@
 @inject VaultLinkedQueueInspection QueueInspection
 @inject VaultLinkedDraftWorkspace DraftWorkspace
 @inject VaultLinkedDraftPublication Publisher
+@inject VaultLinkedAccountExpansion LinkedExpansion
 @inject VaultLinkedDraftRecoveryReview RecoveryReview
 @implements IAsyncDisposable
 
@@ -110,6 +111,34 @@
                                 @onclick="() => ReviewDraftAsync(nextId)">Review next ready draft</button>
                     }
                 </section>
+            }
+            @if (_expandQuote is not null)
+            {
+                <section class="sv-secret-review" aria-label="Review additional linked Stellar storage account">
+                    <h3>Review additional storage account</h3>
+                    <p>A new linked Stellar account is needed before the next record can be saved.
+                       The root signer will authorize it; its master key is disabled by the linked ledger protocol.</p>
+                    <p><strong>New account:</strong> <code>@_expandQuote.TargetAccountId</code></p>
+                    <p><strong>Network fee:</strong> @_expandQuote.NetworkFeeXlm XLM</p>
+                    <p><strong>Peak reserve:</strong> @_expandQuote.PeakReserveXlm XLM</p>
+                    <p><strong>Funding top-up:</strong> @_expandQuote.FundingTopUpXlm XLM</p>
+                    <p><strong>Operations:</strong> @_expandQuote.Operations</p>
+                    <label class="sv-secret-approval">
+                        <input type="checkbox" @bind="_approveExpand" disabled="@_busy" />
+                        I approve creation of this specific linked account and its fees and reserve.
+                    </label>
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !_approveExpand || !QueueKeys.CanPublish)"
+                            @onclick="SubmitExpansionAsync">Create reviewed storage account</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="CancelExpansionAsync">Cancel account review</button>
+                </section>
+            }
+            @if (_expandQuote is null && QueueKeys.CanPublish)
+            {
+                <button type="button" class="pixel-button compact"
+                        disabled="@(_busy || _review is not null)"
+                        @onclick="ReviewExpansionAsync">Review additional account capacity</button>
             }
             @if (_review is not null)
             {
@@ -283,6 +312,69 @@
 
     private VaultLinkedDraftPublication.Review? _review;
     private bool _approvePublish;
+    private VaultSecretLedgerQuote? _expandQuote;
+    private bool _approveExpand;
+
+    private async Task ReviewExpansionAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish || _expandQuote is not null ||
+            _review is not null) return;
+        _busy = true;
+        try
+        {
+            _expandQuote = await LinkedExpansion.PrepareAsync();
+            _approveExpand = false;
+            _manualSyncPlan = null;
+            _message = "Review a separate linked-account transaction. Draft publication will require its own quote afterward.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Account expansion review unavailable: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SubmitExpansionAsync()
+    {
+        if (_busy || !_approveExpand || _expandQuote is null ||
+            !QueueKeys.CanPublish) return;
+        var quote = _expandQuote;
+        _expandQuote = null;
+        _approveExpand = false;
+        _busy = true;
+        try
+        {
+            var hash = await LinkedExpansion.SubmitApprovedAsync(quote, true);
+            _manualSyncPlan = null;
+            _message = "Additional storage account observed after approved transaction " +
+                hash + ". Review the pending draft and its fee separately.";
+        }
+        catch (VaultLinkedExpansionPreflightException)
+        {
+            _message = "Expansion was rejected before this transaction was sent. Refresh and review again; other unresolved transactions still require reconciliation.";
+        }
+        catch
+        {
+            _message = "Expansion outcome may be uncertain. Do not repeat the account creation or any queued publication until ledger history is reconciled.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelExpansionAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await LinkedExpansion.AbandonUnsubmittedAsync();
+            _expandQuote = null;
+            _approveExpand = false;
+            _message = "Unsubmitted account expansion review canceled.";
+        }
+        finally { _busy = false; }
+    }
+
+
     private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
 
     private async Task InspectUnresolvedAsync(string id)
@@ -665,6 +757,7 @@
         _drafts = [];
         ClearDraftEditor();
         await Publisher.CancelAsync();
+        await LinkedExpansion.AbandonUnsubmittedAsync();
         await QueueKeys.LockAsync();
         LinkedRetention.Reset();
             }
