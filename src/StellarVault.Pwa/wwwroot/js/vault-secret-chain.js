@@ -25,9 +25,10 @@ window.stellarVaultSecretChain = (() => {
     const weight = Number(signer?.weight || 0);
     const medium = Number(account.thresholds?.med_threshold);
     const high = Number(account.thresholds?.high_threshold);
-    if (![weight, medium, high].every(Number.isInteger) ||
-        medium < 0 || high < 0 || weight < 0 || weight > 255 ||
-        medium > 255 || high > 255)
+    const low = Number(account.thresholds?.low_threshold);
+    if (![weight, low, medium, high].every(Number.isInteger) ||
+        low < 1 || medium < 1 || high < 1 || weight < 0 || weight > 255 ||
+        low > 255 || medium > 255 || high > 255)
       throw new Error('Invalid Stellar signer or threshold state.');
     return {
       rootCanSign: weight > 0 && weight >= medium && weight >= high,
@@ -69,6 +70,9 @@ window.stellarVaultSecretChain = (() => {
           account.data_attr || {}, 'sv:registry:v2'))
         throw new Error('This account is registered as an HD-v2 vault. Open it with its mnemonic instead.');
       const signer = signerStatus(account, root);
+      if (index > 0 && (account.signers || []).some(x =>
+          x.key !== root && Number(x.weight || 0) > 0))
+        throw new Error('Child account has an additional active signer. Single-secret recovery is unsafe.');
       if (!signer.rootCanSign || signer.medium < 1 || signer.high < 1)
         throw new Error('Account ' + index + ' lacks safe root-signing authorization or signer thresholds. Chain inspection stopped.');
       nodes.push({
