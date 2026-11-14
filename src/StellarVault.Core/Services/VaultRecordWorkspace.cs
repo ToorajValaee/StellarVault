@@ -27,8 +27,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
             var entries = await db.Catalog.ListAsync(key, token);
             var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
             if (metadata is null) return null;
-            if (metadata.ContentType is not null &&
-                !metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (!VaultRecordTypeFactory.IsLegacyText(metadata.ContentType))
                 throw new InvalidOperationException("This record contains a binary file, not editable text.");
             var version = await db.GetVersionAsync(name, key, token);
             if (version is null) return null;
@@ -72,8 +71,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
             // Catalog metadata is encrypted and scoped to the unlocked account.
             var catalog = await db.Catalog.ListAsync(key, token);
             var existing = catalog.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (existing is not null && existing.ContentType is not null &&
-                !existing.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (existing is not null && !VaultRecordTypeFactory.IsLegacyText(existing.ContentType))
                 throw new InvalidOperationException("This record contains a binary file, not editable text.");
             byte[] bytes = Encoding.UTF8.GetBytes(text);
             try
@@ -95,8 +93,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
             ArgumentNullException.ThrowIfNull(expectedVersion);
             var entries = await db.Catalog.ListAsync(key, token);
             var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (metadata is null || (metadata.ContentType is not null &&
-                !metadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+            if (metadata is null || (!VaultRecordTypeFactory.IsLegacyText(metadata.ContentType)))
                 throw new InvalidOperationException("The selected text record is no longer in the catalog.");
             var current = await db.GetVersionAsync(name, key, token);
             if (current != expectedVersion)
