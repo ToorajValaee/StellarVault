@@ -151,6 +151,27 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         CancellationToken cancellationToken = default) =>
         QuoteAsync("expand", null, null, cancellationToken);
 
+    public async Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        RequireConnected();
+        var finding = await js.InvokeAsync<VaultSecretSubmissionDiagnostic?>(
+            "stellarVaultSecretLedger.inspectUncertain", cancellationToken, _sessionId);
+        if (finding is null) return null;
+        if (finding.RootAccountId != _root ||
+            !StellarAccountAddress.IsValid(finding.TargetAccountId) ||
+            finding.Kind is not ("create" or "update" or "delete" or "expand") ||
+            (finding.Kind == "expand" && finding.RecordId is not null) ||
+            (finding.Kind != "expand" && (finding.RecordId is not { Length: 16 } ||
+                !finding.RecordId.All(Uri.IsHexDigit))) ||
+            string.IsNullOrWhiteSpace(finding.NetworkPassphrase) ||
+            (finding.TransactionHash is not null &&
+                (finding.TransactionHash.Length != 64 ||
+                 !finding.TransactionHash.All(Uri.IsHexDigit))))
+            throw new InvalidDataException("Invalid volatile linked-ledger submission diagnostic.");
+        return finding;
+    }
+
     public async Task CancelQuoteAsync(string quoteId)
     {
         if (_connected && !string.IsNullOrWhiteSpace(quoteId))
