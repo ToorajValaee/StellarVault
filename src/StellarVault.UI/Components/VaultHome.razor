@@ -6,6 +6,7 @@
 @inject VaultNetworkSelection NetworkSelection
 @inject IStellarLedgerRecords LedgerRecords
 @inject IStellarSecretKeyVaultDiscovery SecretChain
+@inject IStellarSecretKeyLedger SecretLedger
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
@@ -97,7 +98,7 @@
                     <input id="sv-secret-key" class="terminal-input" type="password" autocomplete="off"
                            autocapitalize="characters" spellcheck="false" maxlength="56"
                            @bind="_secretKey" @bind:event="oninput" disabled="@_busy" />
-                    <p class="advanced-help">This is an independent account-chain architecture, not an HD wallet. Read-only account-chain and signer inspection is available first; creating, editing and submitting Secret Key vault records is not yet enabled.</p>
+                    <p class="advanced-help">This is an independent account-chain architecture, not an HD wallet. This independent vault uses linked Stellar accounts and explicit root-key signer authorization. Record and folder transactions require approval; mutations are Testnet-only until security audit.</p>
                 }
                 @if (_credentialMode == VaultCredentialMode.MnemonicHd && _recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
@@ -170,7 +171,7 @@
                     else
                     {
                         <button class="pixel-button primary" type="submit" disabled="@_busy"
-                                aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Inspect linked accounts")</button>
+                                aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
                     }
                 </div>
                 @if (!Sessions.IsUnlocked)
@@ -712,8 +713,8 @@
         {
             if (_busy) return "Checking vault credential…";
             if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
-                return _secretKey.Length != 56 ? "Enter your existing 56-character Stellar S-key to inspect its account chain." :
-                    "Ready for read-only signer and chain inspection. No transaction will be sent.";
+                return _secretKey.Length != 56 ? "Enter your existing 56-character Stellar S-key to unlock its independent account chain." :
+                    "Ready to unlock the Secret Key vault. Signing requires separate transaction approval.";
             if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
                 return $"Enter a complete 12, 15, 18, 21 or 24-word recovery phrase ({EnteredWordCount} words entered).";
             if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
@@ -730,7 +731,7 @@
 
     private async Task AccessVaultAsync()
     {
-        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected) return;
+        if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected) return;
         if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
         {
             await InspectSecretKeyChainAsync();
@@ -947,13 +948,20 @@
                 "testnet" => "Test SDF Network ; September 2015",
                 _ => _customPassphrase ?? throw new InvalidOperationException("Custom network is not configured.")
             };
+            // Verify signer authority and chain recovery before opening the
+            // independent encrypted record backend. No on-chain writes here.
             _secretChainInspection = await SecretChain.InspectAsync(_secretKey, horizon, passphrase);
-            _message = "Account chain inspected successfully. Secret-key record access and signing are not yet enabled.";
+            await SecretLedger.ConnectAsync(_secretKey, horizon, passphrase);
+            await SecretLedger.ReadAsync();
+            NetworkSelection.Select(_network);
+            Navigation.NavigateTo("/secret-vault");
         }
         catch (Exception ex)
         {
-            Logger.LogWarning("Secret-key chain inspection unavailable: {ErrorType}", ex.GetType().Name);
-            _message = "Secret-key inspection failed. Verify the network, funded root account, linked-account pointers and root signer permissions.";
+            Logger.LogWarning("Secret Key ledger opening failed: {ErrorType}", ex.GetType().Name);
+            try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
+            catch { /* Do not mask the original failure. */ }
+            _message = "Secret Key vault could not be recovered. Check the network, linked signers, record integrity and funding. No transaction was sent.";
         }
         finally
         {
