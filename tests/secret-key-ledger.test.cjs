@@ -1018,3 +1018,12 @@ test('linked read-only inspection clears decrypted queue payloads after counting
   assert.match(source,/var mutations = await store\.ListAsync\(root, scope, ct\)/);
   assert.match(source,/finally\s*\{[\s\S]*?CryptographicOperations\.ZeroMemory\(mutation\.EncryptedPayload\)/);
 });
+
+
+test('linked queue scope rejection zeroes decrypted snapshots before throwing',()=>{
+  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  assert.match(workspace,/catch\s*\{\s*ClearEntries\(all\);\s*throw;/);
+  assert.match(publisher,/catch\s*\{\s*Clear\(all\);\s*throw;/);
+});
