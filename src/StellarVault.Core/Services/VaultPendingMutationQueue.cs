@@ -1082,7 +1082,12 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         if (string.IsNullOrWhiteSpace(networkId))
             throw new ArgumentException("Network ID required.", nameof(networkId));
         var entries = await store.ListAsync(accountId, networkId, ct);
-        foreach (var item in entries) RequireScope(item, accountId, networkId);
+        foreach (var item in entries)
+        {
+            if (item.AccountId != accountId || item.NetworkId != networkId)
+                throw new InvalidDataException("Queue entry belongs to another account or network.");
+            VaultMutationStrategyPolicy.Validate(item.OriginStrategyId);
+        }
         return entries;
     }
 
@@ -1090,11 +1095,16 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         if (item.AccountId != accountId || item.NetworkId != networkId)
             throw new InvalidDataException("Queue entry belongs to another account or network.");
+        // Current durable mutation transitions, including confirmation, use
+        // the HD ledger verifier and local vault key. Linked-origin items are
+        // inspectable but cannot enter these state-changing methods.
+        VaultMutationStrategyPolicy.RequireHd(item);
     }
 
     private static bool SameDurableRevision(VaultPendingMutation a, VaultPendingMutation b) =>
         a.Id == b.Id && a.AccountId == b.AccountId && a.NetworkId == b.NetworkId &&
         a.Kind == b.Kind && a.EntityId == b.EntityId &&
+        a.OriginStrategyId == b.OriginStrategyId &&
         a.EncryptedPayload is not null && b.EncryptedPayload is not null &&
         a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
         a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
