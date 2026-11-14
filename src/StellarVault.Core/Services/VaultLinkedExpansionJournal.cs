@@ -44,10 +44,11 @@ public sealed class VaultLinkedExpansionJournal(
         var entries = await store.ListAsync(root, scope, ct);
         try
         {
-            if (entries.Any(x => x.State is VaultSyncState.Submitting or
-                VaultSyncState.Uncertain or VaultSyncState.Conflict ||
-                x.Kind == VaultMutationKind.ExtendLinkedChain &&
-                x.State != VaultSyncState.Confirmed))
+            if (entries.Any(x =>
+                (x.State is VaultSyncState.Submitting or
+                    VaultSyncState.Uncertain or VaultSyncState.Conflict) ||
+                (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                 x.State != VaultSyncState.Confirmed)))
                 throw new InvalidOperationException(
                     "An earlier linked submission or expansion needs verified reconciliation.");
         }
