@@ -13,6 +13,7 @@ public sealed class VaultLinkedQueueKeySession(
     IStellarSecretKeyLedger ledger,
     VaultNetworkSelection network,
     VaultDeviceRetentionGate retention,
+    VaultLinkedLocalRetentionGate linkedRetention,
     IVaultLinkedPassphraseCredentialStore credentialStore,
     IVaultKeyProtector protector) : IVaultQueueKeySession, IAsyncDisposable
 {
@@ -26,7 +27,8 @@ public sealed class VaultLinkedQueueKeySession(
     private bool _disposed;
 
     public bool IsUnlocked => !_disposed && _key is not null &&
-        retention.AllowsLocalPersistence && ledger.IsConnected &&
+        retention.AllowsLocalPersistence && linkedRetention.AllowsLocalPersistence &&
+        ledger.IsConnected &&
         _connectionEpoch == ledger.ConnectionEpoch &&
         ledger.RootAccountId == _root;
 
@@ -34,6 +36,7 @@ public sealed class VaultLinkedQueueKeySession(
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VaultLinkedQueueKeySession));
         retention.RequireLocalPersistence();
+        linkedRetention.RequireLocalPersistence();
         if (!ledger.IsConnected || ledger.RootAccountId is not { } root ||
             ledger.ConnectedNetworkPassphrase is not { Length: > 0 } selected)
             throw new UnauthorizedAccessException("Unlock the independent Stellar S-key ledger first.");
