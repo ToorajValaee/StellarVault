@@ -964,3 +964,26 @@ test('linked account capacity extension uses a durable single-tail encrypted jou
     assert.match(source,/AddScoped<VaultLinkedExpansionJournal>/);
   }
 });
+
+
+test('pending-only linked expansion journal cleanup cannot clear uncertain or submitting transaction',()=>{
+  const root=path.join(__dirname,'..','src');
+  const core=path.join(root,'StellarVault.Core','Services');
+  const journal=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(journal,/DiscardNeverSubmittedIntentAsync/);
+  assert.match(journal,/intent\.State != VaultSyncState\.Pending/);
+  assert.match(journal,/store\.TryDeleteAsync\(intent, ct\)/);
+  assert.match(journal,/VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(journal,/x\.Kind == VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(journal,/Id = reservationId/);
+  assert.match(panel,/Discard never-submitted reservation/);
+  assert.match(panel,/ExpansionJournal\.DiscardNeverSubmittedIntentAsync\(id\)/);
+  assert.match(workspace,/IsJournal = false/);
+  assert.match(panel,/!draft\.IsJournal/);
+  assert.match(smoke,/journal\.DiscardNeverSubmittedIntentAsync\(abandoned\.Id\)/);
+  assert.match(smoke,/ledger\.Submissions == 0/);
+  assert.match(smoke,/RunUncertainExpansionSmokeAsync/);
+});
