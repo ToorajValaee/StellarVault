@@ -8,7 +8,7 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public sealed class VaultLinkedRecordWritePlanner(
     IStellarSecretKeyLedger ledger,
-    IVaultRecordTypeFactory recordTypes,
+    VaultStellarDraftClassification draftTypes,
     VaultLinkedAccountExpansion expansion)
 {
     public sealed record ReviewPlan(VaultSecretLedgerQuote Quote, bool RequiresCapacityExpansion);
@@ -17,9 +17,7 @@ public sealed class VaultLinkedRecordWritePlanner(
         string recordId, LedgerRecordDraft draft, bool isCreate,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(draft);
-        _ = recordTypes.Create(draft.IsFolder ? VaultRecordTypeFactory.Folder :
-            VaultRecordTypeFactory.Credential, draft.Title);
+        _ = draftTypes.Classify(draft);
         try
         {
             var quote = isCreate
@@ -39,9 +37,7 @@ public sealed class VaultLinkedRecordWritePlanner(
     public async Task<VaultSecretLedgerQuote> PrepareDeferredCreateAsync(
         string recordId, LedgerRecordDraft draft, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(draft);
-        _ = recordTypes.Create(draft.IsFolder ? VaultRecordTypeFactory.Folder :
-            VaultRecordTypeFactory.Credential, draft.Title);
+        _ = draftTypes.Classify(draft);
         return await ledger.QuoteCreateAsync(recordId, draft, ct);
     }
 }
