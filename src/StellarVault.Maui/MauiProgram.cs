@@ -100,6 +100,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVaultRecordIndex>(_ =>
             new FileSystemVaultRecordIndex(Path.Combine(FileSystem.AppDataDirectory, "vault-index")));
         builder.Services.AddSingleton<VaultSessionWorkflow>();
+        builder.Services.AddSingleton<IVaultRecordTypeFactory, VaultRecordTypeFactory>();
         builder.Services.AddSingleton<VaultRecordWorkspace>();
         builder.Services.AddSingleton<VaultBinaryWorkspace>();
 #if DEBUG
