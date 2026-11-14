@@ -40,3 +40,6 @@ The source inventory above was inspected through the connected repository. No `d
 ## Recommended engineering approach
 
 **Stop creating new architecture layers.** Pick one existing shared operation per turn, finish its linked-strategy adapter, run a reproducible local integration test, and report only: reused code, exact missing integration, committed behavior, and verification evidence. Do not mark complete based on documentation or source-pattern tests alone. EVM remains a later priority. Preserve separate HD/mnemonic and imported S-key vault entry paths.
+
+## 2026-11-15 linked draft confirmation hardening
+A current decrypted record matching an approved draft is not historical proof of a specific linked submission. The linked queue create publisher now leaves even successful, snapshot-matching submissions in `Uncertain`, with transaction hash retained, until independent signer/operation provenance can authorize confirmation. Parent/child queue progression stays blocked. This deliberately reduces availability to protect correctness and is not a finished reconciliation workflow. Verified only by source review so far; local Core smoke and Node suite must be rerun.
