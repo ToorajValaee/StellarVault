@@ -25,7 +25,10 @@ public sealed class VaultLinkedQueueKeySession(
     private long? _connectionEpoch;
     private bool _disposed;
 
-    public bool IsUnlocked => !_disposed && _key is not null;
+    public bool IsUnlocked => !_disposed && _key is not null &&
+        retention.AllowsLocalPersistence && ledger.IsConnected &&
+        _connectionEpoch == ledger.ConnectionEpoch &&
+        ledger.RootAccountId == _root;
 
     private (string Root, string Scope, string Passphrase, long Epoch) RequireSigner()
     {
