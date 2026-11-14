@@ -249,10 +249,10 @@ test('historical record names are never silently interpreted as empty new-format
   assert.equal(h.submissions(),0);
 });
 
-test('storage capacity is signaled by create planning without automatic transactions',async()=>{
+test('already full tail fails closed before storage-driven expansion',async()=>{
   const h=harness();await h.open();
   h.accounts.get(ROOT).subentry_count=1000;
-  await assert.rejects(h.plan('create',recordId,record),/SV_ACCOUNT_CAPACITY_REQUIRED/);
+  await assert.rejects(h.plan('create',recordId,record),/Manual recovery is required/);
   assert.equal(h.submissions(),0);
   h.close();
 });
@@ -374,4 +374,21 @@ test('historical receipt adapter is strictly read-only and registered in both ho
   assert.match(pwa,/IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence/);
   assert.match(maui,/IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence/);
   assert.match(csproj,/HorizonVaultLinkedReceiptEvidence\.cs/);
+});
+
+
+test('uncertain write blocks a second previously opened session on the same vault',async()=>{
+  const h=harness();await h.open();
+  const other='parallel-session';
+  await h.api.open(other,SECRET,'https://horizon-testnet.stellar.org',TEST);
+  const first=await h.plan('create',recordId,record);
+  const second=await h.api.plan(other,'create','fedcba9876543210',record);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(first.QuoteId),/uncertain/);
+  await assert.rejects(
+    h.api.plan(other,'expand',null,null),/unresolved for this vault/);
+  await assert.rejects(
+    h.api.submit(other,second.QuoteId),/requires reconciliation/);
+  assert.equal(h.submissions(),1,'No second broadcast must occur');
+  h.api.close(other);h.close();
 });
