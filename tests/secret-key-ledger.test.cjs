@@ -922,3 +922,45 @@ test('independent S-key manual sync orders encrypted draft review without automa
   assert.match(smoke,/afterParentPlan\.NextReadyMutationId == child\.MutationId/);
   assert.match(smoke,/uncertainPlan\.UnresolvedCount > 0 && !uncertainPlan\.CanReviewNext/);
 });
+
+
+test('linked account capacity extension uses a durable single-tail encrypted journal',()=>{
+  const root=path.join(__dirname,'..','src');
+  const core=path.join(root,'StellarVault.Core','Services');
+  const journal=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
+  const queue=fs.readFileSync(path.join(core,'VaultPendingMutationQueue.cs'),'utf8');
+  const manual=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const recovery=fs.readFileSync(path.join(core,'VaultLinkedDraftRecoveryReview.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(queue,/ExtendLinkedChain/);
+  assert.match(queue,/Linked-account expansion journals are never HD queue mutations/);
+  assert.match(journal,/RequireNoUnresolvedAsync\(root, scope, ct\)/);
+  assert.match(journal,/sv:linked-expansion-intent:v1:/);
+  assert.match(journal,/chain\.TailAccountId/);
+  assert.match(journal,/Id = reservationId/);
+  const reserve=journal.indexOf('store.TryReplaceAsync(draft, reserved, ct)');
+  const transmit=journal.indexOf('expansion.SubmitApprovedAsync(approvedQuote, true, ct)');
+  assert.ok(reserve>0 && transmit>reserve,'Durable CAS reservation must precede network submit');
+  assert.match(journal,/State = VaultSyncState\.Uncertain/);
+  assert.match(journal,/State = VaultSyncState\.Confirmed/);
+  assert.match(policy,/VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(manual,/x\.Kind == VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(publisher,/x\.Kind == VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(workspace,/IsJournal = false/);
+  assert.match(workspace,/Linked account capacity expansion/);
+  assert.match(recovery,/item\.Kind == VaultMutationKind\.ExtendLinkedChain/);
+  assert.match(panel,/ExpansionJournal\.PrepareAsync\(\)/);
+  assert.match(panel,/ExpansionJournal\.SubmitApprovedAsync\(quote, true\)/);
+  assert.match(panel,/!draft\.IsJournal/);
+  assert.match(smoke,/RunUncertainExpansionSmokeAsync/);
+  assert.match(smoke,/await journal\.PrepareAsync\(\)/);
+  assert.match(smoke,/new FileSystemVaultLinkedQueueSnapshotStore/);
+  for(const host of ['StellarVault.Pwa','StellarVault.Maui']){
+    const source=fs.readFileSync(path.join(root,host,host==='StellarVault.Pwa'?'Program.cs':'MauiProgram.cs'),'utf8');
+    assert.match(source,/AddScoped<VaultLinkedExpansionJournal>/);
+  }
+});
