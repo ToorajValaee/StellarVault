@@ -49,11 +49,20 @@ public sealed class VaultLinkedDraftPublication(
         string root, string scope, CancellationToken ct)
     {
         var all = await store.ListAsync(root, scope, ct);
-        if (all.Any(x => x.AccountId != root ||
-            x.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(scope) ||
-            x.OriginStrategyId != VaultMutationStrategyPolicy.Linked))
-            throw new InvalidDataException("Foreign or legacy-HD mutation in linked encrypted queue.");
-        return all;
+        try
+        {
+            if (all.Any(x => x.AccountId != root ||
+                x.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(scope) ||
+                x.OriginStrategyId != VaultMutationStrategyPolicy.Linked))
+                throw new InvalidDataException(
+                    "Foreign or legacy-HD mutation in linked encrypted queue.");
+            return all;
+        }
+        catch
+        {
+            Clear(all);
+            throw;
+        }
     }
 
     private static byte[] Fingerprint(VaultPendingMutation mutation)
