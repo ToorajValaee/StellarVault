@@ -283,6 +283,23 @@ public sealed class VaultLinkedDraftWorkspace(
         }
     }
 
+    /// <summary>
+    /// One authenticated encrypted queue snapshot drives both dependency
+    /// ordering and the UI's next-review suggestion. This does not publish.
+    /// </summary>
+    public async Task<VaultLinkedManualSyncPlan.Review> ReviewManualSyncAsync(
+        CancellationToken ct = default)
+    {
+        var context = RequireScope();
+        var all = await ReadEntriesAsync(context, ct);
+        try
+        {
+            Check(context);
+            return VaultLinkedManualSyncPlan.Build(all, keys.CanPublish);
+        }
+        finally { ClearEntries(all); }
+    }
+
     public async Task<IReadOnlyList<DraftItem>> ListAsync(CancellationToken ct = default)
     {
         var context = RequireScope();
