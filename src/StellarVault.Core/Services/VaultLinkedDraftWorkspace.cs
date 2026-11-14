@@ -19,6 +19,9 @@ public sealed class VaultLinkedDraftWorkspace(
         bool IsFolder, string Title, string? FolderId, VaultSyncState State,
         DateTimeOffset CreatedUtc, bool IsCorrupt);
 
+    public sealed record DraftDetail(string MutationId,
+        LedgerRecordDraft Draft, string PayloadSha256);
+
     private sealed record Context(string Root, string Scope, long Epoch);
 
     private Context RequireScope()
@@ -141,6 +144,142 @@ public sealed class VaultLinkedDraftWorkspace(
         {
             if (payload is not null) CryptographicOperations.ZeroMemory(payload);
             ClearEntries(local);
+        }
+    }
+
+    /// <summary>
+    /// Explicit user action to decrypt one unpublished draft for editing.
+    /// This never alters the queue or supplies signing authorization.
+    /// </summary>
+    public async Task<DraftDetail> OpenDraftAsync(string mutationId,
+        CancellationToken ct = default)
+    {
+        if (!Guid.TryParseExact(mutationId, "N", out _))
+            throw new ArgumentException("Invalid draft ID.", nameof(mutationId));
+        var context = RequireScope();
+        var entries = await ReadEntriesAsync(context, ct);
+        try
+        {
+            var current = entries.SingleOrDefault(x => x.Id == mutationId)
+                ?? throw new KeyNotFoundException("Local draft does not exist.");
+            if (current.State != VaultSyncState.Pending ||
+                current.TransactionHash is not null ||
+                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                throw new InvalidOperationException("Only unpublished local drafts are editable.");
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(current.EncryptedPayload)
+                ?? throw new InvalidDataException("Encrypted draft cannot be decoded.");
+            ValidateDraft(draft);
+            if (draft.IsFolder != (current.Kind == VaultMutationKind.CreateFolder))
+                throw new InvalidDataException("Encrypted draft kind is inconsistent.");
+            Check(context);
+            return new(current.Id, draft, Convert.ToHexStringLower(
+                SHA256.HashData(current.EncryptedPayload)));
+        }
+        finally { ClearEntries(entries); }
+    }
+
+    /// <summary>
+    /// Atomically revise an unpublished create without changing its record ID,
+    /// origin or queue state. A parent change and its dependency edge are
+    /// committed together. A stale editor fingerprint always fails closed.
+    /// </summary>
+    public async Task<DraftItem> ReviseAsync(
+        string mutationId, LedgerRecordDraft draft, string expectedPayloadSha256,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        ValidateDraft(draft);
+        if (!Guid.TryParseExact(mutationId, "N", out _) ||
+            expectedPayloadSha256 is not { Length: 64 } ||
+            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid local draft revision.");
+        var context = RequireScope();
+        var all = await ReadEntriesAsync(context, ct);
+        byte[]? payload = null;
+        try
+        {
+            var current = all.SingleOrDefault(x => x.Id == mutationId)
+                ?? throw new KeyNotFoundException("Local draft does not exist.");
+            if (current.State != VaultSyncState.Pending ||
+                current.TransactionHash is not null ||
+                current.SignedFileEntries is { Length: > 0 } ||
+                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+                draft.IsFolder != (current.Kind == VaultMutationKind.CreateFolder))
+                throw new InvalidOperationException("Only unpublished drafts of the same type may be revised.");
+            var actual = SHA256.HashData(current.EncryptedPayload);
+            try
+            {
+                var expected = Convert.FromHexString(expectedPayloadSha256);
+                try
+                {
+                    if (!CryptographicOperations.FixedTimeEquals(actual, expected))
+                        throw new InvalidOperationException(
+                            "This draft was edited elsewhere; reopen its latest revision.");
+                }
+                finally { CryptographicOperations.ZeroMemory(expected); }
+            }
+            finally { CryptographicOperations.ZeroMemory(actual); }
+
+            string[] dependencies = [];
+            if (draft.FolderId is { Length: > 0 } parentId)
+            {
+                if (string.Equals(parentId, current.EntityId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("A folder cannot contain itself.");
+                var parents = VaultQueuedCreatePolicy.ParentCandidates(all, parentId, current.Id);
+                if (parents.Length > 1)
+                    throw new InvalidOperationException("The parent folder is ambiguous.");
+                if (parents.Length == 1)
+                {
+                    var parent = parents[0];
+                    if (parent.Kind != VaultMutationKind.CreateFolder ||
+                        parent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed))
+                        throw new InvalidOperationException("The selected parent folder is unavailable.");
+                    if (parent.State == VaultSyncState.Pending)
+                    {
+                        var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+                        var seen = new HashSet<string>(StringComparer.Ordinal) { current.Id };
+                        VaultPendingMutation? walker = parent;
+                        while (walker is not null)
+                        {
+                            if (!seen.Add(walker.Id) || walker.DependsOn is not { Length: <= 1 })
+                                throw new InvalidOperationException(
+                                    "The proposed folder move creates a dependency cycle.");
+                            walker = walker.DependsOn.Length == 1 &&
+                                byId.TryGetValue(walker.DependsOn[0], out var ancestor)
+                                ? ancestor : null;
+                        }
+                        dependencies = [parent.Id];
+                    }
+                }
+                else if (!keys.IsOfflineOnly)
+                {
+                    var remote = await ledger.ReadAsync(ct);
+                    Check(context);
+                    if (!remote.Any(x => x.Id == parentId && x.IsFolder))
+                        throw new InvalidOperationException(
+                            "The selected parent folder is absent on Stellar.");
+                }
+                // Offline remote parent references remain unverified until the
+                // later online publication preflight.
+            }
+
+            payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+            var replacement = current with
+            {
+                EncryptedPayload = payload,
+                DependsOn = dependencies
+            };
+            Check(context);
+            if (!await store.TryReplaceAsync(current, replacement, ct))
+                throw new InvalidOperationException(
+                    "Local draft changed concurrently. Reopen its latest revision.");
+            return new(current.Id, current.EntityId, draft.IsFolder, draft.Title,
+                draft.FolderId, VaultSyncState.Pending, current.CreatedUtc, false);
+        }
+        finally
+        {
+            if (payload is not null) CryptographicOperations.ZeroMemory(payload);
+            ClearEntries(all);
         }
     }
 
