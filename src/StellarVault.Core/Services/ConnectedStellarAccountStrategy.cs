@@ -19,7 +19,7 @@ public abstract class ConnectedStellarAccountStrategy(
     public abstract string StrategyId { get; }
     protected abstract VaultCredentialMode CredentialMode { get; }
 
-    public async Task<VaultConnectedAccountSummary> InspectConnectedAsync(
+    public async Task<VaultAccountInspection> InspectConnectedAsync(
         VaultAccountRequest request, CancellationToken cancellationToken = default)
     {
         ValidateScope(request);
@@ -30,7 +30,9 @@ public abstract class ConnectedStellarAccountStrategy(
         // another selection. The underlying ledger session must independently verify
         // its network endpoint/passphrase; this UI selection is not that proof.
         ValidateScope(request);
-        return result;
+        return new VaultAccountInspection(
+            BlockchainId, request.NetworkId, request.VaultId, StrategyId,
+            result.RootAccountId, result.TailAccountId, result.AccountCount);
     }
 
     protected void ValidateScope(VaultAccountRequest request)
