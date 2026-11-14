@@ -360,8 +360,8 @@
         {
             var hash = await ExpansionJournal.SubmitApprovedAsync(quote, true);
             _manualSyncPlan = null;
-            _message = "Additional storage account observed after approved transaction " +
-                hash + ". Review the pending draft and its fee separately.";
+            _message = "Additional storage account observed after transaction " + hash +
+                ". Its encrypted journal remains UNCERTAIN until historical signer and operation evidence is verified. Do not retry or publish dependent drafts.";
         }
         catch (VaultLinkedExpansionPreflightException)
         {
