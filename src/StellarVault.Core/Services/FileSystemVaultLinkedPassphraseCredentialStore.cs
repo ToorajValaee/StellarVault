@@ -12,12 +12,11 @@ namespace StellarVault.Core.Services;
 public sealed class FileSystemVaultLinkedPassphraseCredentialStore(
     string baseDirectory,
     VaultNetworkSelection network,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention) : IVaultLinkedPassphraseCredentialStore
 {
     private FileSystemVaultPassphraseCredentialStore Scoped(string accountId)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         StellarAccountAddress.Validate(accountId);
         var scope = "secret-chain:queue-key:v1:" + network.CredentialKey(accountId);
