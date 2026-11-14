@@ -111,6 +111,12 @@ internal static class LinkedDraftSmoke
             Require(keys.IsUnlocked && keys.IsOfflineOnly &&
                 keys.ActiveRootAccountId == Root,
                 "Offline local-only authentication failed.");
+            network.ConfigureCustom("An unrelated unverified network passphrase");
+            Require(!keys.IsUnlocked && !keys.CanPublish,
+                "Offline encrypted queue authorization crossed a network-selection change.");
+            network.Select("testnet");
+            Require(keys.IsUnlocked && keys.IsOfflineOnly,
+                "Returning to the original verified local account/network scope failed.");
             var offlineRecord = await drafts.CreateAsync(
                 new LedgerRecordDraft("Offline personal draft", "local secret"));
             Require((await drafts.ListAsync()).Any(x => x.MutationId == offlineRecord.MutationId),
