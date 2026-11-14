@@ -5,6 +5,7 @@
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyVaultDiscovery SecretChain
+@inject IStellarSecretKeyLedger SecretLedger
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
 @inject VaultNetworkSelection NetworkSelection
@@ -97,12 +98,12 @@ else
                 <h2>Connection</h2>
                 <div class="sv-native-setting-row">
                     <div><strong>Network</strong><p>@NetworkLabel</p></div>
-                    <span>@(Ledger.IsConnected ? "Connected" : "Not connected")</span>
+                    <span>@(Ledger.IsConnected || SecretLedger.IsConnected ? "Connected" : "Not connected")</span>
                 </div>
-                @if (Ledger.IsConnected)
+                @if (Ledger.IsConnected || SecretLedger.IsConnected)
                 {
                     <button type="button" class="pixel-button compact"
-                            disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect Stellar</button>
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Disconnect Stellar</button>
                 }
             </div>
             <div class="terminal-panel">
@@ -126,7 +127,7 @@ else
         @if (_nativePage == "stellar")
         {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
-            @if (!Ledger.IsConnected)
+            @if (!Ledger.IsConnected && !SecretLedger.IsConnected)
             {
                 @if (_ledgerNetwork == "public")
                 {
@@ -154,7 +155,7 @@ else
                     <input id="native-ledger-secret" class="terminal-input" type="password" autocomplete="off"
                            spellcheck="false" maxlength="56" @bind="_ledgerSecretKey" @bind:event="oninput"
                            disabled="@(_ledgerBusy || _secretRuntimeReady != true)" />
-                    <p class="sv-native-subtle-status">Read-only linked-account inspection. Secret-key transaction signing and record access will be enabled after their authorization and recovery checks pass.</p>
+                    <p class="sv-native-subtle-status">Independent Secret Key vault. Verify account signers and encrypted records before unlocking. Ledger mutations require a separate fee review and are Testnet-only until audit.</p>
                     @if (_secretInspection is not null)
                     {
                         <section class="terminal-panel" aria-label="Verified secret-key account chain">
@@ -169,6 +170,10 @@ else
                 @if (_runtimeReady is null || (_runtimeReady == false && _ledgerBusy))
                 { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
 
+            }
+            else if (SecretLedger.IsConnected)
+            {
+                <VaultSecretKeyWorkspace />
             }
             else
             {
@@ -501,10 +506,16 @@ else
         {
             <button class="sv-native-mobile-fab" type="button" aria-label="New record" @onclick='() => SetNativeMode("record")'>＋</button>
         }
-        <div class="sv-native-commandbar @(_nativePage == "stellar" && Ledger.IsConnected && _nativeMode == "browse" ? "sv-native-commandbar-quiet" : "")" aria-label="Quick actions">
+        <div class="sv-native-commandbar @(_nativePage == "stellar" && (Ledger.IsConnected || SecretLedger.IsConnected) && _nativeMode == "browse" ? "sv-native-commandbar-quiet" : "")" aria-label="Quick actions">
             @if (_nativePage == "stellar")
             {
-                @if (Ledger.IsConnected)
+                @if (SecretLedger.IsConnected)
+                {
+                    <span class="sv-native-command-hint">Independent Secret Key vault connected</span>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock Secret Key vault</button>
+                }
+                else if (Ledger.IsConnected)
                 {
                     <button type="button" class="sv-native-command primary"
                             disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
@@ -1351,17 +1362,34 @@ else
             if (!await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"))
                 throw new InvalidOperationException("Stellar S-key runtime is unavailable.");
             _secretInspection = await SecretChain.InspectAsync(_ledgerSecretKey, url, passphrase);
-            _ledgerMessage = "Linked accounts inspected. This has not opened a write-enabled vault.";
+            await SecretLedger.ConnectAsync(_ledgerSecretKey, url, passphrase);
+            await SecretLedger.ReadAsync();
+            _ledgerMessage = "Independent Secret Key vault unlocked.";
+            StorageMode.Reset();
         }
         catch
         {
-            _ledgerMessage = "Unable to inspect linked accounts. Check the S-key, funded root, network and signer authorization.";
+            try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
+            catch { /* Preserve the original failure. */ }
+            _ledgerMessage = "Secret Key vault recovery failed. Verify signer permissions, account links, encrypted records and network.";
         }
         finally
         {
             _ledgerSecretKey = string.Empty;
             _ledgerBusy = false;
         }
+    }
+
+    private async Task DisconnectSelectedLedgerAsync()
+    {
+        if (SecretLedger.IsConnected)
+        {
+            await SecretLedger.DisconnectAsync();
+            _secretInspection = null;
+            _ledgerMessage = "Secret Key vault locked.";
+            return;
+        }
+        if (Ledger.IsConnected) await DisconnectLedgerAsync();
     }
 
     private async Task ConnectLedgerAsync()
