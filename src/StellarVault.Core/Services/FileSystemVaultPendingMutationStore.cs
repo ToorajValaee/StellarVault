@@ -107,7 +107,8 @@ public sealed class FileSystemVaultPendingMutationStore : IVaultPendingMutationS
         ArgumentNullException.ThrowIfNull(previous);
         ArgumentNullException.ThrowIfNull(replacement);
         if (previous.Id != replacement.Id || previous.AccountId != replacement.AccountId ||
-            previous.NetworkId != replacement.NetworkId)
+            previous.NetworkId != replacement.NetworkId ||
+            previous.OriginStrategyId != replacement.OriginStrategyId)
             throw new InvalidOperationException("Queue identity cannot change.");
 
         return WithKeyAsync(previous.AccountId, previous.NetworkId, async (key, token) =>
