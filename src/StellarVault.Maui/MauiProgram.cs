@@ -26,6 +26,7 @@ public static class MauiProgram
         // the signing session, gate and upload services in that same scope.
         // Never retain a WebView JS runtime in an app-wide singleton.
         builder.Services.AddScoped<BrowserStellarLedgerRecords>();
+        builder.Services.AddScoped<IStellarSecretKeyVaultDiscovery, BrowserSecretKeyVaultDiscovery>();
         builder.Services.AddScoped<IStellarLedgerRecords>(
             services => services.GetRequiredService<BrowserStellarLedgerRecords>());
         builder.Services.AddScoped<IVaultLedgerManifestCopyInventory>(
