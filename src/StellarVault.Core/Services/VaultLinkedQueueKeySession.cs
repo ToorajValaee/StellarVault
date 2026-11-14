@@ -23,13 +23,20 @@ public sealed class VaultLinkedQueueKeySession(
     private string? _scope;
     private string? _networkPassphrase;
     private long? _connectionEpoch;
+    private bool _offlineOnly;
     private bool _disposed;
 
     public bool IsUnlocked => !_disposed && _key is not null &&
-        linkedRetention.DeviceRetention.AllowsLocalPersistence && linkedRetention.AllowsLocalPersistence &&
-        ledger.IsConnected &&
-        _connectionEpoch == ledger.ConnectionEpoch &&
-        ledger.RootAccountId == _root;
+        linkedRetention.DeviceRetention.AllowsLocalPersistence &&
+        linkedRetention.AllowsLocalPersistence &&
+        _root is not null && _scope == network.CredentialKey(_root) &&
+        (_offlineOnly
+            ? (!ledger.IsConnected || ledger.RootAccountId == _root)
+            : ledger.IsConnected &&
+              _connectionEpoch == ledger.ConnectionEpoch &&
+              ledger.RootAccountId == _root);
+    public bool IsOfflineOnly => IsUnlocked && _offlineOnly;
+    public string? ActiveRootAccountId => IsUnlocked ? _root : null;
 
     private (string Root, string Scope, string Passphrase, long Epoch) RequireSigner()
     {
@@ -71,6 +78,7 @@ public sealed class VaultLinkedQueueKeySession(
         _scope = null;
         _networkPassphrase = null;
         _connectionEpoch = null;
+        _offlineOnly = false;
     }
 
     /// <summary>
@@ -82,6 +90,73 @@ public sealed class VaultLinkedQueueKeySession(
 
     public Task UnlockAsync(string localPassphrase, CancellationToken ct = default) =>
         ActivateAsync(localPassphrase, create: false, ct);
+
+    /// <summary>
+    /// Unlock an EXISTING wrapped queue key for local-only draft work using the
+    /// public root address and the separately chosen local passphrase.
+    /// No imported S-key or network access is needed. This NEVER creates a new
+    /// device credential, proves Stellar ownership or authorizes publication.
+    /// </summary>
+    public async Task UnlockOfflineAsync(string publicRoot, string localPassphrase,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(localPassphrase) || localPassphrase.Length < 12)
+            throw new ArgumentException("Local queue passphrase must be at least 12 characters.",
+                nameof(localPassphrase));
+        StellarAccountAddress.Validate(publicRoot);
+        await _gate.WaitAsync(ct);
+        byte[]? derived = null;
+        try
+        {
+            ClearUnsafe();
+            linkedRetention.RequireLocalPersistence();
+            var selected = network.CredentialKey(publicRoot);
+            if (ledger.IsConnected && ledger.RootAccountId != publicRoot)
+                throw new UnauthorizedAccessException(
+                    "Connected signer belongs to a different account.");
+            derived = await _credentials.UnlockAsync(publicRoot, localPassphrase, ct);
+            ct.ThrowIfCancellationRequested();
+            linkedRetention.RequireLocalPersistence();
+            if (network.CredentialKey(publicRoot) != selected ||
+                ledger.IsConnected && ledger.RootAccountId != publicRoot)
+                throw new InvalidOperationException("Local vault account or network changed.");
+            _root = publicRoot;
+            _scope = selected;
+            _key = derived;
+            derived = null;
+            _offlineOnly = true;
+        }
+        finally
+        {
+            if (derived is not null) CryptographicOperations.ZeroMemory(derived);
+            _gate.Release();
+        }
+    }
+
+    public async Task<bool> HasLocalCredentialsOfflineAsync(string publicRoot,
+        CancellationToken ct = default)
+    {
+        StellarAccountAddress.Validate(publicRoot);
+        await _gate.WaitAsync(ct);
+        try
+        {
+            linkedRetention.RequireLocalPersistence();
+            var selected = network.CredentialKey(publicRoot);
+            byte[]? stored = await _credentials.ReadCredentialForDiscoveryAsync(publicRoot, ct);
+            try
+            {
+                linkedRetention.RequireLocalPersistence();
+                if (network.CredentialKey(publicRoot) != selected)
+                    throw new InvalidOperationException("Selected network changed.");
+                return stored is not null;
+            }
+            finally
+            {
+                if (stored is not null) CryptographicOperations.ZeroMemory(stored);
+            }
+        }
+        finally { _gate.Release(); }
+    }
 
     public async Task<bool> HasLocalCredentialsAsync(CancellationToken ct = default)
     {
@@ -161,20 +236,36 @@ public sealed class VaultLinkedQueueKeySession(
         {
             if (_key is null || _root != accountId || _scope is null ||
                 VaultLinkedQueueStorageScope.FromNetworkScope(_scope) != networkId ||
-                _networkPassphrase is null || _connectionEpoch is null)
+                (_offlineOnly ? false :
+                    _networkPassphrase is null || _connectionEpoch is null))
                 throw new UnauthorizedAccessException(
                     "Unlock the matching independent S-key local queue first.");
-            RequireSameSigner(_root, _scope, _networkPassphrase, _connectionEpoch.Value);
-            // The browser can revoke its imported signer while the C# bridge
-            // still has a cached IsConnected flag. A LIVE JS/Horizon chain
-            // inspection must succeed before a local queue key may be used.
+            if (_offlineOnly)
+            {
+                // Local passphrase-derived access authorizes ONLY this encrypted
+                // local namespace. No Horizon or signer call is made.
+                if (!IsUnlocked)
+                    throw new UnauthorizedAccessException("Offline queue scope changed.");
+                copy = _key.ToArray();
+                var localResult = await operation(copy, ct);
+                ct.ThrowIfCancellationRequested();
+                linkedRetention.RequireLocalPersistence();
+                if (!IsUnlocked || _root != accountId ||
+                    _scope is null ||
+                    VaultLinkedQueueStorageScope.FromNetworkScope(_scope) != networkId)
+                    throw new InvalidOperationException("Offline local queue context changed.");
+                return localResult;
+            }
+
+            RequireSameSigner(_root, _scope, _networkPassphrase!, _connectionEpoch!.Value);
+            // Online signer-backed unlocks retain full live Horizon inspection.
             var before = await ledger.InspectAccountInfoAsync(ct);
             if (before.RootAccountId != _root)
                 throw new UnauthorizedAccessException("Linked signer is no longer available.");
             copy = _key.ToArray();
             var result = await operation(copy, ct);
             ct.ThrowIfCancellationRequested();
-            RequireSameSigner(_root, _scope, _networkPassphrase, _connectionEpoch.Value);
+            RequireSameSigner(_root, _scope, _networkPassphrase!, _connectionEpoch!.Value);
             var after = await ledger.InspectAccountInfoAsync(ct);
             if (after.RootAccountId != _root ||
                 after.TotalAccounts != before.TotalAccounts ||
