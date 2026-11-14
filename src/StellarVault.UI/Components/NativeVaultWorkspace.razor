@@ -2,6 +2,7 @@
 @using StellarVault.Core.Services
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyVaultDiscovery SecretChain
@@ -1395,6 +1396,7 @@ else
     {
         if (SecretLedger.IsConnected)
         {
+            await LinkedQueueKeys.LockAsync();
             await SecretLedger.DisconnectAsync();
             _secretInspection = null;
             _ledgerMessage = "Secret Key vault locked.";
@@ -1523,6 +1525,7 @@ else
 
     private async Task RevokeForegroundAsync()
     {
+        await LinkedQueueKeys.LockAsync();
         _ledgerMnemonic = string.Empty;
         _passphrase = string.Empty;
         _localConsent = false;
@@ -1600,8 +1603,9 @@ else
         }
     }
 
-    private void LockVault()
+    private async Task LockVault()
     {
+        await LinkedQueueKeys.LockAsync();
         Workflow.Lock();
         Retention.Reset();
         _passphrase = string.Empty;
@@ -1611,6 +1615,7 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        await LinkedQueueKeys.LockAsync();
         Sessions.StateChanged -= OnSessionChanged;
         ForegroundLifecycle.ForegroundLost -= OnForegroundLost;
         NativeNavigation.BackRequested -= OnAndroidBackRequested;
