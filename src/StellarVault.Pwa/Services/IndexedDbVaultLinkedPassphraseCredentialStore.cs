@@ -12,12 +12,11 @@ namespace StellarVault.Pwa.Services;
 public sealed class IndexedDbVaultLinkedPassphraseCredentialStore(
     IJSRuntime js,
     VaultNetworkSelection network,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention) : IVaultLinkedPassphraseCredentialStore
 {
     private string Scope(string accountId)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         StellarAccountAddress.Validate(accountId);
         return "secret-chain:queue-key:v1:" + network.CredentialKey(accountId);
