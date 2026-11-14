@@ -76,6 +76,27 @@ public sealed class VaultLinkedQueueKeySession(
     public Task UnlockAsync(string localPassphrase, CancellationToken ct = default) =>
         ActivateAsync(localPassphrase, create: false, ct);
 
+    public async Task<bool> HasLocalCredentialsAsync(CancellationToken ct = default)
+    {
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var (root, scope, passphrase) = RequireSigner();
+            var entry = await _credentials.ReadCredentialForDiscoveryAsync(root, ct);
+            try
+            {
+                RequireSameSigner(root, scope, passphrase);
+                return entry is not null;
+            }
+            finally
+            {
+                if (entry is not null) CryptographicOperations.ZeroMemory(entry);
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
+
     private async Task ActivateAsync(string localPassphrase, bool create, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(localPassphrase) || localPassphrase.Length < 12)
@@ -130,7 +151,8 @@ public sealed class VaultLinkedQueueKeySession(
         byte[]? copy = null;
         try
         {
-            if (_key is null || _root != accountId || _scope != networkId ||
+            if (_key is null || _root != accountId || _scope is null ||
+                VaultLinkedQueueStorageScope.FromNetworkScope(_scope) != networkId ||
                 _networkPassphrase is null)
                 throw new UnauthorizedAccessException(
                     "Unlock the matching independent S-key local queue first.");
