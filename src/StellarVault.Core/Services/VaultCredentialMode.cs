@@ -21,7 +21,7 @@ public sealed record VaultAccessCredential(VaultCredentialMode Mode, string Secr
             throw new ArgumentException("Vault credential is required.", nameof(Secret));
         if (Mode == VaultCredentialMode.StellarSecretKeyChain &&
             (Secret.Length != 56 || Secret[0] != 'S' ||
-             Secret.Any(c => c is not (>= 'A' and <= 'Z') and not (>= '2' and <= '7'))))
+             Secret.Any(c => !((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7')))))
             throw new ArgumentException("Expected a 56-character Stellar S-key. Its checksum must also be verified.", nameof(Secret));
     }
 }
