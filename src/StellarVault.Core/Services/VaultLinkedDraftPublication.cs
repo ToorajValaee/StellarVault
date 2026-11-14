@@ -257,14 +257,18 @@ public sealed class VaultLinkedDraftPublication(
                             !(published.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal))
                             throw new InvalidDataException(
                                 "Confirmed transaction hash did not match the published draft.");
-                        var confirmed = reserved with
+                        // A matching CURRENT account snapshot does not prove that
+                        // this exact transaction wrote the encrypted manifest and
+                        // chunks. Preserve the durable quarantine until an
+                        // independent historical signer/operation verifier exists.
+                        var uncertain = reserved with
                         {
-                            State = VaultSyncState.Confirmed,
+                            State = VaultSyncState.Uncertain,
                             TransactionHash = hash
                         };
-                        if (!await store.TryReplaceAsync(reserved, confirmed, ct))
+                        if (!await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None))
                             throw new InvalidOperationException(
-                                "Published transaction verified but local confirmation CAS failed.");
+                                "Submission was observed but queue quarantine CAS failed; do not retry.");
                         return hash;
                     }
                     catch
