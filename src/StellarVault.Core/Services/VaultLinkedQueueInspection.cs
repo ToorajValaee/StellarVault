@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace StellarVault.Core.Services;
 
 /// <summary>
@@ -49,6 +51,8 @@ public sealed class VaultLinkedQueueInspection(
         // implementation, but exclusively with its dedicated S-key key session
         // and prefixed namespace. It rejects any untagged/HD-origin entry.
         var mutations = await store.ListAsync(root, scope, ct);
+        try
+        {
         ct.ThrowIfCancellationRequested();
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || keys.ActiveRootAccountId != root ||
@@ -83,5 +87,15 @@ public sealed class VaultLinkedQueueInspection(
             offline
                 ? "Offline-only encrypted queue inspection used the local passphrase and selected public root/network. No signer authorization, ledger state or transaction publication was checked."
                 : "Read-only inspection used a separately unlocked S-key encryption key and isolated queue namespace. No HD drafts are read. Publication requires a fresh fee quote, explicit approval and durable reservation.");
+        }
+        finally
+        {
+            // ListAsync returns decrypted queue envelopes. This report returns
+            // counts only, so retaining each plaintext payload after inspection
+            // would needlessly expose secrets in the managed heap.
+            foreach (var mutation in mutations)
+                if (mutation.EncryptedPayload is not null)
+                    CryptographicOperations.ZeroMemory(mutation.EncryptedPayload);
+        }
     }
 }
