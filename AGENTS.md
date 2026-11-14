@@ -502,3 +502,10 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - Lock must invoke `VaultLinkedAccountExpansion.AbandonUnsubmittedAsync` even if UI has already lost the visible quote. This only invalidates Core reviews still pending before transmission; runtime uncertainty markers remain intact.
 - Linked JS `inspectUncertain` checks the global same-runtime vault tombstone so parallel sessions see each other's unresolved writes. Tail UPDATE writes must preserve a spare entry for `sv:next:v1`; do not only reserve on CREATE.
 - Source regression cases added; no Node execution, .NET build or live Testnet confirmation. Continue reusing existing Core queue/folder/file machinery rather than creating parallel engines; EVM last.
+
+
+## Independent linked-key encrypted queue seam (2026-11-15)
+- `VaultLinkedQueueKeySession` is separate from `VaultLocalQueueKeySession`/HD session and uses existing Argon2id wrapped random data-key lifecycle ONLY after connected S-key signer+network verification and explicit device-retention consent. Its credential namespace `secret-chain:queue-key:v1:` is distinct from HD, and wrapped records are isolated by exact account/network scope.
+- `VaultLinkedQueueStorageScope` prefixes queue ciphertext namespace `secret-chain:queue:v1:`. `IndexedDbVaultLinkedQueueSnapshotStore` and `FileSystemVaultLinkedQueueSnapshotStore` reuse existing encrypted stores with this independent key and namespace (native has a distinct directory). Linked queue inspector NO LONGER reads HD `VaultScopedQueueReview`; it is read-only, rejects HD-origin ciphertext and always `CanPublish=false`.
+- PWA/MAUI DI and lock/background/dispose paths must zero the S-key queue key. Never auto-enable S-key durable mutation writes, manual sync or encrypted local enrollment without explicit consent, accurate signer provenance and operation verification.
+- Branch CI validation workflow added; recent builds/tests report failure but connector exposes no output. Do not assert a green build. Investigate CI before production. EVM last.
