@@ -426,3 +426,7 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - See `docs/architecture/pluggable-vault.md`. Account provenance, record logical type, storage mode, and blockchain transport are independent; do not conflate MIME extension detection with safe file preview.
 - The new account/record factories are extension contracts and legacy MIME classification only, not wired multi-chain support. Preserve historical ciphertext layout and do not enable S-key Mainnet writes or sync broadcasts.
 - Future sharing must never export account/seed/master encryption keys; future import/export needs authenticated versioned envelopes and conflict-safe folder mapping.
+
+## Priority clarification — 2026-11-14
+- EVM is **last priority** and only motivates clean interfaces; do not build EVM functionality now. Complete and validate existing Stellar HD and independently linked S-key paths, common record/file handling and safe synchronization first; sharing and portable import/export come later.
+- The local record type factory is actively used for new text/binary saves. The account-strategy factory is **not** a live provider; `VaultConnectedStellarAccountInventory` only inspects already-connected sessions. No implicit account creation or transaction broadcast via factory calls.
