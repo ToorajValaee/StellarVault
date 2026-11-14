@@ -75,7 +75,7 @@ test('linked-account inspection follows pointers and verifies root signer thresh
 });
 
 test('unauthorized child fails closed', async () => {
-  await assert.rejects(start({ childAuthorized: false }).inspect(), /not authorized/);
+  await assert.rejects(start({ childAuthorized: false }).inspect(), /root-signing authorization/);
 });
 
 test('chain cycles fail closed', async () => {
@@ -108,4 +108,15 @@ test('neither host silently substitutes a secret for an HD mnemonic', () => {
   assert.match(pwa, /js\/vault-secret-chain.js/);
   assert.match(maui, /js\/vault-secret-chain.js/);
   assert.match(csproj, /vault-secret-chain.js/);
+});
+test('zero signer thresholds are rejected rather than treated as root-only authorization', async () => {
+  const fixture = start();
+  fixture.records[childId].thresholds.med_threshold = 0;
+  await assert.rejects(fixture.inspect(), /signer thresholds/);
+});
+
+test('an HD-v2 registered root cannot be mistaken for an independent S-key chain', async () => {
+  const fixture = start({ linked: false });
+  fixture.records[rootId].data_attr['sv:registry:v2'] = btoa('registry');
+  await assert.rejects(fixture.inspect(), /HD-v2 vault/);
 });
