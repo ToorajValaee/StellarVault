@@ -22,11 +22,12 @@ public sealed class VaultLinkedQueueKeySession(
     private string? _root;
     private string? _scope;
     private string? _networkPassphrase;
+    private long? _connectionEpoch;
     private bool _disposed;
 
     public bool IsUnlocked => !_disposed && _key is not null;
 
-    private (string Root, string Scope, string Passphrase) RequireSigner()
+    private (string Root, string Scope, string Passphrase, long Epoch) RequireSigner()
     {
         if (_disposed) throw new ObjectDisposedException(nameof(VaultLinkedQueueKeySession));
         retention.RequireLocalPersistence();
@@ -45,14 +46,14 @@ public sealed class VaultLinkedQueueKeySession(
             !string.Equals(expected, selected, StringComparison.Ordinal))
             throw new UnauthorizedAccessException(
                 "The connected S-key network differs from the selected device-vault network.");
-        return (root, network.CredentialKey(root), selected);
+        return (root, network.CredentialKey(root), selected, ledger.ConnectionEpoch);
     }
 
-    private void RequireSameSigner(string root, string scope, string passphrase)
+    private void RequireSameSigner(string root, string scope, string passphrase, long epoch)
     {
         var current = RequireSigner();
         if (current.Root != root || current.Scope != scope ||
-            current.Passphrase != passphrase)
+            current.Passphrase != passphrase || current.Epoch != epoch)
             throw new InvalidOperationException(
                 "S-key signer or network changed during local queue authorization.");
     }
@@ -64,6 +65,7 @@ public sealed class VaultLinkedQueueKeySession(
         _root = null;
         _scope = null;
         _networkPassphrase = null;
+        _connectionEpoch = null;
     }
 
     /// <summary>
@@ -81,11 +83,11 @@ public sealed class VaultLinkedQueueKeySession(
         await _gate.WaitAsync(ct);
         try
         {
-            var (root, scope, passphrase) = RequireSigner();
+            var (root, scope, passphrase, epoch) = RequireSigner();
             var entry = await _credentials.ReadCredentialForDiscoveryAsync(root, ct);
             try
             {
-                RequireSameSigner(root, scope, passphrase);
+                RequireSameSigner(root, scope, passphrase, epoch);
                 return entry is not null;
             }
             finally
@@ -107,13 +109,13 @@ public sealed class VaultLinkedQueueKeySession(
         try
         {
             ClearUnsafe();
-            var (root, scope, passphrase) = RequireSigner();
+            var (root, scope, passphrase, epoch) = RequireSigner();
             // A validated connected chain and S-key signer are required before
             // any wrapped credential is created or unlocked locally.
             var account = await ledger.InspectAccountInfoAsync(ct);
             if (account.RootAccountId != root)
                 throw new UnauthorizedAccessException("Linked account root changed.");
-            RequireSameSigner(root, scope, passphrase);
+            RequireSameSigner(root, scope, passphrase, epoch);
 
             byte[]? key = null;
             try
@@ -122,12 +124,13 @@ public sealed class VaultLinkedQueueKeySession(
                     ? await _credentials.CreateAsync(root, localPassphrase, ct)
                     : await _credentials.UnlockAsync(root, localPassphrase, ct);
                 ct.ThrowIfCancellationRequested();
-                RequireSameSigner(root, scope, passphrase);
+                RequireSameSigner(root, scope, passphrase, epoch);
                 _key = key;
                 key = null;
                 _root = root;
                 _scope = scope;
                 _networkPassphrase = passphrase;
+                _connectionEpoch = epoch;
             }
             finally
             {
@@ -153,10 +156,10 @@ public sealed class VaultLinkedQueueKeySession(
         {
             if (_key is null || _root != accountId || _scope is null ||
                 VaultLinkedQueueStorageScope.FromNetworkScope(_scope) != networkId ||
-                _networkPassphrase is null)
+                _networkPassphrase is null || _connectionEpoch is null)
                 throw new UnauthorizedAccessException(
                     "Unlock the matching independent S-key local queue first.");
-            RequireSameSigner(_root, _scope, _networkPassphrase);
+            RequireSameSigner(_root, _scope, _networkPassphrase, _connectionEpoch.Value);
             // The browser can revoke its imported signer while the C# bridge
             // still has a cached IsConnected flag. A LIVE JS/Horizon chain
             // inspection must succeed before a local queue key may be used.
@@ -166,7 +169,7 @@ public sealed class VaultLinkedQueueKeySession(
             copy = _key.ToArray();
             var result = await operation(copy, ct);
             ct.ThrowIfCancellationRequested();
-            RequireSameSigner(_root, _scope, _networkPassphrase);
+            RequireSameSigner(_root, _scope, _networkPassphrase, _connectionEpoch.Value);
             var after = await ledger.InspectAccountInfoAsync(ct);
             if (after.RootAccountId != _root ||
                 after.TotalAccounts != before.TotalAccounts ||
