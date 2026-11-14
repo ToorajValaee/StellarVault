@@ -6,7 +6,9 @@ namespace StellarVault.Core.Services;
 /// This does NOT attest to any previous or concurrent network submission.
 /// </summary>
 public sealed class VaultLinkedExpansionPreflightException(string message, Exception innerException)
-    : InvalidOperationException(message, innerException);
+    : InvalidOperationException(message, innerException)
+{
+}
 
 /// <summary>
 /// Shared, single-use review boundary for independent Stellar linked-account expansion.
