@@ -453,3 +453,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Read-only linked submission diagnostic
 - Linked S-key JS transport now retains a volatile public-only unresolved submission snapshot, exposed through InspectUncertainSubmissionAsync and read-only UI. No signing material, plaintext, ciphertext or original draft enters this diagnostic.
 - This is not a durable journal or independent historical proof; a missing snapshot must not be treated as completed or failed transaction. No tests/builds executed in this batch.
+
+## Linked recovery inspection (2026-11-14)
+- `VaultLinkedRecoveryInspector` is registered in PWA/MAUI and observes current linked account tail or record visibility for an uncertain submission without any mutation. Its result is **not historical proof and cannot clear a write block**.
+- Existing encrypted hybrid queue requires an independent local vault key and device consent; do not persist S-key vault unresolved diagnostics using that queue without proper isolation and an audited key lifecycle.
+- No builds/tests executed, no durable linked journal. EVM last priority.
