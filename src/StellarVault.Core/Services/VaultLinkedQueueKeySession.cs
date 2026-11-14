@@ -157,10 +157,22 @@ public sealed class VaultLinkedQueueKeySession(
                 throw new UnauthorizedAccessException(
                     "Unlock the matching independent S-key local queue first.");
             RequireSameSigner(_root, _scope, _networkPassphrase);
+            // The browser can revoke its imported signer while the C# bridge
+            // still has a cached IsConnected flag. A LIVE JS/Horizon chain
+            // inspection must succeed before a local queue key may be used.
+            var before = await ledger.InspectAccountInfoAsync(ct);
+            if (before.RootAccountId != _root)
+                throw new UnauthorizedAccessException("Linked signer is no longer available.");
             copy = _key.ToArray();
             var result = await operation(copy, ct);
             ct.ThrowIfCancellationRequested();
             RequireSameSigner(_root, _scope, _networkPassphrase);
+            var after = await ledger.InspectAccountInfoAsync(ct);
+            if (after.RootAccountId != _root ||
+                after.TotalAccounts != before.TotalAccounts ||
+                after.TailAccountId != before.TailAccountId)
+                throw new InvalidOperationException(
+                    "Linked account signer or chain changed during local encrypted queue access.");
             return result;
         }
         finally
