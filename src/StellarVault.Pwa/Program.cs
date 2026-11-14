@@ -39,6 +39,8 @@ builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedge
 builder.Services.AddScoped<VaultPendingMutationQueue>();
 builder.Services.AddScoped<VaultManualSyncCoordinator>();
 builder.Services.AddScoped<VaultHybridSyncReviewService>();
+builder.Services.AddScoped<VaultScopedQueueReview>();
+builder.Services.AddScoped<VaultLinkedQueueInspection>();
 builder.Services.AddScoped<VaultHybridDraftWorkspace>();
 builder.Services.AddScoped<VaultHybridFileWorkspace>();
 builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
