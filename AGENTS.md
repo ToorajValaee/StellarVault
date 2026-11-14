@@ -458,3 +458,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 - `VaultLinkedRecoveryInspector` is registered in PWA/MAUI and observes current linked account tail or record visibility for an uncertain submission without any mutation. Its result is **not historical proof and cannot clear a write block**.
 - Existing encrypted hybrid queue requires an independent local vault key and device consent; do not persist S-key vault unresolved diagnostics using that queue without proper isolation and an audited key lifecycle.
 - No builds/tests executed, no durable linked journal. EVM last priority.
+
+## Linked uncertain-recovery boundary — 2026-11-14
+- Same-runtime S-key lock/reopen no longer drops an unresolved public-only marker; connected UI checks this before enabling writes. Full reload and other devices are NOT protected. Never claim durable recovery.
+- Read-only Horizon-linked receipt adapter checks selected HTTPS network identity, receipt and root source. It is advisory and cannot confirm exact operation or record, cannot clear quarantine, and never submits. Native host explicitly links adapter. Tests were added but not executed.
+- Keep explicit local-storage consent and independent S-key encryption lifecycle as blockers for durable journal; no plaintext localStorage shortcuts. EVM last.
