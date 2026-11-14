@@ -27,6 +27,7 @@ public interface IVaultAccountProvisioningStrategy
     string BlockchainId { get; }
     string StrategyId { get; }
     Task<VaultAccountHandle> CreateNextAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
+    Task<VaultConnectedAccountSummary> InspectConnectedAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<VaultAccountHandle>> DiscoverAsync(VaultAccountRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -60,6 +61,9 @@ public sealed class VaultAccountStrategyFactory
             ? strategy
             : throw new NotSupportedException("Account strategy is not registered for the requested blockchain.");
     }
+
+    public Task<VaultConnectedAccountSummary> InspectConnectedAsync(VaultAccountRequest request, CancellationToken ct = default) =>
+        Resolve(request).InspectConnectedAsync(request, ct);
 
     public Task<VaultAccountHandle> CreateNextAsync(VaultAccountRequest request, CancellationToken ct = default) =>
         Resolve(request).CreateNextAsync(request, ct);
