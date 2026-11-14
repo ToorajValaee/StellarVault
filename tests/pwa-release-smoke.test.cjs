@@ -598,3 +598,18 @@ test('Phone PWA reproduces the approved object-storage workspace while desktop s
   assert.match(css, /sv-pwa-mobile-tabs/);
   assert.match(css, /safe-area-inset-bottom/);
 });
+
+test('Inspector preserves selected grid mode and keeps explorer and details scrollable', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  assert.match(vault, /data-explorer-layout="@_explorerLayout"/);
+  assert.match(vault, /sv-explorer-main @\(_explorerLayout == "grid"/);
+  assert.match(vault, /sv-settings-help-link/);
+  assert.doesNotMatch(vault, /sv-mobile-help-entry/);
+  assert.match(css, /sv-view-grid \.record-list/);
+  assert.match(css, /sv-view-grid \.sv-folder-grid/);
+  assert.match(css, /overflow-y:auto!important;overflow-x:hidden!important/);
+  assert.match(css, /overscroll-behavior-y:contain!important/);
+  assert.match(css, /sv-settings-help-link/);
+  assert.match(css, /html\[data-theme="dark"\] \.sv-web-shell \.sv-sync-workspace/);
+});
