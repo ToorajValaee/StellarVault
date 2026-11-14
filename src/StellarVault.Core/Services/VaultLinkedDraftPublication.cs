@@ -105,9 +105,9 @@ public sealed class VaultLinkedDraftPublication(
                 "The target record already exists locally or on Stellar.");
 
         if (local.Any(x => x.Id != item.Id &&
-            (x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain or VaultSyncState.Conflict ||
-             x.Kind == VaultMutationKind.ExtendLinkedChain &&
-             x.State != VaultSyncState.Confirmed)))
+            ((x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain or VaultSyncState.Conflict) ||
+             (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+              x.State != VaultSyncState.Confirmed))))
             throw new InvalidOperationException(
                 "An earlier local submission needs reconciliation before publishing more drafts.");
 
