@@ -1,0 +1,74 @@
+name: Manual StellarVault verification
+
+# This workflow is intentionally opt-in to avoid consuming GitHub Actions
+# minutes on commits and pull requests. It does not deploy or transact.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-stellarvault-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shared-core-pwa:
+    name: Node regression and .NET 10 Core/UI/PWA
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify S-key JavaScript syntax
+        run: node --check src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js
+      - name: Execute S-key regression tests
+        shell: bash
+        run: |
+          set -o pipefail
+          node --test tests/secret-key-ledger.test.cjs 2>&1 | tee node-linked-regressions.log
+      - name: Build Core
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.Core/StellarVault.Core.csproj -c Release 2>&1 | tee dotnet-core.log
+      - name: Build shared UI
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.UI/StellarVault.UI.csproj -c Release 2>&1 | tee dotnet-ui.log
+      - name: Build PWA
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj -c Release 2>&1 | tee dotnet-pwa.log
+      - name: Run cryptography and linked queue smoke tests
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj -c Release 2>&1 | tee dotnet-crypto-tests.log
+      - name: Save verification logs for failed runs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-verification-failure-logs
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            node-linked-regressions.log
+            dotnet-core.log
+            dotnet-ui.log
+            dotnet-pwa.log
+            dotnet-crypto-tests.log
