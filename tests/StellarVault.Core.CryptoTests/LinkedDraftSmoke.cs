@@ -12,24 +12,26 @@ internal static class LinkedDraftSmoke
         try
         {
             var network = new VaultNetworkSelection();
-            var retention = new VaultDeviceRetentionGate();
-            retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
+            var hdRetention = new VaultDeviceRetentionGate();
             var linkedRetention = new VaultLinkedLocalRetentionGate();
             linkedRetention.GrantExplicitConsent();
+            Require(hdRetention.Policy == VaultDeviceRetentionPolicy.OnChainOnly &&
+                    linkedRetention.DeviceRetention.AllowsLocalPersistence,
+                "S-key consent incorrectly enabled the independent HD device-storage gate.");
             var ledger = new FakeLinkedLedger();
             var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
-                Path.Combine(directory, "credentials"), network, retention, linkedRetention);
+                Path.Combine(directory, "credentials"), network, linkedRetention);
             await using var keys = new VaultLinkedQueueKeySession(
-                ledger, network, retention, linkedRetention, credentials,
+                ledger, network, linkedRetention, credentials,
                 new NativeVaultKeyProtector());
             await keys.CreateAsync("local S-key test passphrase 12345");
 
             var store = new FileSystemVaultLinkedQueueSnapshotStore(keys,
-                retention, linkedRetention, Path.Combine(directory, "queue"), network);
+                linkedRetention, Path.Combine(directory, "queue"), network);
             var drafts = new VaultLinkedDraftWorkspace(
-                ledger, keys, store, retention, linkedRetention, network);
+                ledger, keys, store, linkedRetention, network);
             var publisher = new VaultLinkedDraftPublication(
-                ledger, store, keys, retention, linkedRetention, network);
+                ledger, store, keys, linkedRetention, network);
 
             var folder = await drafts.CreateAsync(
                 new LedgerRecordDraft("Shared Folder", "folder", IsFolder: true));
