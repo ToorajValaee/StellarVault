@@ -31,7 +31,7 @@ public interface IStellarSecretKeyLedger
 public sealed record VaultSecretLedgerQuote(
     string QuoteId, string Kind, int Operations, int Transactions,
     string NetworkFeeXlm, string PeakReserveXlm, string NetReserveChangeXlm,
-    bool CreatesChildNode, string TargetAccountId);
+    bool CreatesChildNode, string TargetAccountId, string FundingTopUpXlm);
 
 /// <summary>
 /// MAUI and PWA bridge to the same JavaScript ledger implementation.
