@@ -11,17 +11,16 @@ namespace StellarVault.Pwa.Services;
 public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
     IJSRuntime js,
     VaultLinkedQueueKeySession keys,
-    VaultDeviceRetentionGate retention,
     VaultLinkedLocalRetentionGate linkedRetention,
     VaultNetworkSelection networks) : IVaultLinkedDraftStore
 {
     private IndexedDbVaultPendingMutationStore ExistingStore() =>
-        new(js, keys, retention);
+        new(js, keys, linkedRetention.DeviceRetention);
 
     private void RequireEntry(VaultPendingMutation entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         StellarAccountAddress.Validate(entry.AccountId);
         if (entry.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(
@@ -86,7 +85,7 @@ public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
     public async Task<IReadOnlyList<VaultPendingMutation>> ListAsync(
         string accountId, string linkedNetworkScope, CancellationToken ct = default)
     {
-        retention.RequireLocalPersistence();
+        linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         var storageScope = VaultLinkedQueueStorageScope.FromNetworkScope(linkedNetworkScope);
         var storage = ExistingStore();
