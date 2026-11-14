@@ -783,3 +783,10 @@ Follow-up priorities: (1) run .NET 10 builds and both Node suites, (2) perform c
 - New `VaultRecordTypeFactory` introduces stable logical types (text/file/folder/credential/unknown), safe unknown-type behavior, and historical MIME discrimination; shared text and binary workspaces now use the legacy classifier. Existing stored data formats remain unchanged.
 - Added `docs/architecture/pluggable-vault.md` defining Stellar/EVM boundaries and versioned future share/import/export contracts. No EVM adapter, sharing, import/export, or live record migration is implemented.
 - Work is on branch `architecture/pluggable-vault-records-and-chains`. Builds, tests and device validation were not executed; do not claim production readiness. Preserve existing deny-by-default sync verification and S-key Mainnet restrictions.
+
+
+## 2026-11-14 continuation — typed local write integration and safe account read model
+- Both hosts now register `IVaultRecordTypeFactory`; shared text and binary workspaces use it before indexed encrypted writes. Existing ciphertext/index layout unchanged. Unknown/unregistered types and absent binary MIME are rejected on creation; legacy MIME catalog classification retained for reads/deletes.
+- New shared `VaultConnectedStellarAccountInventory` maps explicit credential mode to the already-connected HD or linked S-key ledger inventory; no mnemonic/S-key extraction, new transaction submission, or signer-chain proof. This is intentionally separate from the still-unwired `VaultAccountStrategyFactory`.
+- EVM is explicitly last priority; do not implement an EVM adapter before Stellar production blockers, record/file parity, sharing and import/export foundations.
+- All changes are source-only on `architecture/pluggable-vault-records-and-chains`; no build/tests or device validation run. Review for compile/runtime behavior and preserve existing Mainnet and sync safety gates.
