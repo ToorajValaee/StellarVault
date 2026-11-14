@@ -239,6 +239,8 @@ window.stellarVaultSecretLedger = (() => {
     if(!['create','update','delete','expand'].includes(kind))fail('Invalid ledger operation.');
     if(kind!=='expand'&&!validId(recordId))fail('Record identifier is invalid.');
     if(kind==='create'||kind==='update')validateDraft(draft);
+    // Re-fetch network identity, fees and base reserve for each new approval.
+    s.net=await verifiedNetwork(s.net.origin,s.passphrase);
     const v=await inventory(s),old=v.locations.get(recordId);
     if(kind==='create'&&old)fail('Record already exists.');
     if((kind==='update'||kind==='delete')&&!old)fail('Published record was not found.');
@@ -286,7 +288,8 @@ window.stellarVaultSecretLedger = (() => {
     const fingerprint=old?.rawHeader||null;
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     const quote={kind,recordId,draft,gen,cipher,count,newKeys,priorKeys,node:node.account_id,
-      fingerprint,opCount,topUp,created:Date.now(),fee:fees,reserve:additional,root:s.root};
+      fingerprint,opCount,topUp,created:Date.now(),fee:fees,reserve:additional,root:s.root,
+      feeBase:s.net.fee,reserveBase:s.net.reserve};
     clearQuotes(s);s.quotes.set(quoteId,quote);
     return {QuoteId:quoteId,Kind:kind,Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(additional),
@@ -310,7 +313,8 @@ window.stellarVaultSecretLedger = (() => {
     if(rootFree<required)fail('Root account cannot afford the child reserve, link and network fees.');
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     clearQuotes(s);s.quotes.set(quoteId,{kind:'expand',child,childId,tailId,created:Date.now(),
-      opCount,fee:fees,reserve:childFunding+pointerReserve,required});
+      opCount,fee:fees,reserve:childFunding+pointerReserve,required,
+      feeBase:s.net.fee,reserveBase:s.net.reserve});
     return {QuoteId:quoteId,Kind:'expand',Operations:opCount,Transactions:1,
       NetworkFeeXlm:toXlm(fees),PeakReserveXlm:toXlm(childFunding+pointerReserve),
       NetReserveChangeXlm:toXlm(childFunding+pointerReserve),
@@ -329,6 +333,9 @@ window.stellarVaultSecretLedger = (() => {
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     s.inFlight=true;
     try{
+      const freshNet=await verifiedNetwork(s.net.origin,s.passphrase);
+      if(freshNet.fee!==q.feeBase || freshNet.reserve!==q.reserveBase)
+        fail('Network fees or reserves changed. Review a fresh quote before signing.');
       const current=await inventory(s);
       const root=await s.server.loadAccount(s.root);
       const fee=Number(s.net.fee);
