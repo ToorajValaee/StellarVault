@@ -215,3 +215,41 @@ test('Secret Key adapter exists in both hosts and never substitutes the HD write
   assert.match(nativeUI,/SecretLedger.ConnectAsync\(_ledgerSecretKey/);
   assert.match(nativeUI,/await SecretLedger.DisconnectAsync\(\)/);
 });
+
+test('root secret recovers encrypted records after complete session closure',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('create',recordId,record);
+  await h.submit(quote.QuoteId);
+  h.close();
+  await h.open();
+  assert.equal((await h.read())[0].Content,'Test secret');
+  assert.equal(h.submissions(),1);
+  h.close();
+});
+
+test('linked child with an undisclosed additional signer fails closed',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('expand',null,null);
+  const child=quote.TargetAccountId;
+  await h.submit(quote.QuoteId);
+  h.accounts.get(child).signers.push({
+    type:'ed25519_public_key',key:'G'+'E'.repeat(55),weight:1
+  });
+  await assert.rejects(h.read(),/another active signer/);
+  h.close();
+});
+
+test('historical record names are never silently interpreted as empty new-format storage',async()=>{
+  const h=harness();
+  h.accounts.get(ROOT).data_attr['svh:0123456789abcdef']=Buffer.from('legacy').toString('base64');
+  await assert.rejects(h.open(),/historical vault record format/);
+  assert.equal(h.submissions(),0);
+});
+
+test('source-account entry ceilings fail before transaction submission',async()=>{
+  const h=harness();await h.open();
+  h.accounts.get(ROOT).subentry_count=1000;
+  await assert.rejects(h.plan('create',recordId,record),/subentry limits/);
+  assert.equal(h.submissions(),0);
+  h.close();
+});
