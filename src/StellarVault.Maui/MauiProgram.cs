@@ -27,6 +27,7 @@ public static class MauiProgram
         // Never retain a WebView JS runtime in an app-wide singleton.
         builder.Services.AddScoped<BrowserStellarLedgerRecords>();
         builder.Services.AddScoped<IStellarSecretKeyVaultDiscovery, BrowserSecretKeyVaultDiscovery>();
+        builder.Services.AddScoped<IStellarSecretKeyLedger, BrowserSecretKeyLedger>();
         builder.Services.AddScoped<IStellarLedgerRecords>(
             services => services.GetRequiredService<BrowserStellarLedgerRecords>());
         builder.Services.AddScoped<IVaultLedgerManifestCopyInventory>(
