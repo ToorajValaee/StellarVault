@@ -24,6 +24,7 @@ public sealed class VaultLinkedLocalRetentionGate
         if (!AllowsLocalPersistence)
             throw new InvalidOperationException(
                 "Independent S-key encrypted local storage requires explicit consent for this session.");
+        DeviceRetention.RequireLocalPersistence();
     }
 
     public void Reset()
