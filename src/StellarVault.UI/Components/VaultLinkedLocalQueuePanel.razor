@@ -12,18 +12,30 @@
     <h3>Encrypted device drafts</h3>
     <p>Optional local encrypted storage for this independent Stellar S-key vault.
        This device uses a separate local passphrase, separate encryption key and separate
-       storage namespace from mnemonic-based vaults. No Stellar transaction is
-       submitted by these controls.</p>
+       storage namespace from mnemonic-based vaults. Saving a draft is local-only;
+       publishing later requires a separate connected signer and fee approval.</p>
     <label class="sv-secret-approval">
         <input type="checkbox" checked="@LinkedRetention.AllowsLocalPersistence"
                disabled="@_busy" @onchange="ChangeConsentAsync" />
         I consent to encrypted local storage on this device. Locking or turning off consent does not delete previously saved encrypted data.
     </label>
-    @if (LinkedRetention.AllowsLocalPersistence && LinkedRetention.DeviceRetention.AllowsLocalPersistence && Ledger.IsConnected)
+    @if (LinkedRetention.AllowsLocalPersistence && LinkedRetention.DeviceRetention.AllowsLocalPersistence)
     {
+        @if (!Ledger.IsConnected && !QueueKeys.IsUnlocked)
+        {
+            <label>Stellar root public address (G…)
+                <input maxlength="56" autocomplete="off" spellcheck="false"
+                       @bind="_offlineRoot" @bind:event="oninput" disabled="@_busy" />
+            </label>
+            <p>The account address and selected network locate an existing encrypted
+               device vault. The separate local passphrase decrypts it; the S-key
+               is not required for local-only records. First-time setup requires
+               connecting the S-key while online.</p>
+        }
         @if (_exists is null)
         {
-            <button type="button" class="pixel-button compact" disabled="@_busy"
+            <button type="button" class="pixel-button compact"
+                    disabled="@(_busy || (!Ledger.IsConnected && _offlineRoot.Length != 56))"
                     @onclick="DiscoverAsync">Check local encrypted storage</button>
         }
         else if (!QueueKeys.IsUnlocked)
@@ -40,17 +52,24 @@
                             disabled="@(_busy || _passphrase.Length < 12)"
                             @onclick="UnlockAsync">Unlock encrypted local drafts</button>
                 }
-                else
+                else if (Ledger.IsConnected)
                 {
                     <button type="button" class="pixel-button compact"
                             disabled="@(_busy || _passphrase.Length < 12)"
                             @onclick="CreateAsync">Create encrypted device storage</button>
                 }
+                else
+                {
+                    <p>Encrypted credentials were not found for this public account
+                       and network. Connect with the S-key to enroll local storage.</p>
+                }
             </div>
         }
         else
         {
-            <p role="status">The independent local encryption key is unlocked in memory.</p>
+            <p role="status">@(QueueKeys.IsOfflineOnly
+                ? "Local-only queue unlocked. No Stellar signing or live remote verification is available."
+                : "The independent local encryption key is unlocked in memory.")</p>
             <div class="sv-secret-workspace-actions">
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="InspectAsync">Inspect encrypted draft queue</button>
@@ -137,13 +156,13 @@
                             @if (draft.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
                             {
                                 <button type="button" class="pixel-button compact"
-                                        disabled="@_busy"
+                                        disabled="@(_busy || !Ledger.IsConnected)"
                                         @onclick="() => InspectUnresolvedAsync(draft.MutationId)">Assess unresolved (read-only)</button>
                             }
                             @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
                             {
                                 <button type="button" class="pixel-button compact"
-                                        disabled="@(_busy || _review is not null)"
+                                        disabled="@(_busy || _review is not null || !Ledger.IsConnected || QueueKeys.IsOfflineOnly)"
                                         @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
                                 <button type="button" class="pixel-button compact" disabled="@_busy"
                                         @onclick="() => DiscardDraftAsync(draft.MutationId)">Discard local draft</button>
@@ -186,6 +205,7 @@
     private bool _busy;
     private bool? _exists;
     private string _passphrase = string.Empty;
+    private string _offlineRoot = string.Empty;
     private string? _message;
     private VaultLinkedQueueInspection.Report? _report;
     private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
@@ -290,7 +310,9 @@
     private async Task RefreshFolderOptionsAsync()
     {
         if (!QueueKeys.IsUnlocked) { _availableFolders = []; return; }
-        var published = await Ledger.ReadAsync();
+        IReadOnlyList<LedgerRecordItem> published = QueueKeys.IsOfflineOnly
+            ? []
+            : await Ledger.ReadAsync();
         var remoteFolders = published.Where(x => x.IsFolder)
             .Select(x => new FolderOption(x.Id, x.Title, false));
         var localFolders = _drafts.Where(x => x.IsFolder &&
@@ -397,6 +419,7 @@
         ClearDraftEditor();
         _exists = null;
         _passphrase = string.Empty;
+        _offlineRoot = string.Empty;
         var consented = args.Value is true ||
             args.Value is string value && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
         if (!consented)
@@ -417,7 +440,9 @@
         _message = null;
         try
         {
-            _exists = await QueueKeys.HasLocalCredentialsAsync();
+            _exists = Ledger.IsConnected
+                ? await QueueKeys.HasLocalCredentialsAsync()
+                : await QueueKeys.HasLocalCredentialsOfflineAsync(_offlineRoot.Trim());
             _message = _exists == true
                 ? "Encrypted device credentials found. Unlock with the separate local passphrase."
                 : "No local credentials found for this S-key account and network.";
@@ -442,9 +467,15 @@
         try
         {
             if (create)
+            {
+                if (!Ledger.IsConnected)
+                    throw new InvalidOperationException("New S-key device enrollment requires the connected signer.");
                 await QueueKeys.CreateAsync(_passphrase);
-            else
+            }
+            else if (Ledger.IsConnected)
                 await QueueKeys.UnlockAsync(_passphrase);
+            else
+                await QueueKeys.UnlockOfflineAsync(_offlineRoot.Trim(), _passphrase);
             _exists = true;
             _drafts = await DraftWorkspace.ListAsync();
             await RefreshFolderOptionsAsync();
