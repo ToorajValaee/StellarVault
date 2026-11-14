@@ -22,7 +22,9 @@ public static class VaultLinkedManualSyncPlan
     {
         ArgumentNullException.ThrowIfNull(entries);
         var hasUnresolved = entries.Any(x =>
-            x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting or VaultSyncState.Conflict);
+            x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting or VaultSyncState.Conflict ||
+            x.Kind == VaultMutationKind.ExtendLinkedChain &&
+            x.State != VaultSyncState.Confirmed);
         var result = new List<Item>(entries.Count);
         foreach (var mutation in entries.OrderBy(x => x.CreatedUtc)
                      .ThenBy(x => x.Id, StringComparer.Ordinal))
@@ -44,7 +46,11 @@ public static class VaultLinkedManualSyncPlan
             try
             {
                 var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload);
-                if (draft is null)
+                if (mutation.Kind == VaultMutationKind.ExtendLinkedChain)
+                {
+                    title = "Linked account capacity expansion";
+                }
+                else if (draft is null)
                     reasons.Add("unreadable-draft");
                 else
                 {
@@ -55,7 +61,10 @@ public static class VaultLinkedManualSyncPlan
             }
             catch (Exception e) when (e is JsonException or ArgumentException)
             {
-                reasons.Add("unreadable-draft");
+                if (mutation.Kind == VaultMutationKind.ExtendLinkedChain)
+                    title = "Linked account capacity expansion";
+                else
+                    reasons.Add("unreadable-draft");
             }
 
             if (mutation.State == VaultSyncState.Pending)
@@ -73,7 +82,10 @@ public static class VaultLinkedManualSyncPlan
         return new(result, ready?.MutationId,
             result.Count(x => x.State == VaultSyncState.Pending),
             result.Count(x => x.State is VaultSyncState.Submitting or
-                VaultSyncState.Uncertain or VaultSyncState.Conflict),
+                VaultSyncState.Uncertain or VaultSyncState.Conflict ||
+                entries.Any(y => y.Id == x.MutationId &&
+                    y.Kind == VaultMutationKind.ExtendLinkedChain &&
+                    y.State != VaultSyncState.Confirmed)),
             ready is not null);
     }
 }
