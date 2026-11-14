@@ -732,3 +732,14 @@ Changes:
 Security distinctions: encrypted local save is not proof of Stellar submission or sync. Unknown/uncertain signed submissions must still be reconciled before retry; this change does not relax approval or recovery gates.
 
 Verification still required: .NET 10 build, live offline PWA save, refresh browser while offline, cached folder selection, queue persistence on device, reconnect/review/approval sequence, and platform-specific offline handling. Source assertions alone are not end-to-end verification.
+
+
+## 2026-11-14 — Inspector/theme defects and proposed secret-key chain mode
+
+UI fixes committed: the Settings Help action is now a proper themed navigation row; the explorer maintains its explicit list/grid state with `data-explorer-layout`; desktop inspector and record workspace scroll independently; desktop CSS selectors for `sv-view-grid` override legacy inspectors' forced flex lists; light/dark theme CSS normalizes PWA Sync/Drafts review panels and MAUI shared hybrid panels. The PWA stylesheet asset was cache-busted. A source regression check guards these requirements. Browser/device runtime and .NET compile validation are still outstanding.
+
+Product request: offer two explicit vault unlock modes — existing BIP-39 SEP-5 HD vs imported Stellar secret key with a linked-list of independent accounts. The existing production-path IStellarLedgerRecords expects a mnemonic. Legacy connect/encryption code exists in `docs/legacy-ledger-reference/app.js` and `src/StellarVault.Pwa/wwwroot/js/ledger-compat/app.js`, but does not constitute a production-safe second onboarding path.
+
+Detailed proposal: `docs/SECRET_KEY_CHAIN_OPTION.md`. Important: ManageData addresses are pointers, not signing grants. A single secret-key controller must be registered as a signer on each child or recover child keys from separately encrypted seeds. Prefer explicit root-signer authorization and reconciled atomic account/signer/link provisioning. At current 0.5 XLM base reserve, illustrative new child reserve 1 XLM account + 0.5 XLM pointer + 0.5 XLM signer = 2 XLM per child, exclusive of encrypted data subentries and dynamic transaction fees. Root sponsorship changes payer, not total reserves. Never conflate this with the existing HD registry which derives child keys and sponsors child account reserves.
+
+Security gates: account-chain integrity/authentication, privilege thresholds/master-weight policy, lost child-key recovery, transaction receipt confirmation, concurrent tail extension, clean-device recovery, domain-separated encryption and audit. No second credential mode has been wired in this pass.
