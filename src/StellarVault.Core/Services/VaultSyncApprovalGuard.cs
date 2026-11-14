@@ -17,6 +17,7 @@ public static class VaultSyncApprovalGuard
     public static VaultSyncApprovalSnapshot Capture(VaultPendingMutation mutation,
         decimal feeXlm, decimal peakReserveXlm, DateTimeOffset now)
     {
+        VaultMutationStrategyPolicy.RequireHd(mutation);
         if (mutation.State != VaultSyncState.Pending || mutation.TransactionHash is not null)
             throw new InvalidOperationException("Only an untouched pending draft can be quoted.");
         if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
@@ -42,6 +43,7 @@ public static class VaultSyncApprovalGuard
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(current);
+        VaultMutationStrategyPolicy.RequireHd(current);
         // Share the account/network and lifetime boundary with independent
         // linked-account quote reviews, without sharing signing credentials.
         VaultApprovalScopeGuard.RequireFresh(snapshot.AccountId, snapshot.NetworkId,
@@ -68,6 +70,7 @@ public static class VaultSyncApprovalGuard
             foreach (var dep in item.DependsOn) writer.Write(dep);
             writer.Write(item.EncryptedPayload.Length);
             writer.Write(item.EncryptedPayload);
+            writer.Write(VaultMutationStrategyPolicy.Resolve(item.OriginStrategyId));
         }
         return Convert.ToHexStringLower(SHA256.HashData(stream.ToArray()));
     }
