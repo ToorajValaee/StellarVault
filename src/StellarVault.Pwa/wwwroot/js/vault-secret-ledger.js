@@ -433,7 +433,8 @@ window.stellarVaultSecretLedger = (() => {
       s.uncertain={Kind:q.kind,RootAccountId:s.root,
         TargetAccountId:q.kind==='expand'?q.childId:q.node,
         RecordId:q.kind==='expand'?null:q.recordId,
-        TransactionHash:null,NetworkPassphrase:s.passphrase};
+        TransactionHash:null,NetworkPassphrase:s.passphrase,
+        HorizonUrl:s.net.origin};
       unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
