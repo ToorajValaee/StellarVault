@@ -32,3 +32,9 @@ The existing `IVaultRecordTypeFactory` now feeds one `VaultStellarDraftClassific
 This audit is based on inspected code paths, **not executed test results**. Legacy queue, sync and binary code may have restrictions, TODOs or defects despite being present. Do not assert they are complete merely because service classes exist.
 
 Next: reuse the existing approved-sync review and evidence primitives while adding an independent credential scope for linked S-key mode; then binary/file parity and end-to-end tests. EVM remains final priority.
+
+## 2026-11-14 integration increment — shared approval scope, not a new queue
+
+Extracted `VaultApprovalScopeGuard.RequireFresh` to validate account address, exact scoped network identity and quote lifetime without knowing mnemonic, imported secret, encryption key, transaction quote format or transport. The existing HD `VaultSyncApprovalGuard.RequireFresh` now reuses it while retaining its original encrypted-queue draft fingerprint and pending/CAS checks. S-key `VaultLinkedAccountExpansion` now uses the same scope+age guard for its single-use reviewed expansion quote, in addition to exact quote equality, strategy selection, signer transport and current chain count/tail preflight. S-key quote remains capped at two minutes; transport already has its own quote expiry.
+
+**Not integrated yet:** the encrypted HD hybrid queue cannot simply be registered against an independent S-key vault because its key provider and session manager belong to a separate local vault; similarly, the HD `VaultManualSyncCoordinator` accepts `IStellarLedgerRecords` not the linked-key quote transport. The next actual integration is to decouple those interfaces around the existing CAS/queue/recovery state machinery, establish a separate authenticated S-key local encryption key, and reuse existing policy, before enabling linked offline sync. This is not missing foundational queue technology.
