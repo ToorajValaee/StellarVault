@@ -14,6 +14,8 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
     private string? _root;
+    private string? _connectedPassphrase;
+    public string? ConnectedNetworkPassphrase => _connected ? _connectedPassphrase : null;
     public bool IsConnected => _connected;
     public string? RootAccountId => _root;
     private void RequireConnected()
@@ -38,6 +40,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             if (result is null || !StellarAccountAddress.IsValid(result.RootAccountId))
                 throw new InvalidDataException("Invalid root identity from Secret Key ledger.");
             _root = result.RootAccountId;
+            _connectedPassphrase = networkPassphrase;
             _connected = true;
         }
         catch
@@ -45,6 +48,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             try { await js.InvokeVoidAsync("stellarVaultSecretLedger.close", _sessionId); }
             catch { /* The original failure is more informative. */ }
             _root = null;
+            _connectedPassphrase = null;
             _connected = false;
             throw;
         }
@@ -200,6 +204,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     public async Task DisconnectAsync()
     {
         _root = null;
+        _connectedPassphrase = null;
         _connected = false;
         await js.InvokeVoidAsync("stellarVaultSecretLedger.close", _sessionId);
     }
