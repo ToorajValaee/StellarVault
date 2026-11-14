@@ -100,8 +100,17 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
                 (!draft.IsFolder && string.IsNullOrEmpty(draft.Content)))
                 throw new ArgumentException("Title and record content are required.");
         }
-        var quote = await js.InvokeAsync<VaultSecretLedgerQuote>(
-            "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId, draft);
+        VaultSecretLedgerQuote quote;
+        try
+        {
+            quote = await js.InvokeAsync<VaultSecretLedgerQuote>(
+                "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId, draft);
+        }
+        catch (JSException ex) when (kind == "create" &&
+            ex.Message.Contains("SV_ACCOUNT_CAPACITY_REQUIRED", StringComparison.Ordinal))
+        {
+            throw new VaultAccountCapacityRequiredException();
+        }
         if (quote is null ||
             string.IsNullOrWhiteSpace(quote.QuoteId) || quote.QuoteId.Length != 32 ||
             !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
