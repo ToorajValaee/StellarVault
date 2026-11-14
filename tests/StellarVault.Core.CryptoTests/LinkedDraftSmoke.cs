@@ -234,6 +234,29 @@ internal static class LinkedDraftSmoke
             var journal = new VaultLinkedExpansionJournal(
                 expansion, ledger, store, keys, consent, network);
 
+            var abandonedPayload = System.Text.Encoding.UTF8.GetBytes("unreserved intent");
+            var abandoned = VaultPendingMutation.Create(Root,
+                VaultLinkedQueueStorageScope.FromNetworkScope(network.CredentialKey(Root)),
+                VaultMutationKind.ExtendLinkedChain, FakeLinkedLedger.ExpansionTarget,
+                abandonedPayload) with
+            {
+                OriginStrategyId = VaultMutationStrategyPolicy.Linked
+            };
+            try
+            {
+                Require(await store.AddAsync(abandoned),
+                    "Unable to stage the simulated never-reserved expansion journal.");
+                await journal.DiscardNeverSubmittedIntentAsync(abandoned.Id);
+                Require((await store.ListAsync(Root, network.CredentialKey(Root))).Count == 0 &&
+                        ledger.Submissions == 0,
+                    "Never-reserved expansion journal cleanup broadcast or left a durable blocker.");
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(abandonedPayload);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(abandoned.EncryptedPayload);
+            }
+
             var approved = await journal.PrepareAsync();
             ledger.FailNextSubmission = true;
             await MustRejectAsync(
