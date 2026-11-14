@@ -153,8 +153,8 @@
             <p><strong>Uncertain/submitting:</strong> @_report.UncertainOrSubmitting</p>
             <p><strong>Conflicts:</strong> @_report.Conflicts</p>
             <p><strong>Folder mutations:</strong> @_report.FolderEntries</p>
-            <p>These are local queue diagnostics only. Linked-account publishing
-               remains disabled until separate operation verification is implemented.</p>
+            <p>Manual create-only publication requires an explicit fee review and a live linked S-key signer.
+               Automatic synchronization, queued updates/deletes, and independent historical operation proof are not yet available.</p>
         }
     }
     @if (!string.IsNullOrWhiteSpace(_message))
@@ -201,7 +201,8 @@
             _drafts = await DraftWorkspace.ListAsync();
             await RefreshFolderOptionsAsync();
             _report = await QueueInspection.InspectAsync();
-            _message = "Stellar transaction verified and encrypted queue updated: " + hash;
+            _message = "Connected Stellar record state and encrypted queue confirmed for transaction: " + hash +
+                ". Independent historical operation verification remains pending security review.";
         }
         catch (Exception ex)
         {
@@ -252,7 +253,7 @@
         var remoteFolders = published.Where(x => x.IsFolder)
             .Select(x => new FolderOption(x.Id, x.Title, false));
         var localFolders = _drafts.Where(x => x.IsFolder &&
-                x.State is VaultSyncState.Pending or VaultSyncState.Confirmed &&
+                (x.State is VaultSyncState.Pending or VaultSyncState.Confirmed) &&
                 !x.IsCorrupt)
             .Select(x => new FolderOption(x.EntityId, x.Title, true));
         _availableFolders = remoteFolders.Concat(localFolders)
@@ -398,7 +399,7 @@
             _exists = true;
             _drafts = await DraftWorkspace.ListAsync();
             await RefreshFolderOptionsAsync();
-            _message = "Independent encrypted device storage is unlocked. Review is read-only; on-chain publishing remains separate.";
+            _message = "Independent encrypted device storage unlocked. Local drafts require separate fee-reviewed publication.";
         }
         catch
         {
