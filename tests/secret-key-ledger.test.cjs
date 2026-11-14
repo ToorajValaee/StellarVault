@@ -278,3 +278,29 @@ test('uncertain network submission quarantines same session until closure',async
   assert.equal(h.submissions(),1);
   h.close();
 });
+
+
+test('tail link slot is reserved before a new record exhausts the account',async()=>{
+  const h=harness();await h.open();
+  const root=h.accounts.get(ROOT);
+  root.subentry_count=999;
+  root.balances[0].balance='2000.0000000';
+  await assert.rejects(h.plan('create',recordId,record),/SV_ACCOUNT_CAPACITY_REQUIRED/);
+  assert.equal(h.submissions(),0);
+  const expansion=await h.plan('expand',null,null);
+  assert.equal(expansion.CreatesChildNode,true);
+  await h.submit(expansion.QuoteId);
+  const create=await h.plan('create',recordId,record);
+  assert.equal(create.TargetAccountId,expansion.TargetAccountId);
+  await h.submit(create.QuoteId);
+  assert.equal(h.submissions(),2);
+  h.close();
+});
+
+test('already exhausted tail cannot be extended blindly',async()=>{
+  const h=harness();await h.open();
+  h.accounts.get(ROOT).subentry_count=1000;
+  await assert.rejects(h.plan('expand',null,null),/Manual recovery is required/);
+  assert.equal(h.submissions(),0);
+  h.close();
+});
