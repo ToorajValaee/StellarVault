@@ -169,6 +169,52 @@ public sealed class VaultLinkedExpansionJournal(
         finally { _gate.Release(); }
     }
 
+    /// <summary>
+    /// Explicitly discard ONLY an intent still in Pending before it was
+    /// reserved for broadcast. Atomic TryDelete fails if a sibling tab has
+    /// changed it to Submitting. Never touches uncertain or confirmed journals.
+    /// </summary>
+    public async Task DiscardNeverSubmittedIntentAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        if (!Guid.TryParseExact(mutationId, "N", out _))
+            throw new ArgumentException("Invalid expansion journal identifier.",
+                nameof(mutationId));
+        await _gate.WaitAsync(ct);
+        try
+        {
+            if (!keys.CanPublish || !ledger.IsConnected ||
+                ledger.RootAccountId is not string root)
+                throw new UnauthorizedAccessException(
+                    "A fresh live signer-backed S-key queue unlock is required.");
+            var scope = network.CredentialKey(root);
+            var epoch = ledger.ConnectionEpoch;
+            var entries = await store.ListAsync(root, scope, ct);
+            try
+            {
+                var intent = entries.SingleOrDefault(x => x.Id == mutationId)
+                    ?? throw new KeyNotFoundException("Linked expansion journal not found.");
+                if (intent.Kind != VaultMutationKind.ExtendLinkedChain ||
+                    intent.State != VaultSyncState.Pending ||
+                    intent.TransactionHash is not null ||
+                    intent.SignedFileEntries is { Length: > 0 } ||
+                    intent.SignedDeletionManifests is { Length: > 0 })
+                    throw new InvalidOperationException(
+                        "Only never-reserved expansion intents can be discarded. An uncertain/submitting journal is immutable.");
+                RequireSession(root, scope, epoch);
+                if (!await store.TryDeleteAsync(intent, ct))
+                    throw new InvalidOperationException(
+                        "The expansion intent changed concurrently. Refresh the encrypted journal.");
+            }
+            finally
+            {
+                foreach (var entry in entries)
+                    CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
     private void RequireSession(string root, string scope, long epoch)
     {
         consent.RequireLocalPersistence();
