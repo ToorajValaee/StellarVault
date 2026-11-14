@@ -42,8 +42,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
                     throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
                 var currentEntries = await db.Catalog.ListAsync(key, token);
                 var currentMetadata = currentEntries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-                if (currentMetadata is null || (currentMetadata.ContentType is not null &&
-                    !currentMetadata.ContentType.StartsWith("text/plain", StringComparison.OrdinalIgnoreCase)))
+                if (currentMetadata is null || (!VaultRecordTypeFactory.IsLegacyText(currentMetadata.ContentType)))
                     throw new VaultWriteConflictException(db.GetRecordId(name, key.Span));
                 // Close the gap between catalog revalidation and returning plaintext.
                 // This narrows the race; fully atomic snapshots require a storage-level transaction.
@@ -93,7 +92,7 @@ public sealed class VaultRecordWorkspace(VaultSessionManager sessions, VaultStor
             ArgumentNullException.ThrowIfNull(expectedVersion);
             var entries = await db.Catalog.ListAsync(key, token);
             var metadata = entries.FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
-            if (metadata is null || (!VaultRecordTypeFactory.IsLegacyText(metadata.ContentType)))
+            if (metadata is null || !VaultRecordTypeFactory.IsLegacyText(metadata.ContentType))
                 throw new InvalidOperationException("The selected text record is no longer in the catalog.");
             var current = await db.GetVersionAsync(name, key, token);
             if (current != expectedVersion)
