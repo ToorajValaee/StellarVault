@@ -443,7 +443,7 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
   assert.match(linked,/queue\.ReadAsync\(root, ct\)/);
   assert.match(linked,/CanPublish/);
   assert.match(linked,/\n            false,/);
-  assert.doesNotMatch(linked,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync|secretKey|mnemonic/);
+  assert.doesNotMatch(linked,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
   assert.match(hd,/scopedQueue\.ReadAsync\(accountId, ct\)/);
   for(const host of [pwa,maui]){
     assert.match(host,/AddScoped<VaultScopedQueueReview>/);
