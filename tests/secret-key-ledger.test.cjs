@@ -119,6 +119,7 @@ function harness(passphrase=TEST) {
     read:()=>api.read(session),
     plan:(kind,id,draft)=>api.plan(session,kind,id,draft),
     submit:id=>api.submit(session,id),
+    inspectUncertain:()=>api.inspectUncertain(session),
     close:()=>api.close(session),
     submissions:()=>submitted,
     failNextSubmission:()=>{failSubmission=true;},
@@ -302,5 +303,34 @@ test('already exhausted tail cannot be extended blindly',async()=>{
   h.accounts.get(ROOT).subentry_count=1000;
   await assert.rejects(h.plan('expand',null,null),/Manual recovery is required/);
   assert.equal(h.submissions(),0);
+  h.close();
+});
+
+
+test('uncertain submission exposes only public diagnostics and never authorizes retry',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  assert.equal(h.inspectUncertain(),null);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(q.QuoteId),/uncertain/);
+  const finding=h.inspectUncertain();
+  assert.equal(finding.Kind,'create');
+  assert.equal(finding.RootAccountId,ROOT);
+  assert.equal(finding.TargetAccountId,ROOT);
+  assert.equal(finding.RecordId,recordId);
+  assert.equal(finding.TransactionHash,null);
+  assert.equal(finding.NetworkPassphrase,TEST);
+  assert.ok(!JSON.stringify(finding).includes(record.Content));
+  finding.RecordId='attacker-edited'; // The diagnostic is a defensive copy.
+  assert.equal(h.inspectUncertain().RecordId,recordId);
+  await assert.rejects(h.plan('expand',null,null),/unresolved/);
+  h.close();
+});
+
+test('success clears the read-only uncertain snapshot',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('create',recordId,record);
+  await h.submit(quote.QuoteId);
+  assert.equal(h.inspectUncertain(),null);
   h.close();
 });
