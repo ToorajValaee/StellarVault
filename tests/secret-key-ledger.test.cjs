@@ -409,3 +409,19 @@ test('simultaneous approved submissions in one runtime cannot both reach Horizon
   assert.equal(h.submissions(),1,'Only one signed transaction can reach the transport');
   h.api.close(other);h.close();
 });
+
+test('HD and independent linked approval workflows reuse the same scope freshness policy',()=>{
+  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const shared=fs.readFileSync(path.join(root,'VaultApprovalScopeGuard.cs'),'utf8');
+  const hd=fs.readFileSync(path.join(root,'VaultSyncApprovalGuard.cs'),'utf8');
+  const linked=fs.readFileSync(path.join(root,'VaultLinkedAccountExpansion.cs'),'utf8');
+  assert.match(shared,/quotedNetworkScope/);
+  assert.match(shared,/quotedUtc > now/);
+  assert.match(shared,/now - quotedUtc > maxAge/);
+  assert.match(hd,/VaultApprovalScopeGuard\.RequireFresh/);
+  assert.match(linked,/VaultApprovalScopeGuard\.RequireFresh/);
+  assert.match(linked,/reviewedQuote != pending\.Quote/);
+  assert.match(linked,/TimeSpan\.FromMinutes\(2\)/);
+  assert.match(linked,/ledger\.SubmitApprovedAsync\(pending\.Quote\.QuoteId/);
+  assert.doesNotMatch(shared,/secretKey|mnemonic|submitTransaction|SubmitApprovedAsync/);
+});
