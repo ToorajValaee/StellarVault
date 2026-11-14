@@ -788,10 +788,10 @@ test('native Core smoke suite includes independent linked encrypted staging and 
   assert.match(smoke,/VaultLinkedDraftPublication/);
   assert.match(smoke,/VaultLinkedLocalRetentionGate/);
   assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
-  assert.match(smoke,/publisher\.SubmitAsync\(recordReview\.Quote, true\)/);
-  assert.match(smoke,/VaultSyncState\.Confirmed/);
+  assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
+  assert.match(smoke,/Successful linked expansion was confirmed without historical signer proof/);
   assert.match(smoke,/VaultSyncState\.Uncertain or VaultSyncState\.Submitting/);
-  assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(pending\.MutationId\)/);
+  assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(child\.MutationId\)/);
   assert.match(smoke,/keys\.LockAsync\(\)/);
 });
 
