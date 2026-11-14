@@ -269,7 +269,7 @@ test('existing-record update never allocates another account on subentry ceiling
   h.close();
 });
 
-test('uncertain network submission quarantines same session until closure',async()=>{
+test('uncertain network submission quarantines active session',async()=>{
   const h=harness();await h.open();
   const q=await h.plan('create',recordId,record);
   h.failNextSubmission();
@@ -332,5 +332,27 @@ test('success clears the read-only uncertain snapshot',async()=>{
   const quote=await h.plan('create',recordId,record);
   await h.submit(quote.QuoteId);
   assert.equal(h.inspectUncertain(),null);
+  h.close();
+});
+
+
+test('uncertain write quarantine and diagnostic survive lock then reopen in same runtime',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('create',recordId,record);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(quote.QuoteId),/uncertain/);
+  const original=h.inspectUncertain();
+  h.close();
+  await h.open();
+  const reopened=h.inspectUncertain();
+  assert.equal(reopened.Kind,'create');
+  assert.equal(reopened.RootAccountId,ROOT);
+  assert.equal(reopened.RecordId,recordId);
+  assert.equal(reopened.TransactionHash,null);
+  assert.deepEqual(JSON.parse(JSON.stringify(reopened)),JSON.parse(JSON.stringify(original)));
+  assert.equal((await h.read()).length,0,'Read-only inventory remains available');
+  await assert.rejects(h.plan('create','fedcba9876543210',record),/unresolved/);
+  await assert.rejects(h.plan('expand',null,null),/unresolved/);
+  assert.equal(h.submissions(),1);
   h.close();
 });
