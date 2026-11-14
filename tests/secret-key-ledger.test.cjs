@@ -450,3 +450,32 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
     assert.match(host,/AddScoped<VaultLinkedQueueInspection>/);
   }
 });
+
+
+test('encrypted queue origin is versioned, immutable and not implicitly upgraded to S-key',()=>{
+  const root=path.join(__dirname,'..','src');
+  const core=path.join(root,'StellarVault.Core','Services');
+  const pwa=path.join(root,'StellarVault.Pwa','Services');
+  const policy=fs.readFileSync(path.join(core,'VaultMutationStrategyPolicy.cs'),'utf8');
+  const queue=fs.readFileSync(path.join(core,'VaultPendingMutationQueue.cs'),'utf8');
+  const hd=fs.readFileSync(path.join(core,'VaultHybridSyncReviewService.cs'),'utf8');
+  const guard=fs.readFileSync(path.join(core,'VaultSyncApprovalGuard.cs'),'utf8');
+  const linked=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
+  const native=fs.readFileSync(path.join(core,'FileSystemVaultPendingMutationStore.cs'),'utf8');
+  const browser=fs.readFileSync(path.join(pwa,'IndexedDbVaultPendingMutationStore.cs'),'utf8');
+  assert.match(policy,/null or Hd => Hd/,'legacy null tag must remain HD');
+  assert.match(policy,/Linked => Linked/);
+  assert.match(queue,/string\? OriginStrategyId = null/,'legacy serialized entries must be readable');
+  assert.match(queue,/VaultMutationStrategyPolicy\.RequireHd\(entry\)/);
+  assert.match(guard,/VaultMutationStrategyPolicy\.RequireHd\(mutation\)/);
+  assert.match(guard,/VaultMutationStrategyPolicy\.RequireHd\(current\)/);
+  assert.match(guard,/VaultMutationStrategyPolicy\.Resolve\(item\.OriginStrategyId\)/);
+  assert.match(hd,/Mixed account-strategy queue/);
+  assert.match(linked,/LegacyHdEntries, int LinkedTaggedEntries/);
+  assert.match(linked,/hd, linkedEntries, false/);
+  for (const store of [native,browser]) {
+    assert.match(store,/previous\.OriginStrategyId != replacement\.OriginStrategyId/);
+    assert.match(store,/a\.OriginStrategyId == b\.OriginStrategyId/);
+    assert.match(store,/VaultMutationStrategyPolicy\.Validate\(item\.OriginStrategyId\)/);
+  }
+});
