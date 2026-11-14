@@ -5144,3 +5144,15 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
         margin-bottom:10px!important;
     }
 }
+
+.sv-web-shell .sv-modern-entry > .sv-entry-main > .sv-entry-actions-outside {
+    width:100%;
+    max-width:640px;
+    margin:12px auto 0!important;
+    display:flex;
+    justify-content:stretch;
+}
+.sv-web-shell .sv-entry-actions-outside > .pixel-button {
+    width:100%;
+    min-height:46px;
+}
