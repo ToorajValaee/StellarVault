@@ -65,6 +65,21 @@ public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
                 next.State is not (VaultSyncState.Uncertain or VaultSyncState.Confirmed)))
             throw new InvalidOperationException(
                 "Only original S-key draft submission and immutable outcome transitions are allowed.");
+        // A valid transition may change ONLY state and transaction hash;
+        // every other authenticated field must match the reviewed revision.
+        var expectedNext = previous with
+        {
+            State = next.State,
+            TransactionHash = next.TransactionHash
+        };
+        if (!Equals(expectedNext, next) ||
+            (next.State == VaultSyncState.Confirmed &&
+             (next.TransactionHash is not { Length: 64 } ||
+              !next.TransactionHash.All(Uri.IsHexDigit))) ||
+            next.TransactionHash is { Length: > 0 } hash &&
+                (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
+            throw new InvalidOperationException(
+                "Linked queue state transition modified an immutable draft field or hash.");
         return ExistingStore().TryReplaceAsync(previous, next, ct);
     }
 
