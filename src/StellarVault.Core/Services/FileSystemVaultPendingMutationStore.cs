@@ -14,17 +14,17 @@ public sealed class FileSystemVaultPendingMutationStore : IVaultPendingMutationS
 {
     private const int MaximumQueueFileBytes = 12 * 1024 * 1024;
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(30);
-    private readonly VaultSessionManager sessions;
+    private readonly IVaultQueueKeySession keySession;
     private readonly VaultDeviceRetentionGate retention;
     private readonly string directory;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly string lockPath;
 
     public FileSystemVaultPendingMutationStore(
-        VaultSessionManager sessions, VaultDeviceRetentionGate retention, string directory)
+        IVaultQueueKeySession keySession, VaultDeviceRetentionGate retention, string directory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
-        this.sessions = sessions;
+        this.keySession = keySession;
         this.retention = retention;
         this.directory = Path.GetFullPath(directory);
         Directory.CreateDirectory(this.directory);
@@ -165,9 +165,7 @@ public sealed class FileSystemVaultPendingMutationStore : IVaultPendingMutationS
         retention.RequireLocalPersistence();
         StellarAccountAddress.Validate(accountId);
         _ = ScopePrefix(accountId, networkId);
-        if (sessions.ActiveAccountId != accountId)
-            throw new UnauthorizedAccessException("Queue account does not match the unlocked vault.");
-        return await sessions.ExecuteAsync(async (_, key, token) =>
+        return await keySession.ExecuteAsync(accountId, networkId, async (key, token) =>
         {
             token.ThrowIfCancellationRequested();
             return await action(key, token);
