@@ -649,6 +649,9 @@ test('linked S-key device UI requests explicit consent and separate local passph
   const native=fs.readFileSync(path.join(root,'NativeVaultWorkspace.razor'),'utf8');
   assert.match(panel,/I consent to retaining encrypted vault data on this device/);
   assert.match(panel,/VaultDeviceRetentionPolicy\.EncryptedLocalWithManualSync/);
+  assert.match(panel,/LinkedRetention\.GrantExplicitConsent\(\)/);
+  assert.match(panel,/LinkedRetention\.Reset\(\)/);
+  assert.match(panel,/checked="@LinkedRetention\.AllowsLocalPersistence"/);
   assert.match(panel,/Retention\.Reset\(\)/);
   assert.match(panel,/minlength="12"/);
   assert.match(panel,/QueueKeys\.HasLocalCredentialsAsync\(\)/);
@@ -659,4 +662,39 @@ test('linked S-key device UI requests explicit consent and separate local passph
   assert.doesNotMatch(panel,/SubmitApprovedAsync|QuoteCreateAsync|PublishAsync/);
   assert.match(workspace,/<VaultLinkedLocalQueuePanel \/>/);
   assert.match(native,/<VaultSecretKeyWorkspace \/>/);
+});
+
+
+test('independent S-key local retention is not granted by mnemonic-HD consent',()=>{
+  const src=path.join(__dirname,'..','src');
+  const core=path.join(src,'StellarVault.Core','Services');
+  const pwa=path.join(src,'StellarVault.Pwa','Services');
+  const gate=fs.readFileSync(path.join(core,'VaultLinkedLocalRetentionGate.cs'),'utf8');
+  const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
+  const storePwa=fs.readFileSync(path.join(pwa,'IndexedDbVaultLinkedPassphraseCredentialStore.cs'),'utf8');
+  const storeNative=fs.readFileSync(path.join(core,'FileSystemVaultLinkedPassphraseCredentialStore.cs'),'utf8');
+  const queuePwa=fs.readFileSync(path.join(pwa,'IndexedDbVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const queueNative=fs.readFileSync(path.join(core,'FileSystemVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const inspector=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
+  const pwaHost=fs.readFileSync(path.join(src,'StellarVault.Pwa','Program.cs'),'utf8');
+  const mauiHost=fs.readFileSync(path.join(src,'StellarVault.Maui','MauiProgram.cs'),'utf8');
+  assert.match(gate,/private set/);
+  assert.match(gate,/GrantExplicitConsent/);
+  assert.match(gate,/RequireLocalPersistence/);
+  for(const file of [session,storePwa,storeNative,queuePwa,queueNative,inspector])
+    assert.match(file,/linkedRetention\.RequireLocalPersistence\(\)/);
+  for(const host of [pwaHost,mauiHost])
+    assert.match(host,/AddScoped<VaultLinkedLocalRetentionGate>/);
+  assert.match(mauiHost,/GetRequiredService<VaultLinkedLocalRetentionGate>/);
+  assert.match(session,/ledger\.ConnectionEpoch/);
+  assert.match(session,/current\.Epoch != epoch/);
+  const ledger=fs.readFileSync(path.join(pwa,'BrowserSecretKeyLedger.cs'),'utf8');
+  assert.match(ledger,/_connectionEpoch\+\+/);
+  assert.match(ledger,/ConnectionEpoch => _connectionEpoch/);
+});
+
+test('no GitHub Actions workflow definitions remain on the active branch',()=>{
+  const root=path.join(__dirname,'..','.github','workflows');
+  if(fs.existsSync(root))
+    assert.equal(fs.readdirSync(root).filter(x=>/\.ya?ml$/.test(x)).length,0);
 });
