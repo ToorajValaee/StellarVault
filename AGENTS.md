@@ -5,6 +5,7 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 ## Architecture and product contract
 
 - Shared .NET 10 domain/services: `src/StellarVault.Core`; PWA host: `src/StellarVault.Pwa`; reusable UI: `src/StellarVault.UI`.
+- **Product architecture decision (2026-11-14):** two independent first-class *intended* credential/account strategies: BIP-39 SEP-5 mnemonic / deterministic HD child accounts, and imported Stellar S-key / linked independently created child accounts with explicit root public-key signer authorization. The latter is NOT an HD mnemonic substitute or a legacy-only migration. Reuse records/folders, encryption service contracts, on-chain review and hybrid workflows where safe, but do not cross their derivation/signing/discovery paths.
 - Stellar on-chain vault is the primary mode. Optional encrypted IndexedDB local mode must be explicitly enabled. Do not silently switch to local persistence or broadcast transactions.
 - Preserve the original on-chain `/vault` experience and account/network isolation. Keep mnemonic/keys out of logs, URL parameters and unencrypted persistent storage.
 - Offline mutation queues are encrypted at rest, account/network scoped, and use compare-and-swap durable state transitions. Never retry Submitting/Uncertain mutations blindly.
@@ -402,3 +403,12 @@ Product scope and deliberate restrictions: see `docs/HYBRID_RECORD_FOLDER_RELEAS
 This implementation-only pass added: strict unlocked-session epoch/network binding in `VaultHybridDraftWorkspace` across create/revise/list/discard; corrupt local create drafts now appear as noneditable warnings in the shared editor instead of disappearing; `VaultHybridSyncReviewService` requires a matching unlocked session and connected HD root before fee quoting; `VaultQueuedCreatePolicy.ParentCandidates` aligns create/revise dependency resolution and ignores stale confirmed non-create mutations without dropping the original confirmed folder dependency; generic remote update preflight rejects reserved SVFILE payloads; remote conflict review and Sync messaging now describe the real Testnet-only policy rather than stale 'not enabled' text.
 
 No manual builds, tests, CI inspection, device runs, or Testnet writes were performed for this pass, per user direction. Repository push triggers may independently run existing GitHub Actions. Do not call this production-ready; handoff is for focused validation of the scoped feature set. If results identify errors, return to implementation.
+
+
+## 2026-11-14 — Secret Key vault Phase 1 (read-only)
+
+Read `docs/SECRET_KEY_CHAIN_OPTION.md` and the latest `docs/ENGINEERING_HANDOFF.md` before adding account-chain writes. Phase 1 introduced `VaultCredentialMode` / `VaultAccessCredential`, `IStellarSecretKeyVaultDiscovery`, `VaultSecretChainProvisioningPlanner`, and independent `vault-secret-chain.js` read-only inspection, bundled and DI-registered in PWA and MAUI. Both entry screens expose the explicit credential selection, but S-key currently allows **read-only inspection only**. S-key signing, record decrypt/read/write, safe atomic child provisioning and hybrid sync are NOT implemented. Existing HD `IStellarLedgerRecords.ConnectAsync` remains strictly mnemonic.
+
+The JS inspector enforces S-key checksum, network passphrase, bounded linked-account traversal, no cycles, root signer thresholds and rejection of roots with `sv:registry:v2`. Supported pointer names `sv:next:v1` and `sv:next` are provisionally interpreted as base64 ASCII Stellar G-addresses, NOT verified compatibility with all historical versions. Never treat an address pointer as signing permission, ignore unknown recovery formats, infer access from only a current snapshot, auto-retry an uncertain transaction, or persist/log an S-key. All future network-mutating paths require exact signer policy, child master-weight rules, reserve/fee consent, receipt plus independent historical confirmation and clean-device recovery proof.
+
+Phase-1 mock JS cases were exercised; the committed Node tests and .NET/MAUI builds have not been run in CI/device during this pass. Do not claim the second mode is production-ready.
