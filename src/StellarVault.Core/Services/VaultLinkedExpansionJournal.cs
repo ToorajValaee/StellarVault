@@ -134,14 +134,19 @@ public sealed class VaultLinkedExpansionJournal(
                     transportInvoked = true;
                     hash = await expansion.SubmitApprovedAsync(approvedQuote, true, ct);
                     RequireSession(root, scope, epoch);
-                    var confirmed = reserved with
+                    // A successful transport result and a visible linked tail
+                    // are not independent proof of the exact historical
+                    // CreateAccount/SetOptions/pointer operations or signer policy.
+                    // Keep the original durable reservation quarantined until
+                    // independent operation history can confirm its provenance.
+                    var uncertain = reserved with
                     {
-                        State = VaultSyncState.Confirmed,
+                        State = VaultSyncState.Uncertain,
                         TransactionHash = hash
                     };
-                    if (!await store.TryReplaceAsync(reserved, confirmed, ct))
+                    if (!await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None))
                         throw new InvalidOperationException(
-                            "Expansion was observed but encrypted journal confirmation failed.");
+                            "Expansion was observed but encrypted journal quarantine could not be persisted. Do not retry.");
                     return hash;
                 }
                 catch
