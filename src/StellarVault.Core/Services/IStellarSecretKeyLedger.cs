@@ -33,7 +33,8 @@ public interface IStellarSecretKeyLedger
 /// <summary>Public-only, volatile diagnostic; never proof of inclusion or permission to retry.</summary>
 public sealed record VaultSecretSubmissionDiagnostic(
     string Kind, string RootAccountId, string TargetAccountId,
-    string? RecordId, string? TransactionHash, string NetworkPassphrase);
+    string? RecordId, string? TransactionHash, string NetworkPassphrase,
+    string HorizonUrl);
 
 public sealed record VaultSecretLedgerQuote(
     string QuoteId, string Kind, int Operations, int Transactions,
