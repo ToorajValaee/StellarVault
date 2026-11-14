@@ -13,7 +13,6 @@ public sealed class VaultManualSyncCoordinator(
     VaultNetworkSelection networks,
     VaultSessionManager sessions,
     IVaultLedgerManifestCopyInventory copyInventory,
-    IVaultGuardedLedgerMutations guardedLedger,
     IVaultPreparedCreateLedger preparedCreates,
     IVaultPreparedUpdateLedger preparedUpdates,
     IVaultPreparedDeletionLedger preparedDeletions)
