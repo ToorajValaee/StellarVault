@@ -399,5 +399,12 @@ window.stellarVaultSecretLedger = (() => {
       s.inFlight=false;
     }
   }
-  return Object.freeze({open,close,read,info,plan,submit});
+  function cancelQuote(id,quoteId) {
+    const s=session(id),q=s.quotes.get(quoteId);
+    if(!q || s.inFlight) return;
+    if(q.cipher)q.cipher.fill(0);
+    if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
+    s.quotes.delete(quoteId);
+  }
+  return Object.freeze({open,close,read,info,plan,submit,cancelQuote});
 })();
