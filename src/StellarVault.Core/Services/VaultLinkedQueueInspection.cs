@@ -63,7 +63,8 @@ public sealed class VaultLinkedQueueInspection(
                 VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
             snapshot.Mutations.Count(x => x.State == VaultSyncState.Conflict &&
                 VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
-            snapshot.Mutations.Count(x => x.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder &&
+            snapshot.Mutations.Count(x =>
+                (x.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder) &&
                 VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Linked),
             hd, linkedEntries, false,
             "Existing encrypted queue inspected read-only. Legacy HD entries are excluded from S-key counts. Tagged entries alone do not authorize S-key publishing.");
