@@ -476,3 +476,8 @@ The new independently versioned Secret Key protocol is implemented in `src/Stell
 ## Shared approval policy refactor (2026-11-14)
 - `VaultApprovalScopeGuard` is the shared account/network/age review check. Existing HD queue `VaultSyncApprovalGuard` continues to require its own payload digest and CAS checks, while S-key expansion retains exact quote comparison and separate reviewed signer transport. Do not rewrite those strategy-specific authorization checks as one generic submit function.
 - Do not claim linked offline queue parity: independent S-key authenticated encryption/storage-key lifecycle and protocol adapter are not wired. Reuse existing encrypted queue and folder/file mechanics once isolated. Added regression source, not executed; EVM last.
+
+## Consent-bound encrypted queue reuse (2026-11-14)
+- `VaultScopedQueueReview` is the read-only shared queue+folder snapshot used by HD `VaultHybridSyncReviewService`; it delegates to existing encrypted queue/CAS, does not persist anything or publish. Recheck the active local vault epoch and exact network/consent after async reading.
+- `VaultLinkedQueueInspection` is strictly read-only and `CanPublish=false`. Matching public account address does not authenticate queue format or authorize imported S-key signing. It is not a linked-sync UI workflow; do not silently reinterpret HD-format queued data as S-key drafts. Both hosts register it.
+- Next use existing CAS, queue state policy, folder graph and file mechanisms, after strategy-tagged authenticated local credential/key lifecycle and a protocol-specific approval transport. No builds/tests for this source batch. EVM last.
