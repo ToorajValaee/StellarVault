@@ -481,7 +481,10 @@ window.stellarVaultSecretLedger = (() => {
     const s=session(id);
     // Return a defensive public-only copy. Presence does NOT prove that the
     // transaction reached the network, nor that its contents were confirmed.
-    return s.uncertain ? {...s.uncertain} : null;
+    // A second already-open session must see a sibling's unresolved attempt,
+    // not merely its own initially clean per-session snapshot.
+    const finding=unresolvedByVault.get(vaultScope(s.root,s.passphrase))||s.uncertain;
+    return finding ? {...finding} : null;
   }
   function cancelQuote(id,quoteId) {
     const s=session(id),q=s.quotes.get(quoteId);
