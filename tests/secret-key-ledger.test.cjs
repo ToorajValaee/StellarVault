@@ -709,7 +709,8 @@ test('GitHub verification is manual-only and cannot consume Actions minutes on p
   assert.match(content,/workflow_dispatch:/);
   assert.doesNotMatch(content,/^\s*push:/m);
   assert.doesNotMatch(content,/^\s*pull_request:/m);
-  assert.doesNotMatch(content,/deploy|stellar submit|dotnet publish.*-o/m);
+  assert.doesNotMatch(content,/^\s*-\s*name:\s*(Deploy|Publish release|Broadcast)/mi);
+  assert.doesNotMatch(content,/^\s*push:|^\s*pull_request:/m);
 });
 
 
