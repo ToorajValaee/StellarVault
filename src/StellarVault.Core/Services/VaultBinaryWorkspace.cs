@@ -9,7 +9,7 @@ namespace StellarVault.Core.Services;
 /// chunk store. Reads stage the entire decrypted record privately before exposing
 /// any bytes to a caller; callers must dispose the returned BinaryRecord.
 /// </summary>
-public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStorageModeGate storageMode)
+public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStorageModeGate storageMode, IVaultRecordTypeFactory recordTypes)
 {
     public Task<VaultRecordPointer> SaveAsync(
         string name,
@@ -21,9 +21,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
         ArgumentNullException.ThrowIfNull(plaintext);
         if (!plaintext.CanRead)
             throw new ArgumentException("A readable plaintext stream is required.", nameof(plaintext));
-        if (string.IsNullOrWhiteSpace(contentType) || contentType.Length > 128 ||
-            contentType.Contains('\0'))
-            throw new ArgumentException("Invalid content type.", nameof(contentType));
+        var recordDefinition = recordTypes.Create(VaultRecordTypeFactory.File, name, contentType);
 
         return sessions.ExecuteAsync(async (database, key, ct) =>
         {
@@ -37,7 +35,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
                 throw new InvalidOperationException("This name belongs to a text record.");
             storageMode.Require(VaultStorageMode.LocalEncrypted);
             return await database.PutIndexedAsync(
-                name, expectedVersion, plaintext, key, contentType, ct);
+                name, expectedVersion, plaintext, key, recordDefinition.ContentType!, ct);
         }, cancellationToken);
     }
 
