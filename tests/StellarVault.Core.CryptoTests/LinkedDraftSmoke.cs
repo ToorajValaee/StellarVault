@@ -101,7 +101,30 @@ internal static class LinkedDraftSmoke
             Require(!keys.IsUnlocked, "Linked queue encryption key remained unlocked.");
             await MustRejectAsync(() => drafts.ListAsync(),
                 "Linked encrypted queue was accessible after lock.");
-            Console.WriteLine("PASS: linked encrypted folder/record drafts, dependencies, approval CAS and uncertain submission");
+
+            // Local-only access must use an existing enrolled wrapped key and
+            // must not need the imported S-key or Horizon connectivity.
+            await ledger.DisconnectAsync();
+            Require(await keys.HasLocalCredentialsOfflineAsync(Root),
+                "Existing encrypted S-key device credentials were lost.");
+            await keys.UnlockOfflineAsync(Root, "local S-key test passphrase 12345");
+            Require(keys.IsUnlocked && keys.IsOfflineOnly &&
+                keys.ActiveRootAccountId == Root,
+                "Offline local-only authentication failed.");
+            var offlineRecord = await drafts.CreateAsync(
+                new LedgerRecordDraft("Offline personal draft", "local secret"));
+            Require((await drafts.ListAsync()).Any(x => x.MutationId == offlineRecord.MutationId),
+                "Encrypted local draft failed with disconnected network.");
+            var offlineReport = new VaultLinkedQueueInspection(ledger, store, keys,
+                linkedRetention, network);
+            var report = await offlineReport.InspectAsync();
+            Require(report.Pending > 0 && !report.CanPublish,
+                "Offline queue inspection authorized publication or omitted local drafts.");
+            await MustRejectAsync(() => publisher.PrepareAsync(offlineRecord.MutationId),
+                "An offline encrypted queue session authorized an on-chain transaction.");
+            await keys.LockAsync();
+            Require(!keys.IsUnlocked, "Offline local queue key remained in memory after lock.");
+            Console.WriteLine("PASS: linked encrypted drafts, dependency CAS, uncertain outcomes and independent offline-only access");
         }
         finally
         {
@@ -142,7 +165,10 @@ internal static class LinkedDraftSmoke
 
         public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<LedgerRecordItem>>(_items.ToArray());
+            IsConnected
+                ? Task.FromResult<IReadOnlyList<LedgerRecordItem>>(_items.ToArray())
+                : Task.FromException<IReadOnlyList<LedgerRecordItem>>(
+                    new IOException("Horizon unavailable: offline test must not read Stellar."));
 
         public Task<LedgerAccountInfo> InspectAccountInfoAsync(
             CancellationToken cancellationToken = default) =>
