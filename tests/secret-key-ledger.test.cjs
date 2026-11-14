@@ -392,3 +392,20 @@ test('uncertain write blocks a second previously opened session on the same vaul
   assert.equal(h.submissions(),1,'No second broadcast must occur');
   h.api.close(other);h.close();
 });
+
+
+test('simultaneous approved submissions in one runtime cannot both reach Horizon after uncertainty',async()=>{
+  const h=harness();await h.open();
+  const other='second-approved-session';
+  await h.api.open(other,SECRET,'https://horizon-testnet.stellar.org',TEST);
+  const first=await h.plan('create',recordId,record);
+  const second=await h.api.plan(other,'create','fedcba9876543210',record);
+  h.failNextSubmission();
+  const outcomes=await Promise.allSettled([
+    h.submit(first.QuoteId),
+    h.api.submit(other,second.QuoteId)
+  ]);
+  assert.equal(outcomes.filter(x=>x.status==='rejected').length,2);
+  assert.equal(h.submissions(),1,'Only one signed transaction can reach the transport');
+  h.api.close(other);h.close();
+});
