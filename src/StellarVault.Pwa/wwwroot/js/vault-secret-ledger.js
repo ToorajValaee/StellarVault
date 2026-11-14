@@ -105,7 +105,7 @@ window.stellarVaultSecretLedger = (() => {
         name:'HKDF',hash:'SHA-256',salt,info:text.encode('vault-records|skh/skc|v1')
       },ikm,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     } finally {seed.fill(0);}
-    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false};
+    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,needsReconciliation:false};
     await chain(state);
     sessions.set(id,state);
     return {RootAccountId:root};
@@ -244,6 +244,7 @@ window.stellarVaultSecretLedger = (() => {
     const s=session(id);
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     if(s.inFlight)fail('A ledger operation is already in progress.');
+    if(s.needsReconciliation)fail('A previous submission is unresolved; reconcile ledger history before starting a new session.');
     if(!['create','update','delete','expand'].includes(kind))fail('Invalid ledger operation.');
     if(kind!=='expand'&&!validId(recordId))fail('Record identifier is invalid.');
     if(kind==='create'||kind==='update')validateDraft(draft);
@@ -347,6 +348,7 @@ window.stellarVaultSecretLedger = (() => {
     const s=session(id),q=s.quotes.get(quoteId);
     if(!q)fail('No matching reviewed quote. Estimate again.');
     if(s.inFlight)fail('Another ledger submission is in progress.');
+    if(s.needsReconciliation)fail('An earlier submission requires reconciliation before another transaction.');
     s.quotes.delete(quoteId);
     if(Date.now()-q.created>120000) {
       if(q.cipher)q.cipher.fill(0);
@@ -412,6 +414,9 @@ window.stellarVaultSecretLedger = (() => {
       tx.sign(s.pair);
       if(q.kind==='expand')tx.sign(q.child);
       let result;
+      // From this point any network failure may mean the transaction was accepted.
+      // Keep this session quarantined until the connected outcome is verified.
+      s.needsReconciliation=true;
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
       if(!result?.hash || result.successful===false)
@@ -431,6 +436,7 @@ window.stellarVaultSecretLedger = (() => {
       }catch{
         fail('Transaction accepted ('+result.hash+') but state verification is pending. Do not retry blindly.');
       }
+      s.needsReconciliation=false;
       return result.hash;
     }finally {
       if(q.cipher)q.cipher.fill(0);
