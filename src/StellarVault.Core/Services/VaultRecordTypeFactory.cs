@@ -66,7 +66,7 @@ public sealed class VaultRecordTypeFactory : IVaultRecordTypeFactory
         string? contentType = null, string? fileName = null)
     {
         ValidateTypeId(typeId);
-        if (!_types.ContainsKey(typeId))
+        if (typeId == Unknown || !_types.ContainsKey(typeId))
             throw new NotSupportedException("Cannot create an unregistered vault record type.");
         if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.Contains('\0'))
             throw new ArgumentException("Invalid vault record name.", nameof(name));
@@ -79,6 +79,8 @@ public sealed class VaultRecordTypeFactory : IVaultRecordTypeFactory
             throw new ArgumentException("Invalid file name.", nameof(fileName));
         if (typeId != File && fileName is not null)
             throw new ArgumentException("File names belong to file records.", nameof(fileName));
+        if (typeId == File && string.IsNullOrWhiteSpace(contentType))
+            throw new ArgumentException("A file record requires an explicit media type.", nameof(contentType));
         if (typeId == Folder && contentType is not null)
             throw new ArgumentException("Folders do not have a MIME type.", nameof(contentType));
         if (typeId == Text)
