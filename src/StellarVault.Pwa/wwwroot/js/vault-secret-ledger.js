@@ -49,8 +49,10 @@ window.stellarVaultSecretLedger = (() => {
     const weight=Number(signer?.weight||0);
     const medium=Number(account.thresholds?.med_threshold);
     const high=Number(account.thresholds?.high_threshold);
+    const low=Number(account.thresholds?.low_threshold);
     if(!Number.isInteger(weight)||!Number.isInteger(medium)||!Number.isInteger(high)||
-       weight<1||medium<1||high<1||weight<medium||weight<high)
+       !Number.isInteger(low)||weight<1||low<1||medium<1||high<1||
+       weight<low||weight<medium||weight<high)
       fail('Linked account lacks valid root signing authority.');
     return true;
   }
@@ -72,6 +74,9 @@ window.stellarVaultSecretLedger = (() => {
       seen.add(id);
       const account=await s.server.loadAccount(id);
       signer(account,s.root);
+      if(i>0 && (account.signers||[]).some(x =>
+          x.key!==s.root && Number(x.weight||0)>0))
+        fail('Child account has another active signer; single-secret chain is not exclusively controlled by the root.');
       if(i===0 && Object.hasOwn(account.data_attr||{},'sv:registry:v2'))
         fail('HD-v2 vault root cannot be used as an independent Secret Key vault.');
       nodes.push(account);
