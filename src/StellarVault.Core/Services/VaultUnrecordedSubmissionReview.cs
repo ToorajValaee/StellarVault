@@ -68,6 +68,7 @@ public sealed class VaultUnrecordedSubmissionReview(
     private static bool SameRevision(VaultPendingMutation a, VaultPendingMutation b) =>
         a.Id == b.Id && a.AccountId == b.AccountId && a.NetworkId == b.NetworkId &&
         a.Kind == b.Kind && a.EntityId == b.EntityId &&
+        a.OriginStrategyId == b.OriginStrategyId &&
         a.EncryptedPayload.AsSpan().SequenceEqual(b.EncryptedPayload) &&
         a.ExpectedRemoteVersion == b.ExpectedRemoteVersion &&
         a.DependsOn.SequenceEqual(b.DependsOn, StringComparer.Ordinal) &&
