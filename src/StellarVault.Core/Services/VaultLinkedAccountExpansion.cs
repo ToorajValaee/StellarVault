@@ -56,7 +56,8 @@ public sealed class VaultLinkedAccountExpansion(
             ct.ThrowIfCancellationRequested();
             RequireSessionMatches(root, selectedNetwork, scope);
 
-            var quote = await ledger.QuoteExtendChainAsync(ct);
+            var quote = await ledger.QuoteExtendChainAsync(ct)
+                ?? throw new InvalidDataException("Linked-account ledger returned no expansion quote.");
             try
             {
                 if (quote.Kind != "expand" || !quote.CreatesChildNode ||
