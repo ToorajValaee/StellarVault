@@ -104,7 +104,7 @@
                 }
             </details>
         }
-        <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
+        <form id="sv-access-form" class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
             @if (Platform == "WEB PWA")
             {
@@ -181,17 +181,6 @@
                         <span>Keep this screen open.</span>
                     </div>
                 }
-                <div class="sv-access-actions">
-                    @if (Sessions.IsUnlocked)
-                    {
-                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
-                    }
-                    else
-                    {
-                        <button class="pixel-button primary" type="submit" disabled="@_busy"
-                                aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
-                    }
-                </div>
                 @if (!Sessions.IsUnlocked)
                 {
                     <p id="sv-access-readiness" class="sv-access-readiness" role="status" aria-live="polite">
@@ -255,6 +244,20 @@
                 </div>
             }
         </form>
+        @if (Platform == "WEB PWA")
+        {
+            <div class="sv-access-actions sv-entry-actions-outside">
+                @if (Sessions.IsUnlocked)
+                {
+                    <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
+                }
+                else
+                {
+                    <button class="pixel-button primary" type="submit" form="sv-access-form" disabled="@_busy"
+                            aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
+                }
+            </div>
+        }
         <p class="sv-entry-privacy"><span aria-hidden="true">♧</span> Your recovery credential stays in this session. Never share it with anyone.</p>
         </div>
     </div>
