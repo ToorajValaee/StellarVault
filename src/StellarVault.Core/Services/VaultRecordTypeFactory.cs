@@ -81,6 +81,11 @@ public sealed class VaultRecordTypeFactory : IVaultRecordTypeFactory
             throw new ArgumentException("File names belong to file records.", nameof(fileName));
         if (typeId == File && string.IsNullOrWhiteSpace(contentType))
             throw new ArgumentException("A file record requires an explicit media type.", nameof(contentType));
+        // The v2 local catalog has no logical type identifier. A text/plain binary file
+        // would be misread as an editable text record, potentially exposing arbitrary
+        // bytes to a text editor. Reject until a versioned type discriminator exists.
+        if (typeId == File && IsLegacyText(contentType))
+            throw new NotSupportedException("A text/plain file needs explicit versioned file-type metadata; use a text record instead.");
         if (typeId == Folder && contentType is not null)
             throw new ArgumentException("Folders do not have a MIME type.", nameof(contentType));
         if (typeId == Text)
