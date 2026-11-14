@@ -16,7 +16,7 @@ public sealed class VaultLinkedAccountExpansion(
 
     private sealed record PendingExpansion(
         string Root, string Network, string CredentialScope, VaultSecretLedgerQuote Quote,
-        string PreviousTail, int PreviousCount);
+        DateTimeOffset QuotedUtc, string PreviousTail, int PreviousCount);
 
     private VaultAccountRequest Request(string root, string selectedNetwork) =>
         new(ConnectedStellarAccountStrategy.StellarChain, selectedNetwork, root,
@@ -33,9 +33,11 @@ public sealed class VaultLinkedAccountExpansion(
     private void RequireSameSession(PendingExpansion pending)
     {
         var (root, selectedNetwork) = RequireSession();
-        if (pending.Root != root || pending.Network != selectedNetwork ||
-            pending.CredentialScope != network.CredentialKey(root))
-            throw new InvalidOperationException("Linked-account session or network changed. Cancel and review again.");
+        if (pending.Network != selectedNetwork)
+            throw new InvalidOperationException("Linked-account strategy changed. Review again.");
+        VaultApprovalScopeGuard.RequireFresh(
+            pending.Root, pending.CredentialScope, root, network.CredentialKey(root),
+            pending.QuotedUtc, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(2));
     }
 
     /// <summary>
@@ -73,7 +75,7 @@ public sealed class VaultLinkedAccountExpansion(
                     throw new InvalidOperationException("Account chain changed while preparing the quote.");
 
                 _pending = new(root, selectedNetwork, scope, quote,
-                    before.TailAddress, before.AccountCount);
+                    DateTimeOffset.UtcNow, before.TailAddress, before.AccountCount);
                 return quote;
             }
             catch
