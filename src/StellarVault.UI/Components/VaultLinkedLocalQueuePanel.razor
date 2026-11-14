@@ -1,6 +1,7 @@
 @using StellarVault.Core.Services
 @inject IStellarSecretKeyLedger Ledger
 @inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession QueueKeys
 @inject VaultLinkedQueueInspection QueueInspection
 @implements IAsyncDisposable
@@ -12,11 +13,11 @@
        storage namespace from mnemonic-based vaults. No Stellar transaction is
        submitted by these controls.</p>
     <label class="sv-secret-approval">
-        <input type="checkbox" checked="@Retention.AllowsLocalPersistence"
+        <input type="checkbox" checked="@LinkedRetention.AllowsLocalPersistence"
                disabled="@_busy" @onchange="ChangeConsentAsync" />
         I consent to retaining encrypted vault data on this device until I remove it.
     </label>
-    @if (Retention.AllowsLocalPersistence && Ledger.IsConnected)
+    @if (LinkedRetention.AllowsLocalPersistence && Retention.AllowsLocalPersistence && Ledger.IsConnected)
     {
         @if (_exists is null)
         {
@@ -73,6 +74,7 @@
 
 @code {
     private bool _busy;
+    private bool _enabledGeneralRetention;
     private bool? _exists;
     private string _passphrase = string.Empty;
     private string? _message;
@@ -89,17 +91,24 @@
         if (!consented)
         {
             await QueueKeys.LockAsync();
-            Retention.Reset();
-            _message = "Device retention disabled for this session. Previously encrypted data was not erased.";
+            LinkedRetention.Reset();
+            if (_enabledGeneralRetention) Retention.Reset();
+            _enabledGeneralRetention = false;
+            _message = "Independent device retention disabled for this session. Previously encrypted data was not erased.";
             return;
         }
-        Retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
+        if (!Retention.AllowsLocalPersistence)
+        {
+            Retention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
+            _enabledGeneralRetention = true;
+        }
+        LinkedRetention.GrantExplicitConsent();
         await DiscoverAsync();
     }
 
     private async Task DiscoverAsync()
     {
-        if (_busy || !Retention.AllowsLocalPersistence) return;
+        if (_busy || !Retention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence) return;
         _busy = true;
         _message = null;
         try
@@ -122,7 +131,7 @@
 
     private async Task ActivateAsync(bool create)
     {
-        if (_busy || !Retention.AllowsLocalPersistence || _passphrase.Length < 12)
+        if (_busy || !Retention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence || _passphrase.Length < 12)
             return;
         _busy = true;
         _report = null;
@@ -182,5 +191,7 @@
         _passphrase = string.Empty;
         _report = null;
         await QueueKeys.LockAsync();
+        LinkedRetention.Reset();
+        if (_enabledGeneralRetention) Retention.Reset();
     }
 }
