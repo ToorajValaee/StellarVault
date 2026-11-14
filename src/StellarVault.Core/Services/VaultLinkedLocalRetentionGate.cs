@@ -8,9 +8,16 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public sealed class VaultLinkedLocalRetentionGate
 {
+    // The original HD/device-retention gate is NEVER toggled by S-key consent.
+    // The same reusable encrypted queue stores receive this distinct gate.
+    public VaultDeviceRetentionGate DeviceRetention { get; } = new();
     public bool AllowsLocalPersistence { get; private set; }
 
-    public void GrantExplicitConsent() => AllowsLocalPersistence = true;
+    public void GrantExplicitConsent()
+    {
+        DeviceRetention.Select(VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync);
+        AllowsLocalPersistence = true;
+    }
 
     public void RequireLocalPersistence()
     {
@@ -19,5 +26,9 @@ public sealed class VaultLinkedLocalRetentionGate
                 "Independent S-key encrypted local storage requires explicit consent for this session.");
     }
 
-    public void Reset() => AllowsLocalPersistence = false;
+    public void Reset()
+    {
+        AllowsLocalPersistence = false;
+        DeviceRetention.Reset();
+    }
 }
