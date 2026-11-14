@@ -246,7 +246,7 @@ internal static class LinkedDraftSmoke
                 keys, consent, queuePath, network);
             var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
             Require(durable.Count(x => x.Kind == VaultMutationKind.ExtendLinkedChain &&
-                x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) == 1,
+                (x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting)) == 1,
                 "Unknown account expansion was not preserved in encrypted queue.");
             Require(!VaultLinkedManualSyncPlan.Build(durable, true).CanReviewNext,
                 "Unresolved expansion failed to block manual record publication.");
