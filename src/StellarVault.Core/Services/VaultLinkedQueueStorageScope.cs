@@ -11,7 +11,7 @@ public static class VaultLinkedQueueStorageScope
 
     public static string FromNetworkScope(string networkScope)
     {
-        if (string.IsNullOrWhiteSpace(networkScope) || networkScope.Length > 512 ||
+        if (string.IsNullOrWhiteSpace(networkScope) || networkScope.Length > 512 - Prefix.Length ||
             networkScope.IndexOfAny(['\0', '\r', '\n']) >= 0)
             throw new ArgumentException("Invalid linked queue network scope.", nameof(networkScope));
         return Prefix + networkScope;
