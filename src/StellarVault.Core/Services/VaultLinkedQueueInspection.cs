@@ -11,6 +11,7 @@ public sealed class VaultLinkedQueueInspection(
     IVaultLinkedQueueSnapshotStore store,
     VaultLinkedQueueKeySession keys,
     VaultDeviceRetentionGate retention,
+    VaultLinkedLocalRetentionGate linkedRetention,
     VaultNetworkSelection networks)
 {
     public sealed record Report(
@@ -24,6 +25,7 @@ public sealed class VaultLinkedQueueInspection(
     public async Task<Report> InspectAsync(CancellationToken ct = default)
     {
         retention.RequireLocalPersistence();
+        linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked)
             throw new UnauthorizedAccessException(
                 "Unlock the independent encrypted S-key queue before inspecting local drafts.");
