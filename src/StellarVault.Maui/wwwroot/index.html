@@ -48,6 +48,7 @@
     // This list is local, packaged with the APK; no remote code is fetched.
     const nativeLedgerScripts = [
       "js/vendor/stellar-sdk.min.js",
+      "js/vault-secret-chain.js",
       "js/bip39-english.js",
       "js/hd-keys.js",
       "js/vault-v2-mnemonic.js",
@@ -62,8 +63,7 @@
       "js/ledger-compat/hd-fee-bump.js",
       "js/ledger-compat/hd-discovery.js",
       "js/ledger-compat/hd-bootstrap.js",
-      "js/ledger-compat/app.js",
-      "js/vault-secret-chain.js"
+      "js/ledger-compat/app.js"
 ];
     let nativeLedgerLoad = null;
     window.stellarVaultNativeRuntime = Object.freeze({
@@ -83,6 +83,12 @@
           return true;
         })();
         return nativeLedgerLoad;
+      },
+      inspectSecret() {
+        const sdk = window.StellarSdk;
+        return typeof sdk?.Keypair?.fromSecret === 'function' &&
+          typeof sdk?.StrKey?.isValidEd25519SecretSeed === 'function' &&
+          typeof window.stellarVaultSecretChain?.inspect === 'function';
       },
       async inspect() {
         const sdk = window.StellarSdk;
