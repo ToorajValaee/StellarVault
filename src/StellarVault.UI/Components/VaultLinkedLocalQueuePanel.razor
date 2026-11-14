@@ -231,7 +231,11 @@
                         <div class="sv-secret-workspace-actions" @key="draft.MutationId">
                             <span><strong>@draft.Title</strong> — @(draft.IsFolder ? "Folder" : "Record")
                                 · @draft.State
-                                @if (draft.IsCorrupt) { <em>Unreadable draft</em> }
+                                @if (draft.IsJournal)
+                                {
+                                    <em>Capacity transaction journal — do not retry an unresolved entry</em>
+                                }
+                                else if (draft.IsCorrupt) { <em>Unreadable draft</em> }
                             </span>
                             @if (draft.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
                             {
@@ -239,7 +243,8 @@
                                         disabled="@(_busy || !Ledger.IsConnected)"
                                         @onclick="() => InspectUnresolvedAsync(draft.MutationId)">Assess unresolved (read-only)</button>
                             }
-                            @if (draft.State == VaultSyncState.Pending && !draft.IsCorrupt)
+                            @if (draft.State == VaultSyncState.Pending &&
+                                 !draft.IsCorrupt && !draft.IsJournal)
                             {
                                 <button type="button" class="pixel-button compact"
                                         disabled="@(_busy || _review is not null)"
