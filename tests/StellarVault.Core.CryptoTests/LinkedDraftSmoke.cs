@@ -232,6 +232,19 @@ internal static class LinkedDraftSmoke
             var review = await publisher.PrepareAsync(staged.MutationId);
             Require(review.Quote.Kind == (deleting ? "delete" : "update"),
                 "Wrong S-key ledger transaction kind was quoted for revision-pinned mutation.");
+            ledger.BumpRemoteRevision(id);
+            await MustRejectAsync(() => publisher.SubmitAsync(review.Quote, true),
+                "Remote manifest changed after the approved quote but before durable reservation.");
+            Require(ledger.Submissions == 0 &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == staged.MutationId)
+                        .State == VaultSyncState.Pending,
+                "Stale last-mile approval was broadcast or removed a still-pending draft.");
+            await drafts.DiscardAsync(staged.MutationId);
+            revision = (await ledger.ReadRecordRevisionAsync(id))!;
+            staged = deleting
+                ? await drafts.StageDeleteAsync(id, revision)
+                : await drafts.StageUpdateAsync(id, updated, revision);
+            review = await publisher.PrepareAsync(staged.MutationId);
             var transaction = await publisher.SubmitAsync(review.Quote, true);
             Require(transaction.Length == 64 && ledger.Submissions == 1 &&
                     (await drafts.ListAsync()).Single(x => x.MutationId == staged.MutationId)
