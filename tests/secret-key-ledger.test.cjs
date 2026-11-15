@@ -606,7 +606,7 @@ test('linked expansion preflight cancellation is structurally distinct from tran
   const ui=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.UI','Components',
     'VaultSecretKeyWorkspace.razor'),'utf8');
   const begin=expansion.indexOf('catch (Exception ex)');
-  const submit=expansion.indexOf('var hash = await ledger.SubmitApprovedAsync');
+  const submit=expansion.indexOf('hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);');
   assert.ok(begin>0 && submit>begin,'Preflight error must precede transport');
   assert.match(expansion,/VaultLinkedExpansionPreflightException/);
   assert.match(expansion,/await TryCancelUnsubmittedAsync\(pending\.Quote\.QuoteId\)/);
