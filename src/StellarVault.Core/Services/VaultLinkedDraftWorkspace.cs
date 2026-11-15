@@ -157,6 +157,122 @@ public sealed class VaultLinkedDraftWorkspace(
     }
 
     /// <summary>
+    /// Stage an existing remote S-key record update with the exact original
+    /// manifest revision. No signing/network mutations occur here.
+    /// </summary>
+    public Task<DraftItem> StageUpdateAsync(string entityId,
+        LedgerRecordDraft draft, string expectedRemoteRevision,
+        CancellationToken ct = default) =>
+        StageRemoteMutationAsync(entityId, draft, expectedRemoteRevision, false, ct);
+
+    public Task<DraftItem> StageDeleteAsync(string entityId,
+        string expectedRemoteRevision, CancellationToken ct = default) =>
+        StageRemoteMutationAsync(entityId, null, expectedRemoteRevision, true, ct);
+
+    private async Task<DraftItem> StageRemoteMutationAsync(string entityId,
+        LedgerRecordDraft? proposed, string expectedRevision, bool delete,
+        CancellationToken ct)
+    {
+        if (entityId is not { Length: 16 } ||
+            !entityId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+            !IsManifestRevision(expectedRevision))
+            throw new ArgumentException("A valid remote S-key record revision is required.");
+        if (ledger is not IStellarSecretKeyRecordRevisionReader revisionReader)
+            throw new NotSupportedException("This S-key host cannot verify remote revision identity.");
+        var context = RequireScope();
+        if (keys.IsOfflineOnly || !keys.CanPublish)
+            throw new InvalidOperationException(
+                "An online matching S-key signer is required to capture the existing record revision.");
+
+        var all = await ReadEntriesAsync(context, ct);
+        byte[]? payload = null;
+        try
+        {
+            if (all.Any(x => x.EntityId == entityId &&
+                x.State is not (VaultSyncState.Confirmed or VaultSyncState.Failed)) ||
+                all.Any(x => x.State is VaultSyncState.Uncertain or
+                    VaultSyncState.Submitting or VaultSyncState.Conflict ||
+                    (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                     x.State != VaultSyncState.Confirmed)))
+                throw new InvalidOperationException(
+                    "An unresolved or overlapping S-key mutation must be reconciled first.");
+            var remote = await ledger.ReadAsync(ct);
+            Check(context);
+            var original = remote.SingleOrDefault(x => x.Id == entityId)
+                ?? throw new InvalidOperationException("Published record no longer exists.");
+            var currentRevision = await revisionReader.ReadRecordRevisionAsync(entityId, ct);
+            Check(context);
+            if (currentRevision != expectedRevision)
+                throw new InvalidOperationException(
+                    "Published record changed since it was opened. Reload before editing or deleting.");
+
+            LedgerRecordDraft draft;
+            VaultMutationKind kind;
+            if (delete)
+            {
+                if (remote.Any(x => x.FolderId == entityId))
+                    throw new InvalidOperationException(
+                        "Delete the published child records and folders before deleting their parent.");
+                draft = new LedgerRecordDraft(original.Title, original.Content,
+                    original.FolderId, original.Tags, original.IsFolder,
+                    original.UserName, original.Url, original.Notes);
+                kind = original.IsFolder
+                    ? VaultMutationKind.DeleteFolder : VaultMutationKind.DeleteRecord;
+            }
+            else
+            {
+                draft = proposed ?? throw new ArgumentNullException(nameof(proposed));
+                ValidateDraft(draft);
+                if (draft.IsFolder != original.IsFolder)
+                    throw new InvalidOperationException("Record type cannot change during an update.");
+                if (draft.FolderId == entityId ||
+                    draft.FolderId is { Length: > 0 } parent &&
+                    !remote.Any(x => x.Id == parent && x.IsFolder))
+                    throw new InvalidOperationException("Updated record parent must be a published folder.");
+                if (original.IsFolder && original.FolderId != draft.FolderId &&
+                    remote.Any(x => x.FolderId == entityId) &&
+                    draft.FolderId is not null)
+                    throw new InvalidOperationException(
+                        "Move a folder with published children only through an independently verified tree update.");
+                kind = original.IsFolder
+                    ? VaultMutationKind.UpdateFolder : VaultMutationKind.UpdateRecord;
+            }
+            payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+            var mutation = VaultPendingMutation.Create(context.Root,
+                VaultLinkedQueueStorageScope.FromNetworkScope(context.Scope),
+                kind, entityId, payload, expectedRemoteVersion: expectedRevision)
+                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+            try
+            {
+                Check(context);
+                if (!await store.AddAsync(mutation, ct))
+                    throw new InvalidOperationException("Encrypted mutation was changed concurrently.");
+                return new(mutation.Id, entityId, original.IsFolder, draft.Title,
+                    draft.FolderId, mutation.State, mutation.CreatedUtc, false);
+            }
+            finally { CryptographicOperations.ZeroMemory(mutation.EncryptedPayload); }
+        }
+        finally
+        {
+            if (payload is not null) CryptographicOperations.ZeroMemory(payload);
+            ClearEntries(all);
+        }
+    }
+
+    private static bool IsManifestRevision(string? value)
+    {
+        if (value is not { Length: 64 }) return false;
+        try
+        {
+            var bytes = Convert.FromBase64String(value);
+            try { return bytes.Length == 47 && bytes[0] == 1 &&
+                         Convert.ToBase64String(bytes) == value; }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }
+        catch (FormatException) { return false; }
+    }
+
+    /// <summary>
     /// Explicit user action to decrypt one unpublished draft for editing.
     /// This never alters the queue or supplies signing authorization.
     /// </summary>
