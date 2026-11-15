@@ -1,8 +1,10 @@
 @using Microsoft.Extensions.Logging
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
+@using System.IO.Pipelines
 @using StellarVault.Core.Services
 @inject VaultBinaryWorkspace Files
+@inject IVaultNativeFileAccess NativeFiles
 @inject VaultRecordWorkspace Records
 @inject IJSRuntime JS
 @inject Microsoft.Extensions.Logging.ILogger<VaultBinaryFilesView> Logger
@@ -32,6 +34,41 @@
             <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div>
         }
     </div>
+    <div class="terminal-panel">
+        <div class="form-section-title"><span>02</span> ENCRYPTED FILES</div>
+        <button type="button" class="pixel-button compact" disabled="@_busy"
+                @onclick="RefreshFilesAsync">Refresh file list</button>
+        @if (_files is not null)
+        {
+            @foreach (var file in _files)
+            {
+                <button type="button" class="pixel-button compact"
+                        disabled="@_busy" @onclick="() => SelectStoredFile(file.Name)">
+                    @file.Name
+                </button>
+            }
+        }
+        @if (!string.IsNullOrEmpty(_openName))
+        {
+            <p class="advanced-help">Selected: @_openName</p>
+            <button type="button" class="pixel-button compact" disabled="@_busy"
+                    @onclick="PrepareDownloadAsync">Verify encrypted file</button>
+            @if (_verifiedVersion is not null)
+            {
+                <button type="button" class="pixel-button primary" disabled="@_busy"
+                        @onclick="SaveVerifiedFileAsync">Save verified file…</button>
+            }
+            <button type="button" class="pixel-button compact" disabled="@_busy"
+                    @onclick="() => _confirmRemoval = true">Delete from catalog…</button>
+            @if (_confirmRemoval)
+            {
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="RemoveAsync">Confirm removal</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="() => _confirmRemoval = false">Cancel</button>
+            }
+        }
+    </div>
 
 </section>
 
@@ -45,6 +82,7 @@
     {
         _openName = name;
         _confirmRemoval = false;
+        _verifiedVersion = null;
     }
 
     private async Task RefreshFilesAsync()
@@ -117,36 +155,87 @@
             _status = "File save failed unexpectedly. No successful save was confirmed; inspect the application logs before retrying.";
         }
         finally { _busy = false; }
-
+        if (_status == "Encrypted file saved.")
+            await RefreshFilesAsync();
     }
 
-    private async Task DownloadAsync()
+    private VaultRecordPointer? _verifiedVersion;
+
+    private async Task PrepareDownloadAsync()
     {
-        if (_busy) return;
+        if (_busy || string.IsNullOrWhiteSpace(_openName)) return;
         _busy = true;
-        _loadingMessage = "DECRYPTING AND DOWNLOADING FILE...";
+        _verifiedVersion = null;
+        _loadingMessage = "VERIFYING ENCRYPTED FILE...";
         try
         {
-            using var record = await Files.OpenAsync(_openName);
-            if (record is null) { _status = "File record not found."; return; }
-             byte[] temporaryDownload = record.Content.ToArray();
-            try
+            var version = await Files.CopyVerifiedToAsync(_openName, Stream.Null);
+            if (version is null)
             {
-                await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, temporaryDownload);
+                _status = "Selected file is no longer present.";
+                return;
             }
-            finally
-            {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(temporaryDownload);
-            }
-            _status = "Decrypted file downloaded.";
+            _verifiedVersion = version;
+            _status = "File integrity verified. Select Save verified file to choose an export destination.";
         }
-        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
-                                    or IOException or System.Security.Cryptography.CryptographicException
-                                    or JSException or OperationCanceledException)
+        catch (Exception ex)
         {
-            _status = "File could not be downloaded or authenticated.";
+            Logger.LogWarning(ex, "Encrypted file verification failed");
+            _status = "File verification failed. The file was not exported.";
         }
         finally { _busy = false; }
+    }
+
+    private async Task SaveVerifiedFileAsync()
+    {
+        if (_busy || _verifiedVersion is not { } expected ||
+            string.IsNullOrWhiteSpace(_openName)) return;
+        var name = _openName;
+        _verifiedVersion = null;
+        _busy = true;
+        _loadingMessage = "STREAMING VERIFIED FILE...";
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 256 * 1024,
+            resumeWriterThreshold: 128 * 1024));
+        using var cancellation = new CancellationTokenSource();
+        var producer = Task.Run(async () =>
+        {
+            await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+            try
+            {
+                var observed = await Files.StreamVerifiedToAsync(
+                    name, writer, cancellation.Token);
+                if (observed != expected)
+                    throw new InvalidOperationException("File changed after verification.");
+                await writer.FlushAsync(cancellation.Token);
+                await pipe.Writer.CompleteAsync();
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex);
+                throw;
+            }
+        });
+        try
+        {
+            await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+            if (!await NativeFiles.SaveAsync(name, reader))
+                throw new IOException("File export was cancelled or failed.");
+            await producer;
+            _status = "Verified file exported.";
+        }
+        catch (Exception ex)
+        {
+            cancellation.Cancel();
+            try { await producer; } catch { /* Keep original export failure. */ }
+            Logger.LogWarning(ex, "Encrypted streaming file export failed");
+            _status = "File export failed or was cancelled. Verify again before retrying.";
+        }
+        finally
+        {
+            await pipe.Reader.CompleteAsync();
+            _busy = false;
+        }
     }
 
     private async Task RemoveAsync()
@@ -181,5 +270,10 @@
             await RefreshFilesAsync();
     }
 
-    public void Dispose() => _file = null;
+    public void Dispose()
+    {
+        _file = null;
+        _verifiedVersion = null;
+        _files = null;
+    }
 }
