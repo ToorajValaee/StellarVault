@@ -251,6 +251,23 @@ public sealed class VaultLinkedDraftWorkspace(
                 draft = new LedgerRecordDraft(original.Title, original.Content,
                     original.FolderId, original.Tags, original.IsFolder,
                     original.UserName, original.Url, original.Notes);
+                // A deletion is immutable once queued. Reject unsupported or
+                // malformed file formats BEFORE sealing the original snapshot,
+                // otherwise later queue inspection would render a durable
+                // Pending entry corrupt with no safe publication path.
+                if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
+                        StringComparison.Ordinal))
+                {
+                    if (!VaultLinkedSingleFilePolicy.IsSupportedDraft(draft))
+                        throw new InvalidDataException(
+                            "Cannot stage deletion of a malformed or legacy unchecksummed S-key file.");
+                }
+                else if (draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix,
+                             StringComparison.Ordinal) ||
+                         draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
+                             StringComparison.Ordinal))
+                    throw new NotSupportedException(
+                        "Multipart S-key file deletion requires the dedicated verified multipart workflow.");
                 kind = original.IsFolder
                     ? VaultMutationKind.DeleteFolder : VaultMutationKind.DeleteRecord;
             }
