@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace StellarVault.Core.Services;
 
 /// <summary>
-/// A deliberately manual linked S-key create-only publisher. Reuses the
+/// A deliberately manual linked S-key record mutation publisher. Reuses the
 /// existing encrypted queue CAS, S-key signer, and fresh Stellar fee quote.
 /// A durable Submitting reservation is written BEFORE broadcasting. If the
 /// transport or verification fails, the entry remains Uncertain and MUST NOT
@@ -84,16 +84,19 @@ public sealed class VaultLinkedDraftPublication(
 
     private static LedgerRecordDraft Decode(VaultPendingMutation item)
     {
-        if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+        if (item.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+            VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) ||
             item.State != VaultSyncState.Pending || item.TransactionHash is not null ||
             item.EntityId is not { Length: 16 } || !item.EntityId.All(Uri.IsHexDigit) ||
             item.DependsOn is null || item.DependsOn.Length > 1)
             throw new InvalidOperationException(
-                "Only never-submitted linked record/folder creations can be reviewed.");
+                "Only never-submitted linked record/folder mutations can be reviewed.");
 
         var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
             ?? throw new InvalidDataException("Encrypted draft is missing.");
-        if (draft.IsFolder != (item.Kind == VaultMutationKind.CreateFolder) ||
+        if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
+            VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder) ||
             string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Length > 256 ||
             string.IsNullOrEmpty(draft.Content) ||
             draft.Tags is { Length: > 24 } ||
@@ -102,16 +105,34 @@ public sealed class VaultLinkedDraftPublication(
         return draft;
     }
 
+    private static bool ExistingMutation(VaultMutationKind kind) =>
+        kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder;
+
+    private static bool Deletion(VaultMutationKind kind) =>
+        kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder;
+
+    private static string QuoteKind(VaultMutationKind kind) =>
+        Deletion(kind) ? "delete" : ExistingMutation(kind) ? "update" : "create";
+
+    private static bool SameRecord(LedgerRecordItem found, LedgerRecordDraft draft) =>
+        found.IsFolder == draft.IsFolder &&
+        found.Title == draft.Title && found.Content == draft.Content &&
+        found.FolderId == draft.FolderId &&
+        (found.UserName ?? "") == (draft.UserName ?? "") &&
+        (found.Url ?? "") == (draft.Url ?? "") &&
+        (found.Notes ?? "") == (draft.Notes ?? "") &&
+        (found.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal);
+
     private static void CheckRemote(VaultPendingMutation item, LedgerRecordDraft draft,
         IReadOnlyList<VaultPendingMutation> local,
         IReadOnlyList<LedgerRecordItem> remote)
     {
         if (local.Any(x => x.Id != item.Id &&
-                x.EntityId == item.EntityId &&
-                x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)) ||
-            remote.Any(x => x.Id == item.EntityId))
+            x.EntityId == item.EntityId &&
+            x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)))
             throw new InvalidOperationException(
-                "The target record already exists locally or on Stellar.");
+                "Overlapping encrypted mutations target the same linked record.");
 
         if (local.Any(x => x.Id != item.Id &&
             ((x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain or VaultSyncState.Conflict) ||
@@ -120,19 +141,58 @@ public sealed class VaultLinkedDraftPublication(
             throw new InvalidOperationException(
                 "An earlier local submission needs reconciliation before publishing more drafts.");
 
-        // Pending local parents cannot be published in the same transaction.
-        // The existing Core dependency planner still controls local ordering.
-        var issues = VaultQueuedCreatePolicy.Problems(item, local);
-        if (issues.Length != 0)
-            throw new InvalidOperationException(
-                "Linked draft is not ready: " + string.Join(", ", issues));
-        if (item.DependsOn.Any(id =>
-            !local.Any(x => x.Id == id && x.State == VaultSyncState.Confirmed)))
-            throw new InvalidOperationException(
-                "Publish and verify the parent folder before publishing its children.");
+        if (ExistingMutation(item.Kind))
+        {
+            if (item.ExpectedRemoteVersion is not { Length: 64 } ||
+                remote.SingleOrDefault(x => x.Id == item.EntityId) is not { } old ||
+                old.IsFolder != draft.IsFolder)
+                throw new InvalidOperationException(
+                    "Linked mutation lost its expected published record or version.");
+            if (Deletion(item.Kind))
+            {
+                if (!SameRecord(old, draft))
+                    throw new InvalidOperationException(
+                        "The published record differs from the snapshot approved for deletion.");
+                if (remote.Any(x => x.FolderId == item.EntityId))
+                    throw new InvalidOperationException(
+                        "Delete published child records before deleting a folder.");
+            }
+            else if (draft.FolderId == item.EntityId)
+                throw new InvalidOperationException("Record cannot be its own folder parent.");
+        }
+        else if (remote.Any(x => x.Id == item.EntityId))
+            throw new InvalidOperationException("Target record already exists on Stellar.");
+
+        if (!ExistingMutation(item.Kind))
+        {
+            var issues = VaultQueuedCreatePolicy.Problems(item, local);
+            if (issues.Length != 0)
+                throw new InvalidOperationException(
+                    "Linked draft is not ready: " + string.Join(", ", issues));
+            if (item.DependsOn.Any(id =>
+                !local.Any(x => x.Id == id && x.State == VaultSyncState.Confirmed)))
+                throw new InvalidOperationException(
+                    "Publish and verify the parent folder before publishing its children.");
+        }
+        else if (item.DependsOn.Length != 0)
+            throw new InvalidOperationException("Remote mutations cannot depend on unpublished parents.");
+
         if (draft.FolderId is { Length: > 0 } parent &&
             !remote.Any(x => x.Id == parent && x.IsFolder))
             throw new InvalidOperationException("Parent folder is not published on Stellar.");
+    }
+
+    private async Task RequireRemoteVersionAsync(VaultPendingMutation item,
+        CancellationToken ct)
+    {
+        if (!ExistingMutation(item.Kind)) return;
+        if (ledger is not IStellarSecretKeyRecordRevisionReader reader)
+            throw new NotSupportedException(
+                "This linked signer cannot verify stale published record revisions.");
+        var now = await reader.ReadRecordRevisionAsync(item.EntityId, ct);
+        if (now is null || now != item.ExpectedRemoteVersion)
+            throw new InvalidOperationException(
+                "Linked remote manifest changed since staging. Never overwrite or delete a stale record.");
     }
 
     private async Task CancelUnsafeAsync()
@@ -162,14 +222,22 @@ public sealed class VaultLinkedDraftPublication(
                 var remote = await ledger.ReadAsync(ct);
                 RequireSameScope(root, scope, epoch);
                 CheckRemote(item, draft, all, remote);
-                var quote = await ledger.QuoteCreateAsync(item.EntityId, draft, ct);
+                await RequireRemoteVersionAsync(item, ct);
+                RequireSameScope(root, scope, epoch);
+                var kind = QuoteKind(item.Kind);
+                var quote = kind switch
+                {
+                    "update" => await ledger.QuoteUpdateAsync(item.EntityId, draft, ct),
+                    "delete" => await ledger.QuoteDeleteAsync(item.EntityId, ct),
+                    _ => await ledger.QuoteCreateAsync(item.EntityId, draft, ct)
+                };
                 try
                 {
-                    if (quote.Kind != "create" || quote.CreatesChildNode ||
+                    if (quote.Kind != kind || quote.CreatesChildNode ||
                         quote.TargetAccountId is not { Length: 56 } ||
                         quote.QuoteId is not { Length: 32 } ||
                         !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
-                        throw new InvalidDataException("Invalid linked create quote.");
+                        throw new InvalidDataException("Invalid linked record mutation quote.");
                     RequireSameScope(root, scope, epoch);
                     _pending = new(item.Id, root, scope, epoch,
                         Fingerprint(item), quote, DateTimeOffset.UtcNow);
@@ -232,6 +300,8 @@ public sealed class VaultLinkedDraftPublication(
                     var remote = await ledger.ReadAsync(ct);
                     RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
                     CheckRemote(original, draft, all, remote);
+                    await RequireRemoteVersionAsync(original, ct);
+                    RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
                     ct.ThrowIfCancellationRequested();
 
                     // After this successful CAS, ANY transport or read failure is
@@ -298,7 +368,7 @@ public sealed class VaultLinkedDraftPublication(
                         // network, record, destination and session epoch.
                         hash = submission.TransactionHash ?? hash ??
                             await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
-                                ledger, pending.AccountId, "create",
+                                ledger, pending.AccountId, QuoteKind(original.Kind),
                                 pending.Quote.TargetAccountId, original.EntityId,
                                 ledger.ConnectedNetworkPassphrase ?? "",
                                 pending.Epoch);
