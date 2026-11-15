@@ -420,10 +420,12 @@ internal static class LinkedDraftSmoke
     }
 
     private sealed class FakeLinkedLedger :
-        IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission
+        IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
+        IStellarSecretKeyRecordRevisionReader
     {
         public const string RootAddress = Root;
         private readonly List<LedgerRecordItem> _items = [];
+        private readonly Dictionary<string, int> _revisions = new(StringComparer.Ordinal);
         private string? _quotedId;
         private LedgerRecordDraft? _quotedDraft;
         private string? _quoteId;
@@ -451,6 +453,31 @@ internal static class LinkedDraftSmoke
                 : Task.FromException<IReadOnlyList<LedgerRecordItem>>(
                     new IOException("Horizon unavailable: offline test must not read Stellar."));
 
+        public void SeedRecord(string recordId, LedgerRecordDraft draft)
+        {
+            _items.Add(new LedgerRecordItem(recordId, draft.Title, draft.Content,
+                draft.FolderId, draft.Tags, draft.IsFolder, draft.UserName, draft.Url, draft.Notes));
+            _revisions[recordId] = 1;
+        }
+
+        public void BumpRemoteRevision(string recordId)
+        {
+            if (_revisions.TryGetValue(recordId, out var current))
+                _revisions[recordId] = current + 1;
+        }
+
+        public Task<string?> ReadRecordRevisionAsync(string recordId,
+            CancellationToken ct = default)
+        {
+            if (!_revisions.TryGetValue(recordId, out var generation))
+                return Task.FromResult<string?>(null);
+            var manifest = new byte[47];
+            manifest[0] = 1;
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(
+                manifest.AsSpan(9, 4), generation);
+            return Task.FromResult<string?>(Convert.ToBase64String(manifest));
+        }
+
         public Task<LedgerAccountInfo> InspectAccountInfoAsync(
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new LedgerAccountInfo(Root, Tail, AccountCount,
@@ -471,11 +498,27 @@ internal static class LinkedDraftSmoke
         }
 
         public Task<VaultSecretLedgerQuote> QuoteUpdateAsync(string recordId,
-            LedgerRecordDraft draft, CancellationToken cancellationToken = default) =>
-            Task.FromException<VaultSecretLedgerQuote>(new NotSupportedException());
+            LedgerRecordDraft draft, CancellationToken cancellationToken = default)
+        {
+            _quotedId = recordId;
+            _quotedDraft = draft;
+            _quoteKind = "update";
+            _quoteId = Guid.NewGuid().ToString("N");
+            return Task.FromResult(new VaultSecretLedgerQuote(
+                _quoteId, "update", 3, 1, "0.0000300", "0.5000000", "0.0000000",
+                false, Root, "0.0000000"));
+        }
         public Task<VaultSecretLedgerQuote> QuoteDeleteAsync(string recordId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromException<VaultSecretLedgerQuote>(new NotSupportedException());
+            CancellationToken cancellationToken = default)
+        {
+            _quotedId = recordId;
+            _quotedDraft = null;
+            _quoteKind = "delete";
+            _quoteId = Guid.NewGuid().ToString("N");
+            return Task.FromResult(new VaultSecretLedgerQuote(
+                _quoteId, "delete", 2, 1, "0.0000200", "0.0000000", "-0.5000000",
+                false, Root, "0.0000000"));
+        }
         public Task<VaultSecretLedgerQuote> QuoteExtendChainAsync(
             CancellationToken cancellationToken = default)
         {
@@ -531,10 +574,19 @@ internal static class LinkedDraftSmoke
                 AccountCount++;
                 return Task.FromResult(Submissions.ToString("x64"));
             }
+            if (_quoteKind == "delete")
+            {
+                _items.RemoveAll(x => x.Id == _quotedId);
+                _revisions.Remove(_quotedId!);
+                return Task.FromResult(Submissions.ToString("x64"));
+            }
+            if (_quoteKind == "update")
+                _items.RemoveAll(x => x.Id == _quotedId);
             var draft = _quotedDraft!;
             _items.Add(new LedgerRecordItem(
                 _quotedId, draft.Title, draft.Content, draft.FolderId,
                 draft.Tags, draft.IsFolder, draft.UserName, draft.Url, draft.Notes));
+            _revisions[_quotedId!] = _revisions.GetValueOrDefault(_quotedId!) + 1;
             return Task.FromResult(Submissions.ToString("x64"));
         }
 
