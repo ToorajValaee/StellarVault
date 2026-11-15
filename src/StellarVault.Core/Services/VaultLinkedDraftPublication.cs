@@ -166,7 +166,7 @@ public sealed class VaultLinkedDraftPublication(
 
         if (!ExistingMutation(item.Kind))
         {
-            var issues = VaultLinkedSingleFilePolicy.Problems(item, local);
+            var issues = VaultLinkedMultipartFilePolicy.Problems(item, local, remote);
             if (issues.Length != 0)
                 throw new InvalidOperationException(
                     "Linked draft is not ready: " + string.Join(", ", issues));
