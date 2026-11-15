@@ -459,74 +459,19 @@ else
         {
     @if (_selected is not null)
     {
-        <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
-            <section class="record-modal terminal-panel sv-record-inspector" role="region"
-                     aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
-                <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
-                     tabindex="0" title="Drag to adjust preview width"></div>
-                <header class="modal-header sv-inspector-heading">
-                    <div class="sv-inspector-title"><span class="sv-inspector-record-icon" aria-hidden="true">▦</span><div><div class="panel-kicker">Record details</div><h2 id="sv-record-title">@_selected.Title</h2><p class="sv-inspector-subtitle">@FolderPath(_selected.FolderId)</p></div></div>
-                    <div class="sv-inspector-tools">
-                        <details class="sv-inspector-more"><summary aria-label="Record actions" title="More actions">⋯</summary>
-                            <div class="sv-inspector-more-menu">
-                                <button type="button" @onclick='() => CopyValueAsync(_selected.Id)'>Copy record ID</button>
-                                @if (!IsLedgerFile(_selected)) { <button type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
-                                @if (!VaultLinkedTreeFilePolicy.IsRootRecord(_selected))
-                                {
-                                    <button class="sv-object-delete" type="button" @onclick="() => SelectDelete(_selected)">Delete</button>
-                                }
-                            </div>
-                        </details>
-                        <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
-                    </div>
-                </header>
-                <nav class="sv-inspector-tabs" aria-label="Record preview tabs">
-                    <button type="button" class="@(_recordInspectorTab == "details" ? "selected" : "")"
-                            aria-pressed="@(_recordInspectorTab == "details")"
-                            @onclick='() => _recordInspectorTab = "details"'>▤ Details</button>
-                    <button type="button" class="@(_recordInspectorTab == "activity" ? "selected" : "")"
-                            aria-pressed="@(_recordInspectorTab == "activity")"
-                            @onclick='() => _recordInspectorTab = "activity"'>◷ Activity</button>
-                </nav>
-                @if (_recordInspectorTab == "activity")
-                {
-                    <div class="sv-record-activity">
-                        <h3>Record information</h3>
-                        <dl><dt>Storage</dt><dd>Stellar ledger</dd>
-                            <dt>Type</dt><dd>@(IsLedgerFile(_selected) ? "Encrypted file" : "Secure record")</dd>
-                            <dt>Folder</dt><dd>@FolderPath(_selected.FolderId)</dd>
-                            <dt>Record ID</dt><dd class="sv-activity-id">@_selected.Id</dd></dl>
-                        <p>Historical activity is not available from the current record reader. No activity timestamps are inferred.</p>
-                    </div>
-                }
-                else
-                {
-                <div class="sv-inspector-section-label">Details</div>
-                @if (IsLedgerFile(_selected))
-                {
-                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in verified Stellar ledger nodes.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">VERIFY DECRYPTED FILE</button>
-                        @if (_verifiedTreeDownload is not null)
-                        {
-                            <button class="pixel-button primary" type="button" @onclick="SaveVerifiedTreeFileAsync">SAVE VERIFIED FILE…</button>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }
-                    </div>
-                }
-                else
-                {
-                <div class="data-field"><span class="field-label">Username</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
-                <div class="data-field secret-field"><span class="field-label">Password / secret</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
-                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">Website</span><div class="field-value-row"><code>@_selected.Url</code><div class="inline-actions">@if (SafeRecordUrl(_selected.Url) is string safeUrl) { <a class="mini-button" href="@safeUrl" target="_blank" rel="noopener noreferrer" aria-label="Open website">Open</a> }<button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>Copy</button></div></div></div> }
-                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">Notes</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
-                @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
-                }
-                }
-                <div class="modal-action-row record-actions">
-                    @if (!IsLedgerFile(_selected)) { <button class="pixel-button primary" type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
-                    <button class="pixel-button danger" @onclick="() => SelectDelete(_selected)">DELETE</button>
-                </div>
-            </section>
-        </div>
+        <VaultRecordInspector @key="_selected.Id"
+                              Item="_selected"
+                              FolderPath="@FolderPath(_selected.FolderId)"
+                              CanEdit="@(!IsLedgerFile(_selected))"
+                              CanDelete="@(!IsLedgerFile(_selected))"
+                              CanSaveVerifiedFile="@(_verifiedTreeDownload is not null)"
+                              FileStatus="_fileDownloadStatus"
+                              OnCopy="CopyValueAsync"
+                              OnClose="CloseRecord"
+                              OnEdit="EditSelectedPublishedRecord"
+                              OnDelete="DeleteSelectedPublishedRecordAsync"
+                              OnVerifyFile="DownloadLedgerFileAsync"
+                              OnSaveVerifiedFile="SaveVerifiedTreeFileAsync" />
     }
         }
     </div>
@@ -757,6 +702,16 @@ else
     private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
     private void SelectFolderFromTree(string? id) => OpenFolder(id ?? string.Empty);
+    private void EditSelectedPublishedRecord()
+    {
+        if (_selected is { } item && !IsLedgerFile(item))
+            EditPublishedRecordFromRow(item);
+    }
+
+    private Task DeleteSelectedPublishedRecordAsync() =>
+        _selected is { } item && !IsLedgerFile(item)
+            ? SelectDelete(item) : Task.CompletedTask;
+
     private void EditPublishedRecordFromRow(LedgerRecordItem item) =>
         OpenEditor(item.IsFolder ? "folder" : "record", item.Id);
 
