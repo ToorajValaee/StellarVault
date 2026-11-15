@@ -1432,7 +1432,11 @@ test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed revi
   assert.match(createPolicy,/file-protocol-needs-staged-review/);
   assert.match(workspace,/StageSmallFileAsync\(/);
   assert.match(workspace,/CreateCoreAsync\(draft, allowSingleFile: true, ct\)/);
-  assert.match(publisher,/VaultLinkedSingleFilePolicy\.Problems/);
+  // The publication gate validates SVFILE1 through the multipart policy's
+  // delegation to the single-file policy, rather than calling it directly.
+  assert.match(publisher,/VaultLinkedMultipartFilePolicy\.Problems\(item, local, remote\)/);
+  const multipartPolicy=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');
+  assert.match(multipartPolicy,/VaultLinkedSingleFilePolicy\.Problems\(mutation, all\)/);
   assert.match(panel,/StageLinkedSmallFileAsync/);
   assert.match(panel,/DownloadLinkedSmallFileAsync/);
   assert.match(panel,/CryptographicOperations\.ZeroMemory\(contents\)/);
