@@ -129,6 +129,13 @@ public sealed class VaultLinkedDraftRecoveryReview(
             return new(item.Id, item.EntityId, item.State, matches, receipt,
                 item.Kind == VaultMutationKind.ExtendLinkedChain
                     ? "Current linked tail inspection is advisory only. A matching or different tail does not prove the exact historical account-creation transaction, signer authorization, or permission to retry."
+                    : item.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                        ? matches switch
+                        {
+                            true => "The record is currently absent. This does NOT prove the exact historical deletion transaction or authorize queue release.",
+                            false => "The record is still visible. Do not retry an unresolved deletion.",
+                            _ => "Current deletion outcome is unknown. Do not retry."
+                        }
                     : matches switch
                 {
                     true => "A matching record is visible now. This does NOT prove the exact submitted transaction or authorize retry, release or queue confirmation.",
