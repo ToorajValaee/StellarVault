@@ -251,6 +251,27 @@ public sealed class StellarAccountObjectStoreProvider(
         finally { CryptographicOperations.ZeroMemory(snapshot); }
     }
 
+    private sealed class ZeroingReadStream(byte[] plaintext)
+        : MemoryStream(plaintext, writable: false)
+    {
+        private byte[]? _data = plaintext;
+
+        protected override void Dispose(bool disposing)
+        {
+            if (_data is { } buffer)
+                CryptographicOperations.ZeroMemory(buffer);
+            _data = null;
+            base.Dispose(disposing);
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     public async Task<Stream> OpenReadAsync(
         ObjectStoreScope scope, string objectId, CancellationToken ct = default)
     {
@@ -258,7 +279,7 @@ public sealed class StellarAccountObjectStoreProvider(
             ?? throw new FileNotFoundException("Stellar record not found.");
         // Caller owns plaintext and must dispose the stream. This simple text
         // reader is not the streaming SVTREE3 file reader.
-        return new MemoryStream(Encoding.UTF8.GetBytes(record.Content), writable: false);
+        return new ZeroingReadStream(Encoding.UTF8.GetBytes(record.Content));
     }
 
     public Task<ObjectMutationIntent> PrepareDeleteAsync(
