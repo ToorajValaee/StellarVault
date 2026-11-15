@@ -80,6 +80,7 @@ builder.Services.AddScoped<VaultLinkedAccountExpansion>();
 builder.Services.AddScoped<VaultStellarDraftClassification>();
 builder.Services.AddScoped<VaultLinkedRecordWritePlanner>();
 builder.Services.AddScoped<HorizonVaultLinkedRecordOperationInspector>();
+builder.Services.AddScoped<HorizonVaultLinkedExpansionOperationInspector>();
 builder.Services.AddScoped<IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence>();
 builder.Services.AddScoped<VaultLinkedRecoveryInspector>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
