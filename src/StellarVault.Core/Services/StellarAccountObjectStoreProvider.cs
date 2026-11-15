@@ -38,9 +38,9 @@ public sealed class StellarAccountObjectStoreProvider(
             throw new NotSupportedException("Unsupported Stellar object storage strategy.");
         StellarAccountAddress.Validate(scope.StoreId);
         var network = networks.CredentialKey(scope.StoreId);
-        if (scope.NetworkId != network)
+        if (scope.NetworkId != networks.Network)
             throw new UnauthorizedAccessException(
-                "The selected Stellar account/network does not match the object store.");
+                "The selected Stellar network does not match the object store.");
         if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
         {
             if (requireLedger && (!linkedLedger.IsConnected ||
@@ -238,7 +238,7 @@ public sealed class StellarAccountObjectStoreProvider(
             return new StoredObject(
                 new ObjectDescriptor(record.Id,
                     record.IsFolder ? VaultRecordTypeFactory.Folder : VaultRecordTypeFactory.Credential,
-                    record.Title, "text/plain", record.FolderId),
+                    record.Title, record.IsFolder ? null : "text/plain", record.FolderId),
                 "snapshot-sha256:" + fingerprint,
                 Encoding.UTF8.GetByteCount(record.Content), fingerprint);
         }
