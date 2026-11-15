@@ -396,28 +396,13 @@ else
             {
                 @foreach (var item in Filtered)
                 {
-                    <div class="sv-object-row @(_selected?.Id == item.Id ? "is-selected" : "")">
-                        <button class="record-card sv-modern-record" type="button" @onclick="() => OpenRecord(item)"
-                                aria-label="@($"View {item.Title}")" aria-current="@(_selected?.Id == item.Id ? "true" : null)">
-                            <span class="sv-modern-record-icon" aria-hidden="true">@(IsLedgerFile(item) ? "▤" : "▦")</span>
-                            <span class="record-card-body"><strong>@item.Title</strong><small>@(IsLedgerFile(item) ? "Encrypted file" : "Secure record")</small>
-                            @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
-                            </span>
-                        </button>
-                        <span class="sv-object-type">@(IsLedgerFile(item) ? "File" : "Record")</span>
-                        <span class="sv-object-storage">Stellar</span>
-                        <details class="sv-object-actions">
-                            <summary aria-label="@($"Actions for {item.Title}")" title="More actions">⋯</summary>
-                            <div class="sv-object-menu">
-                                <button type="button" @onclick="() => OpenRecord(item)">View details</button>
-                                @if (!IsLedgerFile(item)) { <button type="button" @onclick='() => OpenEditor("record", item.Id)'>Edit record</button> }
-                                @if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
-                                {
-                                    <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
-                                }
-                            </div>
-                        </details>
-                    </div>
+                    <VaultExplorerItemRow Item="item"
+                                          Selected="@(_selected?.Id == item.Id)"
+                                          CanEdit="@(!IsLedgerFile(item))"
+                                          CanDelete="@(!IsLedgerFile(item))"
+                                          OnOpen="OpenRecord"
+                                          OnEdit="EditPublishedRecordFromRow"
+                                          OnDelete="SelectDelete" />
                 }
             }
         </section>
@@ -761,6 +746,9 @@ else
     private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
     private void SelectFolderFromTree(string? id) => OpenFolder(id ?? string.Empty);
+    private void EditPublishedRecordFromRow(LedgerRecordItem item) =>
+        OpenEditor(item.IsFolder ? "folder" : "record", item.Id);
+
 
     private void ToggleTreeFolder(string id)
     {
