@@ -54,3 +54,8 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Interrupt and reopen the encrypted local queue. Confirm that receipt, matching current record and historical encrypted chunk commitment remain separately labeled **advisory**; no retry or `Confirmed` transition occurs.
 - [ ] Run the new mocked `LinkedRecordHistorySmoke` suite to reject wrong generation, missing, duplicate or reordered chunks, cross-account writes and ciphertext digest mismatches.
 - [ ] Do not open the pilot with real secrets: historical signer authorization, decryption of historical ciphertext to the approved draft and durable quarantine release remain incomplete.
+
+## Historical expansion smoke
+- [ ] Run `LinkedExpansionHistorySmoke` via the .NET Core tests on the exact deployed feature commit.
+- [ ] On disposable Testnet S-key expansion, inspect the successful Horizon transaction for exact child CreateAccount, signer SetOptions, and parent link, including native reserve top-up when the linked tail is not the root.
+- [ ] Reject wrong signer weights, master weight, thresholds, duplicate parent pointer, child destination mismatch, and wrong transaction ID. A read-only match must not unblock the journal.
