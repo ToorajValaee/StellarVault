@@ -106,7 +106,7 @@ public static class VaultQueuedCreatePolicy
         {
             var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
             var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
-            var cursor = edge[0];
+            string? cursor = edge[0];
             while (cursor is not null)
             {
                 if (!seen.Add(cursor))
