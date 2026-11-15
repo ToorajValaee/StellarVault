@@ -1439,5 +1439,10 @@ test('single-record linked files reuse SVFILE1 while HD and multipart file gates
   assert.match(panel,/CryptographicOperations\.ZeroMemory\(decoded\)/);
   assert.match(native,/RunSingleFileLinkedSmokeAsync\(\)/);
   assert.match(native,/VaultLinkedSingleFilePolicy\.Problems\(raw, entries\)/);
+  assert.match(workspace,/item\.Kind is not \(VaultMutationKind\.CreateRecord or\s*VaultMutationKind\.DeleteRecord\)/);
+  assert.match(native,/StageDeleteAsync\(file\.EntityId, originalRevision!\)/);
+  assert.match(native,/deletionEntry\.Kind == VaultMutationKind\.DeleteRecord/);
+  assert.match(native,/drafts\.OpenDraftAsync\(deletion\.MutationId\)/);
+  assert.match(native,/reconciler\.ConfirmVerifiedRecordAsync\(deletion\.MutationId\)/);
   assert.match(native,/StellarLedgerFileProtocol\.DecodeFile/);
 });
