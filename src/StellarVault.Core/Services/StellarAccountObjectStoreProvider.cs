@@ -18,6 +18,8 @@ public sealed class StellarAccountObjectStoreProvider(
     IStellarSecretKeyLedger linkedLedger,
     VaultHybridDraftWorkspace hdDrafts,
     VaultLinkedDraftWorkspace linkedDrafts,
+    VaultSessionManager hdSessions,
+    VaultLinkedQueueKeySession linkedKeys,
     VaultNetworkSelection networks,
     IVaultRecordTypeFactory recordTypes) : IAccountObjectStoreProvider
 {
@@ -60,12 +62,21 @@ public sealed class StellarAccountObjectStoreProvider(
                     throw new UnauthorizedAccessException(
                         "The connected linked signer uses a different Stellar network.");
             }
+            if (!requireLedger && (!linkedKeys.IsUnlocked ||
+                linkedKeys.ActiveRootAccountId != scope.StoreId))
+                throw new UnauthorizedAccessException(
+                    "Unlock the encrypted local queue for this linked account.");
             return new(scope.StoreId, network, scope.AccountStrategyId,
-                linkedLedger.ConnectionEpoch);
+                requireLedger ? linkedLedger.ConnectionEpoch : linkedKeys.UnlockEpoch);
         }
         if (requireLedger && !hdLedger.IsConnected)
             throw new UnauthorizedAccessException("The requested HD ledger is unavailable.");
-        return new(scope.StoreId, network, scope.AccountStrategyId, 0);
+        if (!requireLedger && (!hdSessions.IsUnlocked ||
+            hdSessions.ActiveAccountId != scope.StoreId))
+            throw new UnauthorizedAccessException(
+                "Unlock the encrypted local HD queue for the requested account.");
+        return new(scope.StoreId, network, scope.AccountStrategyId,
+            requireLedger ? 0 : hdSessions.Epoch);
     }
 
     private async Task RequireSameScopeAsync(ObjectStoreScope scope, ScopeCheckpoint before,
