@@ -229,6 +229,65 @@ public static class VaultLinkedTreeFilePolicy
             }
         }
 
+        // A confirmed branch can remain identical while a grandchild leaf
+        // changes on another device. Revalidate every reachable descendant,
+        // not only this parent's immediate children, against one fresh ledger
+        // inventory before approving another network transaction.
+        if (remote is not null && children.Length > 0)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string? CheckDescendant(VaultStreamingFileTree.Reference reference, int depth)
+            {
+                if (depth > 64 || !seen.Add(reference.Id))
+                    return "tree-descendant-cycle-or-reuse";
+                var matches = all.Where(x => x.EntityId == reference.Id &&
+                    x.Kind == VaultMutationKind.CreateRecord &&
+                    x.OriginStrategyId == VaultMutationStrategyPolicy.Linked).ToArray();
+                if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
+                    return "tree-descendant-not-historically-confirmed";
+                LedgerRecordDraft? expected;
+                try { expected = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                    matches[0].EncryptedPayload); }
+                catch (JsonException) { return "tree-descendant-invalid"; }
+                if (expected?.Tags is not { Length: 2 } tags ||
+                    tags[1] != groupTag ||
+                    !TryDecode(expected, out var nodeKind, out var nodeBytes))
+                    return "tree-descendant-invalid";
+                try
+                {
+                    if (!ValidateNode(nodeKind, nodeBytes, out var nested) ||
+                        !string.Equals(Convert.ToHexString(SHA256.HashData(nodeBytes)),
+                            reference.Sha256Hex, StringComparison.OrdinalIgnoreCase))
+                        return "tree-descendant-invalid";
+                    var published = remote.Where(x => x.Id == reference.Id).ToArray();
+                    if (published.Length != 1 ||
+                        published[0].Title != expected.Title ||
+                        published[0].Content != expected.Content ||
+                        published[0].FolderId != expected.FolderId ||
+                        published[0].IsFolder != expected.IsFolder ||
+                        (published[0].UserName ?? "") != (expected.UserName ?? "") ||
+                        (published[0].Url ?? "") != (expected.Url ?? "") ||
+                        (published[0].Notes ?? "") != (expected.Notes ?? "") ||
+                        !(published[0].Tags ?? []).SequenceEqual(expected.Tags ?? [],
+                            StringComparer.Ordinal))
+                        return "tree-descendant-changed-on-ledger";
+                    foreach (var nestedReference in nested)
+                    {
+                        var problem = CheckDescendant(nestedReference, depth + 1);
+                        if (problem is not null) return problem;
+                    }
+                    return null;
+                }
+                finally { CryptographicOperations.ZeroMemory(nodeBytes); }
+            }
+
+            foreach (var child in children)
+            {
+                var problem = CheckDescendant(child, 0);
+                if (problem is not null) return [problem];
+            }
+        }
+
         return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
     }
 
