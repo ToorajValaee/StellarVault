@@ -839,7 +839,7 @@ test('manual linked draft publication reserves durable queue state before networ
   const broadcast=publisher.indexOf('transport.SubmitWithSignedHashAsync(');
   assert.ok(reserve>=0 && broadcast>reserve);
   assert.match(publisher,/pending\.Quote, approvedQuote/);
-  assert.match(publisher,/VaultLinkedSingleFilePolicy\.Problems/);
+  assert.match(publisher,/VaultLinkedMultipartFilePolicy\.Problems\(item, local, remote\)/);
   assert.match(publisher,/CryptographicOperations\.FixedTimeEquals/);
   assert.match(publisher,/Fingerprint\(original\)/);
   assert.match(publisher,/State = VaultSyncState\.Submitting/);
@@ -1411,7 +1411,7 @@ test('linked verified recovery requires signed XDR and encrypted journal CAS, ne
   assert.match(native,/ConfirmVerifiedExpansionAsync\(journalId\)/);
 });
 
-test('single-record linked files reuse SVFILE1 while HD and multipart file gates remain isolated',()=>{
+test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed review gates',()=>{
   const root=path.join(__dirname,'..');
   const core=path.join(root,'src','StellarVault.Core','Services');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
@@ -1449,4 +1449,34 @@ test('single-record linked files reuse SVFILE1 while HD and multipart file gates
   assert.match(native,/drafts\.StageDeleteAsync\(corruptId, corruptRevision\)/);
   assert.match(native,/drafts\.StageDeleteAsync\(multipartId, multipartRevision\)/);
   assert.match(native,/StellarLedgerFileProtocol\.DecodeFile/);
+});
+
+test('linked SVFILE2 multipart staging requires historical part confirmation and manifest-last integrity',()=>{
+  const root=path.join(__dirname,'..');
+  const core=path.join(root,'src','StellarVault.Core','Services');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');
+  const planner=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const ui=fs.readFileSync(path.join(root,'src','StellarVault.UI',
+    'Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const smoke=fs.readFileSync(path.join(root,'tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(policy,/MaxParts = 48/);
+  assert.match(policy,/StellarLedgerFileProtocol\.BuildUpload/);
+  assert.match(policy,/multipart-previous-part-not-confirmed/);
+  assert.match(policy,/multipart-all-parts-must-be-historically-confirmed/);
+  assert.match(policy,/multipart-confirmed-part-changed-on-ledger/);
+  assert.match(policy,/StellarLedgerFileProtocol\.DecodeFile\(candidate, remote\)/);
+  assert.match(policy,/IsReferencedByPendingManifest/);
+  assert.match(workspace,/StageMultipartFileAsync/);
+  assert.match(workspace,/store\.AddAsync\(item, ct\)/);
+  assert.match(workspace,/store\.TryDeleteAsync\(item, CancellationToken\.None\)/);
+  assert.match(workspace,/VaultLinkedMultipartFilePolicy\.IsReferencedByPendingManifest/);
+  assert.match(planner,/VaultLinkedMultipartFilePolicy\.Problems\(mutation, entries\)/);
+  assert.match(publisher,/VaultLinkedMultipartFilePolicy\.Problems\(item, local, remote\)/);
+  assert.match(ui,/StageMultipartFileAsync\(/);
+  assert.match(ui,/StellarLedgerFileProtocol\.IsFile\(file\)/);
+  assert.match(smoke,/RunMultipartLinkedSmokeAsync\(\)/);
+  assert.match(smoke,/multipart file part\/manifest/); // label documenting the expected sequence
 });
