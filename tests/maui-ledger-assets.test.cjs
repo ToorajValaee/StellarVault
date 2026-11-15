@@ -296,7 +296,10 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(workspace, /sv-native-mobile-search/);
   assert.match(workspace, /sv-native-folder-shortcuts/);
   assert.match(workspace, /sv-native-shortcut-grid/);
-  assert.match(workspace, /<VaultExplorerItemRow Item="item"/);
+  assert.match(workspace, /<VaultPublishedItemsView Items="_ledgerRecords"/);
+  const rows = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/VaultPublishedItemsView.razor'), 'utf8');
+  assert.match(rows, /<VaultExplorerItemRow Item="item"/);
   assert.match(workspace, /<VaultRecordInspector @key="_selectedRecord.Id"/);
   const inspector = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/VaultRecordInspector.razor'), 'utf8');
