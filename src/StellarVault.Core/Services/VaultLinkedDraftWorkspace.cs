@@ -143,13 +143,13 @@ public sealed class VaultLinkedDraftWorkspace(
                     throw new InvalidOperationException("Multipart file parent folder is ambiguous.");
                 if (parents.Length == 1)
                 {
-                    var parent = parents[0];
-                    if (parent.Kind != VaultMutationKind.CreateFolder ||
-                        parent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed))
+                    var localParent = parents[0];
+                    if (localParent.Kind != VaultMutationKind.CreateFolder ||
+                        localParent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed))
                         throw new InvalidOperationException(
                             "Selected local folder is not available.");
-                    if (parent.State == VaultSyncState.Pending)
-                        parentDependencies = [parent.Id];
+                    if (localParent.State == VaultSyncState.Pending)
+                        parentDependencies = [localParent.Id];
                 }
                 else if (!keys.IsOfflineOnly &&
                     !remote.Any(x => x.Id == parentFolderId && x.IsFolder))
