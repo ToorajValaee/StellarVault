@@ -497,18 +497,25 @@ else
     </section>
           </div>
         </main>
-        @if (_nativePage == "stellar" && Ledger.IsConnected && _nativeMode == "browse")
+        @if (_nativePage == "stellar" && _nativeMode == "browse" &&
+             (Ledger.IsConnected || SecretLedger.IsConnected))
         {
-            <button class="sv-native-mobile-fab" type="button" aria-label="New record" @onclick='() => SetNativeMode("record")'>＋</button>
+            <button class="sv-native-mobile-fab" type="button" aria-label="New record"
+                    @onclick="NewNativeRecordForActiveStrategy">＋</button>
         }
         <div class="sv-native-commandbar @(_nativePage == "stellar" && (Ledger.IsConnected || SecretLedger.IsConnected) && _nativeMode == "browse" ? "sv-native-commandbar-quiet" : "")" aria-label="Quick actions">
             @if (_nativePage == "stellar")
             {
                 @if (SecretLedger.IsConnected)
                 {
-                    <span class="sv-native-command-hint">Independent Secret Key vault connected</span>
+                    <button type="button" class="sv-native-command primary"
+                            disabled="@_ledgerBusy" @onclick="NewNativeRecordForActiveStrategy">＋ Record</button>
                     <button type="button" class="sv-native-command"
-                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock Secret Key vault</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeFolderForActiveStrategy">＋ Folder</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="RefreshNativeActiveStrategyAsync">Refresh</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
                 }
                 else if (Ledger.IsConnected)
                 {
@@ -524,6 +531,21 @@ else
                             disabled="@(_ledgerBusy || (_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _runtimeReady != true : _secretRuntimeReady != true) || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                             @onclick="ConnectSelectedLedgerCredentialAsync">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
                 }
+            }
+            else if (SecretLedger.IsConnected)
+            {
+                @if (_nativePage == "local")
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("sync")'>Review Sync</button>
+                }
+                else if (_nativePage == "sync")
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("local")'>Encrypted drafts</button>
+                }
+                <button type="button" class="sv-native-command"
+                        disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
             }
             else if (_nativePage == "settings")
             {
@@ -578,6 +600,28 @@ else
             "settings" => "settings",
             _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
         };
+
+    private void NewNativeRecordForActiveStrategy()
+    {
+        if (SecretLedger.IsConnected) _linkedWorkspace?.CreateRecordFromShell();
+        else if (Ledger.IsConnected) SetNativeMode("record");
+    }
+
+    private void NewNativeFolderForActiveStrategy()
+    {
+        if (SecretLedger.IsConnected) _linkedWorkspace?.CreateFolderFromShell();
+        else if (Ledger.IsConnected) SetNativeMode("folder");
+    }
+
+    private async Task RefreshNativeActiveStrategyAsync()
+    {
+        if (SecretLedger.IsConnected)
+        {
+            if (_linkedWorkspace is not null)
+                await _linkedWorkspace.RefreshFromShellAsync();
+        }
+        else if (Ledger.IsConnected) await RefreshLedgerAsync();
+    }
 
     private void NavigateLinkedNative(string view) =>
         NavigateNative(view switch
