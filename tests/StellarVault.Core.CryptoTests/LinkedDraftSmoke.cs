@@ -101,6 +101,7 @@ internal static class LinkedDraftSmoke
                 linkedRetention, network, new DenyVaultLinkedReceiptEvidence());
             var finding = await recovery.InspectAsync(folder.MutationId);
             Require(finding.DurableState is VaultSyncState.Uncertain or VaultSyncState.Submitting &&
+                    finding.CurrentRecordMatches is true &&
                     !finding.HistoricalReceiptObserved,
                 "Read-only recovery falsely confirmed a snapshot-matching linked submission.");
             var afterRecovery = (await drafts.ListAsync())
