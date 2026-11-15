@@ -225,6 +225,19 @@ internal static class LinkedDraftSmoke
                 var failures = VaultLinkedMultipartFilePolicy.Problems(malformed, [malformed]);
                 Require(failures.Contains("missing-record-content"),
                     "Null-content linked draft was not safely blocked.");
+                Require(await store.AddAsync(malformed),
+                    "Could not stage synthetic malformed linked queue fixture.");
+                try
+                {
+                    Require((await drafts.ListAsync()).Single(x => x.MutationId == malformed.Id)
+                            .IsCorrupt,
+                        "Missing linked draft content crashed the queue or appeared healthy.");
+                }
+                finally
+                {
+                    Require(await store.TryDeleteAsync(malformed),
+                        "Malformed linked queue fixture was not removed.");
+                }
                 var edge1 = Guid.NewGuid().ToString("N");
                 var edge2 = Guid.NewGuid().ToString("N");
                 var invalidEdges = malformed with { DependsOn = [edge1, edge2] };
