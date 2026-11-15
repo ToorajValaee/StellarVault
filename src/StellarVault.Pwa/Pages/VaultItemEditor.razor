@@ -6,6 +6,7 @@
 @implements IDisposable
 @inject IStellarLedgerRecords Ledger
 @inject StellarLedgerUploadCoordinator UploadCoordinator
+@inject VaultHybridDraftWorkspace HybridDrafts
 @inject IStellarUploadCheckpointStore Checkpoints
 @inject VaultSessionManager Sessions
 @inject VaultDeviceRetentionGate Retention
@@ -61,18 +62,18 @@ else
                 <label class="terminal-label" for="sv-ledger-file">FILE *</label>
                 <div class="sv-file-picker">
                     <label class="pixel-button compact sv-file-picker-button" for="sv-ledger-file">+ CHOOSE FILE</label>
-                    <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
+                    <span class="sv-file-picked-name">@(_selectedHdFile is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
                     <InputFile id="sv-ledger-file" class="sv-file-native-input sv-ledger-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
                 </div>
-                <p class="advanced-help">Encrypted Stellar ledger publishing uses the existing multipart protocol (currently up to 1 MiB). Each encrypted part requires a separate fee approval and confirmed reconciliation; the manifest is committed last.</p>
-                @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
-                @if (_filePlan is not null) { <p class="advanced-help">CONFIRMED STAGES: @_fileStep / @_filePlan.Count. Each requires approval.</p> }
+                <p class="advanced-help">Files of any logical length are streamed into the encrypted local HD queue as independently reviewable SVTREE3 records. No transaction is sent until you approve each Sync entry. This requires explicit encrypted local-storage consent, and large files may require substantial Stellar fees, reserves and time.</p>
+                @if (_selectedHdFile is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_selectedHdFile.Size bytes)</p> }
+                @if (!Retention.AllowsLocalPersistence || !Sessions.IsUnlocked) { <p class="terminal-alert warning">Unlock encrypted local storage and grant local retention consent before staging a resumable on-chain file.</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
                 <input id="sv-ledger-file-title" class="terminal-input" maxlength="256" @bind="_title" @bind:event="oninput" disabled="@(_busy || _loading)" />
                 <details class="sv-access-learn"><summary>About file publishing</summary><p>Files are encrypted and published to Stellar. Each transaction needs your approval and may incur fees in the network's native asset.</p></details>
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>FILE STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
-                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || _fileBytes is null || string.IsNullOrWhiteSpace(_title))" @onclick="ReviewAsync">REVIEW FILE COST AND APPROVE</button>
+                <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence || _selectedHdFile is null || string.IsNullOrWhiteSpace(_title))" @onclick="StageHdTreeFileAsync">STAGE ENCRYPTED FILE FOR SYNC</button>
                  
             </div>
         }
@@ -148,9 +149,10 @@ else
             _filePlan.Select(x => x.Id).ToArray());
     }
     private byte[]? _fileBytes;
+    private IBrowserFile? _selectedHdFile;
     private string _fileOriginalName = "";
     private string _fileContentType = "application/octet-stream";
-    private async Task SelectLedgerFileAsync(InputFileChangeEventArgs args)
+    private Task SelectLedgerFileAsync(InputFileChangeEventArgs args)
     {
         _status = null;
         _estimate = null;
@@ -160,31 +162,52 @@ else
         _fileFingerprint = null;
         _uncertainStage = false;
         ClearFileBytes();
+        _selectedHdFile = null;
         var file = args.File;
-        if (file.Size > MaximumLedgerFileLength)
-        {
-            _status = "The current on-chain multipart protocol supports up to 1 MiB. No transaction was submitted.";
-            return;
-        }
-        _busy = true;
         try
         {
-            await using var stream = file.OpenReadStream(MaximumLedgerFileLength);
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            _fileBytes = buffer.ToArray();
             LedgerFileProtocol.ValidateName(file.Name);
             _fileOriginalName = file.Name;
-            _fileContentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+            _fileContentType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? "application/octet-stream" : file.ContentType;
             _title = file.Name.Length > 256 ? file.Name[..256] : file.Name;
+            _selectedHdFile = file;
+        }
+        catch (Exception)
+        {
+            _status = "Invalid file name or content type. No data was staged.";
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task StageHdTreeFileAsync()
+    {
+        if (_busy || _loading || _selectedHdFile is not { } selected ||
+            !Sessions.IsUnlocked || !Retention.AllowsLocalPersistence ||
+            string.IsNullOrWhiteSpace(_title))
+            return;
+        _busy = true;
+        _status = "STREAMING FILE TO ENCRYPTED LOCAL SYNC QUEUE...";
+        try
+        {
+            await using var input = selected.OpenReadStream(selected.Size);
+            var staged = await HybridDrafts.StageTreeFileAsync(
+                _title, selected.Name, _fileContentType, input,
+                string.IsNullOrWhiteSpace(_folder) ? null : _folder);
+            _selectedHdFile = null;
+            _status = "Staged " + staged.NodeCount +
+                " encrypted file-tree records. Open Sync to review and approve each transaction; root " +
+                staged.RootId + " is published last. No transaction was submitted.";
+            await CompleteEditorAsync(savedLocally: true);
         }
         catch (Exception ex)
         {
-            ClearFileBytes();
-            _status = "Unable to read file: " + ex.Message;
+            _status = "File staging failed. Inspect the encrypted local queue before retrying. " +
+                ex.GetType().Name + ". No network transaction was sent.";
         }
         finally { _busy = false; }
     }
+
     private bool _loading;
     private bool _newEditorInitialized;
     private LedgerCostPreview? _estimate;
