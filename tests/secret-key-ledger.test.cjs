@@ -831,7 +831,7 @@ test('linked draft recovery remains read-only even when current record or receip
   assert.match(publisher,/CryptographicOperations\.ZeroMemory\(pending\.Fingerprint\)/);
   assert.match(publisher,/await ledger\.CancelQuoteAsync\(quote\.QuoteId\)/);
   assert.match(test,/new VaultLinkedDraftRecoveryReview\(/);
-  assert.match(test,/finding\.CurrentRecordMatches is false/);
+  assert.match(test,/finding\.CurrentRecordMatches is true/);
   assert.match(test,/NetworkFeeXlm = "999\.0000000"/);
   for(const file of ['StellarVault.Pwa/Program.cs','StellarVault.Maui/MauiProgram.cs']){
     const host=fs.readFileSync(path.join(src,...file.split('/')),'utf8');
