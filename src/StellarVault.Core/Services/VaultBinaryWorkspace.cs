@@ -34,7 +34,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             if (existing is not null && (VaultRecordTypeFactory.IsLegacyText(existing.ContentType)))
                 throw new InvalidOperationException("This name belongs to a text record.");
             storageMode.Require(VaultStorageMode.LocalEncrypted);
-            return await database.PutIndexedAsync(
+            return await database.PutIndexedStreamingFileAsync(
                 name, expectedVersion, plaintext, key, recordDefinition.ContentType!, ct);
         }, cancellationToken);
     }
@@ -59,7 +59,7 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             using var staging = new MemoryStream();
             try
             {
-                await database.GetAsync(name, staging, key, ct);
+                await database.ReadStreamingFileAsync(name, staging, key, ct);
                 var after = await database.GetVersionAsync(name, key, ct);
                 if (after != before)
                     throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
