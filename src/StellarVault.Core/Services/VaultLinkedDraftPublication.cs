@@ -157,8 +157,9 @@ public sealed class VaultLinkedDraftPublication(
                     throw new InvalidOperationException(
                         "Delete published child records before deleting a folder.");
             }
-            else if (draft.FolderId == item.EntityId)
-                throw new InvalidOperationException("Record cannot be its own folder parent.");
+            else
+                VaultLinkedFolderHierarchyPolicy.RequirePublishedAcyclicParent(
+                    item.EntityId, draft.FolderId, remote);
         }
         else if (remote.Any(x => x.Id == item.EntityId))
             throw new InvalidOperationException("Target record already exists on Stellar.");
