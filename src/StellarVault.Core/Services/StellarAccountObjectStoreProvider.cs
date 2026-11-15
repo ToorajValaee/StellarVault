@@ -44,8 +44,22 @@ public sealed class StellarAccountObjectStoreProvider(
             if (requireLedger && (!linkedLedger.IsConnected ||
                 linkedLedger.RootAccountId != scope.StoreId))
                 throw new UnauthorizedAccessException("The requested linked signer is unavailable.");
-            if (linkedLedger.IsConnected && linkedLedger.RootAccountId != scope.StoreId)
-                throw new UnauthorizedAccessException("A different linked signer is connected.");
+            if (linkedLedger.IsConnected)
+            {
+                if (linkedLedger.RootAccountId != scope.StoreId)
+                    throw new UnauthorizedAccessException("A different linked signer is connected.");
+                var requiredPassphrase = networks.Network switch
+                {
+                    "testnet" => "Test SDF Network ; September 2015",
+                    "public" => "Public Global Stellar Network ; September 2015",
+                    "custom" => networks.CustomPassphrase,
+                    _ => null
+                };
+                if (requiredPassphrase is null ||
+                    linkedLedger.ConnectedNetworkPassphrase != requiredPassphrase)
+                    throw new UnauthorizedAccessException(
+                        "The connected linked signer uses a different Stellar network.");
+            }
             return new(scope.StoreId, network, scope.AccountStrategyId,
                 linkedLedger.ConnectionEpoch);
         }
