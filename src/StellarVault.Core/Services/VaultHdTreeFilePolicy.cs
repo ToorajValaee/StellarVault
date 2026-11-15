@@ -35,7 +35,7 @@ public static class VaultHdTreeFilePolicy
             !all.Any(x => x.Id != item.Id && x.State == VaultSyncState.Pending &&
                 x.TransactionHash is null &&
                 x.Kind == VaultMutationKind.CreateRecord &&
-                x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd &&
+                (x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd) &&
                 IsPendingRoot(x, group)))
             return ["hd-tree-root-not-staged"];
 
