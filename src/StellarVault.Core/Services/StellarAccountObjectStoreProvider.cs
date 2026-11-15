@@ -299,9 +299,91 @@ public sealed class StellarAccountObjectStoreProvider(
         return found;
     }
 
+    // The neutral OpenReadAsync signature has no caller-provided private
+    // destination. Bound its authenticated temporary buffer rather than
+    // exposing streamed chunks before final SHA-256 verification. Large files
+    // must use the existing private-destination file download API until the
+    // engine supports caller-supplied verified output sinks.
+    private const int MaxVerifiedInMemoryFileBytes = 8 * 1024 * 1024;
+
+    private sealed class VerifiedFileBuffer : MemoryStream
+    {
+        protected override void Dispose(bool disposing)
+        {
+            if (TryGetBuffer(out var segment) && segment.Array is not null)
+                CryptographicOperations.ZeroMemory(segment.Array);
+            base.Dispose(disposing);
+        }
+
+        public override ValueTask DisposeAsync()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+            return ValueTask.CompletedTask;
+        }
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (buffer.Length > MaxVerifiedInMemoryFileBytes - Length)
+                throw new NotSupportedException(
+                    "File exceeds the verified in-memory read limit; use the private-destination streaming downloader.");
+            return base.WriteAsync(buffer, cancellationToken);
+        }
+    }
+
+    private async Task<(VaultStreamingFileTree.Root Manifest, VerifiedFileBuffer Bytes)?>
+        LoadVerifiedTreeAsync(ObjectStoreScope scope, string objectId, CancellationToken ct)
+    {
+        var checkpoint = RequireScope(scope, true);
+        if (objectId.Length != 16 || !objectId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid Stellar file root ID.", nameof(objectId));
+        IReadOnlyList<LedgerRecordItem> records;
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            records = await linkedLedger.ReadAsync(ct);
+        else
+        {
+            var before = await hdLedger.InspectAccountInfoAsync();
+            if (before.RootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException("HD ledger root differs from file object scope.");
+            records = await hdLedger.ReadAsync();
+        }
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        var matching = records.Where(x => x.Id == objectId).ToArray();
+        if (matching.Length == 0) return null;
+        if (matching.Length != 1 || !VaultLinkedTreeFilePolicy.IsRootRecord(matching[0]))
+            throw new NotSupportedException(
+                "Object is not an SVTREE3 root; use the corresponding legacy file protocol reader.");
+        var buffer = new VerifiedFileBuffer();
+        try
+        {
+            var root = await VaultLinkedTreeFilePolicy.ReadAsync(objectId, records, buffer, ct);
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            ct.ThrowIfCancellationRequested();
+            buffer.Position = 0;
+            return (root, buffer);
+        }
+        catch
+        {
+            await buffer.DisposeAsync();
+            throw;
+        }
+    }
+
     public async Task<StoredObject?> GetAsync(
         ObjectStoreScope scope, string objectId, CancellationToken ct = default)
     {
+        var file = await LoadVerifiedTreeAsync(scope, objectId, ct);
+        if (file is not null)
+        {
+            await using var verifiedBytes = file.Value.Bytes;
+            var root = file.Value.Manifest;
+            return new StoredObject(
+                new ObjectDescriptor(objectId, VaultRecordTypeFactory.File,
+                    root.FileName, root.ContentType),
+                "content-sha256:" + root.Sha256Hex,
+                root.Length, root.Sha256Hex);
+        }
         var record = await ReadOrdinaryAsync(scope, objectId, ct);
         if (record is null) return null;
         // Snapshot fingerprint is NOT a signed remote mutation revision and
@@ -344,6 +426,8 @@ public sealed class StellarAccountObjectStoreProvider(
     public async Task<Stream> OpenReadAsync(
         ObjectStoreScope scope, string objectId, CancellationToken ct = default)
     {
+        var file = await LoadVerifiedTreeAsync(scope, objectId, ct);
+        if (file is not null) return file.Value.Bytes;
         var record = await ReadOrdinaryAsync(scope, objectId, ct)
             ?? throw new FileNotFoundException("Stellar record not found.");
         // Caller owns plaintext and must dispose the stream. This simple text
