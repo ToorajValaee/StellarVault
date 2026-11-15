@@ -80,6 +80,12 @@ public static class VaultLinkedMultipartFilePolicy
         {
             var manifest = JsonSerializer.Deserialize<StellarLedgerFileProtocol.Manifest>(
                 draft.Content[StellarLedgerFileProtocol.ManifestPrefix.Length..]);
+            if (manifest is null || string.IsNullOrWhiteSpace(draft.Title) ||
+                draft.Title.Length > 256 ||
+                manifest.FileName is not { Length: > 0 and <= 255 } ||
+                manifest.ContentType is not { Length: > 0 and <= 128 } ||
+                !manifest.ContentType.All(c => c is >= '!' and <= '~'))
+                return false;
             return manifest is not null &&
                 manifest.Length is > StellarLedgerFileProtocol.MaxChunkBytes and <= MaxBytes &&
                 manifest.PartIds is { Length: >= 2 and <= MaxParts } ids &&
@@ -137,6 +143,8 @@ public static class VaultLinkedMultipartFilePolicy
                 var prior = FindExactPart(all, manifest.PartIds[i], part.FileId, i);
                 if (prior is null || prior.State != VaultSyncState.Confirmed)
                     return ["multipart-previous-part-not-confirmed"];
+                if (remote is not null && !PublishedPartMatches(prior, remote))
+                    return ["multipart-previous-part-changed-on-ledger"];
             }
             return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
         }
@@ -148,6 +156,8 @@ public static class VaultLinkedMultipartFilePolicy
             var prior = FindExactPart(all, partId, mutation.EntityId, index);
             if (prior is null || prior.State != VaultSyncState.Confirmed)
                 return ["multipart-all-parts-must-be-historically-confirmed"];
+            if (remote is not null && !PublishedPartMatches(prior, remote))
+                return ["multipart-confirmed-part-changed-on-ledger"];
         }
         // Advisory read-only planner has no remote snapshot. The publisher
         // repeats this exact policy with a fresh snapshot before fee quoting
@@ -172,6 +182,45 @@ public static class VaultLinkedMultipartFilePolicy
             return ["multipart-remote-parts-missing-or-invalid"];
         }
         return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
+    }
+
+    public static bool IsReferencedByPendingManifest(
+        IReadOnlyList<VaultPendingMutation> entries, string entityId) =>
+        entries.Any(x =>
+        {
+            if (x.State != VaultSyncState.Pending ||
+                x.Kind != VaultMutationKind.CreateRecord ||
+                x.OriginStrategyId != VaultMutationStrategyPolicy.Linked)
+                return false;
+            try
+            {
+                var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                    x.EncryptedPayload);
+                if (draft is null || !IsManifest(draft)) return false;
+                var manifest = JsonSerializer.Deserialize<StellarLedgerFileProtocol.Manifest>(
+                    draft.Content[StellarLedgerFileProtocol.ManifestPrefix.Length..]);
+                return manifest?.PartIds.Contains(entityId, StringComparer.Ordinal) == true;
+            }
+            catch (JsonException) { return false; }
+        });
+
+    private static bool PublishedPartMatches(VaultPendingMutation original,
+        IReadOnlyList<LedgerRecordItem> remote)
+    {
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                original.EncryptedPayload);
+            var found = remote.SingleOrDefault(x => x.Id == original.EntityId);
+            return draft is not null && found is not null &&
+                !found.IsFolder && found.Content == draft.Content &&
+                found.Title == draft.Title && found.FolderId == draft.FolderId &&
+                (found.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private static StellarLedgerFileProtocol.Manifest? FindManifest(
