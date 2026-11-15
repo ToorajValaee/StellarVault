@@ -162,8 +162,42 @@
                             disabled="@_busy" @onclick="CancelPublicationReviewAsync">Cancel review</button>
                 </section>
             }
+            @if (QueueKeys.CanPublish)
+            {
+                <section class="sv-secret-review" aria-label="Published S-key records available for local edits">
+                    <h3>Stage changes to published records</h3>
+                    <p>Load a current Stellar snapshot, then stage a revision-pinned update or delete.
+                       Nothing is signed or transmitted until the later individual fee approval.
+                       A changed remote manifest blocks stale publication.</p>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="LoadPublishedRecordsAsync">Load published records</button>
+                    @foreach (var record in _publishedRecords)
+                    {
+                        <div class="sv-secret-workspace-actions" @key="record.Id">
+                            <span><strong>@record.Title</strong> — @(record.IsFolder ? "Folder" : "Record")</span>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || _review is not null)"
+                                    @onclick="() => EditPublishedRecordAsync(record.Id)">Stage update</button>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || _review is not null)"
+                                    @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
+                        </div>
+                    }
+                    @if (_deletePublishedId is not null)
+                    {
+                        <p role="alert">Stage local deletion for the selected published
+                           @(_deletePublishedTitle)? This does not delete anything from Stellar yet,
+                           but later publication will require a separate transaction approval.</p>
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="ConfirmStagePublishedDeletionAsync">Confirm local delete draft</button>
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="CancelPublishedDeletion">Cancel</button>
+                    }
+                </section>
+            }
             <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
-                <h3>@(_editingMutationId is null ? "Save to encrypted device storage" : "Edit unpublished encrypted draft")</h3>
+                <h3>@(_editingRemoteId is not null ? "Stage update to published record" :
+                    _editingMutationId is null ? "Save to encrypted device storage" : "Edit unpublished encrypted draft")</h3>
                 <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
                 @if (QueueKeys.IsOfflineOnly)
                 {
@@ -173,7 +207,7 @@
                 }
                 <label class="sv-secret-approval">
                     <input type="checkbox" @bind="_draftIsFolder"
-                           disabled="@(_busy || _editingMutationId is not null)" />
+                           disabled="@(_busy || _editingMutationId is not null || _editingRemoteId is not null)" />
                     New folder instead of record
                 </label>
                 <label>Title
@@ -215,8 +249,9 @@
                 </label>
                 <button type="button" class="pixel-button primary"
                         disabled="@(_busy || string.IsNullOrWhiteSpace(_draftTitle) || (!_draftIsFolder && string.IsNullOrEmpty(_draftContent)))"
-                        @onclick="StageDraftAsync">@(_editingMutationId is null ? "Save encrypted local draft" : "Save encrypted changes")</button>
-                @if (_editingMutationId is not null)
+                        @onclick="StageDraftAsync">@(_editingRemoteId is not null ? "Stage revision-pinned update" :
+                            _editingMutationId is null ? "Save encrypted local draft" : "Save encrypted changes")</button>
+                @if (_editingMutationId is not null || _editingRemoteId is not null)
                 {
                     <button type="button" class="pixel-button compact" disabled="@_busy"
                             @onclick="ClearDraftEditor">Cancel editing</button>
@@ -230,7 +265,7 @@
                     {
                         <div class="sv-secret-workspace-actions" @key="draft.MutationId">
                             <span><strong>@draft.Title</strong> — @(draft.IsFolder ? "Folder" : "Record")
-                                · @draft.State
+                                · @draft.Kind · @draft.State
                                 @if (draft.IsJournal)
                                 {
                                     <em>Capacity transaction journal — do not retry an unresolved entry</em>
@@ -254,9 +289,12 @@
                             @if (draft.State == VaultSyncState.Pending &&
                                  !draft.IsCorrupt && !draft.IsJournal)
                             {
-                                <button type="button" class="pixel-button compact"
-                                        disabled="@(_busy || _review is not null)"
-                                        @onclick="() => EditDraftAsync(draft.MutationId)">Edit local draft</button>
+                                @if (draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
+                                {
+                                    <button type="button" class="pixel-button compact"
+                                            disabled="@(_busy || _review is not null)"
+                                            @onclick="() => EditDraftAsync(draft.MutationId)">Edit local draft</button>
+                                }
                                 <button type="button" class="pixel-button compact"
                                         disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
                                         @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
@@ -306,8 +344,8 @@
             <p><strong>Uncertain/submitting:</strong> @_report.UncertainOrSubmitting</p>
             <p><strong>Conflicts:</strong> @_report.Conflicts</p>
             <p><strong>Folder mutations:</strong> @_report.FolderEntries</p>
-            <p>Manual create-only publication requires an explicit fee review and a live linked S-key signer.
-               Automatic synchronization, queued updates/deletes, and independent historical operation proof are not yet available.</p>
+            <p>Manual create/update/delete publication requires individual fee review and a live linked S-key signer.
+               Remote-version checks prevent stale writes. Automatic synchronization and full historical signer/record verification remain unavailable.</p>
         }
     }
     @if (!string.IsNullOrWhiteSpace(_message))
