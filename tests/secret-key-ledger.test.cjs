@@ -1511,3 +1511,29 @@ test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling
   assert.match(smoke,/Simulated journal failure/);
   assert.match(runner,/await StreamingFileTreeSmoke\.RunAsync\(\)/);
 });
+
+test('shared local file upload now commits a streaming encrypted tree through the vault CAS pointer',()=>{
+  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const accountDb=fs.readFileSync(path.join(core,'StellarAccountVaultDatabase.cs'),'utf8');
+  const binary=fs.readFileSync(path.join(core,'VaultBinaryWorkspace.cs'),'utf8');
+  const adapter=fs.readFileSync(path.join(core,'VaultChunkObjectStoreAdapter.cs'),'utf8');
+  const encrypted=fs.readFileSync(path.join(core,'VaultStreamingEncryptedFileStore.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,'StellarVault.Core.CryptoTests',
+    'StreamingFileTreeSmoke.cs'),'utf8');
+  assert.match(accountDb,/PutIndexedStreamingFileAsync\(/);
+  assert.match(accountDb,/ReadStreamingFileAsync\(/);
+  assert.match(accountDb,/PutIndexedAsync\(name, expectedVersion, pointerStream/);
+  assert.match(accountDb,/FileTreePointerPrefix/);
+  assert.match(binary,/database\.PutIndexedStreamingFileAsync\(/);
+  assert.match(binary,/database\.ReadStreamingFileAsync\(/);
+  assert.match(binary,/CopyVerifiedToAsync\(/);
+  assert.match(adapter,/IVaultChunkStore/);
+  assert.match(adapter,/SHA256\.HashData\(ciphertext\.Span\)/);
+  assert.match(encrypted,/VaultV2Envelope\.Seal\(/);
+  assert.match(encrypted,/VaultV2Envelope\.Open\(/);
+  assert.match(encrypted,/SHA256\.HashData\(stored\)/);
+  assert.match(encrypted,/WriteContentAddressedAsync\(/);
+  assert.match(smoke,/database\.PutIndexedStreamingFileAsync\(/);
+  assert.match(smoke,/database\.ReadStreamingFileAsync\(/);
+  assert.match(smoke,/Stale streamed file record write was accepted/);
+});
