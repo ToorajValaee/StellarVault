@@ -1387,3 +1387,39 @@ html[data-theme="dark"] .sv-native-shell :is(
  .sv-hybrid-panel select,.sv-hybrid-panel .terminal-input) {
   background:#243c40!important;color:#e9f5f0!important;border-color:#486568!important;
 }
+
+/* Identical shared records, folder tree and editor treatment for HD and
+   independently linked S-key sessions on Android/native. Only each strategy's
+   data and transaction authorization are different. */
+.sv-native-shell .sv-secret-workspace.sv-workspace-surface {
+  margin:0;max-width:100%;min-width:0;padding:0;
+}
+.sv-native-shell .sv-linked-explorer-layout {
+  display:flex;flex-direction:column;gap:12px;min-width:0;
+}
+.sv-native-shell .sv-linked-explorer-layout > .sv-explorer-tree {
+  min-height:0;max-height:200px;overflow-y:auto;
+}
+.sv-native-shell .sv-linked-explorer-layout > .sv-secret-browser {
+  display:flex;flex-direction:column;gap:9px;min-width:0;
+}
+.sv-native-shell .sv-secret-browser.sv-view-grid {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.sv-native-shell .sv-linked-explorer-layout .sv-object-row {
+  min-width:0;width:100%;
+}
+.sv-native-shell .sv-linked-explorer-layout .sv-record-inspector,
+.sv-native-shell .sv-linked-explorer-layout .sv-secret-details,
+.sv-native-shell .sv-linked-explorer-layout .sv-secret-editor {
+  margin:0;max-width:100%;min-width:0;
+}
+.sv-native-shell .sv-shared-record-fields .terminal-input,
+.sv-native-shell .sv-shared-record-fields select {
+  width:100%;min-width:0;
+}
+.sv-native-shell .sv-linked-drafts-workspace[hidden],
+.sv-native-shell .sv-linked-sync-workspace[hidden],
+.sv-native-shell .sv-linked-queue-view[hidden] {
+  display:none!important;
+}
