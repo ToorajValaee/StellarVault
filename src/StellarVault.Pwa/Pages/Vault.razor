@@ -322,7 +322,10 @@ else
                     <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
                         <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
                         <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
-                        <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
+                        @if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
+                                 {
+                                     <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
+                                 }
                     </details>
                 </div>
             }
