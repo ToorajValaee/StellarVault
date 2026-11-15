@@ -392,7 +392,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             (!ValidRecordId(folder) || string.Equals(folder, entityId, StringComparison.OrdinalIgnoreCase)) ||
             draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
             draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-            draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+            draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) ||
+            draft.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal))
             throw new ArgumentException("Invalid remote update fields or file payload.");
     }
 }
