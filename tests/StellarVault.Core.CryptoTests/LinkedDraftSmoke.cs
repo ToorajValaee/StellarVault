@@ -178,12 +178,98 @@ internal static class LinkedDraftSmoke
         }
         await RunSingleFileLinkedSmokeAsync();
         await RunMultipartLinkedSmokeAsync();
+        await RunLinkedTreeFileSmokeAsync();
         await RunVerifiedCreateReconciliationSmokeAsync();
         await RunRemoteMutationSmokeAsync(false);
         await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunLinkedTreeFileSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-tree-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            await keys.CreateAsync("linked streaming tree passphrase");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, Path.Combine(directory, "queue"), network);
+            var workspace = new VaultLinkedDraftWorkspace(ledger, keys, store, consent, network);
+            var publisher = new VaultLinkedDraftPublication(
+                ledger, store, keys, consent, network);
+            var witness = new CapturingLinkedReceiptEvidence { AllowRecordOperations = true };
+            var reviewer = new VaultLinkedDraftRecoveryReview(
+                ledger, store, keys, consent, network, witness);
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, store, keys, consent, network, reviewer);
+
+            var bytes = Enumerable.Range(0, 4096)
+                .Select(x => (byte)(x * 19)).ToArray();
+            await using var source = new MemoryStream(bytes, writable: false);
+            var tree = await workspace.StageTreeFileAsync("Encrypted file tree",
+                "large.bin", "application/octet-stream", source);
+            Require(tree.Manifest.Length == bytes.Length &&
+                tree.NodeCount >= 6 && tree.RootId.Length == 16,
+                "Linked file tree did not stage all bounded nodes.");
+            var local = await workspace.ListAsync();
+            Require(local.Count == tree.NodeCount && local.All(x => x.IsFile),
+                "Staged file tree was not recognized as encrypted typed records.");
+
+            var first = await workspace.ReviewManualSyncAsync();
+            var root = local.Single(x => x.EntityId == tree.RootId);
+            Require(first.Items.Single(x => x.MutationId == root.MutationId)
+                .Blockers.Contains("tree-child-not-historically-confirmed"),
+                "Streaming file root was ready before its children.");
+            await MustRejectAsync(() => publisher.PrepareAsync(root.MutationId),
+                "Streaming file root bypassed child historical verification.");
+            var sent = 0;
+            while (sent < tree.NodeCount)
+            {
+                var review = await workspace.ReviewManualSyncAsync();
+                var next = review.NextReadyMutationId ??
+                    throw new Exception("Linked file tree queue stopped before its root.");
+                var nextItem = local.Single(x => x.MutationId == next);
+                if (sent != tree.NodeCount - 1 &&
+                    nextItem.EntityId == tree.RootId)
+                    throw new Exception("Linked file root was published before its descendants.");
+                var quote = await publisher.PrepareAsync(next);
+                var hash = await publisher.SubmitAsync(quote.Quote, true);
+                Require((await workspace.ListAsync()).Single(x => x.MutationId == next)
+                    .State == VaultSyncState.Uncertain,
+                    "Tree file node was confirmed without independent signed history.");
+                ledger.AllowHistoricalProof = true;
+                var confirmed = await reconciler.ConfirmVerifiedRecordAsync(next);
+                Require(confirmed.Confirmed &&
+                    ledger.ReleasedVerifiedHash == hash,
+                    "Linked file node failed signed XDR history reconciliation.");
+                sent++;
+            }
+            var onChain = await ledger.ReadAsync();
+            await using var reconstructed = new MemoryStream();
+            var file = await VaultLinkedTreeFilePolicy.ReadAsync(
+                tree.RootId, onChain, reconstructed);
+            Require(file.Length == bytes.Length &&
+                reconstructed.ToArray().AsSpan().SequenceEqual(bytes) &&
+                ledger.Submissions == tree.NodeCount,
+                "Linked tree file failed manifest-last authenticated reconstruction.");
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            Console.WriteLine("PASS: linked SVTREE3 nodes require individual quotes, history confirmation and root-last verified reconstruction");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunMultipartLinkedSmokeAsync()
