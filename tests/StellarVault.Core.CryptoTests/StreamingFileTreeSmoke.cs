@@ -282,6 +282,30 @@ internal static class StreamingFileTreeSmoke
                     CryptographicOperations.ZeroMemory(node.Payload);
             }
 
+            // Never traverse a malformed cyclic or shared-node graph, even
+            // when the root metadata itself is otherwise well formed.
+            const string cyclicRootId = "0123456789abcdef";
+            var zeroDigest = Convert.ToHexString(SHA256.HashData([]));
+            var cyclicRoot = new VaultStreamingFileTree.Root(
+                "cyclic.bin", "application/octet-stream", 0, zeroDigest,
+                new VaultStreamingFileTree.Reference(cyclicRootId, 0, zeroDigest),
+                VaultStreamingFileTree.ChunkBytes);
+            var cyclicBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(cyclicRoot);
+            try
+            {
+                await using var cyclicOutput = new MemoryStream();
+                try
+                {
+                    await VaultStreamingFileTree.ReadVerifiedAsync(cyclicRootId,
+                        (id, _) => Task.FromResult(new VaultStreamingFileTree.Emission(
+                            id, VaultStreamingFileTree.RootKind, cyclicBytes.ToArray())),
+                        cyclicOutput);
+                    throw new Exception("Cyclic streaming file root was accepted.");
+                }
+                catch (InvalidDataException) { }
+            }
+            finally { CryptographicOperations.ZeroMemory(cyclicBytes); }
+
             // Zero-length files have a deterministic authenticated empty hash.
             var emptyNodes = new Dictionary<string, (string Kind, byte[] Payload)>();
             await using var emptySource = new MemoryStream();
