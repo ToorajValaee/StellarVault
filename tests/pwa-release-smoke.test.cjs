@@ -133,7 +133,7 @@ test('saved local unlock navigates to the vault and disconnected state remains u
 
 test('offline vault keeps the normal ledger browser layout instead of an alternate editor', () => {
  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
- assert.match(vault, /else if \(Ledger\.IsConnected && _registryReady == false\)/);
+ assert.match(vault, /else if \(ActiveMode == VaultWorkspaceMode\.MnemonicHd &&\s*Ledger\.IsConnected && _registryReady == false\)/);
  assert.ok(vault.includes('search-console'));
  assert.ok(vault.includes('sv-folder-grid'));
  assert.ok(vault.includes('record-list'));
@@ -332,7 +332,7 @@ test('PWA desktop explorer and mobile object storage share one folder model', ()
   assert.match(sharedTree, /sv-explorer-tree/);
   assert.match(vault, /sv-explorer-main/);
   assert.match(sharedTree, /Depth\(folder.Id\)/);
-  assert.match(vault, /OpenFolder\(folder.Id\)/);
+  assert.match(vault, /OnFolderSelected="SelectFolderFromTree"/);
   assert.match(css, /\.sv-explorer-tree/);
   assert.match(css, /\.sv-explorer-main \.record-list/);
   assert.match(css, /@media\(max-width:1040px\)/);
@@ -605,7 +605,7 @@ test('Offline ledger refresh leaves last verified records and gives short status
 
 test('Unreachable registry never redirects an unlocked local vault to initialization', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  assert.match(vault, /else if \(Ledger\.IsConnected && _registryReady == false\)/);
+  assert.match(vault, /else if \(ActiveMode == VaultWorkspaceMode\.MnemonicHd &&\s*Ledger\.IsConnected && _registryReady == false\)/);
   assert.match(vault, /Stellar cannot be reached right now\. You can continue working with encrypted local drafts/);
   assert.doesNotMatch(vault, /Ledger setup check failed: " \+ ex\.Message/);
 });
