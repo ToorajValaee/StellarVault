@@ -110,7 +110,8 @@ window.stellarVaultSecretLedger = (() => {
       },ikm,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     } finally {seed.fill(0);}
     const prior=unresolvedByVault.get(vaultScope(root,passphrase))||null;
-    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false,
+    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),
+       verifiedHistories:new Set(),inFlight:false,
       needsReconciliation:!!prior,uncertain:prior?{...prior}:null};
     await chain(state);
     sessions.set(id,state);
@@ -598,6 +599,7 @@ window.stellarVaultSecretLedger = (() => {
           newGen=m.gen;
         }
       } else if(value==null){
+        if(headerAt===-1)fail('Historical chunk removal preceded the record manifest.');
         if(!name.startsWith('skc:'+recordId+':'))fail('Unexpected historical deletion key.');
         if(removed.has(name))fail('Duplicate historical chunk deletion.');
         removed.add(name);
@@ -620,8 +622,10 @@ window.stellarVaultSecretLedger = (() => {
           fail('Historical previous ciphertext removal key was missing.');
     }
     if(kind==='delete'){
+      const complete=chunks.size===0;
       for(const part of chunks.values())part.fill(0);
-      return chunks.size===0; // Signed transaction removed exact original skh/skc keys.
+      if(complete)s.verifiedHistories.add(txHash);
+      return complete; // Signed transaction removed exact original skh/skc keys.
     }
     const manifest=parseManifest(headerRaw);
     if(chunks.size!==manifest.count||
@@ -643,7 +647,9 @@ window.stellarVaultSecretLedger = (() => {
         FolderId:draft.FolderId||null,Tags:draft.Tags||[],IsFolder:!!draft.IsFolder,
         UserName:draft.UserName||'',Url:draft.Url||'',Notes:draft.Notes||''
       };
-      return JSON.stringify(plain)===JSON.stringify(normalized);
+      const matched=JSON.stringify(plain)===JSON.stringify(normalized);
+      if(matched)s.verifiedHistories.add(txHash);
+      return matched;
     } finally {
       cipher.fill(0);
       for(const part of chunks.values())part.fill(0);
@@ -712,6 +718,7 @@ window.stellarVaultSecretLedger = (() => {
        pointer.name!=='sv:next:v1'||pointer.value==null||
        decoder.decode(new Uint8Array(pointer.value))!==childId)
       fail('Historical linked parent pointer does not target the child.');
+    s.verifiedHistories.add(txHash);
     return true;
   }
 
@@ -719,7 +726,9 @@ window.stellarVaultSecretLedger = (() => {
   // Never clear an unrelated uncertain transaction or a different vault.
   function releaseVerifiedHistory(id,transactionHash) {
     const s=session(id),scope=vaultScope(s.root,s.passphrase);
-    if(!/^[0-9a-f]{64}$/.test(transactionHash))fail('Invalid verified hash.');
+    if(!/^[0-9a-f]{64}$/.test(transactionHash) ||
+       !s.verifiedHistories.has(transactionHash))
+      fail('The current signer has not verified this signed historical transaction.');
     const marker=unresolvedByVault.get(scope)||s.uncertain;
     if(marker && marker.TransactionHash!==transactionHash)
       fail('A different uncertain transaction remains in this signer session.');
@@ -728,6 +737,7 @@ window.stellarVaultSecretLedger = (() => {
       s.uncertain=null;
       s.needsReconciliation=false;
     }
+    s.verifiedHistories.delete(transactionHash);
     return true;
   }
   function inspectUncertain(id) {
