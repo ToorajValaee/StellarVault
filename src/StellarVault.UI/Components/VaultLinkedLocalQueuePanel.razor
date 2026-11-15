@@ -274,6 +274,11 @@
                 <h3>Read-only recovery assessment</h3>
                 <p><strong>Record:</strong> @_recoveryFinding.EntityId</p>
                 <p><strong>Durable queue state:</strong> @_recoveryFinding.DurableState</p>
+                @if (_recoveryFinding.TransactionHash is { } txHash)
+                {
+                    <p><strong>Signed transaction hash (public recovery handle, not proof):</strong>
+                        <code style="overflow-wrap:anywhere">@txHash</code></p>
+                }
                 <p><strong>Current matching record:</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
                     _recoveryFinding.CurrentRecordMatches is false ? "Not observed" : "Unknown")</p>
                 <p><strong>Advisory receipt:</strong> @(_recoveryFinding.HistoricalReceiptObserved ? "Observed (insufficient for release)" : "Not established")</p>
