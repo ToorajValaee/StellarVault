@@ -25,6 +25,11 @@ public sealed class VaultLinkedQueueKeySession(
     private long? _connectionEpoch;
     private bool _offlineOnly;
     private bool _disposed;
+    // An offline lock/unlock can reuse the same public root, network and
+    // ledger epoch. Advance this independent generation whenever the local
+    // decryption authorization is revoked or replaced.
+    private long _unlockEpoch;
+    public long UnlockEpoch => Interlocked.Read(ref _unlockEpoch);
 
     private bool MatchesSelectedNetwork()
     {
@@ -95,6 +100,7 @@ public sealed class VaultLinkedQueueKeySession(
 
     private void ClearUnsafe()
     {
+        Interlocked.Increment(ref _unlockEpoch);
         if (_key is not null) CryptographicOperations.ZeroMemory(_key);
         _key = null;
         _root = null;
