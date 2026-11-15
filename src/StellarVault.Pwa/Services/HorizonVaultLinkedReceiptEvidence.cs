@@ -42,8 +42,18 @@ public sealed class HorizonVaultLinkedReceiptEvidence(
                     " Successful transaction receipt observed from the expected root, but exact historical signer authorization and decrypted draft equality remain unverified. The queue must remain quarantined.",
                     receipt.Ledger, inspected.ManifestAndChunksMatch, inspected.StorageAccount);
             }
+            if (diagnostic.Kind == "expand")
+            {
+                var inspected = await expansions.InspectAsync(
+                    diagnostic.HorizonUrl, diagnostic.TransactionHash,
+                    diagnostic.RootAccountId, diagnostic.TargetAccountId, ct);
+                return new(true, inspected.Explanation +
+                    " The historical operation shape is advisory; it does not establish signed envelope authority or previous linked-chain lineage.",
+                    receipt.Ledger, HistoricalExpansionOperationsMatch: inspected.OperationsMatch,
+                    HistoricalParentAccount: inspected.ParentAccount);
+            }
             return new(true,
-                "Horizon reports a successful transaction from the expected root. Exact account expansion, signer policy and network operation history remain unverified.",
+                "Horizon reports a successful root transaction without enough operation evidence to release the linked queue.",
                 receipt.Ledger);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
