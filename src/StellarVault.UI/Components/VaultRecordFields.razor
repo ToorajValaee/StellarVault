@@ -44,8 +44,7 @@
 
         <label class="terminal-label" for="@(_prefix + "-notes")">NOTES</label>
         <textarea class="terminal-input terminal-textarea" id="@(_prefix + "-notes")"
-                  rows="4" value="@Notes"
-                  @oninput="e => NotesChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)"></textarea>
+                  rows="4" @oninput="e => NotesChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)">@Notes</textarea>
 
         <label class="terminal-label" for="@(_prefix + "-tags")">TAGS // COMMA SEPARATED</label>
         <input class="terminal-input" id="@(_prefix + "-tags")" value="@Tags"
