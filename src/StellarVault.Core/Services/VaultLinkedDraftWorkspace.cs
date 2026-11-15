@@ -488,8 +488,13 @@ public sealed class VaultLinkedDraftWorkspace(
                     if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
                             StringComparison.Ordinal))
                     {
+                        // A published SVFILE1 can be deleted using the exact
+                        // original encrypted record snapshot. File edits remain
+                        // prohibited: only typed creates and pinned deletes
+                        // may carry this protocol in the linked queue.
                         if (!VaultLinkedSingleFilePolicy.IsSupportedDraft(draft) ||
-                            item.Kind != VaultMutationKind.CreateRecord)
+                            item.Kind is not (VaultMutationKind.CreateRecord or
+                                VaultMutationKind.DeleteRecord))
                             throw new InvalidDataException("Corrupt linked encrypted file draft.");
                     }
                     else ValidateDraft(draft);
