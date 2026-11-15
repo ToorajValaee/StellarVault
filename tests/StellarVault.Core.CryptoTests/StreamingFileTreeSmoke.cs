@@ -27,6 +27,7 @@ internal static class StreamingFileTreeSmoke
                     source, "encrypted.bin", "application/octet-stream",
                     store, vaultKey, scope);
                 Check(encrypted.RootId.Length == 64 &&
+                    encrypted.Manifest.ChunkSize == VaultStreamingFileTree.MaxLocalChunkBytes &&
                     encryptedObjects.ContainsKey(encrypted.RootId) &&
                     encrypted.NodeCount == encryptedObjects.Count,
                     "Encrypted streaming tree failed to stage ciphertext-addressed root last.");
