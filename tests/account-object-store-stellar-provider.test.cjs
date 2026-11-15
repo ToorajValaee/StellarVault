@@ -33,7 +33,8 @@ test('Stellar provider fails closed when capacity and file policies are not wire
 test('Stellar adapter binds tenant-free engine scope to selected wallet, network, and local queue', () => {
   const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /StellarAccountAddress\.Validate\(scope\.StoreId\)/);
-  assert.match(provider, /scope\.NetworkId != network/);
+  assert.match(provider, /scope\.NetworkId != networks\.Network/);
+  assert.match(provider, /networks\.CredentialKey\(scope\.StoreId\)/);
   assert.match(provider, /linkedLedger\.ConnectedNetworkPassphrase != requiredPassphrase/);
   assert.match(provider, /linkedKeys\.ActiveRootAccountId != scope\.StoreId/);
   assert.match(provider, /linkedKeys\.UnlockEpoch/);
