@@ -20,7 +20,7 @@ public sealed class VaultLinkedDraftRecoveryReview(
     public sealed record Finding(
         string MutationId, string EntityId, VaultSyncState DurableState,
         bool? CurrentRecordMatches, bool HistoricalReceiptObserved,
-        string Explanation);
+        string Explanation, string? TransactionHash = null);
 
     public async Task<Finding> InspectAsync(
         string mutationId, CancellationToken ct = default)
@@ -114,7 +114,7 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     true => "A matching record is visible now. This does NOT prove the exact submitted transaction or authorize retry, release or queue confirmation.",
                     false => "The expected record is not visible with matching fields. This does NOT prove the submission failed. Do not retry.",
                     _ => "The remote record could not be established. Submission outcome remains unknown; do not retry."
-                });
+                }, item.TransactionHash);
         }
         finally
         {
