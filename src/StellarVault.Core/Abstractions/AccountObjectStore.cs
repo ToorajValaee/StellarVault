@@ -30,11 +30,12 @@ public sealed record ObjectDescriptor(
 
 /// <summary>
 /// Provider-neutral estimate. Costs are quoted in the provider's asset/unit,
-/// never assumed to be XLM, gas or a convertible fiat amount.
+/// never assumed to be XLM, gas or a convertible fiat amount. A null fee
+/// explicitly means no network quote exists yet; it is NOT a zero-fee quote.
 /// </summary>
 public sealed record ObjectStorageQuote(
     string ProviderId, string NetworkId, string FeeUnit,
-    string EstimatedFee, string? RequiredReserve,
+    string? EstimatedFee, string? RequiredReserve,
     long? EstimatedStoredBytes, bool RequiresCapacityExpansion);
 
 /// <summary>
