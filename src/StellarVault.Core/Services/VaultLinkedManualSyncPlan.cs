@@ -74,9 +74,9 @@ public static class VaultLinkedManualSyncPlan
             {
                 if (mutation.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
                     reasons.AddRange(VaultQueuedCreatePolicy.Problems(mutation, entries));
-                else if (mutation.Kind is VaultMutationKind.UpdateRecord or
+                else if ((mutation.Kind is VaultMutationKind.UpdateRecord or
                     VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteRecord or
-                    VaultMutationKind.DeleteFolder &&
+                    VaultMutationKind.DeleteFolder) &&
                     mutation.ExpectedRemoteVersion is not { Length: 64 })
                     reasons.Add("missing-remote-revision");
             }
