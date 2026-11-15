@@ -649,6 +649,70 @@ window.stellarVaultSecretLedger = (() => {
     }
   }
 
+  // Independently inspect a linked-account expansion: root AND newly created
+  // child must sign the SAME successful envelope, which must create exactly
+  // the child, disable its master key, install root signer and point from the
+  // immediately preceding linked tail. Never submits a network operation.
+  async function verifyHistoricalExpansion(id,txHash,childId) {
+    const s=session(id);
+    if(!/^[0-9a-f]{64}$/.test(txHash) ||
+       !s.sdk.StrKey.isValidEd25519PublicKey(childId)||childId===s.root)
+      fail('Invalid linked expansion history scope.');
+    const verified=await verifiedNetwork(s.net.origin,s.passphrase);
+    if(verified.origin!==s.net.origin)fail('Selected network origin changed.');
+    const endpoint=s.net.origin+'/transactions/'+txHash;
+    const response=await fetch(endpoint,{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok||new URL(response.url||endpoint).origin!==s.net.origin)
+      fail('Historical linked expansion receipt is not trustworthy.');
+    const receipt=await response.json();
+    if(receipt?.successful!==true||receipt?.hash?.toLowerCase()!==txHash||
+       receipt?.source_account!==s.root||
+       typeof receipt.envelope_xdr!=='string'||receipt.envelope_xdr.length>65536)
+      fail('Historical expansion receipt is not a successful root transaction.');
+    const tx=s.sdk.TransactionBuilder.fromXDR(receipt.envelope_xdr,s.passphrase);
+    const rawHash=tx.hash();
+    if(rawHash?.length!==32||tx.source!==s.root||
+       Array.from(rawHash,x=>x.toString(16).padStart(2,'0')).join('')!==txHash||
+       !Array.isArray(tx.operations)||![3,4].includes(tx.operations.length))
+      fail('Historical expansion envelope hash or operation count mismatches.');
+    const hasSignature=key=>tx.signatures?.some(signature=>{
+      try{return s.sdk.Keypair.fromPublicKey(key)
+        .verify(rawHash,new Uint8Array(signature.signature()));}
+      catch{return false;}
+    });
+    if(!hasSignature(s.root)||!hasSignature(childId))
+      fail('Historical linked expansion requires root and child signatures.');
+    const nodes=await chain(s);
+    const childIndex=nodes.findIndex(account=>account.account_id===childId);
+    if(childIndex<1||childIndex!==nodes.length-1)
+      fail('Verified linked child must be the current chain tail.');
+    const previousTail=nodes[childIndex-1].account_id;
+    const ops=tx.operations,creation=ops[0],options=ops[1],pointer=ops.at(-1);
+    if(creation.type!=='createAccount'||(creation.source||tx.source)!==s.root||
+       creation.destination!==childId||!(Number(creation.startingBalance)>0))
+      fail('Historical expansion did not create the expected funded child.');
+    if(options.type!=='setOptions'||(options.source||tx.source)!==childId||
+       options.masterWeight!==0||options.lowThreshold!==1||
+       options.medThreshold!==1||options.highThreshold!==1||
+       options.signer?.ed25519PublicKey!==s.root||options.signer?.weight!==1)
+      fail('Historical child signer and thresholds do not match the linked protocol.');
+    if(ops.length===4){
+      const payment=ops[2];
+      if(previousTail===s.root||payment.type!=='payment'||
+         (payment.source||tx.source)!==s.root||
+         payment.destination!==previousTail||
+         payment.asset?.getCode?.()!=='XLM'||!(Number(payment.amount)>0))
+        fail('Historical tail reserve payment does not match the parent.');
+    }else if(previousTail!==s.root) {
+      fail('An existing child tail requires an atomic reserve payment.');
+    }
+    if(pointer.type!=='manageData'||(pointer.source||tx.source)!==previousTail||
+       pointer.name!=='sv:next:v1'||pointer.value==null||
+       decoder.decode(new Uint8Array(pointer.value))!==childId)
+      fail('Historical linked parent pointer does not target the child.');
+    return true;
+  }
+
   // Called only AFTER durable encrypted CAS committed a full historical proof.
   // Never clear an unrelated uncertain transaction or a different vault.
   function releaseVerifiedHistory(id,transactionHash) {
@@ -691,5 +755,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,releaseVerifiedHistory,inspectUncertain,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,verifyHistoricalExpansion,releaseVerifiedHistory,inspectUncertain,cancelQuote,revokeAll});
 })();
