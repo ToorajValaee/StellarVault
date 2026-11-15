@@ -69,6 +69,54 @@ internal static class VaultRecordInterchangeSmoke
                 new byte[VaultRecordInterchange.MaximumBytes + 1]),
                 "Oversized imported JSON accepted.");
 
+            // Password-encrypted portable backup uses a randomized salt and
+            // authenticated ciphertext. It must fail closed on wrong password,
+            // corrupted header, altered ciphertext and unsupported versions.
+            const string backupPassword = "a deliberately long backup passphrase";
+            var firstBackup = await VaultEncryptedRecordBackup.EncryptAsync(
+                restored, backupPassword);
+            var secondBackup = await VaultEncryptedRecordBackup.EncryptAsync(
+                restored, backupPassword);
+            try
+            {
+                Check(!firstBackup.AsSpan().SequenceEqual(secondBackup),
+                    "Encrypted backup reused deterministic salt or nonce.");
+                var decrypted = await VaultEncryptedRecordBackup.DecryptAsync(
+                    firstBackup, backupPassword);
+                Check(decrypted.Records.Length == restored.Records.Length &&
+                    decrypted.Records.Single(x => x.Title == "Credential").Content ==
+                        "Secret password", "Encrypted backup did not preserve records.");
+                async Task RejectEncryptedAsync(byte[] data, string password)
+                {
+                    try
+                    {
+                        await VaultEncryptedRecordBackup.DecryptAsync(data, password);
+                    }
+                    catch (CryptographicException) { return; }
+                    throw new Exception("Unsafe encrypted backup was accepted.");
+                }
+                await RejectEncryptedAsync(firstBackup, "the wrong backup password");
+                var headerDamaged = firstBackup.ToArray();
+                try
+                {
+                    headerDamaged[4] ^= 1;
+                    await RejectEncryptedAsync(headerDamaged, backupPassword);
+                }
+                finally { CryptographicOperations.ZeroMemory(headerDamaged); }
+                var payloadDamaged = firstBackup.ToArray();
+                try
+                {
+                    payloadDamaged[^1] ^= 1;
+                    await RejectEncryptedAsync(payloadDamaged, backupPassword);
+                }
+                finally { CryptographicOperations.ZeroMemory(payloadDamaged); }
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(firstBackup);
+                CryptographicOperations.ZeroMemory(secondBackup);
+            }
+
             var flat = new VaultRecordInterchange.Archive(
                 VaultRecordInterchange.Format, VaultRecordInterchange.Version,
                 [new("1", "CSV title", "A \"quoted\", multi\nline entry",
