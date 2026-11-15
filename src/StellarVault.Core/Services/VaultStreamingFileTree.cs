@@ -220,12 +220,20 @@ public static class VaultStreamingFileTree
 
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         long written = 0;
+        // A file tree must be a tree, never a graph with shared/cyclic
+        // nodes that could amplify a tiny manifest into exponential reads.
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            rootId
+        };
 
         async Task VisitAsync(Reference node, int depth)
         {
             if (depth > 64)
                 throw new InvalidDataException("Streaming file tree depth exceeded.");
             RequireId(node.Id);
+            if (!visited.Add(node.Id))
+                throw new InvalidDataException("Repeated or cyclic streaming file node.");
             if (node.Length < 0 || !ValidDigest(node.Sha256Hex))
                 throw new InvalidDataException("Invalid streaming file tree reference.");
             var emitted = await loadAuthenticatedNode(node.Id, ct);
