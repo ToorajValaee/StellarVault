@@ -118,6 +118,7 @@
         {
             _file = args.File;
             _name = _file.Name;
+            _verifiedVersion = null;
             _status = null;
         }
         catch (Exception ex)
@@ -141,6 +142,7 @@
             await Files.SaveAsync(_name, input,
                 string.IsNullOrWhiteSpace(_file.ContentType) ? "application/octet-stream" : _file.ContentType);
             _openName = _name;
+            _verifiedVersion = null;
             _status = "Encrypted file saved.";
             // The listing is refreshed after _busy has been cleared in finally.
         }
@@ -257,6 +259,7 @@
             await Files.DeleteAsync(_openName, version);
             _status = "File removed from the catalog. Historical ciphertext may remain in storage.";
             _openName = string.Empty;
+            _verifiedVersion = null;
             _confirmRemoval = false;
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException
