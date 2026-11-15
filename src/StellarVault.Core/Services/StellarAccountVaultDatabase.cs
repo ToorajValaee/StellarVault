@@ -106,6 +106,14 @@ public sealed class StellarAccountVaultDatabase
         ArgumentNullException.ThrowIfNull(plaintext);
         ValidateName(name);
         StellarLedgerFileProtocol.ValidateName(name);
+
+        // Reject a stale create/replacement BEFORE reading potentially
+        // gigabytes and allocating unreachable encrypted nodes. The final
+        // pointer commit still performs the authoritative atomic CAS.
+        var original = await GetVersionAsync(name, vaultKey, cancellationToken);
+        if (original != expectedVersion)
+            throw new VaultWriteConflictException(GetRecordId(name, vaultKey.Span));
+
         var scope = BuildFileTreeContext(GetRecordId(name, vaultKey.Span));
         try
         {
