@@ -24,8 +24,13 @@ window.stellarVaultV2Download = Object.freeze({
       input.addEventListener('change', async () => {
         const file = input.files?.[0];
         if (!file) { finish(null); return; }
-        if (file.size <= 0 || file.size > 1024 * 1024) {
-          fail(new RangeError('Select a non-empty file no larger than 1 MiB'));
+        // An SVRB record backup adds a 5-byte magic/version header,
+        // 16-byte salt, 12-byte GCM nonce and 16-byte tag to its bounded
+        // 1 MiB JSON body. Enforce a small hard upper bound here; individual
+        // Core callers validate their format's stricter limit.
+        const maxPortableRecordBackupBytes = 1024 * 1024 + 5 + 16 + 12 + 16;
+        if (file.size <= 0 || file.size > maxPortableRecordBackupBytes) {
+          fail(new RangeError('Selected file exceeds the record-backup picker limit'));
           return;
         }
         try {
