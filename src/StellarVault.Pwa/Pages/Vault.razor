@@ -699,7 +699,6 @@ else
     private string _explorerLayout = "list";
     private string _mobileCollection = "all";
     private bool _showMobileFilters;
-    private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
     private void SelectFolderFromTree(string? id) => OpenFolder(id ?? string.Empty);
     private void EditSelectedPublishedRecord()
@@ -1247,7 +1246,6 @@ else
     private VerifiedTreeDownload? _verifiedTreeDownload;
     private string? _fileDownloadStatus;
     private LedgerRecordItem? _selected;
-    private bool _revealed;
 
     private async Task DownloadLedgerFileAsync()
     {
@@ -1332,8 +1330,7 @@ else
     {
         _editorOpen = false;
         _selected = item;
-        _recordInspectorTab = "details";
-        _revealed = false;
+       
         _fileDownloadStatus = null;
         _verifiedTreeDownload = null;
     }
@@ -1342,7 +1339,7 @@ else
     {
         if (_busy) return;
         _selected = null;
-        _revealed = false;
+       
         _fileDownloadStatus = null;
         _verifiedTreeDownload = null;
     }
@@ -1354,11 +1351,6 @@ else
         _deleteEstimate = null;
     }
 
-    private static string? SafeRecordUrl(string? value)
-    {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return null;
-        return uri.Scheme is "http" or "https" ? uri.AbsoluteUri : null;
-    }
     private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
     private bool _showAccountInfo, _infoLoading;
     private LedgerAccountInfo? _accountInfo;
@@ -1400,7 +1392,7 @@ else
         var id = _deleteCandidate.Id;
         try {
             var result = await Ledger.DeleteAsync(id);
-            _deleteCandidate = null; _deleteEstimate = null; _selected = null; _revealed = false;
+            _deleteCandidate = null; _deleteEstimate = null; _selected = null;
             _records = await Ledger.ReadAsync();
             _error = "Deletion committed: " + result.TransactionHash + (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
         } catch (Exception ex) { _error = "Deletion failed or refresh unavailable: " + ex.Message; }
