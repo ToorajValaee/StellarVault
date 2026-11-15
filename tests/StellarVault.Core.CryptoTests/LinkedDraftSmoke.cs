@@ -277,8 +277,41 @@ internal static class LinkedDraftSmoke
                         .State == VaultSyncState.Confirmed &&
                     ledger.Submissions == 1,
                 "Signed-history verified single-record file was not durably finalized.");
+            // A file's original encrypted snapshot is still SVFILE1 when it
+            // becomes a pending deletion. Keep it typed and reviewable rather
+            // than classifying the valid deletion journal as a corrupt draft.
+            var originalRevision = await ledger.ReadRecordRevisionAsync(file.EntityId);
+            Require(VaultLinkedRemoteRevisionPolicy.IsValid(originalRevision),
+                "Published single-file record had no canonical remote revision.");
+            var deletion = await drafts.StageDeleteAsync(file.EntityId, originalRevision!);
+            var deletionEntry = (await drafts.ListAsync())
+                .Single(x => x.MutationId == deletion.MutationId);
+            Require(!deletionEntry.IsCorrupt && deletionEntry.IsFile &&
+                    deletionEntry.Kind == VaultMutationKind.DeleteRecord &&
+                    deletionEntry.State == VaultSyncState.Pending,
+                "Queued SVFILE1 deletion was misclassified as corrupt or editable.");
+            await MustRejectAsync(
+                () => drafts.OpenDraftAsync(deletion.MutationId),
+                "An immutable linked file deletion was reopened for editing.");
+            var deleteReview = await publisher.PrepareAsync(deletion.MutationId);
+            Require(deleteReview.Quote.Kind == "delete" && ledger.Submissions == 1,
+                "S-key file deletion was not separately fee reviewed.");
+            var deleteHash = await publisher.SubmitAsync(deleteReview.Quote, true);
+            Require(deleteHash != hash &&
+                    (await ledger.ReadAsync()).All(x => x.Id != file.EntityId) &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == deletion.MutationId)
+                        .State == VaultSyncState.Uncertain,
+                "Submitted file deletion did not remain quarantined.");
+            var confirmedDeletion =
+                await reconciler.ConfirmVerifiedRecordAsync(deletion.MutationId);
+            Require(confirmedDeletion.Confirmed &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == deletion.MutationId)
+                        .State == VaultSyncState.Confirmed &&
+                    ledger.Submissions == 2 &&
+                    ledger.ReleasedVerifiedHash == deleteHash,
+                "Historically verified file deletion did not finalize without replay.");
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
-            Console.WriteLine("PASS: S-key single-record binary file uses shared SVFILE1, encrypted queue and signed-history reconciliation");
+            Console.WriteLine("PASS: S-key SVFILE1 create/delete retain typed encrypted queues and signed-history reconciliation");
         }
         finally
         {
