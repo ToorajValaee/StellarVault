@@ -299,5 +299,5 @@ public static class VaultStreamingFileTree
     }
 
     private static string NewId() =>
-        Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
+        Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
 }
