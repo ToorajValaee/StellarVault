@@ -139,34 +139,37 @@
     {
         if (!CanExport)
             throw new InvalidOperationException("Connect the vault before exporting records.");
-        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        var requestedStrategy = Strategy;
+        if (requestedStrategy == VaultMutationStrategyPolicy.Linked)
         {
             if (LinkedLedger.RootAccountId is not string root || !LinkedLedger.IsConnected)
                 throw new InvalidOperationException("Linked vault signer is disconnected.");
             var epoch = LinkedLedger.ConnectionEpoch;
             var scope = Networks.CredentialKey(root);
             var snapshot = await LinkedLedger.ReadAsync();
-            if (!LinkedLedger.IsConnected || LinkedLedger.RootAccountId != root ||
+            if (Strategy != requestedStrategy || !LinkedLedger.IsConnected ||
+                LinkedLedger.RootAccountId != root ||
                 LinkedLedger.ConnectionEpoch != epoch ||
                 Networks.CredentialKey(root) != scope)
                 throw new InvalidOperationException(
                     "Linked account or network changed while reading the export.");
             return (VaultRecordInterchange.FromPublished(snapshot),
-                string.Join("|", Strategy, root, scope,
+                string.Join("|", requestedStrategy, root, scope,
                     epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
-        if (Strategy != VaultMutationStrategyPolicy.Hd || !HdLedger.IsConnected)
+        if (requestedStrategy != VaultMutationStrategyPolicy.Hd || !HdLedger.IsConnected)
             throw new InvalidOperationException("HD vault is disconnected.");
         var before = await HdLedger.InspectAccountInfoAsync();
         var hdScope = Networks.CredentialKey(before.RootAccountId);
         var hdSnapshot = await HdLedger.ReadAsync();
         var after = await HdLedger.InspectAccountInfoAsync();
-        if (!HdLedger.IsConnected || before.RootAccountId != after.RootAccountId ||
+        if (Strategy != requestedStrategy || !HdLedger.IsConnected ||
+            before.RootAccountId != after.RootAccountId ||
             Networks.CredentialKey(before.RootAccountId) != hdScope)
             throw new InvalidOperationException(
                 "HD account or network changed while reading the export.");
         return (VaultRecordInterchange.FromPublished(hdSnapshot),
-            string.Join("|", Strategy, before.RootAccountId, hdScope));
+            string.Join("|", requestedStrategy, before.RootAccountId, hdScope));
     }
 
     private async Task RequireSameExportScopeAsync(string expected)
