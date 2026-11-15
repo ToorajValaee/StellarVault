@@ -217,7 +217,8 @@ test('native explorer has mobile object tiles, desktop folder tree and back navi
   assert.match(native, /sv-native-folder-tree/);
   assert.match(native, /sv-native-object-grid/);
   assert.match(native, /sv-native-detail-screen/);
-  assert.match(native, /Back to folder/);
+  assert.match(native, /aria-label="Back to vault root"/);
+  assert.match(native, /OpenNativeFolder\(""\)/);
   assert.match(styles, /\.sv-native-folder-tree/);
   assert.match(styles, /\.sv-native-object-card/);
 });
