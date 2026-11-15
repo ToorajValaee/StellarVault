@@ -11,6 +11,7 @@
 @inject VaultDeviceRetentionGate Retention
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession LinkedQueueKeys
+@inject VaultDeviceUnlockPreference DeviceUnlockPreference
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
@@ -79,21 +80,29 @@
             </div>
         @if (Platform == "WEB PWA")
         {
-            <details class="sv-access-storage-settings sv-entry-storage-outside" open="@(_credentialMode == VaultCredentialMode.MnemonicHd ? _enableLocalStorage : LinkedRetention.AllowsLocalPersistence)">
-                <summary>Save encrypted items on this device (optional)</summary>
+            <section class="sv-access-storage-settings sv-entry-storage-outside" aria-label="Optional encrypted device storage">
+                <h2 class="sv-storage-heading">Save encrypted items on this device (optional)</h2>
                 <fieldset class="sv-access-storage-choices" disabled="@_busy">
                     <legend class="sr-only">Device storage preference</legend>
                     <label class="sv-biometric-choice">
                         <input type="radio" name="device-retention" checked="@(!CurrentDeviceStoragePreference)"
                                @onchange="() => SelectDeviceStorageAsync(false)" />
-                        Stellar only — do not enable device storage
+                        <span>Stellar only — do not enable device storage</span>
                     </label>
                     <label class="sv-biometric-choice">
                         <input type="radio" name="device-retention" checked="@CurrentDeviceStoragePreference"
                                @onchange="() => SelectDeviceStorageAsync(true)" />
-                        Save encrypted items on this device
+                        <span>Save encrypted items on this device</span>
                     </label>
                 </fieldset>
+                @if (CurrentDeviceStoragePreference)
+                {
+                    <label class="sv-biometric-choice sv-storage-device-unlock">
+                        <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
+                        <span>Enable device unlock after signing in (optional)</span>
+                    </label>
+                    <p class="advanced-help">Device unlock protects only the separate encrypted-device passphrase. For S-key vaults, enrollment happens after you create or unlock encrypted drafts; the S-key itself is never stored. Support depends on your browser and device.</p>
+                }
                 @if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
                 {
                     <p class="advanced-help">S-key vaults use their own encrypted storage, local passphrase and consent. After connecting, set up or unlock encrypted drafts in the Secret Key workspace. This selection does not store your S-key or enable automatic synchronization.</p>
@@ -102,7 +111,7 @@
                 {
                     <p class="advanced-help">HD device storage is encrypted using your separate vault passphrase. Choosing Stellar only does not delete previously stored encrypted data.</p>
                 }
-            </details>
+            </section>
         }
         <form id="sv-access-form" class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
@@ -155,14 +164,7 @@
                         </label>
                     </div>
                 }
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd && !Sessions.IsUnlocked && _enableLocalStorage)
-                {
-                    <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
-                        Enable device unlock after signing in (optional)
-                    </label>
-                    <p class="advanced-help">Use a passkey protected by your device's biometrics or PIN for future privacy unlocks on this device. Enrollment happens only here, after your passphrase is verified.</p>
-                }
-                @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
+                 @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
                 {
                     <div class="terminal-alert" role="status">
                         <strong>ENABLE DEVICE UNLOCK?</strong>
@@ -529,7 +531,11 @@
         _workspaceMode = workspace;
     }
     private bool _enableLocalStorage;
-    private bool _requestBiometricEnrollment;
+    private bool _requestBiometricEnrollment
+    {
+        get => DeviceUnlockPreference.Requested;
+        set => DeviceUnlockPreference.Requested = CurrentDeviceStoragePreference && value;
+    }
     private bool _confirmMainnetAccess;
     private string? _pendingBiometricAccount;
     private string? _pendingBiometricPassphrase;
@@ -572,7 +578,7 @@
         if (_credentialMode == VaultCredentialMode.MnemonicHd)
         {
             _enableLocalStorage = enabled;
-            if (!enabled) _requestBiometricEnrollment = false;
+            if (!enabled) DeviceUnlockPreference.Reset();
             return;
         }
         if (enabled)
@@ -583,6 +589,7 @@
         {
             await LinkedQueueKeys.LockAsync();
             LinkedRetention.Reset();
+            DeviceUnlockPreference.Reset();
         }
     }
 
