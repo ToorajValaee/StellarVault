@@ -1,4 +1,6 @@
 @using StellarVault.Core.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @inject IStellarSecretKeyLedger Ledger
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession QueueKeys
@@ -9,6 +11,7 @@
 @inject VaultLinkedExpansionJournal ExpansionJournal
 @inject VaultLinkedDraftRecoveryReview RecoveryReview
 @inject VaultLinkedVerifiedReconciliation VerifiedReconciliation
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
@@ -175,13 +178,20 @@
                     @foreach (var record in _publishedRecords)
                     {
                         <div class="sv-secret-workspace-actions" @key="record.Id">
-                            <span><strong>@record.Title</strong> — @(record.IsFolder ? "Folder" : "Record")</span>
+                            <span><strong>@record.Title</strong> — @(StellarLedgerFileProtocol.IsFile(record) ? "Encrypted file" : record.IsFolder ? "Folder" : "Record")</span>
                             <button type="button" class="pixel-button compact"
-                                    disabled="@(_busy || _review is not null)"
+                                    disabled="@(_busy || _review is not null || StellarLedgerFileProtocol.IsFile(record))"
                                     @onclick="() => EditPublishedRecordAsync(record.Id)">Stage update</button>
                             <button type="button" class="pixel-button compact"
                                     disabled="@(_busy || _review is not null)"
                                     @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
+                            @if (record.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
+                                    StringComparison.Ordinal))
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@_busy"
+                                        @onclick="() => DownloadLinkedSmallFileAsync(record.Id)">Download decrypted file</button>
+                            }
                         </div>
                     }
                     @if (_deletePublishedId is not null)
@@ -196,6 +206,20 @@
                     }
                 </section>
             }
+            <section class="sv-secret-review" aria-label="Single-record encrypted S-key files">
+                <h3>Encrypted small files (single-record)</h3>
+                <p>Stage files of 1–2048 bytes using the shared SVFILE1 format.
+                   Files stay encrypted locally until separately fee-reviewed.
+                   The larger multipart file protocol is not enabled for this S-key vault.</p>
+                <InputFile OnChange="SelectLinkedSmallFile" disabled="@_busy" />
+                @if (_smallFile is not null)
+                {
+                    <p>Selected: @_smallFile.Name (@_smallFile.Size bytes)</p>
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || _smallFile.Size < 1 || _smallFile.Size > VaultLinkedSingleFilePolicy.MaxBytes)"
+                            @onclick="StageLinkedSmallFileAsync">Stage encrypted file draft</button>
+                }
+            </section>
             <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
                 <h3>@(_editingRemoteId is not null ? "Stage update to published record" :
                     _editingMutationId is null ? "Save to encrypted device storage" : "Edit unpublished encrypted draft")</h3>
@@ -265,7 +289,7 @@
                     @foreach (var draft in _drafts)
                     {
                         <div class="sv-secret-workspace-actions" @key="draft.MutationId">
-                            <span><strong>@draft.Title</strong> — @(draft.IsFolder ? "Folder" : "Record")
+                            <span><strong>@draft.Title</strong> — @(draft.IsFile ? "Encrypted file" : draft.IsFolder ? "Folder" : "Record")
                                 · @draft.Kind · @draft.State
                                 @if (draft.IsJournal)
                                 {
@@ -290,7 +314,8 @@
                             @if (draft.State == VaultSyncState.Pending &&
                                  !draft.IsCorrupt && !draft.IsJournal)
                             {
-                                @if (draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
+                                @if (!draft.IsFile &&
+                                     draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
                                 {
                                     <button type="button" class="pixel-button compact"
                                             disabled="@(_busy || _review is not null)"
@@ -601,6 +626,84 @@
     private string _draftFolderId = string.Empty;
     private string? _editingMutationId;
     private string? _editingPayloadSha256;
+    private IBrowserFile? _smallFile;
+
+    private void SelectLinkedSmallFile(InputFileChangeEventArgs args)
+    {
+        _smallFile = args.File;
+        _message = _smallFile.Size is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes
+            ? "This S-key single-record file mode accepts only 1–2048 bytes."
+            : "File selected. Staging will encrypt its contents locally without a Stellar transaction.";
+    }
+
+    private async Task StageLinkedSmallFileAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked || _smallFile is null) return;
+        _busy = true;
+        byte[]? contents = null;
+        try
+        {
+            if (_smallFile.Size is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes)
+                throw new InvalidDataException("The selected file exceeds the single-record limit.");
+            await using var input = _smallFile.OpenReadStream(VaultLinkedSingleFilePolicy.MaxBytes);
+            using var buffer = new MemoryStream();
+            await input.CopyToAsync(buffer);
+            contents = buffer.ToArray();
+            await DraftWorkspace.StageSmallFileAsync(
+                _smallFile.Name.Length > 256 ? _smallFile.Name[..256] : _smallFile.Name,
+                _smallFile.Name,
+                string.IsNullOrWhiteSpace(_smallFile.ContentType)
+                    ? "application/octet-stream" : _smallFile.ContentType,
+                contents);
+            _smallFile = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _manualSyncPlan = null;
+            _message = "Encrypted file draft staged. Review its separate fee before publication.";
+        }
+        catch (Exception ex)
+        {
+            _message = "S-key file staging failed. Refresh the encrypted queue before repeating: " + ex.Message;
+        }
+        finally
+        {
+            if (contents is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(contents);
+            _busy = false;
+        }
+    }
+
+    private async Task DownloadLinkedSmallFileAsync(string recordId)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        byte[]? decoded = null;
+        try
+        {
+            var records = await Ledger.ReadAsync();
+            var file = records.Single(x => x.Id == recordId);
+            if (!file.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
+                    StringComparison.Ordinal))
+                throw new InvalidDataException("Only a verified SVFILE1 file is supported.");
+            decoded = StellarLedgerFileProtocol.DecodeFile(file, records);
+            if (decoded.Length is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes)
+                throw new InvalidDataException("The linked file exceeds its safe single-record size.");
+            await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                StellarLedgerFileProtocol.FileName(file), decoded);
+            _message = "Verified encrypted S-key file decrypted and downloaded.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Unable to verify and download the selected S-key file: " + ex.Message;
+        }
+        finally
+        {
+            if (decoded is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded);
+            _busy = false;
+        }
+    }
+
     private IReadOnlyList<LedgerRecordItem> _publishedRecords = [];
     private string? _editingRemoteId;
     private string? _editingRemoteRevision;
