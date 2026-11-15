@@ -438,6 +438,12 @@ window.stellarVaultSecretLedger = (() => {
       // session may have submitted while this one was fetching network state.
       if(unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
         fail('Another submission for this vault is unresolved; do not transmit a second transaction.');
+      // Record the network-bound signed hash BEFORE broadcasting. A timeout may
+      // follow a successful submission; keep this public identity for recovery.
+      // This is not proof of inclusion and NEVER authorizes an automatic retry.
+      const rawHash=tx.hash();
+      if(!rawHash||rawHash.length!==32)fail('Signed transaction hash unavailable; no broadcast attempted.');
+      const signedHash=Array.from(rawHash,b=>b.toString(16).padStart(2,'0')).join('');
       // From this point any network failure may mean the transaction was accepted.
       // Keep this session quarantined until the connected outcome is verified.
       s.needsReconciliation=true;
@@ -445,17 +451,15 @@ window.stellarVaultSecretLedger = (() => {
       s.uncertain={Kind:q.kind,RootAccountId:s.root,
         TargetAccountId:q.kind==='expand'?q.childId:q.node,
         RecordId:q.kind==='expand'?null:q.recordId,
-        TransactionHash:null,NetworkPassphrase:s.passphrase,
+        TransactionHash:signedHash,NetworkPassphrase:s.passphrase,
         HorizonUrl:s.net.origin};
       unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
-      if(result?.hash && /^[0-9a-f]{64}$/i.test(result.hash)) {
-        s.uncertain.TransactionHash=result.hash;
-        unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
-      }
       if(!result?.hash || result.successful===false)
         fail('No confirmed Stellar transaction hash. Reconcile before retry.');
+      if(!/^[0-9a-f]{64}$/i.test(result.hash) || result.hash.toLowerCase()!==signedHash)
+        fail('Horizon returned a different transaction hash. Keep the signed hash quarantined and investigate.');
       // An accepted response must still be checked against the new ledger state.
       // If Horizon is temporarily behind, report as uncertain rather than resubmitting.
       try {
