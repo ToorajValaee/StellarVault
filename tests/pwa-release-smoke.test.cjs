@@ -656,7 +656,11 @@ test('local file sizes use streamed storage rather than a 1 MiB UI cap; ledger u
     'VaultItemEditor.razor'), 'utf8');
   const download = fs.readFileSync(path.join(root, 'js','vault-v2-download.js'),'utf8');
   assert.match(local,/OpenReadStream\(_file\.Size\)/);
-  assert.doesNotMatch(local,/MaximumFileLength|1 MiB upload limit/);
+  // Documentation may explain the removed 1 MiB limit; only reject an
+  // actual fixed-size validation or OpenReadStream cap.
+  assert.doesNotMatch(local,/MaximumFileLength/);
+  assert.doesNotMatch(local,/_file\.Size\s*>\s*1024\s*\*\s*1024/);
+  assert.doesNotMatch(local,/OpenReadStream\(1024\s*\*\s*1024\)/);
   assert.doesNotMatch(download,/Download exceeds limit/);
   assert.match(ledger,/MaximumLedgerFileLength = StellarLedgerFileProtocol\.MaxFileBytes/);
   assert.match(ledger,/Each encrypted part requires a separate fee approval/);
