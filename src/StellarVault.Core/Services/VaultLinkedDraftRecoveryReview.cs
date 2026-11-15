@@ -22,7 +22,9 @@ public sealed class VaultLinkedDraftRecoveryReview(
         bool? CurrentRecordMatches, bool HistoricalReceiptObserved,
         string Explanation, string? TransactionHash = null,
         bool HistoricalRecordOperationsMatch = false,
-        string? HistoricalStorageAccount = null);
+        string? HistoricalStorageAccount = null,
+        bool HistoricalExpansionOperationsMatch = false,
+        string? HistoricalParentAccount = null);
 
     public async Task<Finding> InspectAsync(
         string mutationId, CancellationToken ct = default)
