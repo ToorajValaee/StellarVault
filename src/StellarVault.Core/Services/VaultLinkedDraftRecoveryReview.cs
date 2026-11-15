@@ -55,6 +55,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
             var receipt = false;
             var historicalRecordOperations = false;
             string? historicalStorageAccount = null;
+            var historicalExpansionOperations = false;
+            string? historicalParentAccount = null;
             try
             {
                 if (item.Kind == VaultMutationKind.ExtendLinkedChain)
@@ -102,6 +104,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     receipt = evidence.ReceiptObserved;
                     historicalRecordOperations = evidence.HistoricalRecordOperationsMatch;
                     historicalStorageAccount = evidence.StorageAccount;
+                    historicalExpansionOperations = evidence.HistoricalExpansionOperationsMatch;
+                    historicalParentAccount = evidence.HistoricalParentAccount;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -113,6 +117,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                 receipt = false;
                 historicalRecordOperations = false;
                 historicalStorageAccount = null;
+                historicalExpansionOperations = false;
+                historicalParentAccount = null;
             }
 
             RequireSameScope(root, scope, epoch);
@@ -125,7 +131,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     false => "The expected record is not visible with matching fields. This does NOT prove the submission failed. Do not retry.",
                     _ => "The remote record could not be established. Submission outcome remains unknown; do not retry."
                 }, item.TransactionHash, historicalRecordOperations,
-                historicalStorageAccount);
+                historicalStorageAccount, historicalExpansionOperations,
+                historicalParentAccount);
         }
         finally
         {
