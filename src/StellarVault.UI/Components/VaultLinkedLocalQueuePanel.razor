@@ -212,6 +212,16 @@
                             }
                         </div>
                     }
+                    @if (_verifiedTreeExport is not null)
+                    {
+                        <div class="sv-secret-workspace-actions">
+                            <span>File verified: @_verifiedTreeExport.FileName. Choose a destination to save its authenticated bytes.</span>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@_busy" @onclick="SaveVerifiedTreeExportAsync">Save verified file…</button>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@_busy" @onclick="() => _verifiedTreeExport = null">Cancel export</button>
+                        </div>
+                    }
                     @if (_deletePublishedId is not null)
                     {
                         <p role="alert">Stage local deletion for the selected published
@@ -693,46 +703,18 @@
             var file = records.Single(x => x.Id == recordId);
             if (VaultLinkedTreeFilePolicy.IsRootRecord(file))
             {
-                // Preflight verification ensures no unverified plaintext reaches
-                // the native/browser file saver. A second bounded-memory
-                // pass streams the immutable ledger snapshot to the host.
+                // First action: verify the entire immutable ledger snapshot
+                // WITHOUT writing unverified bytes to a user-visible file.
+                // The second explicit click opens the browser's native file
+                // picker within its required transient user activation.
                 var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
                     recordId, records, Stream.Null);
-                var pipe = new Pipe(new PipeOptions(
-                    pauseWriterThreshold: 256 * 1024,
-                    resumeWriterThreshold: 128 * 1024));
-                using var cancellation = new CancellationTokenSource();
-                var producer = Task.Run(async () =>
-                {
-                    await using var writer = pipe.Writer.AsStream(leaveOpen: true);
-                    try
-                    {
-                        await VaultLinkedTreeFilePolicy.ReadAsync(recordId, records,
-                            writer, cancellation.Token);
-                        await writer.FlushAsync(cancellation.Token);
-                        await pipe.Writer.CompleteAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        await pipe.Writer.CompleteAsync(ex);
-                        throw;
-                    }
-                });
-                try
-                {
-                    await using var reader = pipe.Reader.AsStream(leaveOpen: true);
-                    if (!await NativeFiles.SaveAsync(verified.FileName, reader))
-                        throw new IOException("The file export was cancelled or failed.");
-                    await producer;
-                }
-                catch
-                {
-                    cancellation.Cancel();
-                    try { await producer; } catch { /* Preserve export failure. */ }
-                    throw;
-                }
-                finally { await pipe.Reader.CompleteAsync(); }
-                _message = "Streamed, verified S-key file downloaded.";
+                var activeRoot = QueueKeys.ActiveRootAccountId ??
+                    throw new InvalidOperationException("Linked signer disconnected.");
+                _verifiedTreeExport = new(recordId, verified.FileName, records,
+                    activeRoot, Networks.CredentialKey(activeRoot),
+                    Ledger.ConnectionEpoch);
+                _message = "Encrypted file verified. Select Save verified file to choose an export destination.";
             }
             else
             {
@@ -758,6 +740,66 @@
         }
     }
 
+    private sealed record VerifiedTreeExport(string RootId, string FileName,
+        IReadOnlyList<LedgerRecordItem> Records, string AccountId,
+        string NetworkScope, long Epoch);
+
+    private VerifiedTreeExport? _verifiedTreeExport;
+
+    private async Task SaveVerifiedTreeExportAsync()
+    {
+        if (_busy || _verifiedTreeExport is not { } prepared) return;
+        _verifiedTreeExport = null; // One-shot, even on an aborted picker.
+        if (!QueueKeys.CanPublish || QueueKeys.ActiveRootAccountId != prepared.AccountId ||
+            !Ledger.IsConnected || Ledger.RootAccountId != prepared.AccountId ||
+            Ledger.ConnectionEpoch != prepared.Epoch ||
+            Networks.CredentialKey(prepared.AccountId) != prepared.NetworkScope)
+        {
+            _message = "Vault signer or network changed. Verify this file again before exporting.";
+            return;
+        }
+        _busy = true;
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 256 * 1024,
+            resumeWriterThreshold: 128 * 1024));
+        using var cancellation = new CancellationTokenSource();
+        var producer = Task.Run(async () =>
+        {
+            await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+            try
+            {
+                await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, prepared.Records, writer, cancellation.Token);
+                await writer.FlushAsync(cancellation.Token);
+                await pipe.Writer.CompleteAsync();
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex);
+                throw;
+            }
+        });
+        try
+        {
+            await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+            if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                throw new IOException("The file export was cancelled or failed.");
+            await producer;
+            _message = "Verified file saved using bounded-memory streaming.";
+        }
+        catch (Exception ex)
+        {
+            cancellation.Cancel();
+            try { await producer; } catch { /* Preserve the export failure. */ }
+            _message = "Verified file export failed or was cancelled: " + ex.Message;
+        }
+        finally
+        {
+            await pipe.Reader.CompleteAsync();
+            _busy = false;
+        }
+    }
+
     private IReadOnlyList<LedgerRecordItem> _publishedRecords = [];
     private string? _editingRemoteId;
     private string? _editingRemoteRevision;
@@ -771,6 +813,7 @@
         _busy = true;
         try
         {
+            _verifiedTreeExport = null;
             var records = await Ledger.ReadAsync();
             _publishedRecords = records
                 .Where(x => !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
