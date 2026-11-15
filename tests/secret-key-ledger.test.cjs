@@ -1472,11 +1472,15 @@ test('linked SVFILE2 multipart staging requires historical part confirmation and
   assert.match(policy,/multipart-previous-part-not-confirmed/);
   assert.match(policy,/multipart-all-parts-must-be-historically-confirmed/);
   assert.match(policy,/multipart-confirmed-part-changed-on-ledger/);
+  assert.match(policy,/items\[0\]\.State != VaultSyncState\.Pending/);
+  assert.match(policy,/items\[0\]\.TransactionHash is not null/);
   assert.match(policy,/StellarLedgerFileProtocol\.DecodeFile\(candidate, remote\)/);
   assert.match(policy,/IsReferencedByPendingManifest/);
   // Malformed encrypted drafts must fail closed before accessing Content.
   assert.match(policy,/if \(draft\?\.Content is null\) return normal;/);
   assert.match(workspace,/StageMultipartFileAsync/);
+  assert.match(workspace,/Linked encrypted draft content is missing/);
+  assert.match(workspace,/Published linked record content is missing/);
   assert.match(workspace,/store\.AddAsync\(item, ct\)/);
   assert.match(workspace,/store\.TryDeleteAsync\(item, CancellationToken\.None\)/);
   assert.match(workspace,/VaultLinkedMultipartFilePolicy\.IsReferencedByPendingManifest/);
