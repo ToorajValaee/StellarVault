@@ -6,7 +6,14 @@
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="SET UP YOUR VAULT">
-@if (!Sessions.IsUnlocked && !Ledger.IsConnected && !SecretLedger.IsConnected)
+@if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel centered-message" role="alert">
+        <h1>Conflicting vault sessions</h1>
+        <p>Lock the previous independent vault session before continuing setup. No transaction was submitted.</p>
+    </section>
+}
+else if (ActiveMode == VaultWorkspaceMode.Locked)
 {
     <section class="terminal-panel centered-message">
         <h1>Vault locked</h1>
@@ -111,6 +118,9 @@ else
 </AdaptiveShell>
 
 @code {
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
     private LedgerFundingStatus? _funding;
     private LedgerAccountInfo? _linkedInfo;
     private long _linkedEpoch;
@@ -122,6 +132,7 @@ else
         spendable > 0m;
 
     private bool MatchingLinkedSession(string root, long epoch) =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey &&
         SecretLedger.IsConnected &&
         SecretLedger.RootAccountId == root &&
         SecretLedger.ConnectionEpoch == epoch;
@@ -158,6 +169,7 @@ else
     {
         try
         {
+            if (ActiveMode == VaultWorkspaceMode.ConflictingSessions) return;
             if (SecretLedger.IsConnected)
             {
                 await InspectLinkedAsync();
@@ -177,7 +189,8 @@ else
 
     private async Task RefreshFundingAsync()
     {
-        if (_busy || (!Ledger.IsConnected && !SecretLedger.IsConnected)) return;
+        if (_busy || ActiveMode is VaultWorkspaceMode.Locked or
+                VaultWorkspaceMode.ConflictingSessions) return;
         _busy = true;
         _loadingMessage = "REFRESHING NATIVE BALANCE...";
         _error = null;
@@ -203,7 +216,8 @@ else
 
     private async Task InitializeAsync()
     {
-        if (_busy || !_confirmed || _funding?.CanInitialize != true || !Ledger.IsConnected) return;
+        if (_busy || !_confirmed || _funding?.CanInitialize != true ||
+            ActiveMode != VaultWorkspaceMode.MnemonicHd || !Ledger.IsConnected) return;
         _busy = true;
         _loadingMessage = "INITIALIZING STELLAR REGISTRY...";
         _error = null;
