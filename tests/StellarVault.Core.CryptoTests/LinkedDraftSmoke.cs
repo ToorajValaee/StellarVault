@@ -211,6 +211,27 @@ internal static class LinkedDraftSmoke
             var reconciler = new VaultLinkedVerifiedReconciliation(
                 ledger, store, keys, consent, network, reviewer);
 
+            // A corrupted authenticated queue payload may deserialize into a
+            // draft with null content. Both HD and linked policy review must
+            // report a blocker, never crash or authorize publication.
+            var malformedBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                new LedgerRecordDraft("Missing content", null!));
+            var malformed = VaultPendingMutation.Create(Root,
+                VaultLinkedQueueStorageScope.FromNetworkScope(network.CredentialKey(Root)),
+                VaultMutationKind.CreateRecord, "0123456789ABCDEF", malformedBytes)
+                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+            try
+            {
+                var failures = VaultLinkedMultipartFilePolicy.Problems(malformed, [malformed]);
+                Require(failures.Contains("missing-record-content"),
+                    "Null-content linked draft was not safely blocked.");
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(malformedBytes);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(malformed.EncryptedPayload);
+            }
+
             await MustRejectAsync(
                 () => drafts.StageMultipartFileAsync("Too large", "big.bin",
                     "application/octet-stream",
