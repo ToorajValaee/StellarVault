@@ -92,7 +92,7 @@ else
                     <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : _nativePage == "settings" ? "Settings" : "Sync")</h1>
                 </div>
             }
-    @if (_nativePage == "settings")
+    @if (_nativePage == "settings" && !SecretLedger.IsConnected)
     {
         <section class="sv-native-settings" aria-label="Vault settings">
             <div class="terminal-panel">
@@ -125,6 +125,18 @@ else
         </section>
     }
     <section class="native-preview sv-vault-data" aria-label="Native vault workspace">
+        @if (SecretLedger.IsConnected)
+        {
+            @* Keep the same linked component mounted across native tabs to
+               preserve signer-bound quotes, local encrypted queue and recovery. *@
+            <VaultSecretKeyWorkspace Embedded="true"
+                                     View="@(_nativePage == "stellar" ? "records" :
+                                             _nativePage == "local" ? "drafts" : _nativePage)"
+                                     OnViewChange="NavigateLinkedNative"
+                                     @ref="_linkedWorkspace" />
+        }
+        else
+        {
         @if (_nativePage == "stellar")
         {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
@@ -172,10 +184,6 @@ else
                 @if (_runtimeReady is null || (_runtimeReady == false && _ledgerBusy))
                 { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
 
-            }
-            else if (SecretLedger.IsConnected)
-            {
-                <VaultSecretKeyWorkspace />
             }
             else
             {
@@ -402,16 +410,7 @@ else
             }
         </section>
         }
-        @if (_nativePage == "sync" && SecretLedger.IsConnected)
-        {
-            <section class="terminal-panel" aria-label="Secret Key synchronization status">
-                <h3>Secret Key vault synchronization</h3>
-                <p>Encrypted S-key record and folder drafts can be staged on this device and submitted one at a time after an explicit fee review in the Home vault workspace. Automatic background synchronization is not enabled.</p>
-                <p>No local draft will be submitted through the HD transaction signer.</p>
-                <button type="button" class="pixel-button compact" @onclick='() => NavigateNative("stellar")'>Return to Secret Key vault</button>
-            </section>
-        }
-        else if (_nativePage is "local" or "sync")
+        @if (_nativePage is "local" or "sync")
         {
         <section class="terminal-panel" aria-label="Local encrypted vault status">
             <h3>@(Sessions.IsUnlocked ? "Your saved items" : "Unlock local storage")</h3>
@@ -494,6 +493,7 @@ else
             <p role="status" aria-live="polite">@_message</p>
         }
         }
+        }
     </section>
           </div>
         </main>
@@ -566,13 +566,28 @@ else
     private string _syncMode = "changes";
     // Recreate only the content scroller when the selected screen changes;
     // don't carry a deep scroll offset into a different native destination.
-    private string NativeContentKey => _nativePage switch
-    {
-        "local" => "local:" + _localMode,
-        "sync" => "sync:" + _syncMode,
-        "settings" => "settings",
-        _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
-    };
+    private VaultSecretKeyWorkspace? _linkedWorkspace;
+    // Preserve one signer-bound linked component and its pending quotes across
+    // all native tabs, but keep HD content isolated in other sessions.
+    private string NativeContentKey => SecretLedger.IsConnected
+        ? "linked-authenticated-session"
+        : _nativePage switch
+        {
+            "local" => "local:" + _localMode,
+            "sync" => "sync:" + _syncMode,
+            "settings" => "settings",
+            _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
+        };
+
+    private void NavigateLinkedNative(string view) =>
+        NavigateNative(view switch
+        {
+            "records" => "stellar",
+            "drafts" => "local",
+            "sync" => "sync",
+            "settings" => "settings",
+            _ => "stellar"
+        });
 
     private void NavigateNative(string page)
     {
