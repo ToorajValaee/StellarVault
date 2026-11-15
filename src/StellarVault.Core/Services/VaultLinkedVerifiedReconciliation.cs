@@ -90,7 +90,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
 
                 var before = await reviewer.InspectAsync(mutationId, ct);
                 RequireSameScope(root, scope, epoch, passphrase);
-                if (before.DurableState != VaultSyncState.Uncertain ||
+                if (before.DurableState != entry.State ||
                     before.TransactionHash != txHash ||
                     before.CurrentRecordMatches is not true ||
                     !before.HistoricalReceiptObserved ||
@@ -193,7 +193,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 // successful receipt, and the expected current resulting state.
                 var before = await reviewer.InspectAsync(mutationId, ct);
                 RequireSameScope(root, scope, epoch, passphrase);
-                if (before.DurableState != VaultSyncState.Uncertain ||
+                if (before.DurableState != entry.State ||
                     before.TransactionHash != txHash ||
                     before.CurrentRecordMatches is not true ||
                     !before.HistoricalReceiptObserved ||
