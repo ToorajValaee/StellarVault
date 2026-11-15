@@ -8,6 +8,8 @@
 @inject VaultDeviceRetentionGate HdRetention
 @inject VaultLinkedQueueKeySession LinkedKeys
 @inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject IStellarLedgerRecords HdLedger
+@inject IStellarSecretKeyLedger LinkedLedger
 
 <details class="terminal-panel" aria-label="Import and export ordinary vault records">
     <summary>Import / export records (JSON or CSV)</summary>
@@ -27,8 +29,8 @@
     </label>
     <div class="sv-access-actions">
         <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !_understood || Records.Count == 0)"
-                @onclick="ExportJsonAsync">Export visible records (JSON)</button>
+                disabled="@(_busy || !_understood || !CanExport)"
+                @onclick="ExportJsonAsync">Export published records (JSON)</button>
         <button type="button" class="pixel-button compact"
                 disabled="@(_busy || !_understood || Records.Count == 0)"
                 @onclick="ExportCsvAsync">Export flat records (CSV)</button>
@@ -65,6 +67,16 @@
     private string? _message;
     private VaultRecordInterchange.Archive? _pending;
 
+    private bool CanExport => Records.Count > 0 && (Strategy == VaultMutationStrategyPolicy.Linked
+        ? LinkedLedger.IsConnected : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
+
+    protected override void OnParametersSet()
+    {
+        // Do not retain a pending plaintext preview when the local key is
+        // locked or the selected credential strategy changes.
+        if (!CanStage) _pending = null;
+    }
+
     private bool CanStage => Strategy == VaultMutationStrategyPolicy.Linked
         ? LinkedKeys.IsUnlocked && LinkedRetention.AllowsLocalPersistence
         : Strategy == VaultMutationStrategyPolicy.Hd &&
@@ -81,7 +93,7 @@
 
     private async Task ExportAsync(bool csv)
     {
-        if (_busy || !_understood) return;
+        if (_busy || !_understood || !CanExport) return;
         _busy = true;
         _message = null;
         byte[]? bytes = null;
