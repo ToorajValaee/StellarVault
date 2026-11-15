@@ -13,6 +13,7 @@ internal static class StellarObjectEstimateSmoke
         public string Account { get; set; } = Root;
         public int EstimateCalls { get; private set; }
         public int MutationCalls { get; private set; }
+        public IReadOnlyList<LedgerRecordItem> Published { get; set; } = [];
         public bool SwitchRootDuringEstimate { get; set; }
 
         public Task<LedgerAccountInfo> InspectAccountInfoAsync() =>
@@ -51,7 +52,7 @@ internal static class StellarObjectEstimateSmoke
             Unsupported<LedgerFundingStatus>();
         public Task InitializeRegistryAsync() => Unsupported();
         public Task<IReadOnlyList<LedgerRecordItem>> ReadAsync() =>
-            Unsupported<IReadOnlyList<LedgerRecordItem>>();
+            Task.FromResult(Published);
         public Task<string> PublishAsync(string title, string content) => Unsupported<string>();
         public Task<string> PublishDetailedAsync(LedgerRecordDraft draft) => Unsupported<string>();
         public Task<string> PublishWithIdAsync(string id, LedgerRecordDraft draft) =>
@@ -105,6 +106,60 @@ internal static class StellarObjectEstimateSmoke
         }
         Check(ledger.MutationCalls == 0,
             "A rejected account-switch estimate attempted a mutation.");
+        // Exercise the actual SVTREE3 writer/reader through the neutral provider,
+        // not a mocked file reconstruction or a string-only source check.
+        var fileLedger = new QuoteOnlyLedger();
+        var fileProvider = new StellarAccountObjectStoreProvider(
+            fileLedger, null!, null!, null!, null!, null!,
+            new VaultNetworkSelection(), new VaultRecordTypeFactory());
+        var fileEngine = new AccountObjectStoreRouter([fileProvider]);
+        byte[] original = Encoding.UTF8.GetBytes(new string('X', 4096) + "tail");
+        var published = new List<LedgerRecordItem>();
+        using (var source = new MemoryStream(original, writable: false))
+        {
+            await VaultStreamingFileTree.WriteAsync(source,
+                "test.bin", "application/octet-stream",
+                (emission, _) =>
+                {
+                    var draft = VaultLinkedTreeFilePolicy.Draft(
+                        emission, "test.bin", "0123456789abcdef");
+                    published.Add(new LedgerRecordItem(emission.Id, draft.Title,
+                        draft.Content, draft.FolderId, draft.Tags, draft.IsFolder));
+                    return Task.CompletedTask;
+                });
+        }
+        fileLedger.Published = published;
+        var rootRecord = published.Single(x => VaultLinkedTreeFilePolicy.IsRootRecord(x));
+        var fileMetadata = await fileEngine.GetAsync(scope, rootRecord.Id);
+        Check(fileMetadata?.Descriptor.TypeId == VaultRecordTypeFactory.File &&
+              fileMetadata.Descriptor.Name == "test.bin" &&
+              fileMetadata.Length == original.Length &&
+              fileMetadata.IntegrityHash?.Length == 64,
+            "Engine failed to return verified streaming file metadata.");
+        await using (var opened = await fileEngine.OpenReadAsync(scope, rootRecord.Id))
+        {
+            using var received = new MemoryStream();
+            await opened.CopyToAsync(received);
+            Check(received.ToArray().AsSpan().SequenceEqual(original),
+                "Engine verified file read did not reconstruct exact content.");
+        }
+
+        // Corrupted published file content must never escape the private
+        // verification stream as an apparently valid plaintext object.
+        var damaged = published.First(x =>
+            !VaultLinkedTreeFilePolicy.IsRootRecord(x));
+        fileLedger.Published = published.Select(x => x.Id == damaged.Id
+            ? x with { Content = x.Content + "tampered" } : x).ToArray();
+        try
+        {
+            await using var unsafeRead = await fileEngine.OpenReadAsync(scope, rootRecord.Id);
+            throw new Exception("Engine returned a corrupted file as verified plaintext.");
+        }
+        catch (InvalidDataException) { }
+
+        Check(fileLedger.MutationCalls == 0,
+            "Verified file read unexpectedly invoked a mutation operation.");
+        Console.WriteLine("PASS: neutral verified SVTREE3 metadata, reads and tamper rejection");
         Console.WriteLine("PASS: chain-neutral HD fee/reserve estimate and account isolation");
     }
 
