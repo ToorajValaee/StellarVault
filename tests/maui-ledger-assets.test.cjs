@@ -320,6 +320,7 @@ test('native HD file upload shares the unlimited encrypted SVTREE3 Sync staging 
   assert.match(native, /@inject VaultHybridDraftWorkspace HybridDrafts/);
   assert.match(native, /@onclick="StageNativeTreeFileAsync"/);
   assert.match(native, /Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked/);
+  assert.match(native, /Sessions\.ActiveAccountId, _rootAccountId/);
   assert.match(native, /await using var input = picked\.Stream/);
   assert.match(native, /await HybridDrafts\.StageTreeFileAsync\(/);
   assert.match(staging, /VaultStreamingFileTree\.WriteContentAddressedAsync\(/);
