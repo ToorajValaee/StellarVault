@@ -696,6 +696,7 @@
     {
         if (_busy || !QueueKeys.CanPublish) return;
         _busy = true;
+        _verifiedTreeExport = null;
         byte[]? decoded = null;
         try
         {
@@ -1272,6 +1273,7 @@
             _drafts = [];
             _availableFolders = [];
             _publishedRecords = [];
+            _verifiedTreeExport = null;
             _smallFile = null;
         CancelPublishedDeletion();
             ClearDraftEditor();
@@ -1289,6 +1291,7 @@
         _drafts = [];
         _availableFolders = [];
         _publishedRecords = [];
+        _verifiedTreeExport = null;
         _smallFile = null;
         CancelPublishedDeletion();
         ClearDraftEditor();
