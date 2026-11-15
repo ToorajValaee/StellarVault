@@ -75,6 +75,9 @@ public static class VaultRecordInterchange
             throw new InvalidDataException("CSV record import exceeds 1 MiB.");
         var rows = ParseCsv(csv);
         if (rows.Count == 0) throw new InvalidDataException("CSV header is missing.");
+        // Excel and password managers sometimes include a UTF-8 BOM.
+        if (rows[0].Count > 0)
+            rows[0][0] = rows[0][0].TrimStart('\uFEFF');
         var header = rows[0];
         var expected = new[] { "title", "content", "username", "url", "notes", "tags" };
         if (!header.SequenceEqual(expected, StringComparer.OrdinalIgnoreCase))
@@ -174,7 +177,7 @@ public static class VaultRecordInterchange
             if (item is null || item.Id is not { Length: > 0 and <= 128 } ||
                 !ids.Add(item.Id) ||
                 string.IsNullOrWhiteSpace(item.Title) || item.Title.Length > 256 ||
-                item.Content is null || item.Content.Length > 65536 ||
+                string.IsNullOrEmpty(item.Content) || item.Content.Length > 65536 ||
                 !IsOrdinaryContent(item.Content) ||
                 item.Tags is null || item.Tags.Length > 24 ||
                 item.Tags.Any(x => x is null || x.Length > 64) ||
