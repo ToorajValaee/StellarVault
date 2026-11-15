@@ -89,3 +89,6 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] After publishing and historically confirming a disposable Testnet SVFILE1 file, stage its deletion. Verify the encrypted queue labels it as a file and does not report corruption.
 - [ ] Confirm the original file deletion snapshot cannot be opened for editing, and deleting does not submit a transaction until a *new* explicit fee approval.
 - [ ] Verify remote deletion, persistent `Uncertain` journal and explicit signed-history reconciliation to `Confirmed`; the transaction count must increase only once.
+
+- [ ] Attempt to stage deletion of a Testnet linked legacy unchecksummed or malformed SVFILE1 and an unsupported SVFILE2 manifest. Both must be refused *before* creating a local queue entry; neither may send a Stellar transaction.
+- [ ] Confirm a valid checksummed SVFILE1 delete remains typed and reviewable, and its historical proof and final queue state survive a browser/MAUI restart.
