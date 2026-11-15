@@ -9,7 +9,7 @@ namespace StellarVault.Pwa.Services;
 /// Transaction submission requires a fresh quote ID issued in this session.
 /// </summary>
 public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
-    IStellarSecretKeyLedger, IAsyncDisposable
+    IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission, IAsyncDisposable
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
@@ -202,6 +202,44 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
             throw new InvalidDataException("Stellar mutation returned no confirmed transaction hash. Reconcile before retry.");
         return hash;
+    }
+
+    /// <summary>
+    /// Journal-backed callers provide a strict, fail-closed durable CAS
+    /// callback. JavaScript does not call Horizon submitTransaction until that
+    /// callback has completed successfully with the exact signed hash.
+    /// </summary>
+    public async Task<string> SubmitWithSignedHashAsync(
+        string quoteId, Func<string, Task> durableCheckpoint,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(durableCheckpoint);
+        RequireConnected();
+        if (quoteId is not { Length: 32 } ||
+            !quoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid reviewed transaction quote.", nameof(quoteId));
+
+        using var checkpoint = DotNetObjectReference.Create(
+            new SignedHashCheckpoint(durableCheckpoint));
+        var hash = await js.InvokeAsync<string>(
+            "stellarVaultSecretLedger.submit", cancellationToken,
+            _sessionId, quoteId, checkpoint);
+        if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
+            throw new InvalidDataException(
+                "Signed linked transaction returned an invalid hash; reconcile before retry.");
+        return hash.ToLowerInvariant();
+    }
+
+    public sealed class SignedHashCheckpoint(Func<string, Task> persist)
+    {
+        [JSInvokable("CheckpointSignedHash")]
+        public Task CheckpointSignedHash(string hash)
+        {
+            if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
+                throw new InvalidDataException(
+                    "Refusing to checkpoint a malformed signed transaction hash.");
+            return persist(hash.ToLowerInvariant());
+        }
     }
 
     public async Task DisconnectAsync()
