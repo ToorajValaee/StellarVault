@@ -49,6 +49,110 @@ public sealed class VaultHybridDraftWorkspace(
         finally { CryptographicOperations.ZeroMemory(payload); }
     }
 
+    /// <summary>
+    /// Stage an arbitrarily long file as individually encrypted HD queue
+    /// create-record mutations. The existing HD Sync review owns fees,
+    /// signer authorization, signed-hash checkpoints and historical proof;
+    /// this method NEVER submits transactions. All children are staged before
+    /// the typed root and therefore cannot publish on partial staging failure.
+    /// </summary>
+    public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
+        string title, string fileName, string contentType, Stream input,
+        string? folderId = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!input.CanRead) throw new ArgumentException("Readable stream required.", nameof(input));
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
+            throw new ArgumentException("Invalid file display title.", nameof(title));
+        StellarLedgerFileProtocol.ValidateName(fileName);
+        var scope = RequireScope();
+        var local = await queue.ReviewAllAsync(scope.Account, scope.NetworkId, ct);
+        RequireSameScope(scope);
+        var ids = new HashSet<string>(local.Select(x => x.EntityId),
+            StringComparer.OrdinalIgnoreCase);
+        var stagedMutationIds = new List<string>();
+        var group = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
+        try
+        {
+            if (local.Any(x => x.State is VaultSyncState.Submitting or
+                    VaultSyncState.Uncertain or VaultSyncState.Conflict))
+                throw new InvalidOperationException(
+                    "Reconcile unresolved HD mutations before staging another file.");
+            if (folderId is not null && (folderId.Length != 16 ||
+                !folderId.All(Uri.IsHexDigit)))
+                throw new InvalidDataException("Invalid parent folder ID.");
+            // A pending folder is allowed, but its single dependency edge is
+            // attached to the root using the original HD parent policy.
+            var parent = folderId is null ? [] :
+                VaultQueuedCreatePolicy.ParentCandidates(local, folderId);
+            if (parent.Length > 1)
+                throw new InvalidOperationException("Ambiguous local parent folder.");
+            string[] rootDependencies = [];
+            if (parent.Length == 1 && parent[0].State != VaultSyncState.Confirmed)
+            {
+                if (parent[0].Kind != VaultMutationKind.CreateFolder ||
+                    parent[0].State != VaultSyncState.Pending)
+                    throw new InvalidOperationException("Pending parent folder is unavailable.");
+                rootDependencies = [parent[0].Id];
+            }
+
+            return await VaultStreamingFileTree.WriteContentAddressedAsync(input,
+                fileName, contentType, async (node, token) =>
+                {
+                    RequireSameScope(scope);
+                    token.ThrowIfCancellationRequested();
+                    string recordId;
+                    do { recordId = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8)); }
+                    while (!ids.Add(recordId));
+                    var isRoot = node.Kind == VaultStreamingFileTree.RootKind;
+                    var draft = VaultLinkedTreeFilePolicy.Draft(node,
+                        isRoot ? title : "FILE TREE NODE", group,
+                        isRoot ? folderId : null);
+                    if (!VaultLinkedTreeFilePolicy.IsTypedNode(draft))
+                        throw new InvalidDataException("Invalid staged HD file tree node.");
+                    var payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+                    try
+                    {
+                        var pending = VaultPendingMutation.Create(
+                            scope.Account, scope.NetworkId,
+                            VaultMutationKind.CreateRecord, recordId, payload,
+                            dependsOn: isRoot ? rootDependencies : []);
+                        try
+                        {
+                            await queue.EnqueueAsync(pending, token);
+                            stagedMutationIds.Add(pending.Id);
+                        }
+                        finally
+                        {
+                            CryptographicOperations.ZeroMemory(pending.EncryptedPayload);
+                        }
+                    }
+                    finally { CryptographicOperations.ZeroMemory(payload); }
+                    return recordId;
+                }, VaultStreamingFileTree.ChunkBytes, ct);
+        }
+        catch
+        {
+            // Roll back *only never-submitted* entries from this invocation;
+            // any CAS collision leaves a visible, blocked partial group.
+            bool cleanupFailed = false;
+            foreach (var mutationId in stagedMutationIds.AsEnumerable().Reverse())
+            {
+                try
+                {
+                    await queue.DiscardPendingAsync(
+                        scope.Account, scope.NetworkId, mutationId,
+                        CancellationToken.None);
+                }
+                catch { cleanupFailed = true; }
+            }
+            if (cleanupFailed)
+                throw new InvalidOperationException(
+                    "Interrupted HD file staging left encrypted orphan drafts. Reopen and resolve the group; no transaction was sent.");
+            throw;
+        }
+    }
+
     public async Task<VaultPendingMutation> ReviseAsync(
         string mutationId, LedgerRecordDraft draft, string expectedPayloadSha256,
         CancellationToken ct = default)
