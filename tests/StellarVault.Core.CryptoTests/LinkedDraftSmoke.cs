@@ -405,7 +405,8 @@ internal static class LinkedDraftSmoke
             Task.FromResult<IReadOnlyList<VaultAccountHandle>>([]);
     }
 
-    private sealed class FakeLinkedLedger : IStellarSecretKeyLedger
+    private sealed class FakeLinkedLedger :
+        IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission
     {
         public const string RootAddress = Root;
         private readonly List<LedgerRecordItem> _items = [];
@@ -477,6 +478,18 @@ internal static class LinkedDraftSmoke
         {
             if (_quoteId == quoteId) _quoteId = null;
             return Task.CompletedTask;
+        }
+
+        public async Task<string> SubmitWithSignedHashAsync(
+            string quoteId, Func<string, Task> durableCheckpoint,
+            CancellationToken ct = default)
+        {
+            if (_quoteId != quoteId)
+                throw new InvalidOperationException("No matching fake signed quote.");
+            // Mirrors JS: the exact network-bound hash is available before
+            // broadcast and the callback must persist it synchronously.
+            await durableCheckpoint((Submissions + 1).ToString("x64"));
+            return await SubmitApprovedAsync(quoteId, ct);
         }
 
         public Task<string> SubmitApprovedAsync(string quoteId,
