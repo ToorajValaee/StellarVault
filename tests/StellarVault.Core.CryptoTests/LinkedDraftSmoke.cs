@@ -211,6 +211,14 @@ internal static class LinkedDraftSmoke
             var updated = original with { Title = "Updated", Content = "new secret" };
             ledger.SeedRecord(id, original);
             var staleRevision = (await ledger.ReadRecordRevisionAsync(id))!;
+            Require(VaultLinkedRemoteRevisionPolicy.IsValid(staleRevision),
+                "A valid v1 manifest revision was rejected.");
+            var corruptManifest = Convert.FromBase64String(staleRevision);
+            corruptManifest[0] = 2;
+            Require(!VaultLinkedRemoteRevisionPolicy.IsValid(
+                    Convert.ToBase64String(corruptManifest)) &&
+                    !VaultLinkedRemoteRevisionPolicy.IsValid("invalid"),
+                "Malformed or non-v1 manifest revision was accepted.");
             var staged = deleting
                 ? await drafts.StageDeleteAsync(id, staleRevision)
                 : await drafts.StageUpdateAsync(id, updated, staleRevision);
