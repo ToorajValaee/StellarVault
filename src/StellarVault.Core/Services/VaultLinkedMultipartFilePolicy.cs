@@ -120,7 +120,10 @@ public static class VaultLinkedMultipartFilePolicy
         LedgerRecordDraft? draft;
         try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload); }
         catch (JsonException) { return normal; }
-        if (draft is null) return normal;
+        // A malformed create draft may deserialize with missing content.
+        // Keep the existing file-protocol blocker instead of throwing while
+        // planning or quoting the encrypted queue.
+        if (draft?.Content is null) return normal;
         if (draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
                 StringComparison.Ordinal))
         {
