@@ -311,7 +311,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             throw new InvalidOperationException("Remote contents differ from the pinned baseline: conflict.");
         if (remote.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
             remote.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-            remote.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+            remote.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) ||
+            remote.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal))
             throw new InvalidOperationException("File-protocol records cannot use the text update/delete flow.");
         if (current.Kind is VaultMutationKind.DeleteFolder &&
             remoteRecords.Any(x => string.Equals(x.FolderId, current.EntityId,
