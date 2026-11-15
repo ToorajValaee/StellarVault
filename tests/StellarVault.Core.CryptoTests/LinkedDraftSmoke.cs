@@ -303,8 +303,9 @@ internal static class LinkedDraftSmoke
                 keys, consent, queuePath, network);
             var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
             Require(durable.Count(x => x.Kind == VaultMutationKind.ExtendLinkedChain &&
-                (x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting)) == 1,
-                "Unknown account expansion was not preserved in encrypted queue.");
+                (x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) &&
+                x.TransactionHash == 1.ToString("x64")) == 1,
+                "Unknown account expansion was not preserved with its exact signed hash in encrypted queue.");
             Require(!VaultLinkedManualSyncPlan.Build(durable, true).CanReviewNext,
                 "Unresolved expansion failed to block manual record publication.");
             foreach (var entry in durable)
@@ -368,6 +369,7 @@ internal static class LinkedDraftSmoke
         private LedgerRecordDraft? _quotedDraft;
         private string? _quoteId;
         private string? _quoteKind;
+        private VaultSecretSubmissionDiagnostic? _signedSubmission;
         public string Tail { get; private set; } = Root;
         public int AccountCount { get; private set; } = 1;
         public const string ExpansionTarget = "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H";
@@ -426,7 +428,7 @@ internal static class LinkedDraftSmoke
         }
         public Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<VaultSecretSubmissionDiagnostic?>(null);
+            Task.FromResult(_signedSubmission);
         public Task CancelQuoteAsync(string quoteId)
         {
             if (_quoteId == quoteId) _quoteId = null;
@@ -441,6 +443,12 @@ internal static class LinkedDraftSmoke
                 throw new InvalidOperationException("Quote not prepared for exact operation.");
             Submissions++;
             _quoteId = null;
+            _signedSubmission = new VaultSecretSubmissionDiagnostic(
+                _quoteKind!, Root,
+                _quoteKind == "expand" ? ExpansionTarget : Root,
+                _quoteKind == "expand" ? null : _quotedId,
+                Submissions.ToString("x64"), Testnet,
+                "https://horizon-testnet.stellar.org");
             if (FailNextSubmission)
             {
                 FailNextSubmission = false;
