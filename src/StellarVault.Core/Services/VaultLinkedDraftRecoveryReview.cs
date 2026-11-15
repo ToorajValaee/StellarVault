@@ -20,7 +20,9 @@ public sealed class VaultLinkedDraftRecoveryReview(
     public sealed record Finding(
         string MutationId, string EntityId, VaultSyncState DurableState,
         bool? CurrentRecordMatches, bool HistoricalReceiptObserved,
-        string Explanation, string? TransactionHash = null);
+        string Explanation, string? TransactionHash = null,
+        bool HistoricalRecordOperationsMatch = false,
+        string? HistoricalStorageAccount = null);
 
     public async Task<Finding> InspectAsync(
         string mutationId, CancellationToken ct = default)
