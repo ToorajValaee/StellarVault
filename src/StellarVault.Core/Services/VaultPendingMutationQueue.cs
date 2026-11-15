@@ -227,6 +227,15 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var problems = VaultQueuedCreatePolicy.Problems(item, all);
         if (problems.Length > 0)
             throw new InvalidDataException("Queued create cannot be published: " + string.Join(", ", problems));
+        // A locally Confirmed tree child is not enough: immediately before
+        // approval and signed broadcast, each referenced child must still
+        // match its complete originally approved record on Stellar.
+        var remoteTreeProblems = VaultHdTreeFilePolicy.RemoteProblems(
+            item, all, remoteRecords);
+        if (remoteTreeProblems.Length > 0)
+            throw new InvalidDataException(
+                "HD file tree cannot be published: " +
+                string.Join(", ", remoteTreeProblems));
         LedgerRecordDraft draft;
         try
         {
