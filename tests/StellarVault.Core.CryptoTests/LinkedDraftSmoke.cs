@@ -257,6 +257,35 @@ internal static class LinkedDraftSmoke
                     x.Kind == VaultMutationKind.CreateRecord) &&
                     (await drafts.ListAsync()).Count == 3,
                 "Linked SVFILE2 parts and manifest did not stage as typed encrypted entries.");
+
+            // A local manifest that was discarded, failed, confirmed or had a
+            // hash checkpoint must not authorize any further file part writes.
+            var journalSnapshot = await store.ListAsync(Root, network.CredentialKey(Root));
+            try
+            {
+                var firstPart = journalSnapshot.Single(x => x.Id == stages[0].MutationId);
+                var finalManifest = journalSnapshot.Single(x => x.Id == stages[^1].MutationId);
+                foreach (var invalidManifest in new[]
+                {
+                    finalManifest with { State = VaultSyncState.Failed },
+                    finalManifest with { State = VaultSyncState.Confirmed },
+                    finalManifest with { State = VaultSyncState.Uncertain },
+                    finalManifest with { TransactionHash = new string('a', 64) }
+                })
+                {
+                    var corruptSnapshot = journalSnapshot.Select(x =>
+                        x.Id == finalManifest.Id ? invalidManifest : x).ToArray();
+                    Require(VaultLinkedMultipartFilePolicy.Problems(firstPart, corruptSnapshot)
+                            .Contains("multipart-manifest-missing-or-invalid"),
+                        "A non-pending or signed multipart manifest authorized another file part.");
+                }
+            }
+            finally
+            {
+                foreach (var entry in journalSnapshot)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
+
             var initial = await drafts.ReviewManualSyncAsync();
             Require(initial.NextReadyMutationId == stages[0].MutationId &&
                     initial.Items.Single(x => x.MutationId == stages[1].MutationId)
