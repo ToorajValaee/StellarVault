@@ -73,3 +73,14 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Stage a remote update/deletion while a second session changes the record between manifest reads. Verify staging refuses to attach a new revision to old content.
 - [ ] Verify malformed/noncanonical base64 or non-v1 original manifest versions are rejected by both PWA and MAUI encrypted queue adapters.
 - [ ] Verify pending deletion payloads cannot be modified by CAS; only discarding the never-submitted deletion intent is allowed.
+
+## Proof-bound linked reconciliation and small-file preview (2026-11-15)
+- [ ] Run Node source/behavior suites, native Core smoke and Release PWA build at the exact feature HEAD; also build `net10.0-android` on a configured Android SDK machine.
+- [ ] With disposable Testnet S-key A, stage a create, approve its exact fee once, confirm it becomes `Uncertain`. Restart the app, reconnect S-key A and its local encrypted queue. Verify the read-only receipt/operation view and invoke **Verify signed history and finalize journal**; require a single immutable `Confirmed` CAS with no extra transaction.
+- [ ] Repeat for update and delete using the pinned original `skh` manifest. Alter the original record from another signer after staging and again after quoting: both stale writes must fail without network broadcast.
+- [ ] Repeat for first linked-account expansion and another expansion from an existing child tail. Require root/child Ed25519 signatures, correct signer thresholds, selected parent pointer, native reserve top-up when required, and a confirmed journal before the next queued item becomes eligible.
+- [ ] Interrupt immediately after pre-broadcast signed-hash CAS but before Horizon responds, and again before the following `Uncertain` CAS. The durable `Submitting` and `Uncertain` versions must both be safely finalizable when the exact historical hash exists.
+- [ ] Negative: wrong transaction hash, wrong XDR signature, wrong original manifest, missing chunk, malformed/stale tags or unexpected operation, missing child signature, different Horizon passphrase and changed account/network/epoch must NEVER confirm or permit retry.
+- [ ] Upload a synthetic 2 KiB file through linked local encrypted staging. Confirm it remains local before fee approval; after the signed transaction, verify and finalize the journal, then download and compare the bytes and SHA-256 with the original. Confirm 0-byte, 2049-byte, bad/missing checksum and multipart attempts are rejected.
+- [ ] Verify browser lock, offline-only unlock, consent revocation, page reload and Android backgrounding clear volatile keys and file-selection buffers without silently changing durable journal state.
+- [ ] Do not use mainnet, actual secrets or valuable funds until multipart file recovery, legacy migration as required, real-device Testnet interruption testing and independent security review are completed.
