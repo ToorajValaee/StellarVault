@@ -97,6 +97,125 @@ public sealed class VaultLinkedDraftWorkspace(
     }
 
     /// <summary>
+    /// Stream a file of any logical length into the existing encrypted S-key
+    /// queue as bounded SVTREE3 ledger records. All child nodes are durably
+    /// staged before the root is created. No fee is approved and nothing is
+    /// signed or transmitted here. Each node requires later independent
+    /// approval and historical reconciliation through the standard publisher.
+    /// </summary>
+    public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
+        string title, string fileName, string contentType,
+        Stream input, string? parentFolderId = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!input.CanRead) throw new ArgumentException("A readable file stream is required.", nameof(input));
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
+            throw new ArgumentException("Invalid linked file title.", nameof(title));
+        if (parentFolderId is { Length: > 0 } parent &&
+            (parent.Length != 16 || !parent.All(Uri.IsHexDigit)))
+            throw new ArgumentException("Invalid linked file folder.", nameof(parentFolderId));
+        var context = RequireScope();
+        var local = await ReadEntriesAsync(context, ct);
+        var createdIds = new HashSet<string>(StringComparer.Ordinal);
+        var usedIds = new HashSet<string>(local.Select(x => x.EntityId), StringComparer.OrdinalIgnoreCase);
+        var groupId = Guid.NewGuid().ToString("N")[..16];
+        try
+        {
+            if (local.Any(x => x.State is VaultSyncState.Submitting or
+                    VaultSyncState.Uncertain or VaultSyncState.Conflict ||
+                    (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                     x.State != VaultSyncState.Confirmed)))
+                throw new InvalidOperationException(
+                    "Resolve uncertain S-key transactions before staging another file.");
+            var remote = keys.IsOfflineOnly
+                ? Array.Empty<LedgerRecordItem>() : (await ledger.ReadAsync(ct)).ToArray();
+            Check(context);
+            foreach (var item in remote) usedIds.Add(item.Id);
+            string[] parentDependencies = [];
+            if (parentFolderId is { Length: > 0 })
+            {
+                var parents = VaultQueuedCreatePolicy.ParentCandidates(local, parentFolderId);
+                if (parents.Length > 1)
+                    throw new InvalidOperationException("Linked file parent folder is ambiguous.");
+                if (parents.Length == 1)
+                {
+                    var folder = parents[0];
+                    if (folder.Kind != VaultMutationKind.CreateFolder ||
+                        folder.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed))
+                        throw new InvalidOperationException("Linked file parent folder is unavailable.");
+                    if (folder.State == VaultSyncState.Pending)
+                        parentDependencies = [folder.Id];
+                }
+                else if (!keys.IsOfflineOnly &&
+                    !remote.Any(x => x.Id == parentFolderId && x.IsFolder))
+                    throw new InvalidOperationException("Linked file parent folder does not exist.");
+            }
+
+            return await VaultStreamingFileTree.WriteAsync(input, fileName, contentType,
+                async (node, token) =>
+                {
+                    Check(context);
+                    token.ThrowIfCancellationRequested();
+                    if (!usedIds.Add(node.Id))
+                        throw new InvalidOperationException(
+                            "Streaming file tree node ID collided with an existing ledger record.");
+                    var isRoot = node.Kind == VaultStreamingFileTree.RootKind;
+                    var draft = VaultLinkedTreeFilePolicy.Draft(node,
+                        isRoot ? title : "FILE TREE NODE", groupId,
+                        isRoot ? parentFolderId : null);
+                    if (!VaultLinkedTreeFilePolicy.IsTypedNode(draft))
+                        throw new InvalidDataException("Streaming file tree node failed validation.");
+                    var payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+                    try
+                    {
+                        var staged = VaultPendingMutation.Create(context.Root,
+                            VaultLinkedQueueStorageScope.FromNetworkScope(context.Scope),
+                            VaultMutationKind.CreateRecord, node.Id, payload,
+                            dependsOn: isRoot ? parentDependencies : [])
+                            with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+                        try
+                        {
+                            if (!await store.AddAsync(staged, token))
+                                throw new InvalidOperationException(
+                                    "Concurrent encrypted queue modification during file staging.");
+                            createdIds.Add(staged.Id);
+                        }
+                        finally { CryptographicOperations.ZeroMemory(staged.EncryptedPayload); }
+                    }
+                    finally { CryptographicOperations.ZeroMemory(payload); }
+                }, ct);
+        }
+        catch
+        {
+            // Fail closed: rollback all unsent nodes from this staging attempt.
+            // Only short mutation IDs are held during normal streaming, never
+            // a whole-file list of plaintext/ciphertext payloads.
+            var cleanupFailed = false;
+            try
+            {
+                var entries = await store.ListAsync(context.Root, context.Scope,
+                    CancellationToken.None);
+                try
+                {
+                    foreach (var entry in entries.Reverse())
+                    {
+                        if (createdIds.Contains(entry.Id) &&
+                            !await store.TryDeleteAsync(entry, CancellationToken.None))
+                            cleanupFailed = true;
+                    }
+                }
+                finally { ClearEntries(entries); }
+            }
+            catch { cleanupFailed = true; }
+            if (cleanupFailed)
+                throw new InvalidOperationException(
+                    "Tree file staging was interrupted and orphan encrypted drafts remain. Do not publish them; inspect and discard before retrying.");
+            throw;
+        }
+        finally { ClearEntries(local); }
+    }
+
+    /// <summary>
     /// Stages a bounded, multipart SVFILE2 group. Parts are independent
     /// encrypted queue entries; the final manifest is staged LAST. This
     /// method never signs or submits and rejects overlapping unresolved writes.
@@ -655,6 +774,13 @@ public sealed class VaultLinkedDraftWorkspace(
                         if (part is null || !VaultLinkedMultipartFilePolicy.IsPart(
                                 draft, part.FileId, part.Index))
                             throw new InvalidDataException("Invalid encrypted multipart part.");
+                    }
+                    else if (draft.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                                 StringComparison.Ordinal))
+                    {
+                        if (item.Kind != VaultMutationKind.CreateRecord ||
+                            !VaultLinkedTreeFilePolicy.IsTypedNode(draft))
+                            throw new InvalidDataException("Invalid linked file tree node.");
                     }
                     else ValidateDraft(draft);
                     if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
