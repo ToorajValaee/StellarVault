@@ -264,6 +264,44 @@ public static class VaultLinkedTreeFilePolicy
                         !string.Equals(Convert.ToHexString(SHA256.HashData(nodeBytes)),
                             reference.Sha256Hex, StringComparison.OrdinalIgnoreCase))
                         return "tree-descendant-invalid";
+
+                    // A content hash proves only the exact serialized node,
+                    // not that its claimed subtree length is truthful. Reject
+                    // malformed reference lengths before the final file root
+                    // can be quoted or committed on Stellar.
+                    if (nodeKind == VaultStreamingFileTree.LeafKind)
+                    {
+                        var leaf = JsonSerializer.Deserialize<VaultStreamingFileTree.Leaf>(
+                            nodeBytes);
+                        try
+                        {
+                            if (leaf?.Data is null ||
+                                leaf.Data.LongLength != reference.Length)
+                                return "tree-descendant-length-mismatch";
+                        }
+                        finally
+                        {
+                            if (leaf?.Data is not null)
+                                CryptographicOperations.ZeroMemory(leaf.Data);
+                        }
+                    }
+                    else if (nodeKind == VaultStreamingFileTree.BranchKind)
+                    {
+                        if (reference.Length == 0)
+                            return "tree-descendant-length-mismatch";
+                        long sum = 0;
+                        foreach (var child in nested)
+                        {
+                            if (child.Length > reference.Length - sum)
+                                return "tree-descendant-length-mismatch";
+                            sum += child.Length;
+                        }
+                        if (sum != reference.Length)
+                            return "tree-descendant-length-mismatch";
+                    }
+                    else
+                        return "tree-descendant-invalid";
+
                     var published = remoteById[reference.Id].ToArray();
                     if (published.Length != 1 ||
                         published[0].Title != expected.Title ||
