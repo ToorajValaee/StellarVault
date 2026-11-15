@@ -97,8 +97,9 @@ public static class VaultLinkedMultipartFilePolicy
     }
 
     public static bool IsTypedFileDraft(LedgerRecordDraft draft) =>
-        IsManifest(draft) || draft.Content.StartsWith(
-            StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+        IsManifest(draft) || draft.Content is not null &&
+            draft.Content.StartsWith(
+                StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
             draft.Tags is ["svchunk-v2"];
 
     public static string[] Problems(VaultPendingMutation mutation,
@@ -148,7 +149,11 @@ public static class VaultLinkedMultipartFilePolicy
             if (prior is null || prior.State != VaultSyncState.Confirmed)
                 return ["multipart-all-parts-must-be-historically-confirmed"];
         }
-        if (remote is null) return ["multipart-remote-parts-must-be-verified"];
+        // Advisory read-only planner has no remote snapshot. The publisher
+        // repeats this exact policy with a fresh snapshot before fee quoting
+        // and again immediately before any durable submission.
+        if (remote is null)
+            return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
         try
         {
             var candidate = new LedgerRecordItem(mutation.EntityId, draft.Title,
