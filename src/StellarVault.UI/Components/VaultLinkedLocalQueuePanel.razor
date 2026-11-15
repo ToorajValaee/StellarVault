@@ -315,7 +315,7 @@
                                  !draft.IsCorrupt && !draft.IsJournal)
                             {
                                 @if (!draft.IsFile &&
-                                     draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
+                                     (draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)))
                                 {
                                     <button type="button" class="pixel-button compact"
                                             disabled="@(_busy || _review is not null)"
@@ -989,6 +989,7 @@
         _drafts = [];
         _availableFolders = [];
         _publishedRecords = [];
+        _smallFile = null;
         CancelPublishedDeletion();
         ClearDraftEditor();
         _exists = null;
@@ -1110,7 +1111,8 @@
             _drafts = [];
             _availableFolders = [];
             _publishedRecords = [];
-            CancelPublishedDeletion();
+            _smallFile = null;
+        CancelPublishedDeletion();
             ClearDraftEditor();
             _passphrase = string.Empty;
             _message = "Independent local encryption key cleared from memory.";
@@ -1126,6 +1128,7 @@
         _drafts = [];
         _availableFolders = [];
         _publishedRecords = [];
+        _smallFile = null;
         CancelPublishedDeletion();
         ClearDraftEditor();
         await Publisher.CancelAsync();
