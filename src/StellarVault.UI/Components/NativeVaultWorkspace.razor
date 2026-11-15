@@ -287,16 +287,11 @@ else
                         }
                         <h2>@(_nativeCollection == "folders" ? "Folders" : _nativeCollection == "records" ? "Records" : "All Items")</h2><button type="button" aria-label="Toggle item layout" @onclick='() => _nativeGrid = !_nativeGrid'>☷</button></div>
                     <div class="sv-native-explorer sv-native-collection-@_nativeCollection @(_nativeGrid ? "sv-native-grid-mode" : "")">
-                        <aside class="sv-native-folder-tree" aria-label="Folder tree">
-                            <button type="button" class="sv-native-tree-item @(_selectedFolderId == "" ? "selected" : "")"
-                                    @onclick='() => OpenNativeFolder("")'>▣ My vault</button>
-                            @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => NativeFolderPath(x.Id)))
-                            {
-                                <button type="button" class="sv-native-tree-item @(_selectedFolderId == folder.Id ? "selected" : "")"
-                                        style="--sv-tree-depth:@NativeFolderDepth(folder.Id)"
-                                        @onclick="() => OpenNativeFolder(folder.Id)">▸ ▣ @folder.Title</button>
-                            }
-                        </aside>
+                        <VaultExplorerTree Folders="@_ledgerRecords.Where(x => x.IsFolder).ToArray()"
+                                           SelectedFolderId="@(string.IsNullOrEmpty(_selectedFolderId) ? null : _selectedFolderId)"
+                                           CollapsedFolderIds="_nativeCollapsedFolders"
+                                           OnFolderSelected="SelectNativeFolderFromSharedTree"
+                                           OnToggleFolder="ToggleNativeFolder" />
                         <div class="sv-native-object-storage">
                             <label class="terminal-label" for="native-ledger-folder">Folder</label>
                             <select id="native-ledger-folder" class="terminal-input sv-native-mobile-folder"
@@ -309,21 +304,16 @@ else
                             </select>
                             <div class="sv-native-object-grid">
                             @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
-                                !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+                                !VaultPublishedFileClassification.IsInternalNode(x) &&
                                 (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)) &&
                                 (string.IsNullOrWhiteSpace(_nativeSearch) || x.Title.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase) ||
                                     (x.Tags is not null && x.Tags.Any(tag => tag.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase)))))
                                 .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
                             {
-                                <div class="sv-native-object-row @(_selectedRecord?.Id == item.Id ? "is-selected" : "")">
-                                    <button type="button" class="sv-native-object-card" disabled="@_ledgerBusy"
-                                            @onclick="() => SelectRecord(item.Id)">
-                                        <span class="sv-native-object-icon" aria-hidden="true">@(item.IsFolder ? "📁" : StellarLedgerFileProtocol.IsFile(item) ? "▤" : "▦")</span>
-                                        <span class="sv-native-object-description"><strong>@item.Title</strong>
-                                            <small>@(item.IsFolder ? $"Folder · {_ledgerRecords.Count(x => x.FolderId == item.Id)} items" : StellarLedgerFileProtocol.IsFile(item) ? "Encrypted file" : "Record")</small></span>
-                                    </button>
-                                    <button type="button" class="sv-native-row-more" aria-label="@($"Open {item.Title} details")" @onclick="() => SelectRecord(item.Id)">⋯</button>
-                                </div>
+                                <VaultExplorerItemRow Item="item"
+                                                      Selected="@(_selectedRecord?.Id == item.Id)"
+                                                      CanEdit="false" CanDelete="false"
+                                                      OnOpen="SelectNativePublishedItem" />
                             }
                             </div>
                         </div>
@@ -573,6 +563,19 @@ else
                 await _linkedWorkspace.RefreshFromShellAsync();
         }
         else if (Ledger.IsConnected) await RefreshLedgerAsync();
+    }
+
+    private readonly HashSet<string> _nativeCollapsedFolders = new(StringComparer.Ordinal);
+    private void SelectNativeFolderFromSharedTree(string? id) =>
+        OpenNativeFolder(id ?? string.Empty);
+    private void ToggleNativeFolder(string id)
+    {
+        if (!_nativeCollapsedFolders.Add(id)) _nativeCollapsedFolders.Remove(id);
+    }
+    private void SelectNativePublishedItem(LedgerRecordItem item)
+    {
+        if (item.IsFolder) OpenNativeFolder(item.Id);
+        else SelectRecord(item.Id);
     }
 
     private void NavigateLinkedNative(string view) =>
