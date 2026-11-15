@@ -1056,8 +1056,9 @@
         var root = Ledger.IsConnected ? Ledger.RootAccountId : _offlineRoot.Trim();
         // Do not reuse a mnemonic/HD passkey even if its public root address
         // matches an imported S-key vault on the same network.
-        return StellarAccountAddress.IsValid(root)
-            ? "linked-s-key:" + Networks.CredentialKey(root) : null;
+        if (root is not { } validRoot || !StellarAccountAddress.IsValid(validRoot))
+            return null;
+        return "linked-s-key:" + Networks.CredentialKey(validRoot);
     }
 
     private async Task UnlockWithDeviceAsync()
