@@ -82,7 +82,8 @@ public static class VaultLinkedMutationTransitionPolicy
              next.State == VaultSyncState.Submitting && next.TransactionHash is not null) ||
             (previous.TransactionHash is { } pinnedHash &&
              next.TransactionHash != pinnedHash) ||
-            (next.State == VaultSyncState.Confirmed && next.TransactionHash is null) ||
+            (next.State == VaultSyncState.Confirmed &&
+             (previous.TransactionHash is null || next.TransactionHash is null)) ||
             (next.TransactionHash is { } hash &&
              (hash.Length != 64 || !hash.All(Uri.IsHexDigit))))
             throw new InvalidOperationException(
