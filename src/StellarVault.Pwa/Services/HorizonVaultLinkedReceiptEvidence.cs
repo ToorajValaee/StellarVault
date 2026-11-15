@@ -32,8 +32,17 @@ public sealed class HorizonVaultLinkedReceiptEvidence(
                 return new(false,
                     "No successful transaction receipt from the expected root was established on the selected network.");
 
+            if (diagnostic.Kind == "create" &&
+                diagnostic.RecordId is { Length: 16 } recordId)
+            {
+                var inspected = await records.InspectCreateAsync(
+                    diagnostic.HorizonUrl, diagnostic.TransactionHash, recordId, ct);
+                return new(true, inspected.Explanation +
+                    " Successful transaction receipt observed from the expected root, but exact historical signer authorization and decrypted draft equality remain unverified. The queue must remain quarantined.",
+                    receipt.Ledger, inspected.ManifestAndChunksMatch, inspected.StorageAccount);
+            }
             return new(true,
-                "Horizon reports a successful transaction from the expected root. Exact account/record operations, child signer state and historical encrypted bytes have NOT been independently verified.",
+                "Horizon reports a successful transaction from the expected root. Exact account expansion, signer policy and network operation history remain unverified.",
                 receipt.Ledger);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
