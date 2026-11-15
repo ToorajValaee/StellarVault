@@ -1181,3 +1181,37 @@ test('linked historical skh/skc inspection is bounded, read-only and never confi
   assert.match(panel,/Historical record operation check/);
   assert.doesNotMatch(recovery,/store\.TryReplaceAsync/);
 });
+
+test('linked expansion historical operation verification is read-only and never releases journal',()=>{
+  const root=path.join(__dirname,'..','src');
+  const inspector=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
+    'HorizonVaultLinkedExpansionOperationInspector.cs'),'utf8');
+  const evidence=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
+    'HorizonVaultLinkedReceiptEvidence.cs'),'utf8');
+  const review=fs.readFileSync(path.join(root,'StellarVault.Core','Services',
+    'VaultLinkedDraftRecoveryReview.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const nativeSmoke=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','LinkedExpansionHistorySmoke.cs'),'utf8');
+  const program=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','Program.cs'),'utf8');
+  assert.match(program,/await LinkedExpansionHistorySmoke\.RunAsync\(\)/);
+  assert.match(nativeSmoke,/Child master signer was not disabled/);
+  assert.match(nativeSmoke,/Incorrect root signer was accepted/);
+  assert.match(nativeSmoke,/Parent pointer to wrong child was accepted/);
+  assert.match(inspector,/MaxResponseBytes = 256 \* 1024/);
+  assert.match(inspector,/create_account/);
+  assert.match(inspector,/set_options/);
+  assert.match(inspector,/master_key_weight/);
+  assert.match(inspector,/sv:next:v1/);
+  assert.match(inspector,/transaction_successful/);
+  assert.doesNotMatch(inspector,/TryReplaceAsync|SubmitApprovedAsync|VaultSyncState\.Confirmed/);
+  assert.match(evidence,/expansions\.InspectAsync\(/);
+  assert.match(review,/historicalExpansionOperations = evidence\.HistoricalExpansionOperationsMatch/);
+  assert.match(panel,/Historical linked expansion operations/);
+  for(const host of ['StellarVault.Pwa/Program.cs','StellarVault.Maui/MauiProgram.cs']){
+    assert.match(fs.readFileSync(path.join(root,host),'utf8'),
+      /AddScoped<HorizonVaultLinkedExpansionOperationInspector>/);
+  }
+});
