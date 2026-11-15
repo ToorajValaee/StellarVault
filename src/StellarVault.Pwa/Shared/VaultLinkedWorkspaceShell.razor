@@ -49,6 +49,11 @@
                     }
                 </div>
                 <div class="sv-pwa-screen-tools">
+                    @if (_view == "records")
+                    {
+                        <button type="button" class="pixel-button compact"
+                                @onclick="RefreshAsync">↻ Refresh</button>
+                    }
                     <button type="button" class="pixel-button compact"
                             @onclick="LockAsync">Lock</button>
                 </div>
@@ -85,6 +90,11 @@
     {
         if (view is "records" or "drafts" or "sync" or "settings" or "help")
             _view = view;
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_workspace is not null) await _workspace.RefreshFromShellAsync();
     }
 
     private async Task LockAsync()
