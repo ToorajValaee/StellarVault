@@ -22,8 +22,8 @@ public static class VaultLinkedRemoteRevisionPolicy
                 Convert.ToBase64String(raw) != revision)
                 return false;
             for (var i = 1; i < 9; i++)
-                if (raw[i] is not (>= (byte)'0' and <= (byte)'9' or
-                                   >= (byte)'a' and <= (byte)'f'))
+                if (!((raw[i] >= (byte)'0' && raw[i] <= (byte)'9') ||
+                      (raw[i] >= (byte)'a' && raw[i] <= (byte)'f')))
                     return false;
             var count = BinaryPrimitives.ReadUInt16BigEndian(raw.AsSpan(9, 2));
             var size = BinaryPrimitives.ReadInt32BigEndian(raw.AsSpan(11, 4));
