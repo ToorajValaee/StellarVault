@@ -4,11 +4,11 @@ using System.Text.Json;
 namespace StellarVault.Core.Services;
 
 /// <summary>
-/// Final, opt-in linked record journal reconciliation. Re-verifies the exact
+/// Final, opt-in linked record and chain journal reconciliation. Re-verifies the exact
 /// signed Horizon envelope, decrypted historical record and current snapshot
 /// on the SAME connected S-key network before a single encrypted CAS commit.
 /// A negative or unavailable proof never releases an Uncertain mutation.
-/// Expansion journals have a different signer lineage and are not supported.
+/// Expansion journals require a separate dual-signature and parent-pointer proof.
 /// </summary>
 public sealed class VaultLinkedVerifiedReconciliation(
     IStellarSecretKeyLedger ledger,
@@ -138,7 +138,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 }
                 return new(mutationId, txHash, true,
                     "Dual-signed historical child creation and parent-pointer history were checked, then the encrypted expansion journal was confirmed without replay." +
-                    (released ? "" : " Reconnect the signer if its previous in-memory quarantine remains."));
+                    (released ? "" : " Fully restart the app if its previous in-memory signer quarantine remains."));
             }
             finally
             {
@@ -251,7 +251,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 }
                 return new(mutationId, txHash, true,
                     "Exact signed historical XDR, root signature and decrypted record were checked against the approved mutation. The encrypted journal was durably confirmed; no transaction was resubmitted." +
-                    (released ? "" : " The signing session may need to be reopened before publishing again."));
+                    (released ? "" : " A full app restart may be required to clear the volatile signer quarantine."));
             }
             finally
             {
