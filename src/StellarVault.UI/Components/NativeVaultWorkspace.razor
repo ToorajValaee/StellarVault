@@ -892,7 +892,10 @@ else
     {
         if (_ledgerBusy || !_publishApproved || _publishEstimate is null ||
             _publishFingerprint is null || !Ledger.IsConnected) return;
-        var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
+        // Recreate the EXACT reviewed draft. A minimal two-field draft here
+        // silently discarded folder, tags, URL, username and notes even
+        // though they were included in the fee preview.
+        var draft = CurrentPublishDraft();
         if (_publishFingerprint != CurrentPublishFingerprint())
         {
             CancelPublish();
