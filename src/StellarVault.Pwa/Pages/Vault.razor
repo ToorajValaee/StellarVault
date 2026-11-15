@@ -410,6 +410,9 @@ else
         @if (_editorOpen)
         {
             <aside class="sv-editor-sidecar" aria-label="Vault item editor">
+                <div class="sv-inspector-resize-handle sv-editor-resize-handle" role="separator"
+                     aria-label="Resize record editor" aria-orientation="vertical"
+                     tabindex="0" title="Drag or use arrow keys to adjust editor width"></div>
                 <div class="sv-sidecar-topbar">
                     <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
                     <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
