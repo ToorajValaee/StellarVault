@@ -109,8 +109,10 @@ internal static class LinkedDraftSmoke
             Require(afterRecovery.State is VaultSyncState.Uncertain or VaultSyncState.Submitting,
                 "Read-only recovery modified the durable uncertain queue state.");
 
+            var previousUnlockEpoch = keys.UnlockEpoch;
             await keys.LockAsync();
-            Require(!keys.IsUnlocked, "Linked queue encryption key remained unlocked.");
+            Require(keys.UnlockEpoch > previousUnlockEpoch &&
+                !keys.IsUnlocked, "Linked queue lock did not invalidate its unlock generation.");
             await MustRejectAsync(() => drafts.ListAsync(),
                 "Linked encrypted queue was accessible after lock.");
 
@@ -120,6 +122,8 @@ internal static class LinkedDraftSmoke
             Require(await keys.HasLocalCredentialsOfflineAsync(Root),
                 "Existing encrypted S-key device credentials were lost.");
             await keys.UnlockOfflineAsync(Root, "local S-key test passphrase 12345");
+            Require(keys.UnlockEpoch > previousUnlockEpoch,
+                "Offline queue re-unlock reused a stale local authorization generation.");
             Require(keys.IsUnlocked && keys.IsOfflineOnly &&
                 keys.ActiveRootAccountId == Root,
                 "Offline local-only authentication failed.");
