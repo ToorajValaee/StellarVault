@@ -242,6 +242,20 @@ window.stellarVaultSecretLedger = (() => {
        (draft.FolderId&&!validId(draft.FolderId)))
       fail('Invalid record or folder fields.');
   }
+  function requireAcyclicPublishedParent(records,recordId,parentId) {
+    if(!parentId)return;
+    const byId=new Map(records.map(record=>[record.Id,record]));
+    const seen=new Set([recordId]);
+    let cursor=parentId;
+    while(cursor) {
+      if(seen.has(cursor))fail('Folder move creates a parent cycle.');
+      seen.add(cursor);
+      const parent=byId.get(cursor);
+      if(!parent||!parent.IsFolder)
+        fail('Updated record parent must be a published folder.');
+      cursor=parent.FolderId;
+    }
+  }
   function chosenNode(s,view,old) {
     if(old)return old.account;
     return view.nodes.at(-1);
@@ -260,8 +274,11 @@ window.stellarVaultSecretLedger = (() => {
     const v=await inventory(s),old=v.locations.get(recordId);
     if(kind==='create'&&old)fail('Record already exists.');
     if((kind==='update'||kind==='delete')&&!old)fail('Published record was not found.');
-    if(draft?.FolderId && !v.records.some(x=>x.Id===draft.FolderId&&x.IsFolder))
-      fail('Parent folder is not present.');
+    if((kind==='update'||kind==='create') && draft) {
+      if(kind==='update' && old && !!draft.IsFolder!==!!v.records.find(x=>x.Id===recordId)?.IsFolder)
+        fail('An existing record cannot change its folder type.');
+      requireAcyclicPublishedParent(v.records,recordId,draft.FolderId);
+    }
     if(kind==='delete' && v.records.some(x=>x.FolderId===recordId))
       fail('Delete nested records or folders first.');
     if(kind==='expand')return quoteExpansion(s,v,id);
