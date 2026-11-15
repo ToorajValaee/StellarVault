@@ -83,19 +83,15 @@ public sealed class VaultLinkedDraftRecoveryReview(
                 }
                 RequireSameScope(root, scope, epoch);
 
-                // Only a matching public-only diagnostic can supply advisory
-                // receipt evidence. A hash by itself does not bind operations.
-                var diagnostic = await ledger.InspectUncertainSubmissionAsync(ct);
-                RequireSameScope(root, scope, epoch);
-                if (diagnostic is not null && item.TransactionHash is { Length: 64 } hash &&
-                    string.Equals(diagnostic.TransactionHash, hash,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    diagnostic.RootAccountId == root &&
-                    (item.Kind == VaultMutationKind.ExtendLinkedChain
-                        ? diagnostic.Kind == "expand" &&
-                          diagnostic.TargetAccountId == item.EntityId
-                        : diagnostic.RecordId == item.EntityId))
+                // The durable hash is the exact signed transaction identity
+                // captured before broadcast. The volatile runtime diagnostic is
+                // optional after an app restart. Reconstruct only a public-only
+                // receipt query from the selected network, never from untrusted
+                // queue payload or a caller-controlled Horizon URL.
+                var diagnostic = BuildDurableReceiptQuery(root, item);
+                if (diagnostic is not null)
                 {
+                    RequireSameScope(root, scope, epoch);
                     var evidence = await receipts.InspectAsync(diagnostic, ct);
                     receipt = evidence.ReceiptObserved;
                 }
@@ -125,6 +121,51 @@ public sealed class VaultLinkedDraftRecoveryReview(
             foreach (var entry in entries)
                 CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
         }
+    }
+
+    private VaultSecretSubmissionDiagnostic? BuildDurableReceiptQuery(
+        string root, VaultPendingMutation item)
+    {
+        if (item.TransactionHash is not { Length: 64 } hash ||
+            !hash.All(Uri.IsHexDigit))
+            return null;
+
+        // Resolve the horizon endpoint from the already-selected network,
+        // not the encrypted draft and not volatile session diagnostics.
+        var expectedPassphrase = network.Network switch
+        {
+            "testnet" => "Test SDF Network ; September 2015",
+            "public" => "Public Global Stellar Network ; September 2015",
+            "custom" => network.CustomPassphrase,
+            _ => null
+        };
+        var horizon = network.Network switch
+        {
+            "testnet" => "https://horizon-testnet.stellar.org",
+            "public" => "https://horizon.stellar.org",
+            "custom" => network.CustomHorizonUrl,
+            _ => null
+        };
+        if (string.IsNullOrWhiteSpace(expectedPassphrase) ||
+            ledger.ConnectedNetworkPassphrase != expectedPassphrase ||
+            !Uri.TryCreate(horizon, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            uri.UserInfo.Length != 0 || uri.Query.Length != 0 ||
+            uri.Fragment.Length != 0 || uri.AbsolutePath != "/")
+            return null;
+
+        var expansion = item.Kind == VaultMutationKind.ExtendLinkedChain;
+        if (!expansion && item.Kind is not
+            (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            return null;
+        // The root is the signed transaction's source. The exact record
+        // storage node cannot be established from a durable create envelope
+        // alone; this diagnostic deliberately checks receipt existence only.
+        return new VaultSecretSubmissionDiagnostic(
+            expansion ? "expand" : "create", root,
+            expansion ? item.EntityId : root,
+            expansion ? null : item.EntityId, hash.ToLowerInvariant(),
+            expectedPassphrase, uri.GetLeftPart(UriPartial.Authority));
     }
 
     private void RequireSameScope(string root, string scope, long epoch)
