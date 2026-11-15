@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyLedger SecretLedger
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject IVaultNativeFileAccess NativeFiles
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
@@ -36,7 +37,12 @@ else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
 {
     <section class="terminal-panel centered-message" role="alert">
         <h1>Conflicting vault sessions</h1>
-        <p>Independent mnemonic and Secret Key vault sessions are both active. Lock the previous session before reopening a vault. No transaction was sent.</p>
+        <p>Independent mnemonic and Secret Key vault sessions are both active. Lock both sessions before reopening a vault. No transaction was sent.</p>
+        <button type="button" class="pixel-button primary" @onclick="LockConflictingSessionsAsync">Lock both vault sessions</button>
+        @if (_conflictLockError is not null)
+        {
+            <p class="terminal-alert warning" role="alert">@_conflictLockError</p>
+        }
     </section>
 }
 else if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
@@ -1466,6 +1472,25 @@ else
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
         if (RequestedView == "help") _appView = "help";
     }
+    private string? _conflictLockError;
+
+    private async Task LockConflictingSessionsAsync()
+    {
+        // Do not switch strategies while either signing or local unlock key
+        // remains live. Preserve uncertain transaction markers on lock.
+        var failed = false;
+        try { await LinkedQueueKeys.LockAsync(); } catch { failed = true; }
+        try { await SecretLedger.DisconnectAsync(); } catch { failed = true; }
+        try { Workflow.Lock(); } catch { failed = true; }
+        try { await Ledger.DisconnectAsync(); } catch { failed = true; }
+        if (failed)
+        {
+            _conflictLockError = "Not all sessions could be closed. Restart the application before unlocking another vault.";
+            return;
+        }
+        Nav.NavigateTo("/", replace: true);
+    }
+
     private VaultWorkspaceMode ActiveMode =>
         VaultWorkspaceModeResolver.Resolve(
             Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
