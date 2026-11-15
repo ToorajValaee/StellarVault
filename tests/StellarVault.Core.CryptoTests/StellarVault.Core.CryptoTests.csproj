@@ -7,5 +7,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/StellarVault.Core/StellarVault.Core.csproj" />
+    <!-- Compile the pure HTTP historical evidence reader directly so the
+         native .NET console suite verifies it without a browser-WASM host. -->
+    <Compile Include="../../src/StellarVault.Pwa/Services/HorizonVaultLinkedRecordOperationInspector.cs"
+             Link="LinkedRecordOperationInspector.cs" />
   </ItemGroup>
 </Project>
