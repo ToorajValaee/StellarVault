@@ -988,7 +988,10 @@ test('linked unpublished encrypted draft edits reuse atomic CAS and reject cycle
   assert.match(panel,/DraftWorkspace\.OpenDraftAsync\(id\)/);
   assert.match(panel,/DraftWorkspace\.ReviseAsync\(editingId, draft, revision\)/);
   assert.match(panel,/Edit local draft/);
-  assert.match(panel,/Unverified parent/);
+  const sharedFields=fs.readFileSync(path.join(src,'StellarVault.UI',
+    'Components','VaultRecordFields.razor'),'utf8');
+  assert.match(panel,/<VaultRecordFields IsFolder="_draftIsFolder"/);
+  assert.match(sharedFields,/Unverified parent/);
   assert.match(smoke,/stale linked draft edit incorrectly overwrote/);
   assert.match(smoke,/Offline encrypted draft revision depended on Horizon/);
 });
