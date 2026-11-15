@@ -237,8 +237,10 @@ window.stellarVaultSecretLedger = (() => {
   function validateDraft(draft) {
     if(!draft||typeof draft.Title!=='string'||draft.Title.trim().length<1||
        draft.Title.length>256||typeof draft.Content!=='string'||
-       (!draft.IsFolder&&!draft.Content)||!Array.isArray(draft.Tags)||
-       draft.Tags.length>24||draft.Tags.some(t=>typeof t!=='string'||t.length>64)||
+       (!draft.IsFolder&&!draft.Content)||
+       !Array.isArray(draft.Tags||[])||
+       (draft.Tags||[]).length>24||
+       (draft.Tags||[]).some(t=>typeof t!=='string'||t.length>64)||
        (draft.FolderId&&!validId(draft.FolderId)))
       fail('Invalid record or folder fields.');
   }
@@ -618,8 +620,8 @@ window.stellarVaultSecretLedger = (() => {
           fail('Historical previous ciphertext removal key was missing.');
     }
     if(kind==='delete'){
-      if(chunks.size!==0)return false;
-      return true; // Signed transaction removed the exact original skh/skc key set.
+      for(const part of chunks.values())part.fill(0);
+      return chunks.size===0; // Signed transaction removed exact original skh/skc keys.
     }
     const manifest=parseManifest(headerRaw);
     if(chunks.size!==manifest.count||
