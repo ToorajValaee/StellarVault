@@ -92,3 +92,13 @@ test('linked offline import preview cannot survive a lock and re-unlock on same 
   assert.match(panel, /LinkedKeys\.UnlockEpoch\.ToString\(/);
   assert.match(smoke, /Offline queue re-unlock reused a stale local authorization generation/);
 });
+
+test('PWA file picker accepts max-size authenticated SVRB overhead but no larger file', () => {
+  const js = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');
+  const adapter = read('src/StellarVault.Pwa/Services/BrowserVaultNativeFileAccess.cs');
+  const backup = read('src/StellarVault.Core/Services/VaultEncryptedRecordBackup.cs');
+  assert.match(js, /maxPortableRecordBackupBytes = 1024 \* 1024 \+ 5 \+ 16 \+ 12 \+ 16/);
+  assert.match(js, /file\.size > maxPortableRecordBackupBytes/);
+  assert.match(adapter, /VaultEncryptedRecordBackup\.MaximumBackupBytes/);
+  assert.match(backup, /MaximumBackupBytes = VaultRecordInterchange\.MaximumBytes \+/);
+});
