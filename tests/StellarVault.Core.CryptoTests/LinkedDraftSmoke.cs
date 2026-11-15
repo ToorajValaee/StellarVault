@@ -227,6 +227,20 @@ internal static class LinkedDraftSmoke
 
             var first = await workspace.ReviewManualSyncAsync();
             var root = local.Single(x => x.EntityId == tree.RootId);
+            var stagedSnapshot = await store.ListAsync(Root, network.CredentialKey(Root));
+            try
+            {
+                var leaf = stagedSnapshot.First(x => x.EntityId != tree.RootId);
+                Require(VaultLinkedTreeFilePolicy.Problems(leaf,
+                        stagedSnapshot.Where(x => x.EntityId != tree.RootId).ToArray())
+                        .Contains("tree-root-not-staged"),
+                    "A file node from interrupted staging was publishable without its root.");
+            }
+            finally
+            {
+                foreach (var entry in stagedSnapshot)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
             Require(first.Items.Single(x => x.MutationId == root.MutationId)
                 .Blockers.Contains("tree-child-not-historically-confirmed"),
                 "Streaming file root was ready before its children.");
@@ -269,6 +283,15 @@ internal static class LinkedDraftSmoke
                 reconstructed.ToArray().AsSpan().SequenceEqual(bytes) &&
                 ledger.Submissions == tree.NodeCount,
                 "Linked tree file failed manifest-last authenticated reconstruction.");
+            var changed = onChain.Select(x => x.Id == tree.RootId
+                ? x with { Content = VaultLinkedTreeFilePolicy.Prefix + "{}" }
+                : x).ToArray();
+            await MustRejectAsync(async () =>
+            {
+                await using var failedDownload = new MemoryStream();
+                await VaultLinkedTreeFilePolicy.ReadAsync(
+                    tree.RootId, changed, failedDownload);
+            }, "Tampered linked tree root was accepted for download.");
             System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
             Console.WriteLine("PASS: linked SVTREE3 nodes require individual quotes, history confirmation and root-last verified reconstruction");
         }
