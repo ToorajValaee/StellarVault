@@ -589,6 +589,20 @@
         finally { _busy = false; }
     }
 
+    private async Task<(LedgerRecordItem Record, string Revision)> ReadStablePublishedAsync(
+        string id, IStellarSecretKeyRecordRevisionReader reader)
+    {
+        var before = await reader.ReadRecordRevisionAsync(id)
+            ?? throw new InvalidOperationException("Published record has no valid manifest revision.");
+        var remote = await Ledger.ReadAsync();
+        var record = remote.Single(x => x.Id == id);
+        var after = await reader.ReadRecordRevisionAsync(id);
+        if (before != after)
+            throw new InvalidOperationException(
+                "The record changed while opening its contents. Reload before editing or deleting.");
+        return (record, before);
+    }
+
     private async Task EditPublishedRecordAsync(string id)
     {
         if (_busy || !QueueKeys.CanPublish || _review is not null ||
@@ -596,10 +610,7 @@
         _busy = true;
         try
         {
-            var remote = await Ledger.ReadAsync();
-            var record = remote.Single(x => x.Id == id);
-            var revision = await reader.ReadRecordRevisionAsync(id)
-                ?? throw new InvalidOperationException("Published record has no verified manifest.");
+            var (record, revision) = await ReadStablePublishedAsync(id, reader);
             ClearDraftEditor();
             _deletePublishedId = null;
             _editingRemoteId = id;
@@ -629,10 +640,7 @@
         _busy = true;
         try
         {
-            var remote = await Ledger.ReadAsync();
-            var record = remote.Single(x => x.Id == id);
-            var revision = await reader.ReadRecordRevisionAsync(id)
-                ?? throw new InvalidOperationException("Published record has no verified manifest.");
+            var (record, revision) = await ReadStablePublishedAsync(id, reader);
             _deletePublishedId = id;
             _deletePublishedTitle = record.Title;
             _deletePublishedRevision = revision;
