@@ -158,7 +158,7 @@
                 {
                     <div class="terminal-alert warning" role="alert">
                         <strong>MAINNET // REAL ASSETS AND NETWORK FEES</strong>
-                        <span>You selected Stellar PUBLIC. Any approved on-chain operation may spend real native asset. Local encrypted records remain browser-only unless you explicitly publish them.</span>
+                        <span>You selected Stellar PUBLIC. Any approved on-chain operation may spend the network's native asset. Local encrypted records remain browser-only unless you explicitly publish them.</span>
                         <label class="sv-biometric-choice"><input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_busy" />
                             I UNDERSTAND THIS IS STELLAR MAINNET
                         </label>
@@ -299,7 +299,7 @@
             <section class="terminal-panel" aria-label="Stellar ledger records">
                 <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
                 <h2>STELLAR LEDGER</h2>
-                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions cost native asset and require a funded root account and initialized HD registry.</p>
+                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions incur native-asset fees and require a funded root account and initialized HD registry.</p>
                 @if (LedgerRecords.IsConnected)
                 {
                     <p class="advanced-help" role="status">Signed ledger session connected.</p>
