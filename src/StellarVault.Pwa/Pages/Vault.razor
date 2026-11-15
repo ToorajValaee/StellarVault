@@ -322,27 +322,8 @@ else
                     <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
                         <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
                         <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
-                        @if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
-                                 {
-                                     <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
-                                 }
-                             </div>
-                    </details>
-                </div>
-            }
-                @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
-                {
-                    @foreach (var draft in PendingLocalFolders.Where(x => PendingFolderId(x) == _folder))
-                    {
-                        <div class="sv-folder-tile">
-                            <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)"><span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span></button>
-                            <span class="sv-object-type">Folder</span><span class="sv-object-storage">Local</span>
-                        <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
-                                <div class="sv-object-menu">
-                                    <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
-                                    <button type="button" @onclick="() => OpenPending(draft)">Edit local draft</button>
-                                </div>
-                            </details>
+                        <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
+                     </details>
                         </div>
                     }
                 }
@@ -389,7 +370,10 @@ else
                             <div class="sv-object-menu">
                                 <button type="button" @onclick="() => OpenRecord(item)">View details</button>
                                 @if (!IsLedgerFile(item)) { <button type="button" @onclick='() => OpenEditor("record", item.Id)'>Edit record</button> }
-                                <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                                @if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
+                                {
+                                    <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                                }
                             </div>
                         </details>
                     </div>
