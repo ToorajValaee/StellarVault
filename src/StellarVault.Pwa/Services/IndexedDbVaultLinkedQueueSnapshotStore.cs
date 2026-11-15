@@ -41,6 +41,15 @@ public sealed class IndexedDbVaultLinkedQueueSnapshotStore(
                 VaultMutationKind.DeleteFolder or VaultMutationKind.ExtendLinkedChain))
             throw new InvalidOperationException(
                 "Only unpublished linked drafts or immutable chain-expansion intents can be journaled.");
+        var needsVersion = entry.Kind is VaultMutationKind.UpdateRecord or
+            VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteRecord or
+            VaultMutationKind.DeleteFolder;
+        if (needsVersion
+            ? !VaultLinkedRemoteRevisionPolicy.IsValid(entry.ExpectedRemoteVersion) ||
+              entry.DependsOn is not { Length: 0 }
+            : entry.ExpectedRemoteVersion is not null)
+            throw new InvalidOperationException(
+                "Linked remote mutations must preserve a canonical original manifest; creates and expansion intents cannot invent one.");
         return await ExistingStore().AddAsync(entry, ct);
     }
 
