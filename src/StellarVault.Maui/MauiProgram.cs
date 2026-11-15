@@ -1,3 +1,4 @@
+using VaultEngine.Core;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Maui;
 using CommunityToolkit.Maui.Storage;
@@ -98,6 +99,9 @@ public static class MauiProgram
         builder.Services.AddScoped<VaultScopedQueueReview>();
         builder.Services.AddScoped<VaultLinkedQueueInspection>();
         builder.Services.AddScoped<VaultHybridDraftWorkspace>();
+        builder.Services.AddScoped<StellarAccountObjectStoreProvider>();
+        builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.GetRequiredService<StellarAccountObjectStoreProvider>());
+        builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
         builder.Services.AddScoped<VaultHybridFileWorkspace>();
         builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
         builder.Services.AddScoped<VaultHybridRemoteMutationWorkspace>();
