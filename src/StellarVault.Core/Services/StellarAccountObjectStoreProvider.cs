@@ -154,15 +154,46 @@ public sealed class StellarAccountObjectStoreProvider(
                 "Single-account capacity enforcement is not yet wired into the encrypted publisher.");
     }
 
-    public Task<ObjectStorageQuote> EstimatePutAsync(
+    public async Task<ObjectStorageQuote> EstimatePutAsync(
         ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
         ObjectWriteOptions options, CancellationToken ct = default)
     {
-        // A streamed file requires a multi-node planner; a local draft does not
-        // carry a binding fee quote. Never fabricate a monetary estimate.
-        _ = RequireScope(scope, true);
-        throw new NotSupportedException(
-            "Object quotes must use the existing Stellar fee/reserve planner until the quote adapter is wired.");
+        ArgumentNullException.ThrowIfNull(options);
+        if (descriptor is null || descriptor.ObjectId != "new" ||
+            options.ExpectedRevision is not null)
+            throw new NotSupportedException(
+                "This quote path supports only new ordinary records; updates require revision-pinned review.");
+        if (scope.AccountStrategyId != VaultMutationStrategyPolicy.Hd)
+            throw new NotSupportedException(
+                "Linked-account fees require the existing approval-quote lifecycle adapter.");
+        var checkpoint = RequireScope(scope, true);
+        // The HD ledger has a supported read-only estimator. Do not fabricate
+        // a linked quote or force a streaming file through an ordinary record.
+        byte[] bytes = await ReadBoundedAsync(source, ct);
+        try
+        {
+            var content = new UTF8Encoding(false, true).GetString(bytes);
+            var draft = BuildDraft(descriptor, content);
+            var before = await hdLedger.InspectAccountInfoAsync();
+            if (before.RootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException(
+                    "The connected HD ledger root differs from the requested object store.");
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            ct.ThrowIfCancellationRequested();
+            var quoted = await hdLedger.EstimateAsync(draft);
+            ct.ThrowIfCancellationRequested();
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            // This is only an advisory estimate: the approved publisher must
+            // obtain a fresh binding quote immediately before any broadcast.
+            return new ObjectStorageQuote(
+                ProviderId, scope.NetworkId, "XLM",
+                quoted.NetworkFeeXlm.ToString("0.0000000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                quoted.PeakReserveXlm.ToString("0.0000000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                bytes.Length, quoted.CreatesChildNode);
+        }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
     }
 
     public async Task<ObjectMutationIntent> PreparePutAsync(
