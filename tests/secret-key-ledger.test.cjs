@@ -1491,3 +1491,23 @@ test('linked SVFILE2 multipart staging requires historical part confirmation and
   assert.match(smoke,/RunMultipartLinkedSmokeAsync\(\)/);
   assert.match(smoke,/Multipart manifest could publish before its file parts/);
 });
+
+test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling in Core',()=>{
+  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const tree=fs.readFileSync(path.join(core,'VaultStreamingFileTree.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,
+    'StellarVault.Core.CryptoTests','StreamingFileTreeSmoke.cs'),'utf8');
+  const runner=fs.readFileSync(path.join(__dirname,
+    'StellarVault.Core.CryptoTests','Program.cs'),'utf8');
+  assert.match(tree,/public const int Fanout = 12/);
+  assert.match(tree,/IncrementalHash\.CreateHash\(HashAlgorithmName\.SHA256\)/);
+  assert.match(tree,/input\.ReadAsync\(buffer\.AsMemory\(filled\), ct\)/);
+  assert.match(tree,/await EmitAsync\(rootId, RootKind/);
+  assert.match(tree,/ReadVerifiedAsync\(/);
+  assert.match(tree,/CryptographicOperations\.ZeroMemory\(payload\)/);
+  assert.doesNotMatch(tree,/MaxFileBytes|MaxParts = \(MaxFileBytes/);
+  assert.match(smoke,/1024 \* 1024 \+ 19/);
+  assert.match(smoke,/Tampered streaming file node was accepted/);
+  assert.match(smoke,/Simulated journal failure/);
+  assert.match(runner,/await StreamingFileTreeSmoke\.RunAsync\(\)/);
+});
