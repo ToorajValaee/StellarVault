@@ -83,7 +83,7 @@ public sealed class VaultHybridDraftWorkspace(
                 throw new InvalidDataException("Invalid parent folder ID.");
             // A pending folder is allowed, but its single dependency edge is
             // attached to the root using the original HD parent policy.
-            var parent = folderId is null ? [] :
+            VaultPendingMutation[] parent = folderId is null ? [] :
                 VaultQueuedCreatePolicy.ParentCandidates(local, folderId);
             if (parent.Length > 1)
                 throw new InvalidOperationException("Ambiguous local parent folder.");
