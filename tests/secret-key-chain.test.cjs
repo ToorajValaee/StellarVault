@@ -140,3 +140,22 @@ test('an additional active child signer blocks single-secret chain recovery',asy
   });
   await assert.rejects(fixture.inspect(),/additional active signer/);
 });
+
+test('linked recovery rechecks network identity and queue root across asynchronous reads', () => {
+  const code = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services',
+    'VaultLinkedDraftRecoveryReview.cs'), 'utf8');
+  assert.match(code, /ledger\.ConnectedNetworkPassphrase is not \{ Length: > 0 \} passphrase/);
+  assert.match(code, /keys\.ActiveRootAccountId != root/);
+  assert.match(code, /RequireSameScope\(root, scope, epoch, passphrase\)/);
+  assert.match(code, /ledger\.ConnectedNetworkPassphrase != passphrase/);
+  assert.match(code, /network\.CredentialKey\(root\) != scope/);
+  assert.match(code, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+});
+
+test('linked historical reconciliation fails closed if storage provenance changes', () => {
+  const code = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services',
+    'VaultLinkedVerifiedReconciliation.cs'), 'utf8');
+  assert.match(code, /after\.HistoricalStorageAccount != before\.HistoricalStorageAccount/);
+  assert.match(code, /if \(!await store\.TryReplaceAsync\(entry, confirmed, CancellationToken\.None\)\)/);
+  assert.match(code, /if \(!proven\)/);
+});
