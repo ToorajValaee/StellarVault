@@ -103,6 +103,9 @@ public static class VaultRecordInterchange
         var sb = new StringBuilder("title,content,username,url,notes,tags\r\n");
         foreach (var x in archive.Records)
         {
+            if (x.Tags.Any(tag => tag.Contains(';')))
+                throw new NotSupportedException(
+                    "CSV cannot preserve semicolons inside tags. Export JSON instead.");
             sb.Append(string.Join(",", new[] { x.Title, x.Content, x.UserName ?? "",
                 x.Url ?? "", x.Notes ?? "", string.Join(";", x.Tags) }.Select(CsvCell)));
             sb.Append("\r\n");
