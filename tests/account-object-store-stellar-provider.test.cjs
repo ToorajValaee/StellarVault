@@ -100,3 +100,19 @@ test('file Put uses existing encrypted SVTREE3 staging for HD and independent S-
   assert.doesNotMatch(provider, /PublishDetailedAsync\(|SubmitApprovedAsync\(/,
     'Engine file staging must not skip consented publication and receipt checks');
 });
+
+test('neutral Get/OpenRead verifies SVTREE3 before exposing any bytes', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const smoke = read('tests/StellarVault.Core.CryptoTests/StellarObjectEstimateSmoke.cs');
+  assert.match(provider, /VaultLinkedTreeFilePolicy\.ReadAsync\(objectId, records, buffer, ct\)/);
+  assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\)/);
+  assert.match(provider, /private sealed class VerifiedFileBuffer/);
+  assert.match(provider, /MaxVerifiedInMemoryFileBytes = 8 \* 1024 \* 1024/);
+  assert.match(provider, /MaxVerifiedInMemoryFileBytes - Length/);
+  assert.match(provider, /CryptographicOperations\.ZeroMemory\(segment\.Array\)/);
+  assert.match(provider, /if \(file is not null\) return file\.Value\.Bytes/);
+  assert.match(provider, /return null; \/\/ Existing ordinary credential\/folder reader owns this record/);
+  assert.match(smoke, /await fileEngine\.OpenReadAsync\(scope, rootRecord\.Id\)/);
+  assert.match(smoke, /Engine returned a corrupted file as verified plaintext/);
+  assert.doesNotMatch(provider, /\.PublishDetailedAsync\(|\.SubmitApprovedAsync\(/);
+});
