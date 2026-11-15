@@ -46,3 +46,6 @@ A current decrypted record matching an approved draft is not historical proof of
 
 ## 2026-11-15 expansion journal confirmation guard
 Approved linked S-key account expansion now remains durably `Uncertain` even if the signer transport reports a successful transaction hash and a new tail is visible. The exact historical CreateAccount/SetOptions signer/pointer provenance is not yet proven. Queue replay and further dependent writes remain blocked until a separately reviewed reconciliation protocol is implemented. This is a deliberate fail-closed safety behavior, not a complete manual-sync or production solution. Local smoke execution is required.
+
+## 2026-11-15 pre-broadcast signed hash recovery
+The S-key signer and Core queue now preserve a scope-bound **signed transaction hash before Horizon broadcast**. Uncertain queues can retain it after a network timeout, and the read-only recovery reviewer can check the corresponding Horizon receipt after restart without relying on volatile JavaScript diagnostics. The hash is a public investigation handle, not a cryptographic attestation of operation content, signer policy or historical ciphertext. **No `Uncertain → Confirmed` reconciliation is enabled**; additional source, live Testnet and security verification are required. Source committed, executable validation pending.
