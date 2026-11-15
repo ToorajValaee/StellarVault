@@ -1094,6 +1094,12 @@ test('linked queue binds volatile signed transaction identity and restart receip
   assert.match(publisher,/VaultLinkedSignedSubmissionIdentity\.TryReadAsync/);
   assert.match(expansion,/VaultLinkedSignedSubmissionIdentity\.TryReadAsync/);
   assert.match(recovery,/BuildDurableReceiptQuery\(root, item\)/);
+  const smoke=fs.readFileSync(path.join(__dirname,'..','tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(smoke,/class CapturingLinkedReceiptEvidence/);
+  assert.match(smoke,/ledger\.Reconnect\(\); \/\/ The volatile JS diagnostic is absent/);
+  assert.match(smoke,/witness\.Observed\?\.TransactionHash == hash/);
+  assert.match(smoke,/A mocked observed receipt wrongly released an unproven linked expansion/);
   assert.match(recovery,/item\.TransactionHash is not \{ Length: 64 \} hash/);
   assert.match(recovery,/ledger\.ConnectedNetworkPassphrase != expectedPassphrase/);
   assert.doesNotMatch(recovery,/store\.TryReplaceAsync|VaultSyncState\.Confirmed/);
