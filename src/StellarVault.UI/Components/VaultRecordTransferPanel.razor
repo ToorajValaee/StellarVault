@@ -10,6 +10,7 @@
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject IStellarLedgerRecords HdLedger
 @inject IStellarSecretKeyLedger LinkedLedger
+@inject VaultNetworkSelection Networks
 
 <details class="terminal-panel" aria-label="Import and export ordinary vault records">
     <summary>Import / export records (JSON or CSV)</summary>
@@ -82,15 +83,40 @@
     private string _backupPassword = string.Empty;
     private string? _message;
     private VaultRecordInterchange.Archive? _pending;
+    private string? _pendingScope;
 
     private bool CanExport => Records.Count > 0 && (Strategy == VaultMutationStrategyPolicy.Linked
         ? LinkedLedger.IsConnected : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
 
+    private string? CurrentImportScope()
+    {
+        if (!CanStage) return null;
+        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        {
+            var root = LinkedKeys.ActiveRootAccountId;
+            if (root is null) return null;
+            return string.Join("|", Strategy, root, Networks.CredentialKey(root),
+                LinkedKeys.IsOfflineOnly ? "offline" : "connected",
+                LinkedLedger.ConnectionEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        }
+        if (HdSession.ActiveAccountId is not string account) return null;
+        return string.Join("|", Strategy, account, Networks.CredentialKey(account),
+            HdSession.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private void DiscardPending()
+    {
+        _pending = null;
+        _pendingScope = null;
+    }
+
     protected override void OnParametersSet()
     {
-        // Do not retain a pending plaintext preview when the local key is
-        // locked or the selected credential strategy changes.
-        if (!CanStage) _pending = null;
+        // Never carry an authenticated plaintext preview across a different
+        // signer, account, selected network or unlock/session epoch.
+        if (_pendingScope is not null && _pendingScope != CurrentImportScope())
+            DiscardPending();
     }
 
     private bool CanStage => Strategy == VaultMutationStrategyPolicy.Linked
@@ -100,7 +126,7 @@
 
     private void ClearImport()
     {
-        _pending = null;
+        DiscardPending();
         _message = "Import canceled. No drafts were staged.";
     }
 
@@ -140,8 +166,9 @@
     {
         if (_busy || !CanStage || _backupPassword.Length < 12) return;
         _busy = true;
-        _pending = null;
+        DiscardPending();
         _message = null;
+        var initialScope = CurrentImportScope();
         byte[]? ciphertext = null;
         try
         {
@@ -169,8 +196,12 @@
                 if (output.TryGetBuffer(out var segment) && segment.Array is not null)
                     CryptographicOperations.ZeroMemory(segment.Array);
             }
-            _pending = await VaultEncryptedRecordBackup.DecryptAsync(
+            var imported = await VaultEncryptedRecordBackup.DecryptAsync(
                 ciphertext, _backupPassword);
+            if (initialScope is null || initialScope != CurrentImportScope())
+                throw new InvalidOperationException("Vault session changed during backup restore.");
+            _pending = imported;
+            _pendingScope = initialScope;
             _message = "Encrypted backup verified. Review the record count before local staging.";
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
@@ -230,7 +261,8 @@
         if (_busy || !_understood || !CanStage) return;
         _busy = true;
         _message = null;
-        _pending = null;
+        DiscardPending();
+        var initialScope = CurrentImportScope();
         byte[]? bytes = null;
         try
         {
@@ -257,6 +289,12 @@
                         new UTF8Encoding(false, true).GetString(bytes));
                 else
                     throw new InvalidDataException("Select a .json or .csv record interchange file.");
+                if (initialScope is null || initialScope != CurrentImportScope())
+                {
+                    DiscardPending();
+                    throw new InvalidOperationException("Vault session changed during record import.");
+                }
+                _pendingScope = initialScope;
                 _message = "Format and folder references validated. Review the count before staging.";
             }
             finally
@@ -267,8 +305,8 @@
             }
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
-                                   System.Text.DecoderFallbackException or IOException or
-                                   OperationCanceledException)
+                                   InvalidOperationException or System.Text.DecoderFallbackException or
+                                   IOException or OperationCanceledException)
         {
             _message = "Record import rejected: " + ex.Message;
         }
@@ -282,18 +320,25 @@
     private async Task ConfirmImportAsync()
     {
         if (_busy || !_understood || !CanStage || _pending is null) return;
+        if (_pendingScope is null || _pendingScope != CurrentImportScope())
+        {
+            DiscardPending();
+            _message = "Import preview expired after a vault session or network change.";
+            return;
+        }
         _busy = true;
         _message = null;
         var archive = _pending;
-        _pending = null;
+        var approvedScope = _pendingScope;
+        DiscardPending();
         var staged = 0;
         try
         {
             staged = await VaultRecordInterchange.StageAsync(archive,
                 async (draft, ct) =>
                 {
-                    if (!CanStage)
-                        throw new InvalidOperationException("Unlocked account or consent changed.");
+                    if (approvedScope != CurrentImportScope())
+                        throw new InvalidOperationException("Unlocked account, network or session changed.");
                     var id = Strategy == VaultMutationStrategyPolicy.Linked
                         ? (await LinkedDrafts.CreateAsync(draft, ct)).EntityId
                         : (await HdDrafts.CreateAsync(draft, ct)).EntityId;
