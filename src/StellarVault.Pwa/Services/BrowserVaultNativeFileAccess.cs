@@ -37,33 +37,16 @@ public sealed class BrowserVaultNativeFileAccess(IJSRuntime js) : IVaultNativeFi
     public async Task<bool> SaveAsync(string fileName, Stream content)
     {
         ArgumentNullException.ThrowIfNull(content);
+        if (!content.CanRead)
+            throw new ArgumentException("Readable export stream required.", nameof(content));
         StellarLedgerFileProtocol.ValidateName(fileName);
-        using var buffer = new MemoryStream();
-        byte[] block = new byte[16 * 1024];
-        try
-        {
-            while (true)
-            {
-                int read = await content.ReadAsync(block);
-                if (read == 0) break;
-                if (buffer.Length + read > StellarLedgerFileProtocol.MaxFileBytes)
-                    throw new InvalidDataException("Export exceeds the 1 MiB file limit.");
-                await buffer.WriteAsync(block.AsMemory(0, read));
-            }
-            var bytes = buffer.ToArray();
-            try
-            {
-                await js.InvokeVoidAsync("stellarVaultV2Download.save", fileName, bytes);
-                return true;
-            }
-            finally { CryptographicOperations.ZeroMemory(bytes); }
-        }
-        finally
-        {
-            CryptographicOperations.ZeroMemory(block);
-            if (buffer.TryGetBuffer(out var segment) && segment.Array is not null)
-                CryptographicOperations.ZeroMemory(segment.Array);
-        }
+        // Browser-side saveStream uses showSaveFilePicker + ReadableStream,
+        // preserving backpressure and aborting an unverified partial export.
+        // Unlike the legacy byte[] interop, the file is never fully buffered.
+        using var reference = new DotNetStreamReference(content, leaveOpen: true);
+        await js.InvokeVoidAsync("stellarVaultV2Download.saveStream",
+            CancellationToken.None, fileName, reference);
+        return true;
     }
 
     private sealed class ZeroingMemoryStream(byte[] bytes) : MemoryStream(bytes, writable: false)
