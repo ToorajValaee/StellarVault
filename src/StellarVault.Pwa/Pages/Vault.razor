@@ -22,7 +22,15 @@
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
 @if (ActiveMode == VaultWorkspaceMode.Locked)
 {
-    <section class="terminal-panel centered-message"><h1>Vault locked</h1><a class="pixel-button primary" href="/">Unlock vault</a></section>
+    <section class="terminal-panel centered-message">
+        <h1>Vault locked</h1>
+        <a class="pixel-button primary" href="/">Unlock vault</a>
+        <details class="sv-access-learn" style="margin-top:1.25rem;text-align:left">
+            <summary>Recover independent encrypted S-key drafts offline</summary>
+            <p>Device-only encrypted drafts can be unlocked with their independent local passphrase without reconnecting a Stellar signer. This does not enable publication.</p>
+            <VaultLinkedLocalQueuePanel />
+        </details>
+    </section>
 }
 else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
 {
