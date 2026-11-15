@@ -1220,6 +1220,19 @@ test('linked expansion historical operation verification is read-only and never 
   }
 });
 
+test('linked signer rejects a published folder move that creates a parent cycle',async()=>{
+  const h=harness();await h.open();
+  const first='1111111111111111',second='2222222222222222';
+  const folder={...record,Title:'First',Content:'folder',IsFolder:true,
+    FolderId:null};
+  await h.submit((await h.plan('create',first,folder)).QuoteId);
+  await h.submit((await h.plan('create',second,{...folder,Title:'Second',FolderId:first})).QuoteId);
+  await assert.rejects(h.plan('update',first,{...folder,FolderId:second}),/cycle/);
+  await assert.rejects(h.plan('update',first,{...folder,FolderId:first}),/cycle/);
+  assert.equal(h.submissions(),2,'Rejected folder cycle reached Stellar');
+  h.close();
+});
+
 test('revision-pinned linked update/delete use encrypted queue with preflight conflict checks',()=>{
   const root=path.join(__dirname,'..');
   const core=path.join(root,'src','StellarVault.Core','Services');
