@@ -342,7 +342,7 @@
                    root signature and decrypted historical ciphertext. If any check fails,
                    the encrypted journal stays quarantined.</p>
                 @if (_recoveryFinding.TransactionHash is not null &&
-                     _recoveryFinding.DurableState == VaultSyncState.Uncertain)
+                     _recoveryFinding.DurableState is VaultSyncState.Uncertain or VaultSyncState.Submitting)
                 {
                     <button type="button" class="pixel-button compact"
                             disabled="@(_busy || !QueueKeys.CanPublish)"
