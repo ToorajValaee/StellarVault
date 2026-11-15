@@ -42,3 +42,9 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Restart the browser/app and reconnect the same independent S-key signer. Read-only recovery should look up the durable hash using the selected HTTPS Horizon network even if volatile runtime diagnostics are gone.
 - [ ] Confirm that an observed receipt, a matching live record or a new linked tail **still cannot mark the queue Confirmed** without full historical record-operation/signature verification.
 - [ ] Verify manually that a failed pre-broadcast signing/hash computation does not submit any transaction. If persistence fails after signing, retain quarantine and never retry blindly.
+
+## Durable checkpoint verification (journaled linked transactions)
+- [ ] Inspect an approved linked encrypted draft or expansion: confirm the 64-hex fully signed transaction hash appears in durable `Submitting` before Horizon receives the transaction.
+- [ ] Simulate encrypted queue CAS failure at the hash checkpoint. Verify the signer **never** submits the transaction, and the queue is not silently returned to Pending.
+- [ ] Terminate the browser/app after signing/checkpointing but before the network outcome is known; reconnect to the same account and verify the public hash remains in the encrypted journal for read-only receipt investigation.
+- [ ] Confirm returned Horizon hash must equal the pinned signed hash; any disagreement blocks the queue without retries or auto-confirmation.
