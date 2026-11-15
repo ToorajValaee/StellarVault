@@ -76,6 +76,7 @@ function harness(passphrase=TEST) {
     setTimeout(_){return this;}
     build(){return this;}
     sign(pair){this.signed.push(pair.publicKey());}
+    hash(){return Buffer.from((submitted+1).toString(16).padStart(64,'0'),'hex');}
   }
   function pair(id) {
     return { publicKey:()=>id,
@@ -318,13 +319,26 @@ test('uncertain submission exposes only public diagnostics and never authorizes 
   assert.equal(finding.RootAccountId,ROOT);
   assert.equal(finding.TargetAccountId,ROOT);
   assert.equal(finding.RecordId,recordId);
-  assert.equal(finding.TransactionHash,null);
+  assert.match(finding.TransactionHash,/^[0-9a-f]{64}$/);
+  assert.equal(finding.TransactionHash,'1'.padStart(64,'0'));
   assert.equal(finding.NetworkPassphrase,TEST);
   assert.equal(finding.HorizonUrl,'https://horizon-testnet.stellar.org');
   assert.ok(!JSON.stringify(finding).includes(record.Content));
   finding.RecordId='attacker-edited'; // The diagnostic is a defensive copy.
   assert.equal(h.inspectUncertain().RecordId,recordId);
   await assert.rejects(h.plan('expand',null,null),/unresolved/);
+  h.close();
+});
+
+test('signed transaction hash is stable before failed Horizon submission and cannot authorize retry',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  h.failNextSubmission();
+  await assert.rejects(h.submit(q.QuoteId),/uncertain/);
+  const diagnostic=h.inspectUncertain();
+  assert.equal(diagnostic.TransactionHash,'1'.padStart(64,'0'));
+  assert.equal(h.submissions(),1);
+  await assert.rejects(h.plan('create','fedcba9876543210',record),/unresolved/);
   h.close();
 });
 
@@ -349,7 +363,7 @@ test('uncertain write quarantine and diagnostic survive lock then reopen in same
   assert.equal(reopened.Kind,'create');
   assert.equal(reopened.RootAccountId,ROOT);
   assert.equal(reopened.RecordId,recordId);
-  assert.equal(reopened.TransactionHash,null);
+  assert.equal(reopened.TransactionHash,'1'.padStart(64,'0'));
   assert.equal(reopened.HorizonUrl,'https://horizon-testnet.stellar.org');
   assert.deepEqual(JSON.parse(JSON.stringify(reopened)),JSON.parse(JSON.stringify(original)));
   assert.equal((await h.read()).length,0,'Read-only inventory remains available');
