@@ -52,3 +52,14 @@ test('PWA and native host register the same engine-facing interface and provider
     assert.match(content, /new AccountObjectStoreRouter/);
   }
 });
+
+test('provider refuses unversioned type loss and clears ordinary stream bytes on disposal', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  assert.match(provider, /descriptor\.TypeId is not/);
+  assert.match(provider, /VaultRecordTypeFactory\.Credential or VaultRecordTypeFactory\.Folder/);
+  assert.match(provider, /descriptor\.ContentType is not null/);
+  assert.match(provider, /current Stellar ordinary-record protocol does not persist/);
+  assert.match(provider, /private sealed class ZeroingReadStream/);
+  assert.match(provider, /CryptographicOperations\.ZeroMemory\(buffer\)/);
+  assert.match(provider, /new ZeroingReadStream\(Encoding\.UTF8\.GetBytes\(record\.Content\)\)/);
+});
