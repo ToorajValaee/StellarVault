@@ -232,6 +232,9 @@ internal static class LinkedDraftSmoke
                 "Streaming file root was ready before its children.");
             await MustRejectAsync(() => publisher.PrepareAsync(root.MutationId),
                 "Streaming file root bypassed child historical verification.");
+            var stagedLeaf = local.First(x => x.EntityId != tree.RootId);
+            await MustRejectAsync(() => workspace.DiscardAsync(stagedLeaf.MutationId),
+                "A referenced tree leaf was discarded while its root was pending.");
             var sent = 0;
             while (sent < tree.NodeCount)
             {
@@ -252,6 +255,10 @@ internal static class LinkedDraftSmoke
                 Require(confirmed.Confirmed &&
                     ledger.ReleasedVerifiedHash == hash,
                     "Linked file node failed signed XDR history reconciliation.");
+                if (sent == 0)
+                    await MustRejectAsync(
+                        () => workspace.DiscardAsync(root.MutationId),
+                        "Pending file root was discarded after a child was published.");
                 sent++;
             }
             var onChain = await ledger.ReadAsync();
