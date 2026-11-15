@@ -80,5 +80,27 @@ window.stellarVaultV2Download = Object.freeze({
       // Do not zero the interop-provided payload, which may be shared by the runtime.
       data.fill(0);
     }
+  },
+  // Streams verified bytes to the browser's user-selected file sink without
+  // constructing a whole-file Blob. The File System Access API holds writes
+  // in a temporary file and only commits them once pipeTo closes normally;
+  // a failed verification or transfer aborts the sink instead.
+  async saveStream(filename, dotnetStreamReference) {
+    if (typeof window.showSaveFilePicker !== 'function')
+      throw new Error('Streaming downloads require a browser with Save File Picker support.');
+    const safeName = typeof filename === 'string'
+      ? filename.replace(/[\\\\/\\x00-\\x1f\\x7f]/g, '_').slice(0, 160)
+      : 'stellar-vault-record';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: safeName || 'stellar-vault-record'
+    });
+    const target = await handle.createWritable();
+    try {
+      const source = await dotnetStreamReference.stream();
+      await source.pipeTo(target);
+    } catch (error) {
+      try { await target.abort(); } catch (_) { /* The stream may already be aborted. */ }
+      throw error;
+    }
   }
 });
