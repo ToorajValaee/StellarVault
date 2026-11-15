@@ -11,5 +11,7 @@
          native .NET console suite verifies it without a browser-WASM host. -->
     <Compile Include="../../src/StellarVault.Pwa/Services/HorizonVaultLinkedRecordOperationInspector.cs"
              Link="LinkedRecordOperationInspector.cs" />
+    <Compile Include="../../src/StellarVault.Pwa/Services/HorizonVaultLinkedExpansionOperationInspector.cs"
+             Link="LinkedExpansionOperationInspector.cs" />
   </ItemGroup>
 </Project>
