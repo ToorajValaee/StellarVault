@@ -1423,3 +1423,20 @@ html[data-theme="dark"] .sv-native-shell :is(
 .sv-native-shell .sv-linked-queue-view[hidden] {
   display:none!important;
 }
+
+.sv-native-shell .sv-record-inspector-inline {
+  position:relative!important;inset:auto!important;
+  display:block!important;width:100%!important;height:auto!important;
+  padding:0!important;background:transparent!important;min-width:0;
+}
+.sv-native-shell .sv-record-inspector-inline-surface {
+  position:relative!important;width:100%!important;max-width:100%!important;
+  height:auto!important;max-height:none!important;
+  margin:0!important;padding:16px!important;min-width:0;
+  background:var(--sv-work-panel,#fff)!important;
+  border:1px solid var(--sv-work-line,#dce8e5)!important;
+  border-radius:14px!important;overflow-wrap:anywhere;
+}
+.sv-native-shell .sv-record-inspector-inline-surface .sv-inspector-tabs {
+  display:flex;gap:8px;margin:12px 0;
+}
