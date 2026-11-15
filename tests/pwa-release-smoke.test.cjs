@@ -447,7 +447,9 @@ test('Network preference contains only non-secret metadata and custom network mu
 test('Unlock button stays actionable and explains prerequisites without bypassing validation', () => {
   const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.match(home, /type="submit" disabled="@_busy"/);
+  // The unlock action lives outside the form for stable access-page layout,
+  // but still submits that form and remains disabled while access is busy.
+  assert.match(home, /type="submit" form="sv-access-form" disabled="@_busy"/);
   assert.match(home, /aria-describedby="sv-access-readiness"/);
   assert.match(home, /private string AccessReadiness/);
   assert.match(home, /if \(EnteredWordCount is not \(12 or 15 or 18 or 21 or 24\)\)/);
