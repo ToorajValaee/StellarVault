@@ -324,8 +324,9 @@ else
                         <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
                         @if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
                                  {
-                                     <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
+                                     <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
                                  }
+                             </div>
                     </details>
                 </div>
             }
