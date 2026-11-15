@@ -472,9 +472,13 @@ else
                 else if (Ledger.IsConnected)
                 {
                     <button type="button" class="sv-native-command primary"
-                            disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeRecordForActiveStrategy">＋ Record</button>
                     <button type="button" class="sv-native-command"
-                            disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeFolderForActiveStrategy">＋ Folder</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="RefreshNativeActiveStrategyAsync">Refresh</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
                 }
                 else
                 {
