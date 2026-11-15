@@ -18,7 +18,7 @@ public sealed class VaultLinkedDraftWorkspace(
     public sealed record DraftItem(string MutationId, string EntityId,
         bool IsFolder, string Title, string? FolderId, VaultSyncState State,
         DateTimeOffset CreatedUtc, bool IsCorrupt, bool IsJournal = false,
-        VaultMutationKind Kind = VaultMutationKind.CreateRecord);
+        VaultMutationKind Kind = VaultMutationKind.CreateRecord, bool IsFile = false);
 
     public sealed record DraftDetail(string MutationId,
         LedgerRecordDraft Draft, string PayloadSha256);
@@ -82,11 +82,30 @@ public sealed class VaultLinkedDraftWorkspace(
                 CryptographicOperations.ZeroMemory(x.EncryptedPayload);
     }
 
-    public async Task<DraftItem> CreateAsync(LedgerRecordDraft draft,
+    public Task<DraftItem> CreateAsync(LedgerRecordDraft draft,
+        CancellationToken ct = default) =>
+        CreateCoreAsync(draft, allowSingleFile: false, ct);
+
+    public Task<DraftItem> StageSmallFileAsync(
+        string title, string fileName, string contentType,
+        ReadOnlyMemory<byte> file, string? parentFolderId = null,
         CancellationToken ct = default)
     {
+        var draft = VaultLinkedSingleFilePolicy.BuildDraft(
+            title, fileName, contentType, file.Span, parentFolderId);
+        return CreateCoreAsync(draft, allowSingleFile: true, ct);
+    }
+
+    private async Task<DraftItem> CreateCoreAsync(LedgerRecordDraft draft,
+        bool allowSingleFile, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(draft);
-        ValidateDraft(draft);
+        if (allowSingleFile)
+        {
+            if (!VaultLinkedSingleFilePolicy.IsSupportedDraft(draft))
+                throw new InvalidDataException("Invalid S-key single-file draft.");
+        }
+        else ValidateDraft(draft);
         var context = RequireScope();
         var local = await ReadEntriesAsync(context, ct);
         byte[]? payload = null;
@@ -466,12 +485,20 @@ public sealed class VaultLinkedDraftWorkspace(
                 {
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
                         ?? throw new InvalidDataException("Missing encrypted local draft.");
-                    ValidateDraft(draft);
+                    if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
+                            StringComparison.Ordinal))
+                    {
+                        if (!VaultLinkedSingleFilePolicy.IsSupportedDraft(draft) ||
+                            item.Kind != VaultMutationKind.CreateRecord)
+                            throw new InvalidDataException("Corrupt linked encrypted file draft.");
+                    }
+                    else ValidateDraft(draft);
                     if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
                         VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder))
                         throw new InvalidDataException("Encrypted draft type mismatch.");
                     result.Add(new(item.Id, item.EntityId, draft.IsFolder,
-                        draft.Title, draft.FolderId, item.State, item.CreatedUtc, false, false, item.Kind));
+                        draft.Title, draft.FolderId, item.State, item.CreatedUtc, false, false, item.Kind,
+                        draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal)));
                 }
                 catch (Exception ex) when (ex is JsonException or InvalidDataException or
                                            ArgumentException or InvalidOperationException)
