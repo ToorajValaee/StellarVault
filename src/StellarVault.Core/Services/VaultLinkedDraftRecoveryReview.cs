@@ -74,19 +74,23 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload);
                     var current = await ledger.ReadAsync(ct);
                     if (draft is not null && item.Kind is
-                        (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                        (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                         VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+                         VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
                     {
                         var found = current.SingleOrDefault(x => x.Id == item.EntityId);
-                        matches = found is not null &&
-                            found.IsFolder == draft.IsFolder &&
-                            found.Title == draft.Title &&
-                            found.Content == draft.Content &&
-                            found.FolderId == draft.FolderId &&
-                            (found.UserName ?? "") == (draft.UserName ?? "") &&
-                            (found.Url ?? "") == (draft.Url ?? "") &&
-                            (found.Notes ?? "") == (draft.Notes ?? "") &&
-                            (found.Tags ?? []).SequenceEqual(
-                                draft.Tags ?? [], StringComparer.Ordinal);
+                        matches = item.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                            ? found is null
+                            : found is not null &&
+                                found.IsFolder == draft.IsFolder &&
+                                found.Title == draft.Title &&
+                                found.Content == draft.Content &&
+                                found.FolderId == draft.FolderId &&
+                                (found.UserName ?? "") == (draft.UserName ?? "") &&
+                                (found.Url ?? "") == (draft.Url ?? "") &&
+                                (found.Notes ?? "") == (draft.Notes ?? "") &&
+                                (found.Tags ?? []).SequenceEqual(
+                                    draft.Tags ?? [], StringComparer.Ordinal);
                     }
                 }
                 RequireSameScope(root, scope, epoch);
@@ -174,13 +178,20 @@ public sealed class VaultLinkedDraftRecoveryReview(
 
         var expansion = item.Kind == VaultMutationKind.ExtendLinkedChain;
         if (!expansion && item.Kind is not
-            (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+             VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+             VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
             return null;
         // The root is the signed transaction's source. The exact record
         // storage node cannot be established from a durable create envelope
         // alone; this diagnostic deliberately checks receipt existence only.
+        var kind = expansion ? "expand"
+            : item.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                ? "delete"
+                : item.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder
+                    ? "update" : "create";
         return new VaultSecretSubmissionDiagnostic(
-            expansion ? "expand" : "create", root,
+            kind, root,
             expansion ? item.EntityId : root,
             expansion ? null : item.EntityId, hash.ToLowerInvariant(),
             expectedPassphrase, uri.GetLeftPart(UriPartial.Authority));
