@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using StellarVault.Core.Services;
+using StellarVault.Core.Abstractions;
 
 internal static class StreamingFileTreeSmoke
 {
@@ -115,6 +116,60 @@ internal static class StreamingFileTreeSmoke
             }
             finally { CryptographicOperations.ZeroMemory(databaseKey); }
 
+            // Host-equivalent persistent filesystem store: committed root
+            // remains resolvable after the Core database is reconstructed.
+            var disk = Path.Combine(Path.GetTempPath(),
+                "sv-streaming-file-" + Guid.NewGuid().ToString("N"));
+            var persistentKey = RandomNumberGenerator.GetBytes(32);
+            try
+            {
+                var objectsPath = Path.Combine(disk, "objects");
+                var pointersPath = Path.Combine(disk, "pointers");
+                const string account = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+                var live = new StellarAccountVaultDatabase(
+                    new FileSystemVaultChunkStore(objectsPath),
+                    new FileSystemVaultRecordIndex(pointersPath), account);
+                await using (var diskInput = new MemoryStream(data, writable: false))
+                    await live.PutIndexedStreamingFileAsync("durable.bin", null,
+                        diskInput, persistentKey, "application/octet-stream");
+                var reopened = new StellarAccountVaultDatabase(
+                    new FileSystemVaultChunkStore(objectsPath),
+                    new FileSystemVaultRecordIndex(pointersPath), account);
+                await using var diskResult = new MemoryStream();
+                var recovered = await reopened.ReadStreamingFileAsync(
+                    "durable.bin", diskResult, persistentKey);
+                Check(recovered.Length == data.LongLength &&
+                    diskResult.ToArray().AsSpan().SequenceEqual(data),
+                    "Streaming encrypted file failed durable filesystem reopen.");
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(persistentKey);
+                if (Directory.Exists(disk)) Directory.Delete(disk, recursive: true);
+            }
+
+            // Interrupted encrypted node storage must not publish a catalog or
+            // a committed file pointer, despite orphaned incomplete ciphertext.
+            var abortedKey = RandomNumberGenerator.GetBytes(32);
+            try
+            {
+                var incomplete = new StellarAccountVaultDatabase(
+                    new FailAfterChunkWrites(new InMemoryVaultChunkStore(), 2),
+                    new InMemoryVaultRecordIndex(),
+                    "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+                await using var failedInput = new MemoryStream(data, writable: false);
+                try
+                {
+                    await incomplete.PutIndexedStreamingFileAsync("aborted.bin", null,
+                        failedInput, abortedKey, "application/octet-stream");
+                    throw new Exception("Interrupted streamed file staging published a pointer.");
+                }
+                catch (IOException) { }
+                Check(await incomplete.GetVersionAsync("aborted.bin", abortedKey) is null,
+                    "Interrupted streamed file became a visible partially committed record.");
+            }
+            finally { CryptographicOperations.ZeroMemory(abortedKey); }
+
             var nodes = new Dictionary<string, (string Kind, byte[] Payload)>(
                 StringComparer.Ordinal);
             var emittedKinds = new List<string>();
@@ -220,6 +275,22 @@ internal static class StreamingFileTreeSmoke
         finally { CryptographicOperations.ZeroMemory(data); }
 
         Console.WriteLine("PASS: arbitrary-length streaming tree planning, root-last and integrity checks");
+    }
+
+    private sealed class FailAfterChunkWrites(IVaultChunkStore inner, int allowed)
+        : IVaultChunkStore
+    {
+        private int _writes;
+        public Task<string> PutAsync(Stream content, CancellationToken ct = default) =>
+            ++_writes > allowed
+                ? Task.FromException<string>(new IOException("Simulated encrypted node store failure"))
+                : inner.PutAsync(content, ct);
+
+        public Task<Stream> OpenReadAsync(string id, CancellationToken ct = default) =>
+            inner.OpenReadAsync(id, ct);
+
+        public Task DeleteAsync(string id, CancellationToken ct = default) =>
+            inner.DeleteAsync(id, ct);
     }
 
     private static void Check(bool condition, string message)
