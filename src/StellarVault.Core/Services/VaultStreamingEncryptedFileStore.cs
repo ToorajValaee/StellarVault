@@ -51,7 +51,7 @@ public static class VaultStreamingEncryptedFileStore
                     if (envelope is not null) CryptographicOperations.ZeroMemory(envelope);
                     if (stored is not null) CryptographicOperations.ZeroMemory(stored);
                 }
-            }, ct);
+            }, VaultStreamingFileTree.MaxLocalChunkBytes, ct);
     }
 
     /// <summary>
