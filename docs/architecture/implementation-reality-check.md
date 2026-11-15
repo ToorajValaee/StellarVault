@@ -52,3 +52,6 @@ The S-key signer and Core queue now preserve a scope-bound **signed transaction 
 
 ## 2026-11-15 atomic signed-hash checkpoint before broadcast
 The previously advisory pre-broadcast hash is now durably CAS-checkpointed for **journal-backed S-key create and linked expansion** before the transport can contact Horizon. The JavaScript signer awaits the C# IndexedDB/native filesystem store callback and refuses network submission on checkpoint failure, closing a power-loss interval between signing and storing the public transaction hash. The `Submitting` journal remains unresolved after an unknown outcome. This does not cover direct non-journaled writes and is not inclusion proof or historical signer/record verification. Local build/Testnet runtime validation is pending.
+
+## 2026-11-15 linked historical skh/skc proof increment
+Read-only Horizon historical S-key record operation inspector checks a single transaction's manifest + ordered encrypted chunks and SHA-256; this is **not** signer authorization, authenticated vault lineage, historical decryption to the reviewed record, or durable confirmation. The queue remains fail-closed. Executable tests pending local validation.
