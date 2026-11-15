@@ -378,6 +378,23 @@ internal static class LinkedDraftSmoke
                 "Restart recovery did not inspect the exact durable hash on the selected network.");
             await MustRejectAsync(() => journal.PrepareAsync(),
                 "A mocked observed receipt wrongly released an unproven linked expansion.");
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, reopenedStore, keys, consent, network, reviewer);
+            var first = await reconciler.ConfirmVerifiedExpansionAsync(journalId);
+            Require(!first.Confirmed,
+                "An advisory receipt alone released the unproven linked account expansion.");
+            witness.AllowExpansionOperations = true;
+            var second = await reconciler.ConfirmVerifiedExpansionAsync(journalId);
+            Require(!second.Confirmed,
+                "A valid operation trace without root and child signatures released expansion.");
+            ledger.AllowHistoricalProof = true;
+            var proven = await reconciler.ConfirmVerifiedExpansionAsync(journalId);
+            Require(proven.Confirmed &&
+                    (await drafts.ListAsync()).Single(x => x.IsJournal).State ==
+                        VaultSyncState.Confirmed &&
+                    ledger.Submissions == 1 &&
+                    ledger.ReleasedVerifiedHash == hash,
+                "Cryptographically verified linked expansion failed to finalize a single durable journal.");
             Console.WriteLine("PASS: successful linked expansion remains unconfirmed pending historical proof");
         }
         finally
@@ -501,13 +518,18 @@ internal static class LinkedDraftSmoke
     private sealed class CapturingLinkedReceiptEvidence : IVaultLinkedReceiptEvidence
     {
         public VaultSecretSubmissionDiagnostic? Observed { get; private set; }
+        public bool AllowExpansionOperations { get; set; }
         public Task<VaultLinkedReceiptObservation> InspectAsync(
             VaultSecretSubmissionDiagnostic diagnostic,
             CancellationToken ct = default)
         {
             Observed = diagnostic;
             return Task.FromResult(new VaultLinkedReceiptObservation(
-                true, "Mocked receipt is advisory; no historical operation proof."));
+                true, "Mocked receipt; historical proof must still come from the signer.",
+                HistoricalExpansionOperationsMatch: AllowExpansionOperations &&
+                    diagnostic.Kind == "expand",
+                HistoricalParentAccount: AllowExpansionOperations &&
+                    diagnostic.Kind == "expand" ? Root : null));
         }
     }
 
@@ -537,6 +559,7 @@ internal static class LinkedDraftSmoke
         IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
         IStellarSecretKeyRecordRevisionReader,
         IStellarSecretKeyHistoricalRecordVerifier,
+        IStellarSecretKeyHistoricalExpansionVerifier,
         IStellarSecretKeyVerifiedSessionRelease
     {
         public const string RootAddress = Root;
@@ -576,6 +599,12 @@ internal static class LinkedDraftSmoke
                         x.Content == expectedDraft.Content));
             return Task.FromResult(valid);
         }
+
+        public Task<bool> VerifyExpansionAsync(string transactionHash,
+            string childAccountId, CancellationToken ct = default) =>
+            Task.FromResult(AllowHistoricalProof &&
+                transactionHash == Submissions.ToString("x64") &&
+                childAccountId == ExpansionTarget && Tail == childAccountId);
 
         public Task ReleaseVerifiedAsync(string transactionHash, CancellationToken ct = default)
         {
