@@ -19,7 +19,7 @@
             <InputFile id="sv-file-select" class="sv-file-native-input" OnChange="SelectFile" disabled="@_busy" />
         </div>
         @if (_file is not null) { <p class="advanced-help">FILE SIZE: @(_file.Size.ToString("N0")) BYTES</p> }
-        <p class="advanced-help">Files are currently stored encrypted in this browser. Maximum file size: 1 MiB.</p>
+        <p class="advanced-help">Files are encrypted and chunked on this device. There is no fixed 1 MiB upload limit; available storage and memory determine the practical size.</p>
         <label class="terminal-label" for="sv-file-record-name">FILE RECORD NAME *</label>
         <input id="sv-file-record-name" class="terminal-input" maxlength="512" @bind="_name"
                @bind:event="oninput" disabled="@_busy" placeholder="Encrypted file name" />
@@ -36,8 +36,7 @@
 </section>
 
 @code {
-    private const long MaximumFileLength = 1024 * 1024;
-    private IBrowserFile? _file;
+     private IBrowserFile? _file;
     private IReadOnlyList<VaultRecordWorkspace.RecordSummary>? _files;
 
     // The Add File form only selects and saves a new encrypted file.
@@ -80,7 +79,7 @@
         {
             _file = args.File;
             _name = _file.Name;
-            _status = _file.Size > MaximumFileLength ? "File exceeds the current 1 MiB upload limit." : null;
+            _status = null;
         }
         catch (Exception ex)
         {
@@ -96,9 +95,10 @@
         _loadingMessage = "ENCRYPTING AND SAVING FILE...";
         try
         {
-            if (_file.Size > MaximumFileLength) throw new InvalidDataException("File too large.");
-            // Use create-only semantics; existing record updates require explicit version handling.
-            await using var input = _file.OpenReadStream(MaximumFileLength);
+            // Do not impose an unrelated fixed 1 MiB application limit on
+            // locally encrypted chunked storage. The browser enforces the
+            // actual selected File size; the backing store controls quota.
+            await using var input = _file.OpenReadStream(_file.Size);
             await Files.SaveAsync(_name, input,
                 string.IsNullOrWhiteSpace(_file.ContentType) ? "application/octet-stream" : _file.ContentType);
             _openName = _name;
@@ -129,9 +129,7 @@
         {
             using var record = await Files.OpenAsync(_openName);
             if (record is null) { _status = "File record not found."; return; }
-            if (record.Content.Length > MaximumFileLength)
-                throw new InvalidDataException("File exceeds current download limit.");
-            byte[] temporaryDownload = record.Content.ToArray();
+             byte[] temporaryDownload = record.Content.ToArray();
             try
             {
                 await JS.InvokeVoidAsync("stellarVaultV2Download.save", _openName, temporaryDownload);
