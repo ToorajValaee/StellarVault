@@ -259,102 +259,102 @@ public static class VaultLinkedTreeFilePolicy
             return "tree-descendant-invalid-strategy";
         if (groupTag is null || children is null || all is null || remote is null)
             return "tree-descendant-invalid";
-            // Build bounded indexes once: a streamed multi-level tree can
-            // contain thousands of nodes, so rescanning the entire journal
-            // and ledger for every descendant would be quadratic.
-            var localById = all.ToLookup(x => x.EntityId, StringComparer.OrdinalIgnoreCase);
-            var remoteById = remote.ToLookup(x => x.Id, StringComparer.OrdinalIgnoreCase);
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            string? CheckDescendant(VaultStreamingFileTree.Reference reference, int depth)
+        // Build bounded indexes once: a streamed multi-level tree can
+        // contain thousands of nodes, so rescanning the entire journal
+        // and ledger for every descendant would be quadratic.
+        var localById = all.ToLookup(x => x.EntityId, StringComparer.OrdinalIgnoreCase);
+        var remoteById = remote.ToLookup(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        string? CheckDescendant(VaultStreamingFileTree.Reference reference, int depth)
+        {
+            if (depth > 64 || !seen.Add(reference.Id))
+                return "tree-descendant-cycle-or-reuse";
+            var matches = localById[reference.Id].Where(x =>
+                x.Kind == VaultMutationKind.CreateRecord &&
+                (strategyId == VaultMutationStrategyPolicy.Hd
+                    ? x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd
+                    : x.OriginStrategyId == VaultMutationStrategyPolicy.Linked)).ToArray();
+            if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
+                return "tree-descendant-not-historically-confirmed";
+            LedgerRecordDraft? expected;
+            try { expected = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                matches[0].EncryptedPayload); }
+            catch (JsonException) { return "tree-descendant-invalid"; }
+            if (expected?.Tags is not { Length: 2 } tags ||
+                tags[1] != groupTag ||
+                !TryDecode(expected, out var nodeKind, out var nodeBytes))
+                return "tree-descendant-invalid";
+            try
             {
-                if (depth > 64 || !seen.Add(reference.Id))
-                    return "tree-descendant-cycle-or-reuse";
-                var matches = localById[reference.Id].Where(x =>
-                    x.Kind == VaultMutationKind.CreateRecord &&
-                    (strategyId == VaultMutationStrategyPolicy.Hd
-                        ? x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd
-                        : x.OriginStrategyId == VaultMutationStrategyPolicy.Linked)).ToArray();
-                if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
-                    return "tree-descendant-not-historically-confirmed";
-                LedgerRecordDraft? expected;
-                try { expected = JsonSerializer.Deserialize<LedgerRecordDraft>(
-                    matches[0].EncryptedPayload); }
-                catch (JsonException) { return "tree-descendant-invalid"; }
-                if (expected?.Tags is not { Length: 2 } tags ||
-                    tags[1] != groupTag ||
-                    !TryDecode(expected, out var nodeKind, out var nodeBytes))
+                if (!ValidateNode(nodeKind, nodeBytes, out var nested) ||
+                    !string.Equals(Convert.ToHexString(SHA256.HashData(nodeBytes)),
+                        reference.Sha256Hex, StringComparison.OrdinalIgnoreCase))
                     return "tree-descendant-invalid";
-                try
+
+                // A content hash proves only the exact serialized node,
+                // not that its claimed subtree length is truthful. Reject
+                // malformed reference lengths before the final file root
+                // can be quoted or committed on Stellar.
+                if (nodeKind == VaultStreamingFileTree.LeafKind)
                 {
-                    if (!ValidateNode(nodeKind, nodeBytes, out var nested) ||
-                        !string.Equals(Convert.ToHexString(SHA256.HashData(nodeBytes)),
-                            reference.Sha256Hex, StringComparison.OrdinalIgnoreCase))
-                        return "tree-descendant-invalid";
-
-                    // A content hash proves only the exact serialized node,
-                    // not that its claimed subtree length is truthful. Reject
-                    // malformed reference lengths before the final file root
-                    // can be quoted or committed on Stellar.
-                    if (nodeKind == VaultStreamingFileTree.LeafKind)
+                    var leaf = JsonSerializer.Deserialize<VaultStreamingFileTree.Leaf>(
+                        nodeBytes);
+                    try
                     {
-                        var leaf = JsonSerializer.Deserialize<VaultStreamingFileTree.Leaf>(
-                            nodeBytes);
-                        try
-                        {
-                            if (leaf?.Data is null ||
-                                leaf.Data.LongLength != reference.Length)
-                                return "tree-descendant-length-mismatch";
-                        }
-                        finally
-                        {
-                            if (leaf?.Data is not null)
-                                CryptographicOperations.ZeroMemory(leaf.Data);
-                        }
-                    }
-                    else if (nodeKind == VaultStreamingFileTree.BranchKind)
-                    {
-                        if (reference.Length == 0)
-                            return "tree-descendant-length-mismatch";
-                        long sum = 0;
-                        foreach (var child in nested)
-                        {
-                            if (child.Length > reference.Length - sum)
-                                return "tree-descendant-length-mismatch";
-                            sum += child.Length;
-                        }
-                        if (sum != reference.Length)
+                        if (leaf?.Data is null ||
+                            leaf.Data.LongLength != reference.Length)
                             return "tree-descendant-length-mismatch";
                     }
-                    else
-                        return "tree-descendant-invalid";
-
-                    var published = remoteById[reference.Id].ToArray();
-                    if (published.Length != 1 ||
-                        published[0].Title != expected.Title ||
-                        published[0].Content != expected.Content ||
-                        published[0].FolderId != expected.FolderId ||
-                        published[0].IsFolder != expected.IsFolder ||
-                        (published[0].UserName ?? "") != (expected.UserName ?? "") ||
-                        (published[0].Url ?? "") != (expected.Url ?? "") ||
-                        (published[0].Notes ?? "") != (expected.Notes ?? "") ||
-                        !(published[0].Tags ?? []).SequenceEqual(expected.Tags ?? [],
-                            StringComparer.Ordinal))
-                        return "tree-descendant-changed-on-ledger";
-                    foreach (var nestedReference in nested)
+                    finally
                     {
-                        var problem = CheckDescendant(nestedReference, depth + 1);
-                        if (problem is not null) return problem;
+                        if (leaf?.Data is not null)
+                            CryptographicOperations.ZeroMemory(leaf.Data);
                     }
-                    return null;
                 }
-                finally { CryptographicOperations.ZeroMemory(nodeBytes); }
-            }
+                else if (nodeKind == VaultStreamingFileTree.BranchKind)
+                {
+                    if (reference.Length == 0)
+                        return "tree-descendant-length-mismatch";
+                    long sum = 0;
+                    foreach (var child in nested)
+                    {
+                        if (child.Length > reference.Length - sum)
+                            return "tree-descendant-length-mismatch";
+                        sum += child.Length;
+                    }
+                    if (sum != reference.Length)
+                        return "tree-descendant-length-mismatch";
+                }
+                else
+                    return "tree-descendant-invalid";
 
-            foreach (var child in children)
-            {
-                var problem = CheckDescendant(child, 0);
-                if (problem is not null) return problem;
+                var published = remoteById[reference.Id].ToArray();
+                if (published.Length != 1 ||
+                    published[0].Title != expected.Title ||
+                    published[0].Content != expected.Content ||
+                    published[0].FolderId != expected.FolderId ||
+                    published[0].IsFolder != expected.IsFolder ||
+                    (published[0].UserName ?? "") != (expected.UserName ?? "") ||
+                    (published[0].Url ?? "") != (expected.Url ?? "") ||
+                    (published[0].Notes ?? "") != (expected.Notes ?? "") ||
+                    !(published[0].Tags ?? []).SequenceEqual(expected.Tags ?? [],
+                        StringComparer.Ordinal))
+                    return "tree-descendant-changed-on-ledger";
+                foreach (var nestedReference in nested)
+                {
+                    var problem = CheckDescendant(nestedReference, depth + 1);
+                    if (problem is not null) return problem;
+                }
+                return null;
             }
+            finally { CryptographicOperations.ZeroMemory(nodeBytes); }
+        }
+
+        foreach (var child in children)
+        {
+            var problem = CheckDescendant(child, 0);
+            if (problem is not null) return problem;
+        }
         return null;
     }
 
