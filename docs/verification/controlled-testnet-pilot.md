@@ -100,3 +100,12 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Choose local encrypted storage and device unlock in HD mode, then S-key mode. Verify HD passkey enrollment still requires the HD passphrase and S-key enrollment only follows verification of its independent local queue passphrase. Confirm S-key and HD passkeys never share namespaces; fallback to passphrase when WebAuthn PRF is unsupported.
 - [ ] On a custom/private Stellar network, fee/reserve descriptions say native asset rather than assuming XLM. SDK's native asset checks must remain correct.
 - [ ] Upload/download a **locally encrypted** synthetic file larger than 1 MiB; verify integrity and no UI size rejection (subject to real device quota and memory). A **direct Stellar** file up to the existing protocol 1 MiB ceiling must use separate approved multipart checkpointed transactions. Larger on-chain and S-key multipart files remain unsupported and must show their actual protocol limits.
+
+## Bounded linked SVFILE2 multipart Testnet acceptance
+- [ ] Run current `node --test tests/secret-key-chain.test.cjs tests/secret-key-ledger.test.cjs tests/pwa-release-smoke.test.cjs`, the native Core smoke and Release builds after pulling new commits.
+- [ ] Stage a disposable synthetic 4096-byte file in the independent S-key queue. Verify there are exactly two part drafts and one final manifest draft, and absolutely no network transaction during staging.
+- [ ] Try approving the second part and the manifest before the first part has been signed and historically confirmed. Both must be blocked. Approve part 1's exact fee; verify `Uncertain` after submission and `Confirmed` only after historical XDR/decrypted-record proof; repeat for part 2.
+- [ ] Try deleting or modifying the on-chain first part from a second session before the second quote or final manifest; the fresh remote mismatch must prevent further publication.
+- [ ] Approve the manifest only after all preceding parts are independently confirmed. Download via SVFILE2, verify exact original SHA-256 and no duplicated transactions.
+- [ ] Attempt 98305-byte and larger S-key files and multipart manifest deletion; both must remain unsupported. Verify the general local encrypted file store is not affected by the S-key on-chain limit.
+- [ ] Interrupt local multipart staging and after submitting each part. Verify partial *pending* staging is either rolled back or explicitly requires local cleanup, while all `Submitting/Uncertain` entries remain quarantined until individual signed-history confirmation.
