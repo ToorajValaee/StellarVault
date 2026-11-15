@@ -51,6 +51,10 @@
                 <div class="sv-pwa-screen-tools">
                     @if (_view == "records")
                     {
+                        <button type="button" class="pixel-button primary sv-create-record"
+                                @onclick="CreateRecord"><span aria-hidden="true">＋</span> New record</button>
+                        <button type="button" class="pixel-button sv-create-folder"
+                                @onclick="CreateFolder"><span aria-hidden="true">＋</span> New folder</button>
                         <button type="button" class="pixel-button compact"
                                 @onclick="RefreshAsync">↻ Refresh</button>
                     }
@@ -91,6 +95,9 @@
         if (view is "records" or "drafts" or "sync" or "settings" or "help")
             _view = view;
     }
+
+    private void CreateRecord() => _workspace?.CreateRecordFromShell();
+    private void CreateFolder() => _workspace?.CreateFolderFromShell();
 
     private async Task RefreshAsync()
     {
