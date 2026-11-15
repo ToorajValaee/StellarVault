@@ -19,7 +19,7 @@ window.stellarVaultSponsorship = (() => {
     function toStroops(value) {
       const str = String(value || '0');
       if (!/^\d+(\.\d{1,7})?$/.test(str))
-        throw new Error('Invalid native XLM amount');
+        throw new Error('Invalid native-asset amount');
       const [whole, fractional = ''] = str.split('.');
       return BigInt(whole) * 10000000n + BigInt(fractional.padEnd(7, '0'));
     }
@@ -56,7 +56,7 @@ window.stellarVaultSponsorship = (() => {
       throw new Error('Invalid sponsorship fee, reserve or safety buffer');
     const funds = parseAccountReserves(root, baseReserveStroops);
     if (funds.spendable < required)
-      throw new Error('Root account has insufficient spendable XLM for sponsorship and fees');
+      throw new Error('Root account has insufficient spendable native asset for sponsorship and fees');
 
     const transaction = new sdk.TransactionBuilder(root, {
       fee: fee.toString(), networkPassphrase
@@ -148,7 +148,7 @@ window.stellarVaultSponsorship = (() => {
         BigInt(String(safetyBufferStroops)) < 0n)
       throw new Error('Invalid sponsorship fee, reserve or safety buffer');
     if (parseAccountReserves(root, baseReserveStroops).spendable < required)
-      throw new Error('Root account has insufficient spendable XLM for data operation');
+      throw new Error('Root account has insufficient spendable native asset for data operation');
 
     let builder = new sdk.TransactionBuilder(root, {
       fee: fee.toString(), networkPassphrase
