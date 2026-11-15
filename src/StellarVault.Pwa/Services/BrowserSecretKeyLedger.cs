@@ -9,7 +9,8 @@ namespace StellarVault.Pwa.Services;
 /// Transaction submission requires a fresh quote ID issued in this session.
 /// </summary>
 public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
-    IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission, IAsyncDisposable
+    IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
+    IStellarSecretKeyRecordRevisionReader, IAsyncDisposable
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
@@ -72,6 +73,30 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         if (items.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
             throw new InvalidDataException("Duplicate Secret Key ledger record identifiers.");
         return items;
+    }
+
+    public async Task<string?> ReadRecordRevisionAsync(string recordId,
+        CancellationToken ct = default)
+    {
+        RequireConnected();
+        ValidateRecordId(recordId);
+        var revision = await js.InvokeAsync<string?>(
+            "stellarVaultSecretLedger.recordRevision", ct, _sessionId, recordId);
+        // A v1 skh manifest is exactly 47 bytes, encoded as 64 base64 chars.
+        if (revision is not null)
+        {
+            byte[] decoded;
+            try { decoded = Convert.FromBase64String(revision); }
+            catch (FormatException) { throw new InvalidDataException("Invalid linked record revision."); }
+            try
+            {
+                if (decoded.Length != 47 || decoded[0] != 1 ||
+                    Convert.ToBase64String(decoded) != revision)
+                    throw new InvalidDataException("Malformed linked record manifest revision.");
+            }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded); }
+        }
+        return revision;
     }
 
     public async Task<LedgerAccountInfo> InspectAccountInfoAsync(
