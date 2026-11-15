@@ -78,6 +78,43 @@ internal static class StreamingFileTreeSmoke
                     CryptographicOperations.ZeroMemory(value);
             }
 
+            // The same encrypted object and CAS pointer implementations used
+            // by PWA/MAUI must handle the new streaming file root end to end.
+            var databaseKey = RandomNumberGenerator.GetBytes(32);
+            try
+            {
+                var localObjects = new InMemoryVaultChunkStore();
+                var localPointers = new InMemoryVaultRecordIndex();
+                const string account = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+                var database = new StellarAccountVaultDatabase(
+                    localObjects, localPointers, account);
+                await using var databaseInput = new MemoryStream(data, writable: false);
+                var firstVersion = await database.PutIndexedStreamingFileAsync(
+                    "archive.bin", null, databaseInput, databaseKey,
+                    "application/octet-stream");
+                Check(firstVersion.Generation == 0 &&
+                    await database.GetVersionAsync("archive.bin", databaseKey) == firstVersion,
+                    "Streaming file root failed to commit an atomic encrypted pointer.");
+                await using var databaseResult = new MemoryStream();
+                var metadata = await database.ReadStreamingFileAsync(
+                    "archive.bin", databaseResult, databaseKey);
+                Check(metadata.Length == data.LongLength &&
+                    databaseResult.ToArray().AsSpan().SequenceEqual(data),
+                    "Streaming vault file did not survive encrypted pointer read.");
+
+                await using var staleInput = new MemoryStream(data, writable: false);
+                try
+                {
+                    await database.PutIndexedStreamingFileAsync("archive.bin",
+                        null, staleInput, databaseKey, "application/octet-stream");
+                    throw new Exception("Stale streamed file record write was accepted.");
+                }
+                catch (VaultWriteConflictException) { }
+                Check(await database.GetVersionAsync("archive.bin", databaseKey) ==
+                    firstVersion, "Rejected streaming write replaced the committed file pointer.");
+            }
+            finally { CryptographicOperations.ZeroMemory(databaseKey); }
+
             var nodes = new Dictionary<string, (string Kind, byte[] Payload)>(
                 StringComparer.Ordinal);
             var emittedKinds = new List<string>();
