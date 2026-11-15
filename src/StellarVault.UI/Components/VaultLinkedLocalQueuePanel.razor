@@ -1,6 +1,8 @@
 @using StellarVault.Core.Services
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
+@using System.IO.Pipelines
+@inject IVaultNativeFileAccess NativeFiles
 @inject IStellarSecretKeyLedger Ledger
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession QueueKeys
@@ -689,14 +691,60 @@
         {
             var records = await Ledger.ReadAsync();
             var file = records.Single(x => x.Id == recordId);
-            if (!StellarLedgerFileProtocol.IsFile(file))
-                throw new InvalidDataException("Selected record is not an authenticated SVFILE1/SVFILE2 file.");
-            decoded = StellarLedgerFileProtocol.DecodeFile(file, records);
-            if (decoded.Length is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
-                throw new InvalidDataException("The linked file exceeds the supported verified multipart size.");
-            await JS.InvokeVoidAsync("stellarVaultV2Download.save",
-                StellarLedgerFileProtocol.FileName(file), decoded);
-            _message = "Verified encrypted S-key file decrypted and downloaded.";
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(file))
+            {
+                // Preflight verification ensures no unverified plaintext reaches
+                // the native/browser file saver. A second bounded-memory
+                // pass streams the immutable ledger snapshot to the host.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    recordId, records, Stream.Null);
+                var pipe = new Pipe(new PipeOptions(
+                    pauseWriterThreshold: 256 * 1024,
+                    resumeWriterThreshold: 128 * 1024));
+                using var cancellation = new CancellationTokenSource();
+                var producer = Task.Run(async () =>
+                {
+                    await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+                    try
+                    {
+                        await VaultLinkedTreeFilePolicy.ReadAsync(recordId, records,
+                            writer, cancellation.Token);
+                        await writer.FlushAsync(cancellation.Token);
+                        await pipe.Writer.CompleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await pipe.Writer.CompleteAsync(ex);
+                        throw;
+                    }
+                });
+                try
+                {
+                    await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+                    if (!await NativeFiles.SaveAsync(verified.FileName, reader))
+                        throw new IOException("The file export was cancelled or failed.");
+                    await producer;
+                }
+                catch
+                {
+                    cancellation.Cancel();
+                    try { await producer; } catch { /* Preserve export failure. */ }
+                    throw;
+                }
+                finally { await pipe.Reader.CompleteAsync(); }
+                _message = "Streamed, verified S-key file downloaded.";
+            }
+            else
+            {
+                if (!StellarLedgerFileProtocol.IsFile(file))
+                    throw new InvalidDataException("Selected record is not an authenticated file.");
+                decoded = StellarLedgerFileProtocol.DecodeFile(file, records);
+                if (decoded.Length is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
+                    throw new InvalidDataException("Legacy file exceeds its original format bound.");
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                    StellarLedgerFileProtocol.FileName(file), decoded);
+                _message = "Verified legacy S-key file downloaded.";
+            }
         }
         catch (Exception ex)
         {
