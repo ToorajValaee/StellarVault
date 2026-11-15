@@ -57,16 +57,12 @@ window.stellarVaultV2Download = Object.freeze({
     if (payload instanceof Uint8Array) {
       data = payload.slice();
     } else if (typeof payload === 'string') {
-      if (payload.length > 2 * 1024 * 1024) throw new RangeError('Download exceeds limit');
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(payload)) throw new TypeError('Invalid binary base64');
       const raw = atob(payload);
       data = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
     } else {
       throw new TypeError('Expected binary file content');
-    }
-    if (data.byteLength > 1024 * 1024) {
-      data.fill(0);
-      throw new RangeError('Download exceeds limit');
     }
     const safeName = typeof filename === 'string'
       ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
