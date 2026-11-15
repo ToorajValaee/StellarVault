@@ -6,7 +6,8 @@ namespace StellarVault.Core.Services;
 /// consensus. Never use this value to clear a transaction quarantine.
 /// </summary>
 public sealed record VaultLinkedReceiptObservation(
-    bool ReceiptObserved, string Explanation, long? LedgerSequence = null);
+    bool ReceiptObserved, string Explanation, long? LedgerSequence = null,
+    bool HistoricalRecordOperationsMatch = false, string? StorageAccount = null);
 
 public interface IVaultLinkedReceiptEvidence
 {
