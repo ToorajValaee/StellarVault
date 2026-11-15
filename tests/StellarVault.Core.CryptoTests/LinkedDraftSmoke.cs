@@ -176,8 +176,22 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunPrebroadcastCheckpointFailureSmokeAsync()
+    {
+        var ledger = new FakeLinkedLedger();
+        var quote = await ledger.QuoteExtendChainAsync();
+        await MustRejectAsync(
+            () => ledger.SubmitWithSignedHashAsync(quote.QuoteId,
+                _ => Task.FromException(new IOException("Durable CAS checkpoint failed."))),
+            "Checkpoint refusal unexpectedly returned successful publication.");
+        Require(ledger.Submissions == 0,
+            "The simulated network was contacted despite a failed durable hash checkpoint.");
+        Console.WriteLine("PASS: linked network transport refuses to broadcast before durable checkpoint");
     }
 
     private static async Task RunSuccessfulExpansionQuarantineSmokeAsync()
