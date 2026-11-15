@@ -113,6 +113,57 @@ public static class VaultStreamingEncryptedFileStore
         }
     }
 
+    /// <summary>
+    /// For non-seekable host export pipes: independently verify the complete
+    /// encrypted graph into a null sink before streaming it a second time.
+    /// Callers MUST abort/discard the downstream destination if this fails.
+    /// This uses bounded memory even for very large files.
+    /// </summary>
+    public static async Task<VaultStreamingFileTree.Root> CopyVerifiedToAsync(
+        string rootId, IVaultChunkObjectStore objects, Stream destination,
+        ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> vaultScope,
+        CancellationToken ct = default)
+    {
+        RequireInputs(objects, key, vaultScope);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (!destination.CanWrite)
+            throw new ArgumentException("Writable export stream required.", nameof(destination));
+        var preflight = await RestoreAsync(rootId, objects,
+            Stream.Null, key, vaultScope, ct);
+        var written = await VaultStreamingFileTree.ReadVerifiedAsync(rootId,
+            async (objectId, token) =>
+            {
+                if (objectId is not { Length: 64 } ||
+                    !objectId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+                    throw new InvalidDataException("Invalid encrypted file node ID.");
+                byte[]? stored = null;
+                byte[]? context = null;
+                try
+                {
+                    stored = await objects.GetAsync(objectId, token);
+                    if (stored.Length <= 1 ||
+                        !string.Equals(Convert.ToHexString(
+                            SHA256.HashData(stored)).ToLowerInvariant(),
+                            objectId, StringComparison.Ordinal))
+                        throw new CryptographicException("Encrypted file node digest mismatch.");
+                    var kindCode = stored[0];
+                    var kind = CodeKind(kindCode);
+                    context = Context(vaultScope.Span, kindCode);
+                    return new VaultStreamingFileTree.Emission(
+                        objectId, kind,
+                        VaultV2Envelope.Open(key.Span, stored.AsSpan(1), context));
+                }
+                finally
+                {
+                    if (stored is not null) CryptographicOperations.ZeroMemory(stored);
+                    if (context is not null) CryptographicOperations.ZeroMemory(context);
+                }
+            }, destination, ct);
+        if (written != preflight)
+            throw new CryptographicException("Export root changed during streaming.");
+        return written;
+    }
+
     private static void RequireInputs(IVaultChunkObjectStore? objects,
         ReadOnlyMemory<byte> key, ReadOnlyMemory<byte> scope)
     {
