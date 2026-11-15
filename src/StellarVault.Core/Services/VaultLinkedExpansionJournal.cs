@@ -151,6 +151,12 @@ public sealed class VaultLinkedExpansionJournal(
                 }
                 catch
                 {
+                    // The transport may have signed and transmitted the
+                    // expansion before a Horizon timeout. Preserve that exact
+                    // pre-broadcast hash as a public reconciliation handle.
+                    hash ??= await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                        ledger, root, "expand", approvedQuote.TargetAccountId,
+                        null, ledger.ConnectedNetworkPassphrase ?? "", epoch);
                     var uncertain = reserved with
                     {
                         State = VaultSyncState.Uncertain,
