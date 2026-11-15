@@ -27,34 +27,25 @@
         }
         @if (_editingScreen)
         {
-        <label class="terminal-label" for="hybrid-draft-name">TITLE</label>
-        <input id="hybrid-draft-name" class="terminal-input" maxlength="256"
-               @bind="_title" @bind:event="oninput" disabled="@_busy" />
-        <label class="terminal-label" for="hybrid-draft-parent">PARENT FOLDER ID (OPTIONAL — STELLAR OR LOCAL PENDING)</label>
-        <input id="hybrid-draft-parent" class="terminal-input" maxlength="16"
-               @bind="_folderId" disabled="@_busy" autocomplete="off" />
+        <VaultRecordFields IsFolder="_isFolder"
+                           Disabled="_busy"
+                           MultilineSecret="true"
+                           ExcludedId="@(_items.FirstOrDefault(x => x.MutationId == _editingId)?.EntityId)"
+                           AdditionalFolders="@LocalFolderOptions"
+                           @bind-Title="_title"
+                           @bind-FolderId="_folderId"
+                           @bind-Username="_username"
+                           @bind-Url="_url"
+                           @bind-Secret="_content"
+                           @bind-Notes="_notes"
+                           @bind-Tags="_tags"
+                           @bind-ShowSecret="_showDraftSecret" />
         @if (!string.IsNullOrWhiteSpace(_folderId))
         {
-            <p class="advanced-help">Selected parent: <code>@_folderId</code>.
-                An unpublished parent blocks the child until it is independently confirmed.</p>
+            <p class="advanced-help">An unpublished folder parent blocks publication until independently confirmed.</p>
             <button type="button" class="pixel-button compact" disabled="@_busy"
                     @onclick="ClearParent">Move to vault root</button>
         }
-        @if (!_isFolder)
-        {
-            <label class="terminal-label" for="hybrid-draft-content">ENCRYPTED RECORD CONTENT</label>
-            <textarea id="hybrid-draft-content" class="terminal-input terminal-textarea"
-                      rows="5" @bind="_content" disabled="@_busy"></textarea>
-            <label class="terminal-label" for="hybrid-draft-username">USERNAME</label>
-            <input id="hybrid-draft-username" class="terminal-input" @bind="_username" disabled="@_busy" />
-            <label class="terminal-label" for="hybrid-draft-url">URL</label>
-            <input id="hybrid-draft-url" class="terminal-input" @bind="_url" disabled="@_busy" />
-            <label class="terminal-label" for="hybrid-draft-notes">NOTES</label>
-            <textarea id="hybrid-draft-notes" class="terminal-input" rows="3" @bind="_notes" disabled="@_busy"></textarea>
-            <label class="terminal-label" for="hybrid-draft-tags">TAGS (COMMA-SEPARATED)</label>
-            <input id="hybrid-draft-tags" class="terminal-input" @bind="_tags" disabled="@_busy" />
-        }
- 
         <button type="button" class="pixel-button primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_title) || (!_isFolder && string.IsNullOrEmpty(_content)))" @onclick="SaveAsync">Save encrypted draft</button>
         @if (_editingId is not null)
         {
@@ -124,6 +115,14 @@
         _notes = "", _tags = "", _folderId = "";
     private bool _isFolder;
     private bool _editingScreen;
+    private bool _showDraftSecret;
+    private IReadOnlyDictionary<string, string> LocalFolderOptions =>
+        _items.Where(x => !x.IsCorrupt &&
+            x.Kind == VaultMutationKind.CreateFolder &&
+            x.State is VaultSyncState.Pending or VaultSyncState.Confirmed)
+            .GroupBy(x => x.EntityId, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First().Draft.Title + " (local draft)",
+                StringComparer.Ordinal);
 
     protected override void OnInitialized()
     {
@@ -172,6 +171,7 @@
         _openedRevision = null;
         _isFolder = folder;
         _title = _content = _username = _url = _notes = _tags = _folderId = "";
+        _showDraftSecret = false;
         _status = null;
     }
 
@@ -220,6 +220,7 @@
         _isFolder = item.Draft.IsFolder;
         _title = item.Draft.Title;
         _content = _isFolder ? "" : item.Draft.Content;
+        _showDraftSecret = false;
         _folderId = item.Draft.FolderId ?? "";
         _username = item.Draft.UserName ?? "";
         _url = item.Draft.Url ?? "";
