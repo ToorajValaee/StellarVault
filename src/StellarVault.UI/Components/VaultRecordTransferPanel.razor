@@ -247,6 +247,7 @@
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
                                    InvalidOperationException or IOException or
                                    OperationCanceledException or
+                                   Microsoft.JSInterop.JSException or
                                    System.Security.Cryptography.CryptographicException)
         {
             _message = "Encrypted backup export failed: " + ex.Message;
@@ -346,7 +347,8 @@
         }
         catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
                                    NotSupportedException or InvalidOperationException or
-                                   IOException or OperationCanceledException)
+                                   IOException or OperationCanceledException or
+                                   Microsoft.JSInterop.JSException)
         {
             _message = "Record export blocked or canceled: " + ex.Message;
         }
