@@ -112,6 +112,21 @@ public sealed class StellarAccountVaultDatabase
             var result = await VaultStreamingEncryptedFileStore.StageAsync(
                 plaintext, name, contentType, _fileObjects, vaultKey,
                 scope, cancellationToken);
+
+            // A successful PutAsync is not sufficient proof that every node is
+            // independently retrievable. Before publishing the encrypted root
+            // pointer, walk and authenticate the complete persisted tree.
+            // Stream.Null discards recovered bytes without buffering a file in
+            // RAM or writing a plaintext temporary copy to disk.
+            var verified = await VaultStreamingEncryptedFileStore.RestoreAsync(
+                result.RootId, _fileObjects, Stream.Null, vaultKey,
+                scope, cancellationToken);
+            if (verified.Length != result.Manifest.Length ||
+                verified.Sha256Hex != result.Manifest.Sha256Hex ||
+                verified.ChunkSize != result.Manifest.ChunkSize)
+                throw new InvalidDataException(
+                    "Persisted encrypted file tree does not match the staged root.");
+
             var pointerBytes = Encoding.ASCII.GetBytes(FileTreePointerPrefix + result.RootId);
             try
             {
