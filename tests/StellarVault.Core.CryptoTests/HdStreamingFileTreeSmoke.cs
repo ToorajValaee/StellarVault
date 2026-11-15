@@ -72,6 +72,23 @@ internal static class HdStreamingFileTreeSmoke
                 restored.ToArray().AsSpan().SequenceEqual(input),
                 "HD file tree did not reconstruct authenticated bytes.");
 
+            // The last root can have an unchanged immediate branch while an
+            // earlier leaf was modified from another device. A fresh HD quote
+            // must reject this deep drift exactly as the independent S-key
+            // queue does, rather than only noticing it during later download.
+            Check(VaultHdTreeFilePolicy.RemoteProblems(nodes[^1], nodes, remote).Length == 0,
+                "Authentic HD file tree failed full-depth remote preflight.");
+            var staleLeaf = remote.Select(x => x.Id == leaf.EntityId
+                ? x with { Notes = "remote leaf changed after branch confirmation" }
+                : x).ToArray();
+            Check(VaultHdTreeFilePolicy.RemoteProblems(nodes[^1], nodes, staleLeaf)
+                    .Contains("tree-descendant-changed-on-ledger"),
+                "HD root accepted a changed grandchild under its unchanged branch.");
+            var missingGrandchild = remote.Where(x => x.Id != leaf.EntityId).ToArray();
+            Check(VaultHdTreeFilePolicy.RemoteProblems(nodes[^1], nodes, missingGrandchild)
+                    .Contains("tree-descendant-changed-on-ledger"),
+                "HD root accepted a missing grandchild under its unchanged branch.");
+
             // A missing/replaced remote child must fail last-mile preflight,
             // even when the local journal says that child was confirmed.
             var fakeRoot = root with { State = VaultSyncState.Pending };
