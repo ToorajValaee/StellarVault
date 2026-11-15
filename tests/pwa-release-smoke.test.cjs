@@ -179,8 +179,15 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   assert.match(access, /if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
   assert.ok(program.includes('AddScoped<VaultDeviceRetentionGate>()'));
-  assert.ok(vault.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
-  assert.ok(add.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
+  // A connected HD ledger is a valid on-chain-only session even without
+  // a local-vault unlock. The canonical route resolves credential strategy
+  // explicitly instead of using the old HD-only boolean guard.
+  const mode = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core',
+    'Services', 'VaultWorkspaceModeResolver.cs'), 'utf8');
+  assert.match(vault, /ActiveMode == VaultWorkspaceMode\.Locked/);
+  assert.match(vault, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(mode, /if \(hdLocalUnlocked \|\| hdLedgerConnected\) return VaultWorkspaceMode\.MnemonicHd/);
+  assert.match(add, /!Sessions\.IsUnlocked && !Ledger\.IsConnected/);
 });
 
 test('HD file upload uses encrypted durable queue instead of in-memory checkpoint plan', () => {
