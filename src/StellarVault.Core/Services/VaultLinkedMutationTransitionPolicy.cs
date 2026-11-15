@@ -54,6 +54,12 @@ public static class VaultLinkedMutationTransitionPolicy
             !previous.EncryptedPayload.AsSpan().SequenceEqual(next.EncryptedPayload) ||
             !((previous.State == VaultSyncState.Pending &&
                next.State == VaultSyncState.Submitting) ||
+              // Single-use public signed-hash checkpoint BEFORE broadcast.
+              // The original state remains Submitting, with its CAS identity
+              // preserved; no second checkpoint or hash replacement is valid.
+              (previous.State == VaultSyncState.Submitting &&
+               next.State == VaultSyncState.Submitting &&
+               previous.TransactionHash is null && next.TransactionHash is not null) ||
               (previous.State == VaultSyncState.Submitting &&
                next.State is VaultSyncState.Uncertain or VaultSyncState.Confirmed)) ||
             !Equals(previous with
@@ -61,8 +67,11 @@ public static class VaultLinkedMutationTransitionPolicy
                 State = next.State,
                 TransactionHash = next.TransactionHash
             }, next) ||
-            (next.State is VaultSyncState.Pending or VaultSyncState.Submitting &&
-             next.TransactionHash is not null) ||
+            (next.State == VaultSyncState.Pending && next.TransactionHash is not null) ||
+            (previous.State == VaultSyncState.Pending &&
+             next.State == VaultSyncState.Submitting && next.TransactionHash is not null) ||
+            (previous.TransactionHash is { } pinnedHash &&
+             next.TransactionHash != pinnedHash) ||
             (next.State == VaultSyncState.Confirmed && next.TransactionHash is null) ||
             (next.TransactionHash is { } hash &&
              (hash.Length != 64 || !hash.All(Uri.IsHexDigit))))
