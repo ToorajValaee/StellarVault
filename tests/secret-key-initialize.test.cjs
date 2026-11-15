@@ -20,7 +20,8 @@ test('empty S-key root enters shared setup; existing S-key records open directly
 test('shared initialization page admits a connected independent S-key session', () => {
   assert.match(init, /@page "\/initialize"/);
   assert.match(init, /@inject IStellarSecretKeyLedger SecretLedger/);
-  assert.match(init, /!Sessions\.IsUnlocked && !Ledger\.IsConnected && !SecretLedger\.IsConnected/);
+  assert.match(init, /ActiveMode == VaultWorkspaceMode\.Locked/);
+  assert.match(init, /ActiveMode == VaultWorkspaceMode\.ConflictingSessions/);
   assert.match(init, /else if \(SecretLedger\.IsConnected\)/);
   assert.match(init, /await SecretLedger\.InspectAccountInfoAsync\(\)/);
   assert.match(init, /SecretLedger\.ConnectionEpoch == epoch/);
