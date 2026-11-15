@@ -186,7 +186,7 @@ public sealed class VaultHybridSyncReviewService(
                 var quote = VaultSyncApprovalGuard.Capture(mutation,
                     cost.NetworkFeeXlm, cost.PeakReserveXlm, DateTimeOffset.UtcNow);
                 details.Add(new(mutation.Id, mutation.Kind, draft.Title,
-                    $"Indicative: {cost.Transactions} transactions, {cost.Operations} operations, fee {cost.NetworkFeeXlm} XLM, peak reserve {cost.PeakReserveXlm} XLM.", quote));
+                    $"Indicative: {cost.Transactions} transactions, {cost.Operations} operations, fee {cost.NetworkFeeXlm} native asset, peak reserve {cost.PeakReserveXlm} native asset.", quote));
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception)
