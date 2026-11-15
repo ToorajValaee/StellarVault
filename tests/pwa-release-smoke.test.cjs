@@ -408,7 +408,10 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(vault, /<VaultItemEditor @ref="_inlineEditor" Embedded="true"/);
   assert.match(vault, /sv-inspector-tabs/);
   assert.match(vault, /sv-inspector-more/);
-  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _uncertainStage/);
+  // The obsolete flat-file upload checkpoint was removed; the shared HD
+  // streaming queue owns interrupted-file recovery instead.
+  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null;/);
+  assert.doesNotMatch(editor, /_uncertainStage|StellarLedgerUploadPlan/);
   assert.match(editor, /OnSaved.InvokeAsync/);
   assert.match(css, /grid-template-columns:245px minmax\(0,1fr\) var\(--sv-record-inspector-width\)/);
   assert.match(css, /\.sv-editor-embedded/);
