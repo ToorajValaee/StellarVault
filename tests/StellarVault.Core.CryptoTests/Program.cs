@@ -443,6 +443,7 @@ Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
 
 // Uses the real native encrypted queue and isolated S-key key lifecycle,
 // but a fake Stellar ledger: no transactions or GitHub CI are involved.
+VaultWorkspaceModeSmoke.Run();
 await StreamingFileTreeSmoke.RunAsync();
 await HdStreamingFileTreeSmoke.RunAsync();
 await LinkedDraftSmoke.RunAsync();
