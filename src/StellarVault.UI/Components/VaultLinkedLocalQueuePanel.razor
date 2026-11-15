@@ -192,7 +192,10 @@
                                     disabled="@(_busy || _review is not null || StellarLedgerFileProtocol.IsFile(record))"
                                     @onclick="() => EditPublishedRecordAsync(record.Id)">Stage update</button>
                             <button type="button" class="pixel-button compact"
-                                    disabled="@(_busy || _review is not null)"
+                                    disabled="@(_busy || _review is not null ||
+                                        record.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix,
+                                            StringComparison.Ordinal))"
+                                    title="Multipart deletion needs a separately verified manifest-and-parts removal workflow"
                                     @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
                             @if (StellarLedgerFileProtocol.IsFile(record))
                             {
