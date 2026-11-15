@@ -276,7 +276,8 @@ public sealed class VaultHybridDraftWorkspace(
             throw new ArgumentException("Offline record/folder draft is invalid.");
         if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
             draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-            draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+            draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) ||
+            draft.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal))
             throw new InvalidOperationException("File protocol data requires staged file synchronization.");
     }
 
