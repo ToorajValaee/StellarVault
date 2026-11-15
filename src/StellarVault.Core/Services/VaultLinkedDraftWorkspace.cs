@@ -146,7 +146,7 @@ public sealed class VaultLinkedDraftWorkspace(
                     throw new InvalidOperationException(
                         "The draft changed concurrently; refresh local drafts.");
                 return new(item.Id, item.EntityId, draft.IsFolder,
-                    draft.Title, draft.FolderId, item.State, item.CreatedUtc, false);
+                    draft.Title, draft.FolderId, item.State, item.CreatedUtc, false, false, kind);
             }
             finally { CryptographicOperations.ZeroMemory(item.EncryptedPayload); }
         }
@@ -257,7 +257,7 @@ public sealed class VaultLinkedDraftWorkspace(
                 if (!await store.AddAsync(mutation, ct))
                     throw new InvalidOperationException("Encrypted mutation was changed concurrently.");
                 return new(mutation.Id, entityId, original.IsFolder, draft.Title,
-                    draft.FolderId, mutation.State, mutation.CreatedUtc, false);
+                    draft.FolderId, mutation.State, mutation.CreatedUtc, false, false, kind);
             }
             finally { CryptographicOperations.ZeroMemory(mutation.EncryptedPayload); }
         }
@@ -424,7 +424,8 @@ public sealed class VaultLinkedDraftWorkspace(
                 throw new InvalidOperationException(
                     "Local draft changed concurrently. Reopen its latest revision.");
             return new(current.Id, current.EntityId, draft.IsFolder, draft.Title,
-                draft.FolderId, VaultSyncState.Pending, current.CreatedUtc, false);
+                draft.FolderId, VaultSyncState.Pending, current.CreatedUtc, false,
+                false, current.Kind);
         }
         finally
         {
