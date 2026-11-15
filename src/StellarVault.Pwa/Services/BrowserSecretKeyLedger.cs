@@ -82,20 +82,10 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         ValidateRecordId(recordId);
         var revision = await js.InvokeAsync<string?>(
             "stellarVaultSecretLedger.recordRevision", ct, _sessionId, recordId);
-        // A v1 skh manifest is exactly 47 bytes, encoded as 64 base64 chars.
-        if (revision is not null)
-        {
-            byte[] decoded;
-            try { decoded = Convert.FromBase64String(revision); }
-            catch (FormatException) { throw new InvalidDataException("Invalid linked record revision."); }
-            try
-            {
-                if (decoded.Length != 47 || decoded[0] != 1 ||
-                    Convert.ToBase64String(decoded) != revision)
-                    throw new InvalidDataException("Malformed linked record manifest revision.");
-            }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded); }
-        }
+        if (revision is not null &&
+            !VaultLinkedRemoteRevisionPolicy.IsValid(revision))
+            throw new InvalidDataException(
+                "The connected S-key manifest revision is malformed or noncanonical.");
         return revision;
     }
 
