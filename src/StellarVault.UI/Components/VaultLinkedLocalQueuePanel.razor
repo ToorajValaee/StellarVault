@@ -19,7 +19,7 @@
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
-    <h3>Encrypted device drafts</h3>
+    <h3>@(View == "sync" ? "Synchronization & transaction review" : "Encrypted device drafts")</h3>
     <p>Optional local encrypted storage for this independent Stellar S-key vault.
        This device uses a separate local passphrase, separate encryption key and separate
        storage namespace from mnemonic-based vaults. Saving a draft is local-only;
@@ -92,11 +92,15 @@
                         @onclick="InspectAsync">Inspect encrypted draft queue</button>
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LoadDraftsAsync">Refresh local drafts</button>
-                <button type="button" class="pixel-button compact" disabled="@_busy"
-                        @onclick="ReviewManualSyncAsync">Review manual sync order</button>
+                @if (ShowSync)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ReviewManualSyncAsync">Review manual sync order</button>
+                }
                 <button type="button" class="pixel-button compact" disabled="@_busy"
                         @onclick="LockAsync">Lock local drafts</button>
             </div>
+            <div hidden="@(!ShowSync)" class="sv-linked-sync-workspace">
             @if (_manualSyncPlan is not null)
             {
                 <section class="sv-secret-review" aria-label="Manual linked draft synchronization order">
@@ -234,6 +238,8 @@
                     }
                 </section>
             }
+            </div>
+            <div hidden="@(!ShowDrafts)" class="sv-linked-drafts-workspace">
             <section class="sv-secret-review" aria-label="Encrypted S-key files">
                 <h3>Encrypted files</h3>
                 <p>SVTREE3 streams files as bounded ledger records without a fixed
@@ -337,7 +343,9 @@
                     }
                 </section>
             }
+            </div>
         }
+        <div hidden="@(!ShowSync)" class="sv-linked-sync-workspace">
         @if (_recoveryFinding is not null && QueueKeys.IsUnlocked)
         {
             <section class="sv-secret-review" aria-label="Uncertain local draft recovery assessment">
@@ -392,6 +400,7 @@
             <p>Manual create/update/delete publication requires individual fee review and a live linked S-key signer.
                Remote-version checks prevent stale writes. Automatic synchronization and full historical signer/record verification remain unavailable.</p>
         }
+        </div>
     }
     @if (!string.IsNullOrWhiteSpace(_message))
     {
@@ -400,6 +409,9 @@
 </section>
 
 @code {
+    [Parameter] public string View { get; set; } = "all";
+    private bool ShowDrafts => View is "all" or "drafts";
+    private bool ShowSync => View is "all" or "sync";
     private bool _busy;
     private bool? _exists;
     private string _passphrase = string.Empty;
