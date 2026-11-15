@@ -59,3 +59,5 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Run `LinkedExpansionHistorySmoke` via the .NET Core tests on the exact deployed feature commit.
 - [ ] On disposable Testnet S-key expansion, inspect the successful Horizon transaction for exact child CreateAccount, signer SetOptions, and parent link, including native reserve top-up when the linked tail is not the root.
 - [ ] Reject wrong signer weights, master weight, thresholds, duplicate parent pointer, child destination mismatch, and wrong transaction ID. A read-only match must not unblock the journal.
+
+- [ ] Test both the three-operation initial and four-operation existing-tail expansion paths against real Testnet history; confirm signer weights, root funding, and parent StrKey checksums.
