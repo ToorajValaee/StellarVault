@@ -93,15 +93,17 @@ public static class VaultQueuedCreatePolicy
              existingEdges[0] != localParent.Id))
             problems.Add("orphaned-parent-dependency");
 
-        // A corrupt encrypted queue may contain multiple dependencies or
-        // duplicate durable mutation IDs. Neither may crash an advisory review
-        // or be treated as a publishable dependency graph.
-        if (item.DependsOn is { Length: 1 } edge)
+        // Reject ambiguous immutable journal identities even when the draft
+        // has no folder dependency. A corrupt duplicate cannot become Ready.
+        var duplicateMutationIds = all.Select(x => x.Id)
+            .Distinct(StringComparer.Ordinal).Count() != all.Count;
+        if (duplicateMutationIds)
+            problems.Add("duplicate-local-mutation-id");
+
+        // Never traverse malformed multi-edge dependency graphs or build a
+        // dictionary over duplicate IDs: both previously threw during review.
+        if (item.DependsOn is { Length: 1 } edge && !duplicateMutationIds)
         {
-            if (all.GroupBy(x => x.Id, StringComparer.Ordinal).Any(g => g.Count() != 1))
-                problems.Add("duplicate-local-mutation-id");
-            else
-            {
                 var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
                 var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
                 var cursor = edge[0];
@@ -129,7 +131,6 @@ public static class VaultQueuedCreatePolicy
                     }
                     cursor = ancestor.DependsOn.SingleOrDefault();
                 }
-            }
         }
         return problems.Distinct(StringComparer.Ordinal).ToArray();
     }
