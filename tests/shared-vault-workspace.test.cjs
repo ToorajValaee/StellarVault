@@ -43,6 +43,7 @@ test('both strategies reuse one PWA app chrome and two identical explorer compon
   const linked = read('StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
   const tree = read('StellarVault.UI/Components/VaultExplorerTree.razor');
   const row = read('StellarVault.UI/Components/VaultExplorerItemRow.razor');
+  const published = read('StellarVault.UI/Components/VaultPublishedItemsView.razor');
   const css = read('StellarVault.Pwa/wwwroot/css/modern-app.css');
 
   for (const word of ['Vault', 'Drafts', 'Sync', 'Settings', 'Documentation &amp; Help']) {
@@ -57,7 +58,8 @@ test('both strategies reuse one PWA app chrome and two identical explorer compon
   assert.match(vault, /<VaultExplorerTree Folders="@Folders"/);
   assert.match(linked, /<VaultExplorerTree Folders="@_items/);
   assert.match(vault, /<VaultExplorerItemRow Item="item"/);
-  assert.match(linked, /<VaultExplorerItemRow Item="item"/);
+  assert.match(linked, /<VaultPublishedItemsView Items="_items"/);
+  assert.match(published, /<VaultExplorerItemRow Item="item"/);
   assert.match(tree, /class="sv-explorer-tree terminal-panel"/);
   assert.match(row, /class="sv-object-row/);
   assert.match(row, /VaultPublishedFileClassification.IsFile/);
@@ -118,7 +120,7 @@ test('PWA and native hosts reuse identical inspectors, forms, trees and rows', (
   assert.match(linked, /<VaultRecordInspector @key="_selected.Id"/);
   assert.match(native, /<VaultRecordInspector @key="_selectedRecord.Id"/);
   assert.match(native, /<VaultExplorerTree Folders=/);
-  assert.match(native, /<VaultExplorerItemRow Item="item"/);
+  assert.match(native, /<VaultPublishedItemsView Items="_ledgerRecords"/);
   assert.match(native, /<VaultRecordFields IsFolder=/);
   assert.match(localHd, /<VaultRecordFields IsFolder="_isFolder"/);
   assert.match(localSkey, /<VaultRecordFields IsFolder="_draftIsFolder"/);
