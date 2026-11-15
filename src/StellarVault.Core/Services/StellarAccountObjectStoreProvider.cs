@@ -153,6 +153,10 @@ public sealed class StellarAccountObjectStoreProvider(
         ObjectWriteOptions options, CancellationToken ct = default)
     {
         RequireSupportedCreate(options);
+        if (descriptor is null || descriptor.ObjectId != "new")
+            throw new ArgumentException(
+                "Create requests must use ObjectId='new'; the encrypted queue allocates the durable record ID.",
+                nameof(descriptor));
         var checkpoint = RequireScope(scope, false);
         byte[] bytes = await ReadBoundedAsync(source, ct);
         try
