@@ -44,6 +44,16 @@ internal static class VaultRecordInterchangeSmoke
                 staged[1].Content == "Secret password" &&
                 staged[1].UserName == "alice",
                 "Import failed to stage folder first and remap record parent.");
+            // Even an adapter that returns colliding 16-hex IDs must not
+            // silently produce ambiguous imported parent/child references.
+            try
+            {
+                await VaultRecordInterchange.StageAsync(restored,
+                    (_, _) => Task.FromResult("abcdef0123456789"));
+                throw new Exception("Duplicate newly assigned import IDs were accepted.");
+            }
+            catch (InvalidDataException) { }
+
             var missing = archive with
             {
                 Records = archive.Records.Select(x => x.Title == "Credential"
