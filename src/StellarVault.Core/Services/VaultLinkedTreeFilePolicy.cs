@@ -229,12 +229,36 @@ public static class VaultLinkedTreeFilePolicy
             }
         }
 
-        // A confirmed branch can remain identical while a grandchild leaf
-        // changes on another device. Revalidate every reachable descendant,
-        // not only this parent's immediate children, against one fresh ledger
-        // inventory before approving another network transaction.
+        // Reuse the same full-depth remote graph check for both independent
+        // signers. The HD path calls this exact verifier with its own strategy.
         if (remote is not null && children.Length > 0)
         {
+            var problem = RemoteDescendantProblem(children, all, remote,
+                groupTag, VaultMutationStrategyPolicy.Linked);
+            if (problem is not null) return [problem];
+        }
+
+        return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
+    }
+
+    /// <summary>
+    /// Strategy-neutral read-only SVTREE3 descendant verification. Every
+    /// referenced node must be historically Confirmed, authenticated against
+    /// its exact draft, and unchanged in the same fresh remote snapshot.
+    /// Legacy untagged queue entries are accepted only for the HD strategy.
+    /// No signing, state transition or publication happens in this method.
+    /// </summary>
+    public static string? RemoteDescendantProblem(
+        IReadOnlyList<VaultStreamingFileTree.Reference> children,
+        IReadOnlyList<VaultPendingMutation> all,
+        IReadOnlyCollection<LedgerRecordItem> remote,
+        string groupTag, string strategyId)
+    {
+        if (strategyId != VaultMutationStrategyPolicy.Linked &&
+            strategyId != VaultMutationStrategyPolicy.Hd)
+            return "tree-descendant-invalid-strategy";
+        if (groupTag is null || children is null || all is null || remote is null)
+            return "tree-descendant-invalid";
             // Build bounded indexes once: a streamed multi-level tree can
             // contain thousands of nodes, so rescanning the entire journal
             // and ledger for every descendant would be quadratic.
@@ -247,7 +271,9 @@ public static class VaultLinkedTreeFilePolicy
                     return "tree-descendant-cycle-or-reuse";
                 var matches = localById[reference.Id].Where(x =>
                     x.Kind == VaultMutationKind.CreateRecord &&
-                    x.OriginStrategyId == VaultMutationStrategyPolicy.Linked).ToArray();
+                    (strategyId == VaultMutationStrategyPolicy.Hd
+                        ? x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd
+                        : x.OriginStrategyId == VaultMutationStrategyPolicy.Linked)).ToArray();
                 if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
                     return "tree-descendant-not-historically-confirmed";
                 LedgerRecordDraft? expected;
@@ -327,11 +353,9 @@ public static class VaultLinkedTreeFilePolicy
             foreach (var child in children)
             {
                 var problem = CheckDescendant(child, 0);
-                if (problem is not null) return [problem];
+                if (problem is not null) return problem;
             }
-        }
-
-        return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
+        return null;
     }
 
     /// <summary>Immutable file-tree cleanup ordering: do not discard the
