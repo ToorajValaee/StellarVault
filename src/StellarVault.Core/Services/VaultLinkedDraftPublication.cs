@@ -273,6 +273,15 @@ public sealed class VaultLinkedDraftPublication(
                     }
                     catch
                     {
+                        // A signed hash may already exist even when Horizon
+                        // throws before returning its receipt. Bind the
+                        // runtime's public diagnostic to the same signer,
+                        // network, record, destination and session epoch.
+                        hash ??= await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                            ledger, pending.AccountId, "create",
+                            pending.Quote.TargetAccountId, original.EntityId,
+                            ledger.ConnectedNetworkPassphrase ?? "",
+                            pending.Epoch);
                         var uncertain = reserved with
                         {
                             State = VaultSyncState.Uncertain,
