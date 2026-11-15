@@ -270,9 +270,20 @@ internal static class LinkedDraftSmoke
                     ledger.ReleasedVerifiedHash == hash,
                     "Linked file node failed signed XDR history reconciliation.");
                 if (sent == 0)
+                {
                     await MustRejectAsync(
                         () => workspace.DiscardAsync(root.MutationId),
                         "Pending file root was discarded after a child was published.");
+                    // A connection epoch change must not erase the durable
+                    // node queue or accidentally mark the root complete.
+                    ledger.Reconnect();
+                    var restoredWorkspace = new VaultLinkedDraftWorkspace(
+                        ledger, keys, store, consent, network);
+                    Require((await restoredWorkspace.ReviewManualSyncAsync())
+                            .Items.Any(x => x.MutationId == root.MutationId &&
+                                x.State == VaultSyncState.Pending),
+                        "Linked file tree root was lost across signer reconnect.");
+                }
                 sent++;
             }
             var onChain = await ledger.ReadAsync();
