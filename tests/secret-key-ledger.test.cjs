@@ -1444,5 +1444,9 @@ test('single-record linked files reuse SVFILE1 while HD and multipart file gates
   assert.match(native,/deletionEntry\.Kind == VaultMutationKind\.DeleteRecord/);
   assert.match(native,/drafts\.OpenDraftAsync\(deletion\.MutationId\)/);
   assert.match(native,/reconciler\.ConfirmVerifiedRecordAsync\(deletion\.MutationId\)/);
+  assert.match(workspace,/Cannot stage deletion of a malformed or legacy unchecksummed S-key file/);
+  assert.match(workspace,/Multipart S-key file deletion requires the dedicated verified multipart workflow/);
+  assert.match(native,/drafts\.StageDeleteAsync\(corruptId, corruptRevision\)/);
+  assert.match(native,/drafts\.StageDeleteAsync\(multipartId, multipartRevision\)/);
   assert.match(native,/StellarLedgerFileProtocol\.DecodeFile/);
 });
