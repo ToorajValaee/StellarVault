@@ -204,7 +204,7 @@ test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   assert.ok(recent.includes("iterations: 600000"));
   assert.ok(recent.includes("crypto.subtle.decrypt"));
   assert.ok(app.includes('stellarVaultRecentVault.unlockEncryptedSeed'));
-  assert.ok(app.includes('Workflow.Lock();\n            Retention.Reset();'));
+  assert.match(app, /catch\s*\{\s*Workflow\.Lock\(\);\s*Retention\.Reset\(\);\s*StorageMode\.Reset\(\);\s*throw;/);
 });
 
 test('shared offline queue requires storage consent and reconciles uncertain submissions', () => {
