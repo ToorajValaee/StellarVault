@@ -92,3 +92,11 @@ Before handling real secrets or funds, finish historical operation and signer ve
 
 - [ ] Attempt to stage deletion of a Testnet linked legacy unchecksummed or malformed SVFILE1 and an unsupported SVFILE2 manifest. Both must be refused *before* creating a local queue entry; neither may send a Stellar transaction.
 - [ ] Confirm a valid checksummed SVFILE1 delete remains typed and reviewable, and its historical proof and final queue state survive a browser/MAUI restart.
+
+## Access, resize, private network and local file-size UI regression
+- [ ] On desktop PWA, open **New record**, **Edit record**, and record preview; drag the right pane border in both directions and use keyboard left/right arrows on the handle. Verify left content resizes without clipping, including at the 1100px breakpoint.
+- [ ] With a short record/folder tree, confirm the entire left explorer background fills the viewport-height records panel; with a long tree, confirm both sides remain usable.
+- [ ] On access screen, select Stellar-only and local encrypted storage repeatedly; the choices must remain visible, the radio text stays vertically aligned and the green left welcome copy must not shift up/down.
+- [ ] Choose local encrypted storage and device unlock in HD mode, then S-key mode. Verify HD passkey enrollment still requires the HD passphrase and S-key enrollment only follows verification of its independent local queue passphrase. Confirm S-key and HD passkeys never share namespaces; fallback to passphrase when WebAuthn PRF is unsupported.
+- [ ] On a custom/private Stellar network, fee/reserve descriptions say native asset rather than assuming XLM. SDK's native asset checks must remain correct.
+- [ ] Upload/download a **locally encrypted** synthetic file larger than 1 MiB; verify integrity and no UI size rejection (subject to real device quota and memory). A **direct Stellar** file up to the existing protocol 1 MiB ceiling must use separate approved multipart checkpointed transactions. Larger on-chain and S-key multipart files remain unsupported and must show their actual protocol limits.
