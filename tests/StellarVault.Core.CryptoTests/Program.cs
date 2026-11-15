@@ -445,6 +445,7 @@ Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
 // but a fake Stellar ledger: no transactions or GitHub CI are involved.
 await LinkedDraftSmoke.RunAsync();
 await LinkedRecordHistorySmoke.RunAsync();
+await LinkedExpansionHistorySmoke.RunAsync();
 
 sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
 {
