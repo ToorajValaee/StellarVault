@@ -225,6 +225,16 @@ internal static class LinkedDraftSmoke
                 var raw = entries.Single(x => x.Id == file.MutationId);
                 var draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(
                     raw.EncryptedPayload)!;
+                var metadata = System.Text.Json.JsonSerializer.Deserialize<
+                    StellarLedgerFileProtocol.Single>(
+                    draft.Content[StellarLedgerFileProtocol.SinglePrefix.Length..])!;
+                var missingChecksum = draft with
+                {
+                    Content = StellarLedgerFileProtocol.SinglePrefix +
+                        System.Text.Json.JsonSerializer.Serialize(metadata with { Sha256Hex = null })
+                };
+                Require(!VaultLinkedSingleFilePolicy.IsSupportedDraft(missingChecksum),
+                    "A legacy unchecksummed SVFILE1 envelope bypassed typed S-key file policy.");
                 Require(VaultLinkedSingleFilePolicy.IsSupportedDraft(draft) &&
                     VaultQueuedCreatePolicy.Problems(raw, entries).Contains(
                         "file-protocol-needs-staged-review") &&
