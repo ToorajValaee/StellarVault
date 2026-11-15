@@ -714,6 +714,7 @@
         var remoteFolders = published.Where(x => x.IsFolder)
             .Select(x => new FolderOption(x.Id, x.Title, false));
         var localFolders = _drafts.Where(x => x.IsFolder &&
+                x.Kind == VaultMutationKind.CreateFolder &&
                 (x.State is VaultSyncState.Pending or VaultSyncState.Confirmed) &&
                 !x.IsCorrupt)
             .Select(x => new FolderOption(x.EntityId, x.Title, true));
@@ -954,6 +955,8 @@
             _report = null;
             _drafts = [];
             _availableFolders = [];
+            _publishedRecords = [];
+            CancelPublishedDeletion();
             ClearDraftEditor();
             _passphrase = string.Empty;
             _message = "Independent local encryption key cleared from memory.";
@@ -967,6 +970,9 @@
         _report = null;
         _recoveryFinding = null;
         _drafts = [];
+        _availableFolders = [];
+        _publishedRecords = [];
+        CancelPublishedDeletion();
         ClearDraftEditor();
         await Publisher.CancelAsync();
         await LinkedExpansion.AbandonUnsubmittedAsync();
