@@ -25,6 +25,10 @@ test('one canonical /vault route selects explicit authenticated HD or S-key stra
   assert.match(vault, /ActiveMode == VaultWorkspaceMode\.StellarSecretKey/);
   assert.match(vault, /<VaultLinkedWorkspaceShell \/>/);
   assert.match(vault, /ActiveMode == VaultWorkspaceMode\.ConflictingSessions/);
+  assert.match(vault, /@onclick="LockConflictingSessionsAsync"/);
+  assert.match(vault, /await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(vault, /await SecretLedger\.DisconnectAsync\(\)/);
+  assert.match(vault, /Workflow\.Lock\(\)/);
   assert.match(vault, /if \(ActiveMode != VaultWorkspaceMode\.MnemonicHd\) return;/);
   assert.match(index, /Navigation.NavigateTo\("\/vault", replace: true\)/);
   assert.doesNotMatch(index, /NavigateTo\("\/secret-vault"/);
