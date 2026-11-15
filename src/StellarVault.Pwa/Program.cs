@@ -43,6 +43,7 @@ builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
         builder.Services.AddScoped<VaultLinkedDraftPublication>();
         builder.Services.AddScoped<VaultLinkedExpansionJournal>();
         builder.Services.AddScoped<VaultLinkedDraftRecoveryReview>();
+        builder.Services.AddScoped<VaultLinkedVerifiedReconciliation>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
 builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
