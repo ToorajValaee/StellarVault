@@ -1149,3 +1149,34 @@ test('linked queue binds volatile signed transaction identity and restart receip
   assert.match(publisher,/submission\.TransactionHash != hash/);
   assert.match(source,/await checkpoint\.invokeMethodAsync\('CheckpointSignedHash',signedHash\)/);
 });
+
+test('linked historical skh/skc inspection is bounded, read-only and never confirms uncertain queue',()=>{
+  const root=path.join(__dirname,'..','src');
+  const inspector=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
+    'HorizonVaultLinkedRecordOperationInspector.cs'),'utf8');
+  const receipt=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
+    'HorizonVaultLinkedReceiptEvidence.cs'),'utf8');
+  const recovery=fs.readFileSync(path.join(root,'StellarVault.Core','Services',
+    'VaultLinkedDraftRecoveryReview.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  for(const host of ['StellarVault.Pwa/Program.cs','StellarVault.Maui/MauiProgram.cs']){
+    const content=fs.readFileSync(path.join(root,host),'utf8');
+    assert.match(content,/AddScoped<HorizonVaultLinkedRecordOperationInspector>/);
+  }
+  assert.match(inspector,/transactions\/.*operations\?limit=200/);
+  assert.match(inspector,/MaxOperations = 90/);
+  assert.match(inspector,/MaxBytes = 262144/);
+  assert.match(inspector,/skh:/);
+  assert.match(inspector,/skc:/);
+  assert.match(inspector,/IncrementalHash\.CreateHash\(HashAlgorithmName\.SHA256\)/);
+  assert.match(inspector,/CryptographicOperations\.FixedTimeEquals/);
+  assert.match(inspector,/Mixed generations or duplicate record chunk/);
+  assert.match(inspector,/Record chunk appeared after the manifest/);
+  assert.match(inspector,/manifest and skc chunks use different generations|manifest and skc/);
+  assert.doesNotMatch(inspector,/TryReplaceAsync|VaultSyncState\.Confirmed|submitTransaction/);
+  assert.match(receipt,/records\.InspectCreateAsync\(/);
+  assert.match(recovery,/historicalRecordOperations = evidence\.HistoricalRecordOperationsMatch/);
+  assert.match(panel,/Historical record operation check/);
+  assert.doesNotMatch(recovery,/store\.TryReplaceAsync/);
+});
