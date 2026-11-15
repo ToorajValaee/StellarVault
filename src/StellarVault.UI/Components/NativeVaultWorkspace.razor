@@ -1075,11 +1075,10 @@ else
                 finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
             }
         }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException or
-                                     System.Text.Json.JsonException or InvalidOperationException or
-                                     System.Security.Cryptography.CryptographicException or
-                                     IOException or ArgumentException)
+        catch (Exception)
         {
+            // A network, JSON or host failure must never expose a partially
+            // authenticated file or print an untrusted exception message.
             _verifiedNativeTree = null;
             _verifiedFileMessage = "File integrity could not be verified. Nothing was exported.";
         }
@@ -1165,11 +1164,9 @@ else
                     : "Legacy file export canceled; no ledger data changed.";
             }
         }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException or
-                                     System.Text.Json.JsonException or InvalidOperationException or
-                                     UnauthorizedAccessException or IOException or NotSupportedException or
-                                     System.Security.Cryptography.CryptographicException)
+        catch (Exception)
         {
+            _verifiedNativeTree = null;
             _verifiedFileMessage = "File export failed. Verify again before retrying.";
         }
         finally
