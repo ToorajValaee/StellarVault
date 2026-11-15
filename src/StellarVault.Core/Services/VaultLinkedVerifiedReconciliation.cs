@@ -227,7 +227,8 @@ public sealed class VaultLinkedVerifiedReconciliation(
                     after.TransactionHash != txHash ||
                     after.CurrentRecordMatches is not true ||
                     !after.HistoricalReceiptObserved ||
-                    (isCreate && !after.HistoricalRecordOperationsMatch))
+                    (isCreate && !after.HistoricalRecordOperationsMatch) ||
+                    after.HistoricalStorageAccount != before.HistoricalStorageAccount)
                     return new(mutationId, txHash, false,
                         "Historical evidence or current-state confirmation changed during verification.");
 
