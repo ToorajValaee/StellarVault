@@ -560,8 +560,14 @@ internal static class LinkedDraftSmoke
                 return Task.FromResult<string?>(null);
             var manifest = new byte[47];
             manifest[0] = 1;
+            System.Text.Encoding.ASCII.GetBytes(generation.ToString("x8"))
+                .CopyTo(manifest, 1);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16BigEndian(
+                manifest.AsSpan(9, 2), 1);
             System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(
-                manifest.AsSpan(9, 4), generation);
+                manifest.AsSpan(11, 4), 32);
+            System.Security.Cryptography.SHA256.HashData(
+                BitConverter.GetBytes(generation)).CopyTo(manifest, 15);
             return Task.FromResult<string?>(Convert.ToBase64String(manifest));
         }
 
