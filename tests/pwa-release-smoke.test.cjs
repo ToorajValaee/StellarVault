@@ -426,8 +426,11 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(vault, /sv-layout-switch/);
   assert.match(vault, /_explorerLayout == "grid"/);
   assert.match(vault, /<VaultItemEditor @ref="_inlineEditor" Embedded="true"/);
-  assert.match(vault, /sv-inspector-tabs/);
-  assert.match(vault, /sv-inspector-more/);
+  const inspector = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  assert.match(vault, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(inspector, /sv-inspector-tabs/);
+  assert.match(inspector, /sv-inspector-more/);
   // The obsolete flat-file upload checkpoint was removed; the shared HD
   // streaming queue owns interrupted-file recovery instead.
   assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null;/);
@@ -630,7 +633,10 @@ test('Phone PWA reproduces the approved object-storage workspace while desktop s
   assert.match(vault, /sv-mobile-folder-back/);
   assert.match(vault, /_mobileCollection == "folders"/);
   assert.match(vault, /OpenEditor\("record"\)/);
-  assert.match(vault, /sv-record-inspector-backdrop/);
+  const inspector = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  assert.match(vault, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(inspector, /sv-record-inspector-backdrop/);
   assert.match(css, /MOBILE VAULT/);
   assert.match(css, /@media\(max-width:840px\)/);
   assert.match(css, /sv-mobile-collection-folders/);
