@@ -177,12 +177,110 @@ internal static class LinkedDraftSmoke
                 Directory.Delete(directory, recursive: true);
         }
         await RunSingleFileLinkedSmokeAsync();
+        await RunMultipartLinkedSmokeAsync();
         await RunVerifiedCreateReconciliationSmokeAsync();
         await RunRemoteMutationSmokeAsync(false);
         await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunMultipartLinkedSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-multipart-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            await keys.CreateAsync("linked multipart test passphrase");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, Path.Combine(directory, "queue"), network);
+            var drafts = new VaultLinkedDraftWorkspace(ledger, keys, store, consent, network);
+            var publisher = new VaultLinkedDraftPublication(ledger, store, keys, consent, network);
+            var witness = new CapturingLinkedReceiptEvidence { AllowRecordOperations = true };
+            var reviewer = new VaultLinkedDraftRecoveryReview(
+                ledger, store, keys, consent, network, witness);
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, store, keys, consent, network, reviewer);
+
+            await MustRejectAsync(
+                () => drafts.StageMultipartFileAsync("Too large", "big.bin",
+                    "application/octet-stream",
+                    new byte[VaultLinkedMultipartFilePolicy.MaxBytes + 1]),
+                "Oversized linked multipart manifest was staged without hierarchy.");
+            var bytes = Enumerable.Range(0, 4096).Select(x => (byte)x).ToArray();
+            var stages = await drafts.StageMultipartFileAsync(
+                "Multipart backup", "backup.bin", "application/octet-stream", bytes);
+            Require(stages.Count == 3 && stages.All(x => x.IsFile &&
+                    x.Kind == VaultMutationKind.CreateRecord) &&
+                    (await drafts.ListAsync()).Count == 3,
+                "Linked SVFILE2 parts and manifest did not stage as typed encrypted entries.");
+            var initial = await drafts.ReviewManualSyncAsync();
+            Require(initial.NextReadyMutationId == stages[0].MutationId &&
+                    initial.Items.Single(x => x.MutationId == stages[1].MutationId)
+                        .Blockers.Contains("multipart-previous-part-not-confirmed") &&
+                    initial.Items.Single(x => x.MutationId == stages[2].MutationId)
+                        .Blockers.Contains("multipart-all-parts-must-be-historically-confirmed"),
+                "Multipart planner offered a later part or final manifest too early.");
+            await MustRejectAsync(
+                () => publisher.PrepareAsync(stages[2].MutationId),
+                "Multipart manifest could publish before its file parts.");
+            await MustRejectAsync(
+                () => publisher.PrepareAsync(stages[1].MutationId),
+                "Multipart second part could publish before the first part was verified.");
+            await MustRejectAsync(
+                () => drafts.DiscardAsync(stages[0].MutationId),
+                "A pending multipart manifest lost its still-referenced part.");
+
+            for (int i = 0; i < stages.Count; i++)
+            {
+                var state = await drafts.ReviewManualSyncAsync();
+                Require(state.NextReadyMutationId == stages[i].MutationId,
+                    "The next verified multipart part/manifest was not the only next review.");
+                var reviewed = await publisher.PrepareAsync(stages[i].MutationId);
+                Require(reviewed.Quote.Kind == "create",
+                    "A multipart file stage bypassed the reviewed S-key create quote.");
+                var hash = await publisher.SubmitAsync(reviewed.Quote, true);
+                Require((await drafts.ListAsync()).Single(
+                            x => x.MutationId == stages[i].MutationId).State ==
+                        VaultSyncState.Uncertain,
+                    "Multipart stage was marked confirmed without historic signature proof.");
+                ledger.AllowHistoricalProof = true;
+                var confirmed = await reconciler.ConfirmVerifiedRecordAsync(
+                    stages[i].MutationId);
+                Require(confirmed.Confirmed && ledger.ReleasedVerifiedHash == hash &&
+                    (await drafts.ListAsync()).Single(
+                        x => x.MutationId == stages[i].MutationId).State ==
+                        VaultSyncState.Confirmed,
+                    "Multipart stage did not complete signed-history encrypted CAS.");
+            }
+
+            var all = await ledger.ReadAsync();
+            var manifest = all.Single(x => x.Id == stages[^1].EntityId);
+            var decoded = StellarLedgerFileProtocol.DecodeFile(manifest, all);
+            try
+            {
+                Require(decoded.SequenceEqual(bytes) &&
+                    ledger.Submissions == stages.Count,
+                    "Manifest-last S-key multipart publication failed authenticated download or replayed a transaction.");
+            }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded); }
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            Console.WriteLine("PASS: linked SVFILE2 parts require individual quote, history proof and manifest-last authenticated download");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunSingleFileLinkedSmokeAsync()
