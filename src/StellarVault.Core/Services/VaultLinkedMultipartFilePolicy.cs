@@ -228,8 +228,12 @@ public static class VaultLinkedMultipartFilePolicy
                 original.EncryptedPayload);
             var found = remote.SingleOrDefault(x => x.Id == original.EntityId);
             return draft is not null && found is not null &&
-                !found.IsFolder && found.Content == draft.Content &&
+                found.IsFolder == draft.IsFolder &&
+                found.Content == draft.Content &&
                 found.Title == draft.Title && found.FolderId == draft.FolderId &&
+                (found.UserName ?? "") == (draft.UserName ?? "") &&
+                (found.Url ?? "") == (draft.Url ?? "") &&
+                (found.Notes ?? "") == (draft.Notes ?? "") &&
                 (found.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
