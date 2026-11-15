@@ -12,7 +12,7 @@ const init = fs.readFileSync(path.join(repo, 'src', 'StellarVault.Pwa',
 
 test('empty S-key root enters shared setup; existing S-key records open directly', () => {
   assert.match(home, /var recovered = await SecretLedger\.ReadAsync\(\)/);
-  assert.match(home, /Navigation\.NavigateTo\(recovered\.Count == 0\s*\? "\/initialize" : "\/secret-vault"\)/);
+  assert.match(home, /Navigation\.NavigateTo\(recovered\.Count == 0\s*\? "\/initialize" : "\/vault"\)/);
   assert.match(home, /SecretChain\.InspectAsync\(_secretKey, horizon, passphrase\)/);
   assert.match(home, /SecretLedger\.ConnectAsync\(_secretKey, horizon, passphrase\)/);
 });
@@ -28,7 +28,7 @@ test('shared initialization page admits a connected independent S-key session', 
   assert.match(init, /_linkedInfo\.SpendableNative/);
   assert.match(init, /@onclick="RefreshFundingAsync"/);
   assert.match(init, /@onclick="ContinueLinkedAsync"/);
-  assert.match(init, /Nav\.NavigateTo\("\/secret-vault"\)/);
+  assert.match(init, /Nav\.NavigateTo\("\/vault"\)/);
 });
 
 test('S-key setup never invokes HD registry writes or calls a connected key an HD account', () => {
