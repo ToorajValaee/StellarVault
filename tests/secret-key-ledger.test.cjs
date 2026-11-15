@@ -1257,6 +1257,8 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.match(workspace,/StageDeleteAsync/);
   assert.match(workspace,/ExpectedRemoteVersion/);
   assert.match(workspace,/currentRevision != expectedRevision/);
+  assert.match(workspace,/var beforeRevision = await revisionReader\.ReadRecordRevisionAsync\(entityId, ct\)/);
+  assert.match(workspace,/beforeRevision != expectedRevision/);
   assert.match(workspace,/remote\.Any\(x => x\.FolderId == entityId\)/);
   assert.match(publisher,/RequireRemoteVersionAsync\(item, ct\)/);
   assert.match(publisher,/RequireRemoteVersionAsync\(original, ct\)/);
@@ -1280,6 +1282,8 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.match(linkedPwa,/VaultLinkedRemoteRevisionPolicy\.IsValid/);
   assert.match(transition,/A staged linked deletion must retain its original encrypted record snapshot/);
   assert.match(panel,/LoadPublishedRecordsAsync/);
+  assert.match(panel,/ReadStablePublishedAsync/);
+  assert.match(panel,/before != after/);
   assert.match(panel,/StageUpdateAsync\(remoteId, draft, remoteRevision\)/);
   assert.match(panel,/StageDeleteAsync\(_deletePublishedId, _deletePublishedRevision\)/);
   assert.match(smoke,/RunRemoteMutationSmokeAsync\(false\)/);
