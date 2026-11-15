@@ -5372,3 +5372,33 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
 .sv-web-shell .sv-linked-unified-workspace .sv-explorer-main > .sv-object-row {
   min-width:0;
 }
+
+/* The same shared record inspector serves HD sidecars and S-key inline
+   explorer details. Inline mode does NOT trigger the HD :has() viewport
+   reservation and always remains a normal grid child. */
+.sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline {
+  position:relative!important;inset:auto!important;
+  width:auto!important;height:auto!important;
+  margin:0!important;padding:0!important;
+  background:transparent!important;backdrop-filter:none!important;
+  pointer-events:auto!important;min-width:0;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline-surface {
+  width:100%!important;min-width:0!important;max-width:100%!important;
+  height:auto!important;max-height:min(80dvh,860px)!important;
+  overflow-y:auto!important;margin:0!important;padding:18px!important;
+  position:relative!important;border-radius:14px!important;
+  border:1px solid var(--sk-line,#dce8e5)!important;
+  background:var(--sk-panel,#fff)!important;
+  color:var(--sk-ink,#1b363c)!important;
+  box-shadow:0 7px 24px rgba(12,58,49,.055)!important;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline-surface .sv-inspector-tabs {
+  display:flex;gap:8px;padding:12px 0;border-bottom:1px solid var(--sk-line,#dce8e5);
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline-surface .sv-inspector-tabs button.selected {
+  color:var(--sk-green,#087858);font-weight:700;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline-surface .modal-action-row {
+  display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;
+}
