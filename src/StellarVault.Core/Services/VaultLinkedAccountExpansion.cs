@@ -103,8 +103,27 @@ public sealed class VaultLinkedAccountExpansion(
     /// The pending intent is consumed before the network call: failures are
     /// uncertain and must be reconciled, never retried automatically.
     /// </summary>
-    public async Task<string> SubmitApprovedAsync(
-        VaultSecretLedgerQuote reviewedQuote, bool explicitlyApproved, CancellationToken ct = default)
+    public Task<string> SubmitApprovedAsync(
+        VaultSecretLedgerQuote reviewedQuote, bool explicitlyApproved,
+        CancellationToken ct = default) =>
+        SubmitCoreAsync(reviewedQuote, explicitlyApproved, null, ct);
+
+    /// <summary>
+    /// Journaled expansion: checkpoint the exact signed hash before any
+    /// network transmission. The legacy direct workspace remains separate.
+    /// </summary>
+    public Task<string> SubmitWithSignedHashAsync(
+        VaultSecretLedgerQuote reviewedQuote, bool explicitlyApproved,
+        Func<string, Task> durableCheckpoint, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(durableCheckpoint);
+        return SubmitCoreAsync(reviewedQuote, explicitlyApproved,
+            durableCheckpoint, ct);
+    }
+
+    private async Task<string> SubmitCoreAsync(
+        VaultSecretLedgerQuote reviewedQuote, bool explicitlyApproved,
+        Func<string, Task>? durableCheckpoint, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(reviewedQuote);
         if (!explicitlyApproved)
@@ -153,7 +172,19 @@ public sealed class VaultLinkedAccountExpansion(
             // The preflight quote is single-use. From here onward a transport
             // failure may be uncertain and MUST NOT be reclassified as preflight.
             _pending = null;
-            var hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);
+            string hash;
+            if (durableCheckpoint is null)
+            {
+                hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);
+            }
+            else
+            {
+                if (ledger is not IStellarSecretKeySignedSubmission prepared)
+                    throw new InvalidOperationException(
+                        "Linked expansion transport cannot durably checkpoint its signed hash.");
+                hash = await prepared.SubmitWithSignedHashAsync(
+                    pending.Quote.QuoteId, durableCheckpoint, ct);
+            }
             if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
                 throw new InvalidDataException("Account expansion receipt is invalid; reconcile before retry.");
 
