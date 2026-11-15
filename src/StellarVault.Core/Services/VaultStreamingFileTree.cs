@@ -26,6 +26,7 @@ public static class VaultStreamingFileTree
     public sealed record Branch(Reference[] Children);
     public sealed record Root(string FileName, string ContentType,
         long Length, string Sha256Hex, Reference Tree);
+    public sealed record Result(string RootId, Root Manifest, long NodeCount);
 
     /// <summary>
     /// Plaintext is ephemeral and is wiped after the sink completes. The sink
@@ -34,7 +35,7 @@ public static class VaultStreamingFileTree
     /// </summary>
     public sealed record Emission(string Id, string Kind, byte[] Plaintext);
 
-    public static async Task<Root> WriteAsync(
+    public static async Task<Result> WriteAsync(
         Stream input, string fileName, string contentType,
         Func<Emission, CancellationToken, Task> persistEncryptedNode,
         CancellationToken ct = default)
@@ -51,10 +52,15 @@ public static class VaultStreamingFileTree
         using var totalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var buffer = new byte[ChunkBytes];
         long total = 0;
+        long emitted = 0;
 
         async Task EmitAsync(string id, string kind, byte[] payload)
         {
-            try { await persistEncryptedNode(new Emission(id, kind, payload), ct); }
+            try
+            {
+                await persistEncryptedNode(new Emission(id, kind, payload), ct);
+                emitted = checked(emitted + 1);
+            }
             finally { CryptographicOperations.ZeroMemory(payload); }
         }
 
@@ -100,8 +106,10 @@ public static class VaultStreamingFileTree
                 if (filled == 0) break;
                 total = checked(total + filled);
                 totalHash.AppendData(buffer.AsSpan(0, filled));
-                var payload = JsonSerializer.SerializeToUtf8Bytes(
-                    new Leaf(buffer.AsSpan(0, filled).ToArray()));
+                var leafBytes = buffer.AsSpan(0, filled).ToArray();
+                byte[] payload;
+                try { payload = JsonSerializer.SerializeToUtf8Bytes(new Leaf(leafBytes)); }
+                finally { CryptographicOperations.ZeroMemory(leafBytes); }
                 var digest = Convert.ToHexString(SHA256.HashData(payload));
                 var id = NewId();
                 await EmitAsync(id, LeafKind, payload);
@@ -140,7 +148,7 @@ public static class VaultStreamingFileTree
                 Convert.ToHexString(totalHash.GetHashAndReset()), top);
             var rootId = NewId();
             await EmitAsync(rootId, RootKind, JsonSerializer.SerializeToUtf8Bytes(root));
-            return root;
+            return new Result(rootId, root, emitted);
         }
         finally { CryptographicOperations.ZeroMemory(buffer); }
     }
