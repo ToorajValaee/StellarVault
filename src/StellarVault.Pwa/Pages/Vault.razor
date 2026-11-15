@@ -111,6 +111,7 @@ else
                     {
                         <button class="pixel-button primary sv-create-record" type="button" @onclick="CreateRecordForActiveVault"><span aria-hidden="true">＋</span> New record</button>
                         <button class="pixel-button sv-create-folder" type="button" @onclick="CreateFolderForActiveVault"><span aria-hidden="true">＋</span> New folder</button>
+                        <button class="pixel-button sv-create-file" type="button" @onclick="CreateFileForActiveVault"><span aria-hidden="true">＋</span> Add file</button>
                     }
                     @if (!Ledger.IsConnected && !SecretLedger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
                     <button class="pixel-button compact" type="button" disabled="@(_infoLoading || (!Ledger.IsConnected && !SecretLedger.IsConnected))" aria-label="Account information" @onclick="OpenActiveAccountInfoAsync">ⓘ Account</button>
@@ -705,6 +706,13 @@ else
         if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
             _linkedWorkspace?.CreateFolderFromShell();
         else OpenEditor("folder");
+    }
+
+    private void CreateFileForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            SelectAppView("drafts");
+        else OpenEditor("file");
     }
 
     private Task RefreshActiveVaultAsync() =>
