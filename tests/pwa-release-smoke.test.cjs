@@ -168,8 +168,8 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
-  assert.ok(access.includes('Stellar only — nothing saved on this device'));
-  assert.ok(access.includes('checked="@(!_enableLocalStorage)"'));
+  assert.ok(access.includes('Stellar only — do not enable device storage'));
+  assert.ok(access.includes('checked="@(!CurrentDeviceStoragePreference)"'));
   assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
   assert.ok(program.includes('AddScoped<VaultDeviceRetentionGate>()'));
@@ -612,4 +612,51 @@ test('Inspector preserves selected grid mode and keeps explorer and details scro
   assert.match(css, /overscroll-behavior-y:contain!important/);
   assert.match(css, /sv-settings-help-link/);
   assert.match(css, /html\[data-theme="dark"\] \.sv-web-shell \.sv-sync-workspace/);
+});
+
+test('desktop add/edit uses the same drag width as record preview and explorer tree fills its pane', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(vault,/sv-inspector-resize-handle sv-editor-resize-handle/);
+  assert.match(index,/--sv-record-inspector-width/);
+  assert.match(index,/pointerdown/);
+  assert.match(index,/ArrowLeft/);
+  assert.match(css,/\.sv-editor-sidecar > \.sv-editor-resize-handle/);
+  assert.match(css,/\.sv-explorer-layout \{\s*align-items:stretch!important/);
+  assert.match(css,/\.sv-explorer-tree \{\s*align-self:stretch!important/);
+  assert.match(css,/min-height:100%!important/);
+});
+
+test('device storage stays expanded, the radio layout is stable and both credential modes can enroll device unlock', () => {
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultHome.razor'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultLinkedLocalQueuePanel.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
+  assert.match(home,/<section class="sv-access-storage-settings sv-entry-storage-outside"/);
+  assert.doesNotMatch(home,/<details class="sv-access-storage-settings/);
+  assert.match(home,/@if \(CurrentDeviceStoragePreference\)/);
+  assert.match(home,/@bind="_requestBiometricEnrollment"/);
+  assert.match(home,/DeviceUnlockPreference\.Requested/);
+  assert.match(css,/\.sv-access-storage-choices \.sv-biometric-choice > span/);
+  assert.match(css,/min-height:48px!important/);
+  assert.match(program,/AddScoped<VaultDeviceUnlockPreference>/);
+  assert.match(queue,/stellarVaultBiometric\.enroll/);
+  assert.match(queue,/stellarVaultBiometric\.unlock/);
+  assert.match(queue,/linked-s-key:/);
+});
+
+test('local file sizes use streamed storage rather than a 1 MiB UI cap; ledger uses protocol maximum', () => {
+  const local = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultBinaryFilesView.razor'), 'utf8');
+  const ledger = fs.readFileSync(path.join(root, '..', 'Pages',
+    'VaultItemEditor.razor'), 'utf8');
+  const download = fs.readFileSync(path.join(root, 'js','vault-v2-download.js'),'utf8');
+  assert.match(local,/OpenReadStream\(_file\.Size\)/);
+  assert.doesNotMatch(local,/MaximumFileLength|1 MiB upload limit/);
+  assert.doesNotMatch(download,/Download exceeds limit/);
+  assert.match(ledger,/MaximumLedgerFileLength = StellarLedgerFileProtocol\.MaxFileBytes/);
+  assert.match(ledger,/Each encrypted part requires a separate fee approval/);
 });
