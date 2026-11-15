@@ -69,3 +69,7 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Stage and explicitly approve deletion of a published record with no children; confirm its current absence and that the durable local journal remains `Uncertain`, NOT `Confirmed`, even after app restart.
 - [ ] Attempt deleting a folder with published or locally pending children and moving a folder inside its own descendant; both must fail without submission.
 - [ ] Run updated Node and Core smoke regressions and PWA/MAUI Release builds before using these UI flows. Mainnet/real credentials remain excluded.
+
+- [ ] Stage a remote update/deletion while a second session changes the record between manifest reads. Verify staging refuses to attach a new revision to old content.
+- [ ] Verify malformed/noncanonical base64 or non-v1 original manifest versions are rejected by both PWA and MAUI encrypted queue adapters.
+- [ ] Verify pending deletion payloads cannot be modified by CAS; only discarding the never-submitted deletion intent is allowed.
