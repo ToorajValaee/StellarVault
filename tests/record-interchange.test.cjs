@@ -54,3 +54,18 @@ test('record interchange is a bounded and versioned local-only Core operation', 
   assert.match(source, /!IsOrdinaryContent\(item\.Content\)/);
   assert.match(program, /VaultRecordInterchangeSmoke\.RunAsync\(\)/);
 });
+
+test('import previews are bound to the same unlocked account and network', () => {
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  const core = read('src/StellarVault.Core/Services/VaultRecordInterchange.cs');
+  assert.match(panel, /private string\? CurrentImportScope\(\)/);
+  assert.match(panel, /Networks\.CredentialKey\(root\)/);
+  assert.match(panel, /Networks\.CredentialKey\(account\)/);
+  assert.match(panel, /HdSession\.Epoch/);
+  assert.match(panel, /LinkedLedger\.ConnectionEpoch/);
+  assert.match(panel, /initialScope != CurrentImportScope\(\)/);
+  assert.match(panel, /approvedScope != CurrentImportScope\(\)/);
+  assert.match(panel, /DiscardPending\(\)/);
+  assert.match(core, /createdRecordIds\.Add\(newId\)/);
+});
+
