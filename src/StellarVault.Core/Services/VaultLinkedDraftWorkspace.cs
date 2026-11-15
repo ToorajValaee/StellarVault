@@ -110,6 +110,9 @@ public sealed class VaultLinkedDraftWorkspace(
     {
         var plan = VaultLinkedMultipartFilePolicy.BuildUpload(
             title, fileName, contentType, file.Span, parentFolderId);
+        if (parentFolderId is { Length: > 0 } parent &&
+            (parent.Length != 16 || !parent.All(Uri.IsHexDigit)))
+            throw new ArgumentException("Invalid linked multipart parent folder.", nameof(parentFolderId));
         var context = RequireScope();
         var local = await ReadEntriesAsync(context, ct);
         var created = new List<VaultPendingMutation>(plan.Count);
@@ -691,6 +694,10 @@ public sealed class VaultLinkedDraftWorkspace(
                 x.DependsOn.Contains(item.Id, StringComparer.Ordinal)))
                 throw new InvalidOperationException(
                     "Discard dependent local drafts before deleting their parent folder.");
+            if (VaultLinkedMultipartFilePolicy.IsReferencedByPendingManifest(
+                    items.Where(x => x.Id != item.Id).ToArray(), item.EntityId))
+                throw new InvalidOperationException(
+                    "Discard the unpublished multipart manifest before discarding a referenced file part.");
             Check(context);
             if (!await store.TryDeleteAsync(item, ct))
                 throw new InvalidOperationException(
