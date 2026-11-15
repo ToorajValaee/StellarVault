@@ -7,6 +7,7 @@
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
 @inject IStellarLedgerRecords Ledger
+@inject IStellarSecretKeyLedger SecretLedger
 @inject IVaultNativeFileAccess NativeFiles
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
@@ -19,9 +20,20 @@
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
-@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
+@if (ActiveMode == VaultWorkspaceMode.Locked)
 {
     <section class="terminal-panel centered-message"><h1>Vault locked</h1><a class="pixel-button primary" href="/">Unlock vault</a></section>
+}
+else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel centered-message" role="alert">
+        <h1>Conflicting vault sessions</h1>
+        <p>Independent mnemonic and Secret Key vault sessions are both active. Lock the previous session before reopening a vault. No transaction was sent.</p>
+    </section>
+}
+else if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+{
+    <VaultLinkedWorkspaceShell />
 }
 else if (Ledger.IsConnected && _registryReady == false)
 {
@@ -1446,7 +1458,14 @@ else
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
         if (RequestedView == "help") _appView = "help";
     }
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
+
     protected override async Task OnInitializedAsync() {
+        // An independent S-key session must never inspect the HD queue,
+        // registry or mnemonic-derived account in the shared route.
+        if (ActiveMode != VaultWorkspaceMode.MnemonicHd) return;
         if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) await LoadPendingAsync();
         if (!Ledger.IsConnected) return;
         try {
