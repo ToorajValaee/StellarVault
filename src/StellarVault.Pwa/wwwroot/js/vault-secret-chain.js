@@ -19,7 +19,7 @@ window.stellarVaultSecretChain = (() => {
     return value;
   }
 
-  function signerStatus(account, root) {
+  function signerStatus(account, root, isRoot) {
     const signer = (account.signers || []).find(x =>
       x.type === 'ed25519_public_key' && x.key === root);
     const weight = Number(signer?.weight || 0);
@@ -27,12 +27,18 @@ window.stellarVaultSecretChain = (() => {
     const high = Number(account.thresholds?.high_threshold);
     const low = Number(account.thresholds?.low_threshold);
     if (![weight, low, medium, high].every(Number.isInteger) ||
-        low < 1 || medium < 1 || high < 1 || weight < 0 || weight > 255 ||
+        low < 0 || medium < 0 || high < 0 || weight < 0 || weight > 255 ||
         low > 255 || medium > 255 || high > 255)
       throw new Error('Invalid Stellar signer or threshold state.');
+    // Stellar's default freshly funded account thresholds are zero.
+    // They permit read-only recovery, but NOT secure vault mutations.
+    // Child-chain accounts must always require an authorized root signature.
+    const safeWrite = low >= 1 && medium >= 1 && high >= 1;
+    if (!isRoot && !safeWrite)
+      throw new Error('Child account has unsafe zero signer thresholds.');
     return {
-      rootCanSign: weight > 0 && weight >= medium && weight >= high,
-      weight, medium, high
+      rootCanSign: weight > 0 && weight >= low && weight >= medium && weight >= high,
+      safeWrite, weight, low, medium, high
     };
   }
 
@@ -69,11 +75,11 @@ window.stellarVaultSecretChain = (() => {
       if (index === 0 && Object.prototype.hasOwnProperty.call(
           account.data_attr || {}, 'sv:registry:v2'))
         throw new Error('This account is registered as an HD-v2 vault. Open it with its mnemonic instead.');
-      const signer = signerStatus(account, root);
+      const signer = signerStatus(account, root, index === 0);
       if (index > 0 && (account.signers || []).some(x =>
           x.key !== root && Number(x.weight || 0) > 0))
         throw new Error('Child account has an additional active signer. Single-secret recovery is unsafe.');
-      if (!signer.rootCanSign || signer.medium < 1 || signer.high < 1)
+      if (!signer.rootCanSign)
         throw new Error('Account ' + index + ' lacks safe root-signing authorization or signer thresholds. Chain inspection stopped.');
       nodes.push({
         AccountId: current,
@@ -94,7 +100,10 @@ window.stellarVaultSecretChain = (() => {
       TailAccountId: nodes[nodes.length - 1].AccountId,
       Accounts: nodes,
       HasChain: nodes.length > 1,
-      Note: 'Read-only signer and pointer inspection. No transaction or vault decryption performed.'
+      Note: nodes[0].MediumThreshold === 0 ||
+        nodes[0].HighThreshold === 0 || nodes[0].LowThreshold === 0
+        ? 'Read-only recovery: root thresholds are zero. Vault writes are blocked until secured.'
+        : 'Read-only signer and pointer inspection. No transaction or vault decryption performed.'
     };
   }
   return Object.freeze({ inspect });
