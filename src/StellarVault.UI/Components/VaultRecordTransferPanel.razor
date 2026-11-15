@@ -130,6 +130,71 @@
         _message = "Import canceled. No drafts were staged.";
     }
 
+    // The parent view can keep its previous published-record list while an
+    // account switch or network refresh is still in progress. Never export
+    // credentials from that cached list. Read a new authoritative snapshot
+    // and pin its exact connected ledger identity before any host file save.
+    private async Task<(VaultRecordInterchange.Archive Archive, string Scope)>
+        LoadExportSnapshotAsync()
+    {
+        if (!CanExport)
+            throw new InvalidOperationException("Connect the vault before exporting records.");
+        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        {
+            if (LinkedLedger.RootAccountId is not string root || !LinkedLedger.IsConnected)
+                throw new InvalidOperationException("Linked vault signer is disconnected.");
+            var epoch = LinkedLedger.ConnectionEpoch;
+            var scope = Networks.CredentialKey(root);
+            var snapshot = await LinkedLedger.ReadAsync();
+            if (!LinkedLedger.IsConnected || LinkedLedger.RootAccountId != root ||
+                LinkedLedger.ConnectionEpoch != epoch ||
+                Networks.CredentialKey(root) != scope)
+                throw new InvalidOperationException(
+                    "Linked account or network changed while reading the export.");
+            return (VaultRecordInterchange.FromPublished(snapshot),
+                string.Join("|", Strategy, root, scope,
+                    epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (Strategy != VaultMutationStrategyPolicy.Hd || !HdLedger.IsConnected)
+            throw new InvalidOperationException("HD vault is disconnected.");
+        var before = await HdLedger.InspectAccountInfoAsync();
+        var hdScope = Networks.CredentialKey(before.RootAccountId);
+        var hdSnapshot = await HdLedger.ReadAsync();
+        var after = await HdLedger.InspectAccountInfoAsync();
+        if (!HdLedger.IsConnected || before.RootAccountId != after.RootAccountId ||
+            Networks.CredentialKey(before.RootAccountId) != hdScope)
+            throw new InvalidOperationException(
+                "HD account or network changed while reading the export.");
+        return (VaultRecordInterchange.FromPublished(hdSnapshot),
+            string.Join("|", Strategy, before.RootAccountId, hdScope));
+    }
+
+    private async Task RequireSameExportScopeAsync(string expected)
+    {
+        if (!CanExport)
+            throw new InvalidOperationException("Vault disconnected before export.");
+        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        {
+            var root = LinkedLedger.RootAccountId;
+            if (root is null ||
+                string.Join("|", Strategy, root, Networks.CredentialKey(root),
+                    LinkedLedger.ConnectionEpoch.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)) != expected)
+                throw new InvalidOperationException(
+                    "Linked account or network switched before export.");
+        }
+        else if (Strategy == VaultMutationStrategyPolicy.Hd)
+        {
+            var info = await HdLedger.InspectAccountInfoAsync();
+            if (string.Join("|", Strategy, info.RootAccountId,
+                    Networks.CredentialKey(info.RootAccountId)) != expected)
+                throw new InvalidOperationException(
+                    "HD account or network switched before export.");
+        }
+        else
+            throw new InvalidOperationException("Unsupported export strategy.");
+    }
+
     private async Task ExportEncryptedAsync()
     {
         if (_busy || !CanExport || _backupPassword.Length < 12) return;
@@ -138,9 +203,10 @@
         byte[]? ciphertext = null;
         try
         {
-            var archive = VaultRecordInterchange.FromPublished(Records);
+            var (archive, exportScope) = await LoadExportSnapshotAsync();
             ciphertext = await VaultEncryptedRecordBackup.EncryptAsync(
                 archive, _backupPassword);
+            await RequireSameExportScopeAsync(exportScope);
             using var data = new MemoryStream(ciphertext, writable: false);
             bool saved = await NativeFiles.SaveAsync("stellar-vault-records.svrb", data);
             _message = saved
@@ -230,12 +296,13 @@
         byte[]? bytes = null;
         try
         {
-            var archive = VaultRecordInterchange.FromPublished(Records);
+            var (archive, exportScope) = await LoadExportSnapshotAsync();
             if (archive.Records.Length == 0)
                 throw new InvalidOperationException("No ordinary records or folders to export.");
             bytes = csv
                 ? VaultRecordInterchange.ExportCsv(archive)
                 : VaultRecordInterchange.ExportJson(archive);
+            await RequireSameExportScopeAsync(exportScope);
             using var stream = new MemoryStream(bytes, writable: false);
             var saved = await NativeFiles.SaveAsync(
                 csv ? "stellar-vault-records.csv" : "stellar-vault-records.json", stream);
