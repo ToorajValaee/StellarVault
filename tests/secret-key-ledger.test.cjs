@@ -1568,7 +1568,9 @@ test('linked SVTREE3 streaming file stages typed nodes through existing history-
   assert.match(multipart,/VaultLinkedTreeFilePolicy\.Problems\(mutation, all, remote\)/);
   assert.match(queued,/VaultLinkedTreeFilePolicy\.Prefix/);
   assert.match(ui,/DraftWorkspace\.StageTreeFileAsync/);
-  assert.match(ui,/NativeFiles\.SaveAsync\(verified\.FileName, reader\)/);
+  assert.match(ui,/NativeFiles\.SaveAsync\(prepared\.FileName, reader\)/);
+  assert.match(ui,/SaveVerifiedTreeExportAsync\(/);
+  assert.match(ui,/VaultLinkedTreeFilePolicy\.ReadAsync\(\s*recordId, records, Stream\.Null\)/);
   assert.match(browser,/new DotNetStreamReference\(content, leaveOpen: true\)/);
   assert.match(js,/async saveStream\(filename, dotnetStreamReference\)/);
   assert.match(smoke,/RunLinkedTreeFileSmokeAsync\(\)/);
