@@ -27,7 +27,16 @@ test('Stellar provider fails closed when capacity and file policies are not wire
   assert.match(provider, /Large or binary objects require the verified streaming file provider/);
   assert.match(provider, /Revision-pinned updates need the existing remote-mutation journal adapter/);
   assert.match(provider, /Deletion requires an authenticated, revision-pinned remote mutation journal/);
-  assert.match(provider, /Object quotes must use the existing Stellar fee\/reserve planner/);
+  assert.match(provider, /Linked-account fees require the existing approval-quote lifecycle adapter/);
+  assert.match(provider, /await hdLedger\.EstimateAsync\(draft\)/);
+  assert.match(provider, /await hdLedger\.InspectAccountInfoAsync\(\)/);
+  assert.match(provider, /quoted\.CreatesChildNode/);
+  assert.match(provider, /quoted\.PeakReserveXlm/);
+  assert.match(provider, /quoted\.NetworkFeeXlm/);
+  assert.match(provider, /InvariantCulture/);
+  assert.match(provider, /advisory estimate/);
+  assert.doesNotMatch(provider, /await linkedLedger\.QuoteCreateAsync/,
+    'Do not create a signer-backed quote without lifecycle cancellation and approval binding');
 });
 
 test('Stellar adapter binds tenant-free engine scope to selected wallet, network, and local queue', () => {
