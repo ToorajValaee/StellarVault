@@ -214,6 +214,16 @@ public sealed class VaultLinkedDraftWorkspace(
                 if (remote.Any(x => x.FolderId == entityId))
                     throw new InvalidOperationException(
                         "Delete the published child records and folders before deleting their parent.");
+                if (all.Any(x =>
+                {
+                    if (x.State != VaultSyncState.Pending ||
+                        x.Kind == VaultMutationKind.ExtendLinkedChain) return false;
+                    var dependent = JsonSerializer.Deserialize<LedgerRecordDraft>(x.EncryptedPayload)
+                        ?? throw new InvalidDataException("A staged linked draft cannot be decoded.");
+                    return dependent.FolderId == entityId;
+                }))
+                    throw new InvalidOperationException(
+                        "A pending local record still references this published folder. Resolve it before staging deletion.");
                 draft = new LedgerRecordDraft(original.Title, original.Content,
                     original.FolderId, original.Tags, original.IsFolder,
                     original.UserName, original.Url, original.Notes);
@@ -387,6 +397,20 @@ public sealed class VaultLinkedDraftWorkspace(
                 }
                 // Offline remote parent references remain unverified until the
                 // later online publication preflight.
+            }
+
+            if (current.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
+            {
+                if (dependencies.Length != 0)
+                    throw new InvalidOperationException(
+                        "A published record update cannot depend on an unpublished local folder.");
+                if (!keys.IsOfflineOnly)
+                {
+                    var remote = await ledger.ReadAsync(ct);
+                    Check(context);
+                    VaultLinkedFolderHierarchyPolicy.RequirePublishedAcyclicParent(
+                        current.EntityId, draft.FolderId, remote);
+                }
             }
 
             payload = JsonSerializer.SerializeToUtf8Bytes(draft);
