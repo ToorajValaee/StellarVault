@@ -10,7 +10,8 @@ namespace StellarVault.Pwa.Services;
 /// </summary>
 public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
-    IStellarSecretKeyRecordRevisionReader, IAsyncDisposable
+    IStellarSecretKeyRecordRevisionReader,
+    IStellarSecretKeyHistoricalRecordVerifier, IAsyncDisposable
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
@@ -87,6 +88,44 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             throw new InvalidDataException(
                 "The connected S-key manifest revision is malformed or noncanonical.");
         return revision;
+    }
+
+    public async Task<bool> VerifyAsync(string transactionHash, VaultMutationKind kind,
+        string recordId, LedgerRecordDraft expectedDraft,
+        string? originalManifest, CancellationToken ct = default)
+    {
+        RequireConnected();
+        ValidateRecordId(recordId);
+        ArgumentNullException.ThrowIfNull(expectedDraft);
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid network transaction identity.", nameof(transactionHash));
+        var operationKind = kind switch
+        {
+            VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder => "create",
+            VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder => "update",
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder => "delete",
+            _ => throw new NotSupportedException(
+                "Historical S-key record evidence cannot prove this mutation type.")
+        };
+        if (operationKind == "create"
+            ? originalManifest is not null
+            : !VaultLinkedRemoteRevisionPolicy.IsValid(originalManifest))
+            throw new InvalidDataException(
+                "The original S-key record revision does not match the claimed operation.");
+        var epoch = ConnectionEpoch;
+        var expectedRoot = RootAccountId;
+        var passphrase = ConnectedNetworkPassphrase;
+        var proven = await js.InvokeAsync<bool>(
+            "stellarVaultSecretLedger.verifyHistoricalRecord", ct,
+            _sessionId, transactionHash, operationKind, recordId,
+            expectedDraft, originalManifest);
+        if (!IsConnected || ConnectionEpoch != epoch ||
+            RootAccountId != expectedRoot ||
+            ConnectedNetworkPassphrase != passphrase)
+            throw new InvalidOperationException(
+                "The S-key signer scope changed during historical verification.");
+        return proven;
     }
 
     public async Task<LedgerAccountInfo> InspectAccountInfoAsync(
