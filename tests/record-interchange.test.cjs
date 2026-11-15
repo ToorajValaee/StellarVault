@@ -146,3 +146,19 @@ test('browser export destination is chosen before work and cannot be reused', as
   await assert.rejects(saver.writeStream({ stream: async () => {} }),
     /already used/);
 });
+
+test('record exports select browser destination before any asynchronous ledger read', () => {
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  const adapter = read('src/StellarVault.Pwa/Services/BrowserVaultNativeFileAccess.cs');
+  const contract = read('src/StellarVault.Core/Services/IVaultNativeFileAccess.cs');
+  const js = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');
+  assert.match(contract, /interface IVaultDeferredFileSaveAccess/);
+  assert.match(contract, /interface IVaultPendingFileSave/);
+  assert.match(adapter, /SelectSaveDestinationAsync\(string fileName\)/);
+  assert.match(adapter, /stellarVaultV2Download\.selectSaveDestination/);
+  assert.match(js, /async selectSaveDestination\(filename\)/);
+  assert.match(panel, /browserDestination = await SelectBrowserDestinationAsync\(\s*"stellar-vault-records\.svrb"\);\s*var \(archive, exportScope\) = await LoadExportSnapshotAsync\(\)/);
+  assert.match(panel, /browserDestination = await SelectBrowserDestinationAsync\(filename\);\s*var \(archive, exportScope\) = await LoadExportSnapshotAsync\(\)/);
+  assert.match(panel, /await RequireSameExportScopeAsync\(exportScope\);/);
+  assert.match(panel, /await browserDestination\.SaveAsync\(stream\)/);
+});
