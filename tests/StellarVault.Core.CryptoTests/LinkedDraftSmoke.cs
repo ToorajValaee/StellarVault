@@ -179,12 +179,115 @@ internal static class LinkedDraftSmoke
         await RunSingleFileLinkedSmokeAsync();
         await RunMultipartLinkedSmokeAsync();
         await RunLinkedTreeFileSmokeAsync();
+        RunLinkedTreeLengthCommitmentSmoke();
         await RunVerifiedCreateReconciliationSmokeAsync();
         await RunRemoteMutationSmokeAsync(false);
         await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static void RunLinkedTreeLengthCommitmentSmoke()
+    {
+        // A node's SHA-256 may be valid while a parent lies about that
+        // node's logical byte length. That file must be rejected before
+        // publishing the final root, not only upon attempted download.
+        const string leafId = "1111111111111111";
+        const string rootId = "2222222222222222";
+        const string group = "aabbccddeeff0011";
+        var leafData = Enumerable.Range(0, 10).Select(x => (byte)x).ToArray();
+        var leafBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new VaultStreamingFileTree.Leaf(leafData));
+        try
+        {
+            var leafDraft = VaultLinkedTreeFilePolicy.Draft(
+                new VaultStreamingFileTree.Emission(leafId,
+                    VaultStreamingFileTree.LeafKind, leafBytes),
+                "FILE TREE NODE", group);
+            var network = new VaultNetworkSelection();
+            var scope = VaultLinkedQueueStorageScope.FromNetworkScope(
+                network.CredentialKey(Root));
+            var serializedLeaf = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(leafDraft);
+            var leaf = VaultPendingMutation.Create(Root, scope,
+                VaultMutationKind.CreateRecord, leafId, serializedLeaf)
+                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked,
+                    State = VaultSyncState.Confirmed };
+            try
+            {
+                VaultPendingMutation MakeRoot(long declaredLength)
+                {
+                    var reference = new VaultStreamingFileTree.Reference(
+                        leafId, declaredLength,
+                        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(leafBytes)));
+                    var root = new VaultStreamingFileTree.Root("bad.bin",
+                        "application/octet-stream", declaredLength,
+                        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(leafData)),
+                        reference, VaultStreamingFileTree.ChunkBytes);
+                    var rootBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(root);
+                    try
+                    {
+                        var draft = VaultLinkedTreeFilePolicy.Draft(
+                            new VaultStreamingFileTree.Emission(rootId,
+                                VaultStreamingFileTree.RootKind, rootBytes),
+                            "bad.bin", group);
+                        var serialized = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(draft);
+                        try
+                        {
+                            return VaultPendingMutation.Create(Root, scope,
+                                VaultMutationKind.CreateRecord, rootId, serialized)
+                                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+                        }
+                        finally
+                        {
+                            System.Security.Cryptography.CryptographicOperations.ZeroMemory(serialized);
+                        }
+                    }
+                    finally
+                    {
+                        System.Security.Cryptography.CryptographicOperations.ZeroMemory(rootBytes);
+                    }
+                }
+                var remote = new[]
+                {
+                    new LedgerRecordItem(leafId, leafDraft.Title, leafDraft.Content,
+                        leafDraft.FolderId, leafDraft.Tags, leafDraft.IsFolder,
+                        leafDraft.UserName, leafDraft.Url, leafDraft.Notes)
+                };
+                var valid = MakeRoot(leafData.LongLength);
+                var falseLength = MakeRoot(100);
+                try
+                {
+                    Require(VaultLinkedTreeFilePolicy.Problems(valid,
+                            [leaf, valid], remote).Length == 0,
+                        "Valid single-leaf SVTREE3 root was rejected before fee review.");
+                    Require(VaultLinkedTreeFilePolicy.Problems(falseLength,
+                            [leaf, falseLength], remote)
+                            .Contains("tree-descendant-length-mismatch"),
+                        "A hash-valid leaf with a false length was approved for publication.");
+                }
+                finally
+                {
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                        valid.EncryptedPayload);
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                        falseLength.EncryptedPayload);
+                }
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    serializedLeaf);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
+                    leaf.EncryptedPayload);
+            }
+        }
+        finally
+        {
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(leafBytes);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(leafData);
+        }
+        Console.WriteLine("PASS: SVTREE3 rejects hash-valid false-length child commitments");
     }
 
     private static async Task RunLinkedTreeFileSmokeAsync()
