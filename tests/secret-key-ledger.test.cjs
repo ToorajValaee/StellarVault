@@ -1315,6 +1315,63 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.doesNotMatch(publisher,/State = VaultSyncState\.Confirmed/);
 });
 
+test('historical S-key record proof rejects wrong plaintext and missing root signature',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  const txHash=await h.submit(q.QuoteId);
+  await assert.rejects(h.api.releaseVerifiedHistory(h.session,txHash),
+    /has not verified/);
+  assert.equal(await h.api.verifyHistoricalRecord(h.session,txHash,
+    'create',recordId,{...record,Content:'another secret'},null),false);
+  assert.equal(await h.api.verifyHistoricalRecord(h.session,txHash,
+    'create',recordId,record,null),true);
+  assert.equal(h.api.releaseVerifiedHistory(h.session,txHash),true);
+  h.history.get(txHash).signatures=[];
+  await assert.rejects(h.api.verifyHistoricalRecord(h.session,txHash,
+    'create',recordId,record,null),/valid root signature/);
+  assert.equal(h.submissions(),1,'History inspection retransmitted the transaction');
+  h.close();
+});
+
+test('historical S-key update/delete proof binds original manifest, ciphertext and removal keys',async()=>{
+  const h=harness();await h.open();
+  const first=await h.plan('create',recordId,record);
+  await h.submit(first.QuoteId);
+  let original=await h.api.recordRevision(h.session,recordId);
+  const revised={...record,Notes:'changed historical note'};
+  const update=await h.plan('update',recordId,revised);
+  const updateHash=await h.submit(update.QuoteId);
+  assert.equal(await h.api.verifyHistoricalRecord(h.session,updateHash,
+    'update',recordId,revised,original),true);
+  assert.equal(await h.api.verifyHistoricalRecord(h.session,updateHash,
+    'update',recordId,revised,null).catch(()=>false),false);
+  original=await h.api.recordRevision(h.session,recordId);
+  const deletion=await h.plan('delete',recordId,null);
+  const deleteHash=await h.submit(deletion.QuoteId);
+  assert.equal(await h.api.verifyHistoricalRecord(h.session,deleteHash,
+    'delete',recordId,revised,original),true);
+  assert.equal((await h.read()).length,0);
+  assert.equal(h.submissions(),3);
+  h.close();
+});
+
+test('historical linked expansion proof requires matching root and child signatures',async()=>{
+  const h=harness();await h.open();
+  const first=await h.plan('expand',null,null);
+  const firstHash=await h.submit(first.QuoteId);
+  assert.equal(await h.api.verifyHistoricalExpansion(h.session,
+    firstHash,first.TargetAccountId),true);
+  const second=await h.plan('expand',null,null);
+  const secondHash=await h.submit(second.QuoteId);
+  assert.equal(await h.api.verifyHistoricalExpansion(h.session,
+    secondHash,second.TargetAccountId),true);
+  h.history.get(secondHash).signatures=h.history.get(secondHash).signatures.slice(0,1);
+  await assert.rejects(h.api.verifyHistoricalExpansion(h.session,
+    secondHash,second.TargetAccountId),/root and child signatures/);
+  assert.equal(h.submissions(),2,'Historical expansion review published again');
+  h.close();
+});
+
 test('linked verified recovery requires signed XDR and encrypted journal CAS, never a replay',()=>{
   const root=path.join(__dirname,'..');
   const core=path.join(root,'src','StellarVault.Core','Services');
