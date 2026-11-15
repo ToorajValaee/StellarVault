@@ -55,3 +55,6 @@ The previously advisory pre-broadcast hash is now durably CAS-checkpointed for *
 
 ## 2026-11-15 linked historical skh/skc proof increment
 Read-only Horizon historical S-key record operation inspector checks a single transaction's manifest + ordered encrypted chunks and SHA-256; this is **not** signer authorization, authenticated vault lineage, historical decryption to the reviewed record, or durable confirmation. The queue remains fail-closed. Executable tests pending local validation.
+
+## 2026-11-15 linked expansion historical operation shape
+A bounded read-only Horizon inspector now independently checks that the linked expansion transaction's CreateAccount, SetOptions and parent ManageData pointer have the expected operation structure, including optional native reserve top-up. The encrypted expansion journal remains blocked: observing a successful transaction and matching operation shape is **not** proof of historical signed authorization or parent lineage. Source committed; local mocked tests, live Testnet and security assessment pending.
