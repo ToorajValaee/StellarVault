@@ -1440,3 +1440,40 @@ html[data-theme="dark"] .sv-native-shell :is(
 .sv-native-shell .sv-record-inspector-inline-surface .sv-inspector-tabs {
   display:flex;gap:8px;margin:12px 0;
 }
+
+/* Native HD and S-key now share the same VaultExplorerTree and
+   VaultExplorerItemRow markup, rather than separate folder/record widgets. */
+.sv-native-shell .sv-native-explorer > .sv-explorer-tree {
+  display:flex;flex-direction:column;gap:4px;min-width:0;
+  width:100%;max-height:260px;overflow-y:auto;
+  border:1px solid var(--sv-work-line,#dce8e5);
+  background:var(--sv-work-panel,#fff);
+  border-radius:12px;padding:9px;
+}
+.sv-native-shell .sv-native-explorer .sv-tree-node {
+  min-width:0;padding-left:calc(var(--sv-tree-depth,0) * 12px);
+}
+.sv-native-shell .sv-native-explorer .sv-tree-item {
+  display:flex;gap:8px;align-items:center;min-width:0;width:100%;
+  padding:9px 8px;border:0;border-radius:8px;text-align:left;
+  background:transparent;color:inherit;
+}
+.sv-native-shell .sv-native-explorer .sv-tree-item.selected {
+  background:rgba(8,125,86,.11);font-weight:700;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row {
+  display:flex;gap:8px;align-items:center;min-width:0;width:100%;
+  padding:6px;border:1px solid var(--sv-work-line,#dce8e5);
+  background:var(--sv-work-panel,#fff);border-radius:12px;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row > .record-card {
+  flex:1;min-width:0;border:0!important;background:transparent!important;
+  box-shadow:none!important;text-align:left;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row > .sv-object-actions {
+  flex:0 0 auto;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row .sv-object-type,
+.sv-native-shell .sv-native-object-grid > .sv-object-row .sv-object-storage {
+  display:none;
+}
