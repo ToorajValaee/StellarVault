@@ -2,10 +2,12 @@
 @using StellarVault.Core.Services
 @using System.Text.Json
 @using System.Security.Cryptography
+@using System.IO.Pipelines
 @using StellarVault.Pwa.Services
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
 @inject IStellarLedgerRecords Ledger
+@inject IVaultNativeFileAccess NativeFiles
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
 @inject VaultDeviceRetentionGate Retention
@@ -449,7 +451,10 @@ else
                             <div class="sv-inspector-more-menu">
                                 <button type="button" @onclick='() => CopyValueAsync(_selected.Id)'>Copy record ID</button>
                                 @if (!IsLedgerFile(_selected)) { <button type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
-                                <button class="sv-object-delete" type="button" @onclick="() => SelectDelete(_selected)">Delete</button>
+                                @if (!VaultLinkedTreeFilePolicy.IsRootRecord(_selected))
+                                {
+                                    <button class="sv-object-delete" type="button" @onclick="() => SelectDelete(_selected)">Delete</button>
+                                }
                             </div>
                         </details>
                         <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
@@ -479,7 +484,13 @@ else
                 <div class="sv-inspector-section-label">Details</div>
                 @if (IsLedgerFile(_selected))
                 {
-                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
+                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in verified Stellar ledger nodes.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">VERIFY DECRYPTED FILE</button>
+                        @if (_verifiedTreeDownload is not null)
+                        {
+                            <button class="pixel-button primary" type="button" @onclick="SaveVerifiedTreeFileAsync">SAVE VERIFIED FILE…</button>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }
+                    </div>
                 }
                 else
                 {
@@ -1175,38 +1186,121 @@ else
 
 
     [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
-    private static bool IsLedgerFile(LedgerRecordItem item) => LedgerFileProtocol.IsFile(item);
-    private async Task DownloadLedgerFileAsync()
-    {
-        if (_selected is null || !IsLedgerFile(_selected)) return;
-        _fileDownloadStatus = "RECOVERING ENCRYPTED FILE FROM STELLAR...";
-        try
-        {
-            // Re-read the full authenticated ledger snapshot rather than trusting
-            // an old in-memory list that may omit parts from a recent publication.
-            var all = await Ledger.ReadAsync();
-            var current = all.SingleOrDefault(r => r.Id == _selected.Id)
-                ?? throw new InvalidDataException("File manifest is no longer available.");
-            var bytes = LedgerFileProtocol.DecodeFile(current, all);
-            try
-            {
-                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
-                    LedgerFileProtocol.FileName(current), bytes);
-                _fileDownloadStatus = "File verified and downloaded.";
-            }
-            finally { CryptographicOperations.ZeroMemory(bytes); }
-        }
-        catch (Exception ex)
-        {
-            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.Message;
-        }
-    }
+    private static bool IsLedgerFile(LedgerRecordItem item) =>
+        LedgerFileProtocol.IsFile(item) || VaultLinkedTreeFilePolicy.IsRootRecord(item);
+
+    private sealed record VerifiedTreeDownload(string RootId, string FileName,
+        IReadOnlyList<LedgerRecordItem> Records);
+    private VerifiedTreeDownload? _verifiedTreeDownload;
     private string? _fileDownloadStatus;
     private LedgerRecordItem? _selected;
     private bool _revealed;
-    private void OpenRecord(LedgerRecordItem item) { _editorOpen = false; _selected = item; _recordInspectorTab = "details"; _revealed = false; _fileDownloadStatus = null; }
-    private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
-    private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
+
+    private async Task DownloadLedgerFileAsync()
+    {
+        if (_selected is null || !IsLedgerFile(_selected)) return;
+        _verifiedTreeDownload = null;
+        _fileDownloadStatus = "VERIFYING ENCRYPTED FILE FROM STELLAR...";
+        try
+        {
+            var all = await Ledger.ReadAsync();
+            var current = all.SingleOrDefault(r => r.Id == _selected.Id)
+                ?? throw new InvalidDataException("File root is no longer available.");
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(current))
+            {
+                // This pass never exports plaintext or opens a file picker.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    current.Id, all, Stream.Null);
+                _verifiedTreeDownload = new VerifiedTreeDownload(
+                    current.Id, verified.FileName, all);
+                _fileDownloadStatus = "File integrity verified. Choose SAVE VERIFIED FILE to select a destination.";
+            }
+            else
+            {
+                var bytes = LedgerFileProtocol.DecodeFile(current, all);
+                try
+                {
+                    await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                        LedgerFileProtocol.FileName(current), bytes);
+                    _fileDownloadStatus = "Legacy file verified and downloaded.";
+                }
+                finally { CryptographicOperations.ZeroMemory(bytes); }
+            }
+        }
+        catch (Exception ex)
+        {
+            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.GetType().Name;
+        }
+    }
+
+    private async Task SaveVerifiedTreeFileAsync()
+    {
+        if (_verifiedTreeDownload is not { } prepared) return;
+        _verifiedTreeDownload = null;
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 256 * 1024,
+            resumeWriterThreshold: 128 * 1024));
+        using var cancel = new CancellationTokenSource();
+        var producer = Task.Run(async () =>
+        {
+            await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+            try
+            {
+                await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, prepared.Records, writer, cancel.Token);
+                await writer.FlushAsync(cancel.Token);
+                await pipe.Writer.CompleteAsync();
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex);
+                throw;
+            }
+        });
+        try
+        {
+            await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+            if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                throw new IOException("File export was cancelled.");
+            await producer;
+            _fileDownloadStatus = "Streamed verified file saved.";
+        }
+        catch (Exception ex)
+        {
+            cancel.Cancel();
+            try { await producer; } catch { /* Preserve export error. */ }
+            _fileDownloadStatus = "File export failed: " + ex.GetType().Name +
+                ". Verify the file again before retrying.";
+        }
+        finally { await pipe.Reader.CompleteAsync(); }
+    }
+
+    private void OpenRecord(LedgerRecordItem item)
+    {
+        _editorOpen = false;
+        _selected = item;
+        _recordInspectorTab = "details";
+        _revealed = false;
+        _fileDownloadStatus = null;
+        _verifiedTreeDownload = null;
+    }
+
+    private void CloseRecord()
+    {
+        if (_busy) return;
+        _selected = null;
+        _revealed = false;
+        _fileDownloadStatus = null;
+        _verifiedTreeDownload = null;
+    }
+
+    private void CancelDelete()
+    {
+        if (_busy) return;
+        _deleteCandidate = null;
+        _deleteEstimate = null;
+    }
+
     private static string? SafeRecordUrl(string? value)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return null;
@@ -1261,7 +1355,10 @@ else
     }
     private string? _error;
     private List<LedgerRecordItem> Folders => _records.Where(r => r.IsFolder).ToList();
-    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder && !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)).ToList();
+    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder &&
+        !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+        (!r.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal) ||
+         VaultLinkedTreeFilePolicy.IsRootRecord(r))).ToList();
     private IEnumerable<LedgerRecordItem> Breadcrumbs
     {
         get {
