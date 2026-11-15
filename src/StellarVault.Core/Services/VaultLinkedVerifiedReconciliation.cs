@@ -130,8 +130,23 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 if (!await store.TryReplaceAsync(entry, confirmed, CancellationToken.None))
                     throw new InvalidOperationException(
                         "The encrypted journal changed concurrently; no confirmation was persisted.");
+                var released = false;
+                if (ledger is IStellarSecretKeyVerifiedSessionRelease session)
+                {
+                    try
+                    {
+                        await session.ReleaseVerifiedAsync(txHash, CancellationToken.None);
+                        released = true;
+                    }
+                    catch
+                    {
+                        // Durable confirmation is final. A failed volatile
+                        // marker release cannot roll it back or trigger retry.
+                    }
+                }
                 return new(mutationId, txHash, true,
-                    "Exact signed historical XDR, root signature and decrypted record were checked against the approved mutation. The encrypted journal was durably confirmed; no transaction was resubmitted.");
+                    "Exact signed historical XDR, root signature and decrypted record were checked against the approved mutation. The encrypted journal was durably confirmed; no transaction was resubmitted." +
+                    (released ? "" : " The signing session may need to be reopened before publishing again."));
             }
             finally
             {
