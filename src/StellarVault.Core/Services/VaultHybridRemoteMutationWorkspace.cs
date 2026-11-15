@@ -351,7 +351,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         item.Title is { Length: > 0 and <= 256 } &&
         !item.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) &&
         !item.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) &&
-        !item.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal);
+        !item.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+        !item.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal);
 
     private static void ValidateUpdate(LedgerRecordItem previous,
         LedgerRecordDraft proposed, IReadOnlyList<LedgerRecordItem> inventory)
