@@ -8,7 +8,7 @@ namespace StellarVault.Pwa.Services;
 /// Browser file picker/export adapter. File bytes are transferred directly
 /// through JS interop and are never written to localStorage or browser caches.
 /// </summary>
-public sealed class BrowserVaultNativeFileAccess(IJSRuntime js) : IVaultNativeFileAccess
+public sealed class BrowserVaultNativeFileAccess(IJSRuntime js) : IVaultNativeFileAccess, IVaultDeferredFileSaveAccess
 {
     public sealed record BrowserPick(string? FileName, string? ContentType, string? ContentBase64);
 
@@ -54,6 +54,33 @@ public sealed class BrowserVaultNativeFileAccess(IJSRuntime js) : IVaultNativeFi
         await js.InvokeVoidAsync("stellarVaultV2Download.saveStream",
             CancellationToken.None, fileName, reference);
         return true;
+    }
+
+    public async Task<IVaultPendingFileSave?> SelectSaveDestinationAsync(string fileName)
+    {
+        StellarLedgerFileProtocol.ValidateName(fileName);
+        // The JS function calls showSaveFilePicker synchronously, before
+        // any .NET ledger read, encryption or other asynchronous continuation.
+        var handle = await js.InvokeAsync<IJSObjectReference>(
+            "stellarVaultV2Download.selectSaveDestination", fileName);
+        return new BrowserPendingFileSave(handle);
+    }
+
+    private sealed class BrowserPendingFileSave(IJSObjectReference handle)
+        : IVaultPendingFileSave
+    {
+        private bool _used;
+        public async Task SaveAsync(Stream source)
+        {
+            if (_used) throw new InvalidOperationException("Export destination already used.");
+            _used = true;
+            ArgumentNullException.ThrowIfNull(source);
+            if (!source.CanRead) throw new ArgumentException("Readable export required.", nameof(source));
+            using var reference = new DotNetStreamReference(source, leaveOpen: true);
+            await handle.InvokeVoidAsync("writeStream", reference);
+        }
+
+        public ValueTask DisposeAsync() => handle.DisposeAsync();
     }
 
     private sealed class ZeroingMemoryStream(byte[] bytes) : MemoryStream(bytes, writable: false)
