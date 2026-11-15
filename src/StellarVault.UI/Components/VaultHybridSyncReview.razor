@@ -276,8 +276,8 @@
                     <p>Account: <code>@_selectedQuote.AccountId</code></p>
                     <p>Network: <code>@Networks.Network</code></p>
                     <p>Record mutation: <code>@_selectedQuote.MutationId</code></p>
-                    <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm XLM</strong></p>
-                    <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm XLM</strong></p>
+                    <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm native asset</strong></p>
+                    <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm native asset</strong></p>
                     <p>Draft fingerprint: <code>@(_selectedQuote.DraftSha256[..12])</code></p>
                     @if (_selectedKind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
                         VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
@@ -291,7 +291,7 @@
                         </p>
                     }
                     <p class="terminal-alert warning" role="alert">
-                        Submitting may spend real XLM. This action writes the local draft
+                        Submitting may spend real native asset. This action writes the local draft
                         to Stellar. Even if a transaction hash is returned, the queue will
                         remain Uncertain until independently verified reconciliation.
                         Update historical confirmation now requires the exact manifest-commit
@@ -306,7 +306,7 @@
                     </label>
                     @if (Networks.Network == "public")
                     {
-                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend real XLM and is not reversible.</p>
+                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend real native asset and is not reversible.</p>
                         <label class="sv-biometric-choice">
                             <input type="checkbox" @bind="_mainnetApproved" disabled="@_busy" />
                             I understand this transaction will be submitted to STELLAR PUBLIC MAINNET.
