@@ -1478,5 +1478,5 @@ test('linked SVFILE2 multipart staging requires historical part confirmation and
   assert.match(ui,/StageMultipartFileAsync\(/);
   assert.match(ui,/StellarLedgerFileProtocol\.IsFile\(file\)/);
   assert.match(smoke,/RunMultipartLinkedSmokeAsync\(\)/);
-  assert.match(smoke,/multipart file part\/manifest/); // label documenting the expected sequence
+  assert.match(smoke,/Multipart manifest could publish before its file parts/);
 });
