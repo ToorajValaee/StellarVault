@@ -23,7 +23,7 @@ function harness(passphrase=TEST) {
     thresholds:{low_threshold:1,med_threshold:1,high_threshold:1},
     subentry_count:0,num_sponsoring:0,num_sponsored:0
   });
-  let childCounter=0,submitted=0,failSubmission=false;
+  let childCounter=0,submitted=0,failSubmission=false,mismatchHash=false;
   const format=v=>Number(v).toFixed(7);
   class Server {
     async loadAccount(id) {
@@ -67,7 +67,7 @@ function harness(passphrase=TEST) {
           }
         }
       }
-      return {successful:true,hash:submitted.toString(16).padStart(64,'0')};
+      return {successful:true,hash:mismatchHash?'f'.repeat(64):submitted.toString(16).padStart(64,'0')};
     }
   }
   class TransactionBuilder {
@@ -124,6 +124,7 @@ function harness(passphrase=TEST) {
     close:()=>api.close(session),
     submissions:()=>submitted,
     failNextSubmission:()=>{failSubmission=true;},
+    mismatchNextHash:()=>{mismatchHash=true;},
     session
   };
 }
@@ -339,6 +340,18 @@ test('signed transaction hash is stable before failed Horizon submission and can
   assert.equal(diagnostic.TransactionHash,'1'.padStart(64,'0'));
   assert.equal(h.submissions(),1);
   await assert.rejects(h.plan('create','fedcba9876543210',record),/unresolved/);
+  h.close();
+});
+
+test('mismatched Horizon hash cannot erase the pre-broadcast signed identity',async()=>{
+  const h=harness();await h.open();
+  const q=await h.plan('create',recordId,record);
+  h.mismatchNextHash();
+  await assert.rejects(h.submit(q.QuoteId),/different transaction hash/);
+  const diagnostic=h.inspectUncertain();
+  assert.equal(diagnostic.TransactionHash,'1'.padStart(64,'0'));
+  assert.equal(h.submissions(),1);
+  await assert.rejects(h.plan('expand',null,null),/unresolved/);
   h.close();
 });
 
@@ -1064,4 +1077,24 @@ test('PWA device storage choice stays outside credential tabs and keeps mode-sco
   assert.ok(actions>formEnd,'Unlock action must remain outside credential form');
   assert.match(home,/type="submit" form="sv-access-form"/);
   assert.match(css,/sv-entry-actions-outside/);
+});
+
+test('linked queue binds volatile signed transaction identity and restart receipt inspection to network scope',()=>{
+  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const identifier=fs.readFileSync(path.join(core,'VaultLinkedSignedSubmissionIdentity.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const expansion=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
+  const recovery=fs.readFileSync(path.join(core,'VaultLinkedDraftRecoveryReview.cs'),'utf8');
+  assert.match(source,/const rawHash=tx\.hash\(\)/);
+  assert.match(source,/TransactionHash:signedHash/);
+  assert.match(source,/result\.hash\.toLowerCase\(\)!==signedHash/);
+  assert.match(identifier,/diagnostic\.NetworkPassphrase != networkPassphrase/);
+  assert.match(identifier,/diagnostic\.TargetAccountId != targetAccountId/);
+  assert.match(identifier,/ledger\.ConnectionEpoch != signerEpoch/);
+  assert.match(publisher,/VaultLinkedSignedSubmissionIdentity\.TryReadAsync/);
+  assert.match(expansion,/VaultLinkedSignedSubmissionIdentity\.TryReadAsync/);
+  assert.match(recovery,/BuildDurableReceiptQuery\(root, item\)/);
+  assert.match(recovery,/item\.TransactionHash is not \{ Length: 64 \} hash/);
+  assert.match(recovery,/ledger\.ConnectedNetworkPassphrase != expectedPassphrase/);
+  assert.doesNotMatch(recovery,/store\.TryReplaceAsync|VaultSyncState\.Confirmed/);
 });
