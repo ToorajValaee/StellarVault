@@ -119,7 +119,7 @@
     private IReadOnlyDictionary<string, string> LocalFolderOptions =>
         _items.Where(x => !x.IsCorrupt &&
             x.Kind == VaultMutationKind.CreateFolder &&
-            x.State is VaultSyncState.Pending or VaultSyncState.Confirmed)
+            (x.State is VaultSyncState.Pending or VaultSyncState.Confirmed))
             .GroupBy(x => x.EntityId, StringComparer.Ordinal)
             .ToDictionary(x => x.Key, x => x.First().Draft.Title + " (local draft)",
                 StringComparer.Ordinal);
