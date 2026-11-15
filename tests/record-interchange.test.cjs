@@ -69,3 +69,16 @@ test('import previews are bound to the same unlocked account and network', () =>
   assert.match(core, /createdRecordIds\.Add\(newId\)/);
 });
 
+
+test('record export uses fresh account/network pinned ledger reads, not cached UI records', () => {
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  assert.match(panel, /private async Task<\(VaultRecordInterchange\.Archive Archive, string Scope\)>/);
+  assert.match(panel, /await LinkedLedger\.ReadAsync\(\)/);
+  assert.match(panel, /await HdLedger\.ReadAsync\(\)/);
+  assert.match(panel, /await HdLedger\.InspectAccountInfoAsync\(\)/);
+  assert.match(panel, /LinkedLedger\.ConnectionEpoch != epoch/);
+  assert.match(panel, /Strategy != requestedStrategy/);
+  assert.match(panel, /await RequireSameExportScopeAsync\(exportScope\)/);
+  assert.doesNotMatch(panel, /VaultRecordInterchange\.FromPublished\(Records\)/,
+    'Never export secrets from the view\'s stale record cache.');
+});
