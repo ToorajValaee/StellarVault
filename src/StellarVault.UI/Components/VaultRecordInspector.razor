@@ -169,7 +169,9 @@
 </div>
 
 @code {
-    private readonly string _titleId = "sv-record-title-" + Guid.NewGuid().ToString("N")[..8];
+    // Exactly one active workspace strategy/record inspector exists per host.
+    // Retain the established ID to preserve inspector sizing and theme rules.
+    private const string _titleId = "sv-record-title";
     private string _tab = "details";
     private bool _revealed;
     [Parameter, EditorRequired] public LedgerRecordItem Item { get; set; } = default!;
