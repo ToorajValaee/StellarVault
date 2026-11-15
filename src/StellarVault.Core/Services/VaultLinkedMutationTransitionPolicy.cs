@@ -15,7 +15,9 @@ public static class VaultLinkedMutationTransitionPolicy
         if (previous.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
             next.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
             previous.Kind is not (VaultMutationKind.CreateRecord or
-                VaultMutationKind.CreateFolder or VaultMutationKind.ExtendLinkedChain) ||
+                VaultMutationKind.CreateFolder or VaultMutationKind.UpdateRecord or
+                VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteRecord or
+                VaultMutationKind.DeleteFolder or VaultMutationKind.ExtendLinkedChain) ||
             previous.Id != next.Id || previous.AccountId != next.AccountId ||
             previous.NetworkId != next.NetworkId || previous.EntityId != next.EntityId ||
             previous.Kind != next.Kind || previous.CreatedUtc != next.CreatedUtc ||
