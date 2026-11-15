@@ -338,15 +338,11 @@ public sealed class VaultLinkedDraftPublication(
                         var observed = await ledger.ReadAsync(ct);
                         RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
                         var published = observed.SingleOrDefault(x => x.Id == original.EntityId);
-                        if (published is null || published.IsFolder != draft.IsFolder ||
-                            published.Title != draft.Title || published.Content != draft.Content ||
-                            published.FolderId != draft.FolderId ||
-                            (published.UserName ?? "") != (draft.UserName ?? "") ||
-                            (published.Url ?? "") != (draft.Url ?? "") ||
-                            (published.Notes ?? "") != (draft.Notes ?? "") ||
-                            !(published.Tags ?? []).SequenceEqual(draft.Tags ?? [], StringComparer.Ordinal))
+                        if (Deletion(original.Kind)
+                            ? published is not null
+                            : published is null || !SameRecord(published, draft))
                             throw new InvalidDataException(
-                                "Confirmed transaction hash did not match the published draft.");
+                                "Linked transaction response did not match the expected current record mutation.");
                         // A matching CURRENT account snapshot does not prove that
                         // this exact transaction wrote the encrypted manifest and
                         // chunks. Preserve the durable quarantine until an
