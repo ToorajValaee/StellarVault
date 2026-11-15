@@ -3,7 +3,7 @@
    quote, encryption, signer, verification and safe deletion authorization. *@
 <div class="@(Embedded ? "sv-record-inspector-inline" : "modal-backdrop sv-record-inspector-backdrop")"
      @onclick="() => OnClose.InvokeAsync()">
-    <section class="record-modal terminal-panel sv-record-inspector"
+    <section class="record-modal terminal-panel @(Embedded ? "sv-record-inspector-inline-surface" : "sv-record-inspector")"
              role="region" aria-labelledby="@_titleId"
              @onclick:stopPropagation="true">
         @if (!Embedded)
