@@ -226,10 +226,8 @@ public sealed class VaultLinkedDraftWorkspace(
                 ValidateDraft(draft);
                 if (draft.IsFolder != original.IsFolder)
                     throw new InvalidOperationException("Record type cannot change during an update.");
-                if (draft.FolderId == entityId ||
-                    draft.FolderId is { Length: > 0 } parent &&
-                    !remote.Any(x => x.Id == parent && x.IsFolder))
-                    throw new InvalidOperationException("Updated record parent must be a published folder.");
+                VaultLinkedFolderHierarchyPolicy.RequirePublishedAcyclicParent(
+                    entityId, draft.FolderId, remote);
                 if (original.IsFolder && original.FolderId != draft.FolderId &&
                     remote.Any(x => x.FolderId == entityId) &&
                     draft.FolderId is not null)
