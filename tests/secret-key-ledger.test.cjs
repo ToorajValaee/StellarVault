@@ -1204,6 +1204,9 @@ test('linked expansion historical operation verification is read-only and never 
   assert.match(inspector,/create_account/);
   assert.match(inspector,/set_options/);
   assert.match(inspector,/master_key_weight/);
+  assert.match(inspector,/GetString\(create, "funder"\) != rootAccount/);
+  assert.match(inspector,/PositiveXlm\(GetString\(create, "starting_balance"\)\)/);
+  assert.match(inspector,/PositiveXlm\(GetString\(funding, "amount"\)\)/);
   assert.match(inspector,/sv:next:v1/);
   assert.match(inspector,/transaction_successful/);
   assert.doesNotMatch(inspector,/TryReplaceAsync|SubmitApprovedAsync|VaultSyncState\.Confirmed/);
