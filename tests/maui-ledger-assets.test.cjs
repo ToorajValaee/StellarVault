@@ -352,3 +352,17 @@ test('native HD file inspector authenticates SVTREE3 and exports through a bound
   assert.match(native, /await NativeFiles\.SaveAsync\(prepared\.FileName, reader\)/);
   assert.match(native, /CryptographicOperations\.ZeroMemory\(plaintext\)/);
 });
+
+
+test('native vault session strategy is explicit and both active modes fail closed', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(native, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(native, /ActiveMode == VaultWorkspaceMode\.ConflictingSessions/);
+  assert.match(native, /@onclick="LockConflictingNativeSessionsAsync"/);
+  assert.match(native, /await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(native, /Workflow\.Lock\(\)/);
+  assert.match(native, /await SecretLedger\.DisconnectAsync\(\)/);
+  assert.match(native, /await Ledger\.DisconnectAsync\(\)/);
+  assert.match(native, /_foregroundRevoked = true/);
+});
