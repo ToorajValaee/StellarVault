@@ -286,8 +286,7 @@ public static class VaultStreamingFileTree
 
     private static void RequireId(string? id)
     {
-        if (id is not { Length: 16 or 64 } ||
-            !id.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F'))
+        if (id is not { Length: 16 or 64 } || !id.All(Uri.IsHexDigit))
             throw new InvalidDataException("Invalid streaming file node ID.");
     }
 
