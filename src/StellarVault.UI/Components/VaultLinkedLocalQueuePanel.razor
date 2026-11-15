@@ -4,6 +4,8 @@
 @inject IStellarSecretKeyLedger Ledger
 @inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultLinkedQueueKeySession QueueKeys
+@inject VaultNetworkSelection Networks
+@inject VaultDeviceUnlockPreference DeviceUnlockPreference
 @inject VaultLinkedQueueInspection QueueInspection
 @inject VaultLinkedDraftWorkspace DraftWorkspace
 @inject VaultLinkedDraftPublication Publisher
@@ -57,6 +59,13 @@
                     <button type="button" class="pixel-button compact"
                             disabled="@(_busy || _passphrase.Length < 12)"
                             @onclick="UnlockAsync">Unlock encrypted local drafts</button>
+                    @if (_deviceUnlockAvailable)
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@_busy" @onclick="UnlockWithDeviceAsync">
+                            Unlock encrypted drafts with device
+                        </button>
+                    }
                 }
                 else if (Ledger.IsConnected)
                 {
@@ -1021,6 +1030,16 @@
             _message = _exists == true
                 ? "Encrypted device credentials found. Unlock with the separate local passphrase."
                 : "No local credentials found for this S-key account and network.";
+            _deviceUnlockAvailable = false;
+            if (_exists == true && DeviceUnlockKey() is { } deviceKey)
+            {
+                try
+                {
+                    _deviceUnlockAvailable = await JS.InvokeAsync<bool>(
+                        "stellarVaultBiometric.has", deviceKey);
+                }
+                catch { /* Passkey APIs may be unavailable in the native WebView. */ }
+            }
         }
         catch
         {
@@ -1028,6 +1047,33 @@
             _message = "Local encrypted credentials could not be verified for this public account and selected network.";
         }
         finally { _busy = false; }
+    }
+
+    private bool _deviceUnlockAvailable;
+
+    private string? DeviceUnlockKey()
+    {
+        var root = Ledger.IsConnected ? Ledger.RootAccountId : _offlineRoot.Trim();
+        return StellarAccountAddress.IsValid(root)
+            ? Networks.CredentialKey(root) : null;
+    }
+
+    private async Task UnlockWithDeviceAsync()
+    {
+        if (_busy || !_deviceUnlockAvailable || _exists != true) return;
+        var key = DeviceUnlockKey();
+        if (key is null) return;
+        try
+        {
+            _passphrase = await JS.InvokeAsync<string>(
+                "stellarVaultBiometric.unlock", key);
+            await ActivateAsync(create: false);
+        }
+        catch
+        {
+            _message = "Device unlock is unavailable or was canceled. Use your separate local passphrase.";
+        }
+        finally { _passphrase = string.Empty; }
     }
 
     private Task CreateAsync() => ActivateAsync(create: true);
@@ -1055,6 +1101,24 @@
             _message = QueueKeys.IsOfflineOnly
                 ? "Local encrypted drafts unlocked without Horizon. No transaction can be submitted in this mode."
                 : "Independent encrypted device storage unlocked. Publication requires a separate fee review.";
+            if (DeviceUnlockPreference.Requested)
+            {
+                DeviceUnlockPreference.Reset();
+                if (DeviceUnlockKey() is { } key)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync(
+                            "stellarVaultBiometric.enroll", key, _passphrase);
+                        _deviceUnlockAvailable = true;
+                        _message += " Device unlock enrolled for this encrypted queue. The S-key was not saved.";
+                    }
+                    catch
+                    {
+                        _message += " Device unlock could not be enrolled on this device. Continue using your local passphrase.";
+                    }
+                }
+            }
             try
             {
                 _drafts = await DraftWorkspace.ListAsync();
