@@ -26,6 +26,20 @@
            cleared. If this screen remains, close and reopen the app before reconnecting.</p>
     </section>
 }
+else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel" role="alert">
+        <h2>Conflicting vault sessions</h2>
+        <p>Mnemonic/HD and independent Secret Key sessions are both active.
+           Vault actions are disabled until both are locked. No transaction was sent.</p>
+        <button type="button" class="pixel-button primary" disabled="@_ledgerBusy"
+                @onclick="LockConflictingNativeSessionsAsync">Lock both vaults</button>
+        @if (_conflictingLockError is not null)
+        {
+            <p role="alert" class="terminal-alert warning">@_conflictingLockError</p>
+        }
+    </section>
+}
 else
 {
     <div class="sv-native-shell native-@HostPlatform.ToLowerInvariant()">
@@ -79,8 +93,8 @@ else
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
-            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Home</span></button>
-            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Vault</span></button>
+            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Vault</span></button>
+            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Device</span></button>
             <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
             <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
@@ -520,6 +534,43 @@ else
 }
 
 @code {
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
+    private string? _conflictingLockError;
+
+    private async Task LockConflictingNativeSessionsAsync()
+    {
+        if (_ledgerBusy) return;
+        _ledgerBusy = true;
+        bool failed = false;
+        try { await LinkedQueueKeys.LockAsync(); } catch { failed = true; }
+        try { Workflow.Lock(); } catch { failed = true; }
+        try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
+        catch { failed = true; }
+        try { if (Ledger.IsConnected) await Ledger.DisconnectAsync(); }
+        catch { failed = true; }
+        _ledgerMnemonic = string.Empty;
+        _ledgerSecretKey = string.Empty;
+        _passphrase = string.Empty;
+        _localConsent = false;
+        Retention.Reset();
+        if (failed)
+        {
+            // A failed native/WebView signer teardown cannot be bypassed by
+            // switching account strategies or navigating to another tab.
+            _foregroundRevoked = true;
+            _conflictingLockError = "Signer cleanup could not be confirmed. Restart the app before unlocking again.";
+        }
+        else
+        {
+            _conflictingLockError = null;
+            ClearLedgerView();
+            _nativePage = "stellar";
+        }
+        _ledgerBusy = false;
+    }
+
     [Parameter] public string HostPlatform { get; set; } = "Android";
     private string _nativePage = "stellar";
     private string _localMode = "records";
