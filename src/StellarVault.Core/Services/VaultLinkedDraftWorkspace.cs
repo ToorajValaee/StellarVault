@@ -17,7 +17,8 @@ public sealed class VaultLinkedDraftWorkspace(
 {
     public sealed record DraftItem(string MutationId, string EntityId,
         bool IsFolder, string Title, string? FolderId, VaultSyncState State,
-        DateTimeOffset CreatedUtc, bool IsCorrupt, bool IsJournal = false);
+        DateTimeOffset CreatedUtc, bool IsCorrupt, bool IsJournal = false,
+        VaultMutationKind Kind = VaultMutationKind.CreateRecord);
 
     public sealed record DraftDetail(string MutationId,
         LedgerRecordDraft Draft, string PayloadSha256);
@@ -289,12 +290,13 @@ public sealed class VaultLinkedDraftWorkspace(
                 ?? throw new KeyNotFoundException("Local draft does not exist.");
             if (current.State != VaultSyncState.Pending ||
                 current.TransactionHash is not null ||
-                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                    VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder))
                 throw new InvalidOperationException("Only unpublished local drafts are editable.");
             var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(current.EncryptedPayload)
                 ?? throw new InvalidDataException("Encrypted draft cannot be decoded.");
             ValidateDraft(draft);
-            if (draft.IsFolder != (current.Kind == VaultMutationKind.CreateFolder))
+            if (draft.IsFolder != (current.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder))
                 throw new InvalidDataException("Encrypted draft kind is inconsistent.");
             Check(context);
             return new(current.Id, draft, Convert.ToHexStringLower(
@@ -328,8 +330,9 @@ public sealed class VaultLinkedDraftWorkspace(
             if (current.State != VaultSyncState.Pending ||
                 current.TransactionHash is not null ||
                 current.SignedFileEntries is { Length: > 0 } ||
-                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
-                draft.IsFolder != (current.Kind == VaultMutationKind.CreateFolder))
+                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                    VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
+                draft.IsFolder != (current.Kind is VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder))
                 throw new InvalidOperationException("Only unpublished drafts of the same type may be revised.");
             var actual = SHA256.HashData(current.EncryptedPayload);
             try
@@ -441,7 +444,7 @@ public sealed class VaultLinkedDraftWorkspace(
                     // not an encrypted record or an editable local folder.
                     result.Add(new(item.Id, item.EntityId, false,
                         "Linked account capacity expansion", null,
-                        item.State, item.CreatedUtc, false, true));
+                        item.State, item.CreatedUtc, false, true, item.Kind));
                     continue;
                 }
                 try
@@ -449,18 +452,20 @@ public sealed class VaultLinkedDraftWorkspace(
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
                         ?? throw new InvalidDataException("Missing encrypted local draft.");
                     ValidateDraft(draft);
-                    if (draft.IsFolder != (item.Kind == VaultMutationKind.CreateFolder))
+                    if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
+                        VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder))
                         throw new InvalidDataException("Encrypted draft type mismatch.");
                     result.Add(new(item.Id, item.EntityId, draft.IsFolder,
-                        draft.Title, draft.FolderId, item.State, item.CreatedUtc, false));
+                        draft.Title, draft.FolderId, item.State, item.CreatedUtc, false, false, item.Kind));
                 }
                 catch (Exception ex) when (ex is JsonException or InvalidDataException or
                                            ArgumentException or InvalidOperationException)
                 {
                     result.Add(new(item.Id, item.EntityId,
-                        item.Kind == VaultMutationKind.CreateFolder,
+                        item.Kind is VaultMutationKind.CreateFolder or
+                            VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder,
                         "UNREADABLE ENCRYPTED DRAFT", null,
-                        item.State, item.CreatedUtc, true));
+                        item.State, item.CreatedUtc, true, false, item.Kind));
                 }
             }
             Check(context);
