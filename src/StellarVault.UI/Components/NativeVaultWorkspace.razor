@@ -1,6 +1,7 @@
 @using StellarVault.UI.Components
 @using StellarVault.Core.Services
 @using Microsoft.JSInterop
+@using System.IO.Pipelines
 @inject VaultSessionManager Sessions
 @inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject VaultSessionWorkflow Workflow
@@ -321,7 +322,9 @@ else
                                           CanEdit="false"
                                           CanDelete="false"
                                           FileStatus="_verifiedFileMessage"
-                                          CanSaveVerifiedFile="@StellarLedgerFileProtocol.IsFile(_selectedRecord)"
+                                          CanSaveVerifiedFile="@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ||
+                                               (_verifiedNativeTree is not null &&
+                                                _verifiedNativeTree.RootId == _selectedRecord.Id))"
                                           OnClose="ResetSelection"
                                           OnCopy="CopyNativeRecordValueAsync"
                                           OnVerifyFile="VerifySelectedFile"
@@ -978,26 +981,55 @@ else
         finally { _ledgerBusy = false; }
     }
 
-    private void VerifySelectedFile()
+    private sealed record VerifiedNativeTree(string RootId, string FileName,
+        string RootAccount, string Network, IReadOnlyList<LedgerRecordItem> Snapshot);
+    private VerifiedNativeTree? _verifiedNativeTree;
+
+    private async Task VerifySelectedFile()
     {
         _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
         var selected = _selectedRecord;
-        if (selected is null || !StellarLedgerFileProtocol.IsFile(selected)) return;
+        if (selected is null || !VaultPublishedFileClassification.IsFile(selected) ||
+            !Ledger.IsConnected) return;
         try
         {
-            // The shared codec validates the manifest, ordered parts and SHA-256.
-            // No file content is stored in app-private storage or shown in the UI.
-            var bytes = StellarLedgerFileProtocol.DecodeFile(selected, _ledgerRecords);
-            try
+            var fresh = await Ledger.ReadAsync();
+            var current = fresh.SingleOrDefault(x => x.Id == selected.Id)
+                ?? throw new InvalidDataException("The selected ledger file no longer exists.");
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(current))
             {
-                var name = StellarLedgerFileProtocol.FileName(selected);
-                _verifiedFileMessage = $"Verified file: {name} ({bytes.Length} bytes).";
+                // No unverified plaintext reaches a user-selected destination.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    current.Id, fresh, Stream.Null);
+                var rootAccount = _rootAccountId
+                    ?? throw new InvalidOperationException("The HD account is disconnected.");
+                if (!Ledger.IsConnected || _rootAccountId != rootAccount)
+                    throw new InvalidOperationException("The HD session changed during verification.");
+                _verifiedNativeTree = new(current.Id, verified.FileName,
+                    rootAccount, _ledgerNetwork, fresh);
+                _verifiedFileMessage = "File contents and hierarchy verified. Select Save verified file.";
             }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
+            else
+            {
+                // Legacy SVFILE readers remain read-only; all new files use
+                // bounded encrypted staging rather than whole-file arrays.
+                var bytes = StellarLedgerFileProtocol.DecodeFile(current, fresh);
+                try
+                {
+                    _verifiedFileMessage = "Verified legacy file: " +
+                        StellarLedgerFileProtocol.FileName(current) + " (" +
+                        bytes.Length + " bytes).";
+                }
+                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
+            }
         }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException or System.Text.Json.JsonException or InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidDataException or FormatException or
+                                     System.Text.Json.JsonException or InvalidOperationException or
+                                     System.Security.Cryptography.CryptographicException)
         {
-            _verifiedFileMessage = "File verification failed. An incomplete or corrupted ledger file cannot be opened.";
+            _verifiedNativeTree = null;
+            _verifiedFileMessage = "File integrity could not be verified. Nothing was exported.";
         }
     }
 
@@ -1005,28 +1037,81 @@ else
     {
         if (_ledgerBusy || !Ledger.IsConnected) return;
         var selected = _selectedRecord;
-        if (selected is null || !StellarLedgerFileProtocol.IsFile(selected)) return;
+        if (selected is null || !VaultPublishedFileClassification.IsFile(selected)) return;
         _ledgerBusy = true;
-        _verifiedFileMessage = null;
         byte[]? plaintext = null;
         try
         {
-            // Always reconstruct and re-verify just before exporting, rather
-            // than trusting an earlier verification of mutable ledger state.
-            plaintext = StellarLedgerFileProtocol.DecodeFile(selected, _ledgerRecords);
-            var name = StellarLedgerFileProtocol.FileName(selected);
-            StellarLedgerFileProtocol.ValidateName(name);
-            using var stream = new MemoryStream(plaintext, writable: false);
-            var saved = await NativeFiles.SaveAsync(name, stream);
-            _verifiedFileMessage = saved
-                ? "Unencrypted file exported to the location you selected."
-                : "File export was canceled or failed. Your vault remains unchanged.";
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(selected))
+            {
+                var prepared = _verifiedNativeTree;
+                _verifiedNativeTree = null; // one-shot, including failed picker
+                if (prepared is null || prepared.RootId != selected.Id ||
+                    prepared.RootAccount != _rootAccountId ||
+                    prepared.Network != _ledgerNetwork || !Ledger.IsConnected)
+                    throw new InvalidOperationException("Verify the tree file again after an account or network change.");
+
+                // A new read ensures the root and its referenced children have
+                // not been changed or removed since the user's verification.
+                var current = await Ledger.ReadAsync();
+                var original = prepared.Snapshot.Single(x => x.Id == prepared.RootId);
+                var latest = current.SingleOrDefault(x => x.Id == prepared.RootId);
+                if (latest != original || !current.SequenceEqual(prepared.Snapshot))
+                    throw new InvalidDataException("Ledger file changed since verification. Verify again.");
+
+                var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 256 * 1024,
+                    resumeWriterThreshold: 128 * 1024));
+                using var cancel = new CancellationTokenSource();
+                var producer = Task.Run(async () =>
+                {
+                    await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+                    try
+                    {
+                        await VaultLinkedTreeFilePolicy.ReadAsync(
+                            prepared.RootId, current, writer, cancel.Token);
+                        await writer.FlushAsync(cancel.Token);
+                        await pipe.Writer.CompleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await pipe.Writer.CompleteAsync(ex);
+                        throw;
+                    }
+                });
+                try
+                {
+                    await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+                    if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                        throw new IOException("File selection was canceled or write failed.");
+                    await producer;
+                    _verifiedFileMessage = "Authenticated file saved with bounded-memory streaming.";
+                }
+                catch
+                {
+                    cancel.Cancel();
+                    try { await producer; } catch { /* preserve original export failure */ }
+                    throw;
+                }
+                finally { await pipe.Reader.CompleteAsync(); }
+            }
+            else
+            {
+                var fresh = await Ledger.ReadAsync();
+                var current = fresh.Single(x => x.Id == selected.Id);
+                plaintext = StellarLedgerFileProtocol.DecodeFile(current, fresh);
+                var name = StellarLedgerFileProtocol.FileName(current);
+                using var stream = new MemoryStream(plaintext, writable: false);
+                _verifiedFileMessage = await NativeFiles.SaveAsync(name, stream)
+                    ? "Verified legacy file exported."
+                    : "Legacy file export canceled; no ledger data changed.";
+            }
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException or
-                                    System.Text.Json.JsonException or InvalidOperationException or
-                                    UnauthorizedAccessException or IOException or NotSupportedException)
+                                     System.Text.Json.JsonException or InvalidOperationException or
+                                     UnauthorizedAccessException or IOException or NotSupportedException or
+                                     System.Security.Cryptography.CryptographicException)
         {
-            _verifiedFileMessage = "File export failed. The file was not marked as exported.";
+            _verifiedFileMessage = "File export failed. Verify again before retrying.";
         }
         finally
         {
@@ -1048,6 +1133,7 @@ else
         _selectedRecord = null;
         _revealSecret = false;
         _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
     }
 
     private void SelectRecord(string id)
@@ -1055,6 +1141,7 @@ else
         _nativeDetailTab = "details";
         _revealSecret = false;
         _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
         var record = _ledgerRecords.SingleOrDefault(x => x.Id == id);
         if (record is null) { _selectedRecord = null; return; }
         if (record.IsFolder)
