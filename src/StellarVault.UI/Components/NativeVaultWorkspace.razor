@@ -311,18 +311,13 @@ else
                                 }
                             </select>
                             <div class="sv-native-object-grid">
-                            @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
-                                !VaultPublishedFileClassification.IsInternalNode(x) &&
-                                (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)) &&
-                                (string.IsNullOrWhiteSpace(_nativeSearch) || x.Title.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase) ||
-                                    (x.Tags is not null && x.Tags.Any(tag => tag.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase)))))
-                                .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
-                            {
-                                <VaultExplorerItemRow Item="item"
-                                                      Selected="@(_selectedRecord?.Id == item.Id)"
-                                                      CanEdit="false" CanDelete="false"
-                                                      OnOpen="SelectNativePublishedItem" />
-                            }
+                            <VaultPublishedItemsView Items="_ledgerRecords"
+                                                     FolderId="_selectedFolderId"
+                                                     Search="_nativeSearch"
+                                                     Collection="_nativeCollection"
+                                                     SelectedItemId="_selectedRecord?.Id"
+                                                     Busy="_ledgerBusy"
+                                                     OnOpen="SelectNativePublishedItem" />
                             </div>
                         </div>
                     </div>
