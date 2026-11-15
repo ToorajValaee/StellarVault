@@ -36,3 +36,9 @@ Do not retry or clear an uncertain journal just to make the pilot proceed. Prese
 ## Production gate — outside the pilot
 
 Before handling real secrets or funds, finish historical operation and signer verification with durable reconciliation, linked file and queue parity, cross-device recovery, security review and remediation, and the manual checks in `PWA-RELEASE-GATE.md`. Pilot success does not satisfy these release requirements.
+
+## Additional signed-transaction receipt checks (2026-11-15)
+- [ ] On an interrupted S-key submission, confirm the encrypted local queue retains the **signed transaction hash** when signing succeeded; that hash is public and cannot authorize retry.
+- [ ] Restart the browser/app and reconnect the same independent S-key signer. Read-only recovery should look up the durable hash using the selected HTTPS Horizon network even if volatile runtime diagnostics are gone.
+- [ ] Confirm that an observed receipt, a matching live record or a new linked tail **still cannot mark the queue Confirmed** without full historical record-operation/signature verification.
+- [ ] Verify manually that a failed pre-broadcast signing/hash computation does not submit any transaction. If persistence fails after signing, retain quarantine and never retry blindly.
