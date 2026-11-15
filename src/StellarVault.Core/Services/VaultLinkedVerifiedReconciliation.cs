@@ -74,7 +74,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                     entry.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(scope) ||
                     entry.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
                     entry.Kind != VaultMutationKind.ExtendLinkedChain ||
-                    entry.State != VaultSyncState.Uncertain ||
+                    entry.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
                     entry.TransactionHash is not { Length: 64 } txHash ||
                     !txHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
                     !StellarAccountAddress.IsValid(entry.EntityId))
@@ -166,7 +166,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 if (entry.AccountId != root ||
                     entry.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(scope) ||
                     entry.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
-                    entry.State != VaultSyncState.Uncertain ||
+                    entry.State is not (VaultSyncState.Uncertain or VaultSyncState.Submitting) ||
                     entry.TransactionHash is not { Length: 64 } txHash ||
                     !txHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
                     entry.Kind is not (
