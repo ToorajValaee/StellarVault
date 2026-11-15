@@ -24,6 +24,7 @@ function harness(passphrase=TEST) {
     subentry_count:0,num_sponsoring:0,num_sponsored:0
   });
   let childCounter=0,submitted=0,failSubmission=false,mismatchHash=false;
+  const history=new Map();
   const format=v=>Number(v).toFixed(7);
   class Server {
     async loadAccount(id) {
@@ -67,16 +68,29 @@ function harness(passphrase=TEST) {
           }
         }
       }
-      return {successful:true,hash:mismatchHash?'f'.repeat(64):submitted.toString(16).padStart(64,'0')};
+      const txHash=submitted.toString(16).padStart(64,'0');
+      history.set(txHash,{
+        source:ROOT,operations:tx.operations.slice(),
+        hash:()=>Buffer.from(txHash,'hex'),
+        signatures:tx.signed.map(key=>({signature:()=>Buffer.from(key,'utf8')}))
+      });
+      return {successful:true,hash:mismatchHash?'f'.repeat(64):txHash};
     }
   }
   class TransactionBuilder {
-    constructor(account,options) {this.operations=[];this.signed=[];this.options=options;}
+    constructor(account,options) {this.operations=[];this.signed=[];this.options=options;
+      this.source=account.account_id;}
     addOperation(op){this.operations.push(op);return this;}
     setTimeout(_){return this;}
     build(){return this;}
     sign(pair){this.signed.push(pair.publicKey());}
     hash(){return Buffer.from((submitted+1).toString(16).padStart(64,'0'),'hex');}
+    static fromXDR(xdr,network){
+      assert.equal(network,passphrase);
+      const matched=/^fixture:([0-9a-f]{64})$/.exec(xdr);
+      if(!matched||!history.has(matched[1]))throw Error('Unknown signed envelope');
+      return history.get(matched[1]);
+    }
   }
   function pair(id) {
     return { publicKey:()=>id,
@@ -85,13 +99,16 @@ function harness(passphrase=TEST) {
   const sdk={
     Keypair:{
       fromSecret:secret=>{assert.equal(secret,SECRET);return pair(ROOT);},
+      fromPublicKey:publicKey=>({
+        verify:(_hash,sig)=>Buffer.from(sig).toString('utf8')===publicKey
+      }),
       random:()=>pair('G'+(++childCounter).toString(36).toUpperCase().padStart(55,'B'))
     },
     StrKey:{isValidEd25519SecretSeed:x=>x===SECRET,
       isValidEd25519PublicKey:x=>typeof x==='string'&&x.length===56&&x[0]==='G'},
     Horizon:{Server},
     TransactionBuilder,
-    Asset:{native:()=>({type:'native'})},
+    Asset:{native:()=>({type:'native',getCode:()=> 'XLM'})},
     Operation:{
       createAccount:x=>({type:'createAccount',...x}),
       setOptions:x=>({type:'setOptions',...x}),
@@ -103,6 +120,12 @@ function harness(passphrase=TEST) {
     window:{StellarSdk:sdk},
     crypto:webcrypto,atob,btoa,TextEncoder,TextDecoder,URL,
     fetch:async url=>{
+      if(url.includes('/transactions/')){
+        const hash=url.split('/').at(-1),found=history.get(hash);
+        return {ok:!!found,url,
+          json:async()=>({successful:!!found,hash,source_account:ROOT,
+            envelope_xdr:'fixture:'+hash})};
+      }
       if(url.endsWith('/fee_stats'))return {ok:true,json:async()=>({
         fee_charged:{p90:'100'},last_ledger_base_fee:'100'
       })};
@@ -115,7 +138,7 @@ function harness(passphrase=TEST) {
   vm.runInNewContext(source,sandbox,{filename:'vault-secret-ledger.js'});
   const api=sandbox.window.stellarVaultSecretLedger,session='fixture';
   return {
-    accounts,api,
+    accounts,history,api,
     open:()=>api.open(session,SECRET,'https://horizon-testnet.stellar.org',passphrase),
     read:()=>api.read(session),
     plan:(kind,id,draft)=>api.plan(session,kind,id,draft),
