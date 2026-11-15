@@ -19,8 +19,10 @@ public static class VaultLinkedTreeFilePolicy
     public sealed record Node(string Kind, string Base64);
 
     public static LedgerRecordDraft Draft(VaultStreamingFileTree.Emission node,
-        string title, string? folderId = null)
+        string title, string groupId, string? folderId = null)
     {
+        if (groupId is not { Length: 16 } || !groupId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid linked file group identity.", nameof(groupId));
         var tag = node.Kind switch
         {
             VaultStreamingFileTree.LeafKind => LeafTag,
@@ -33,7 +35,7 @@ public static class VaultLinkedTreeFilePolicy
         return new LedgerRecordDraft(title,
             Prefix + JsonSerializer.Serialize(new Node(node.Kind,
                 Convert.ToBase64String(node.Plaintext))),
-            folderId, [tag]);
+            folderId, [tag, "svtree3-group:" + groupId]);
     }
 
     public static bool TryDecode(LedgerRecordDraft draft, out string kind,
@@ -55,8 +57,11 @@ public static class VaultLinkedTreeFilePolicy
                 VaultStreamingFileTree.RootKind => RootTag,
                 _ => null
             };
-            if (expectedTag is null || draft.Tags is not { Length: 1 } tags ||
+            if (expectedTag is null || draft.Tags is not { Length: 2 } tags ||
                 tags[0] != expectedTag ||
+                !tags[1].StartsWith("svtree3-group:", StringComparison.Ordinal) ||
+                tags[1].Length != "svtree3-group:".Length + 16 ||
+                !tags[1]["svtree3-group:".Length..].All(Uri.IsHexDigit) ||
                 (metadata.Kind != VaultStreamingFileTree.RootKind &&
                  draft.FolderId is not null))
                 return false;
@@ -148,6 +153,18 @@ public static class VaultLinkedTreeFilePolicy
         }
         finally { CryptographicOperations.ZeroMemory(bytes); }
 
+        // Failed/interrupted staging may leave pending leaf records but no
+        // completed root. Such orphan nodes must never be approved for an
+        // on-chain transaction. A root belongs to exactly this file group.
+        var groupTag = draft.Tags![1];
+        if (kind != VaultStreamingFileTree.RootKind &&
+            !all.Any(x => x.Kind == VaultMutationKind.CreateRecord &&
+                x.State == VaultSyncState.Pending &&
+                x.TransactionHash is null &&
+                x.OriginStrategyId == VaultMutationStrategyPolicy.Linked &&
+                HasRootTag(x, groupTag)))
+            return ["tree-root-not-staged"];
+
         foreach (var child in children)
         {
             var entries = all.Where(x => x.EntityId == child.Id &&
@@ -159,7 +176,10 @@ public static class VaultLinkedTreeFilePolicy
             LedgerRecordDraft? staged;
             try { staged = JsonSerializer.Deserialize<LedgerRecordDraft>(original.EncryptedPayload); }
             catch (JsonException) { return ["tree-child-invalid"]; }
-            if (staged is null || !TryDecode(staged, out _, out var childBytes))
+            if (staged is null ||
+                staged.Tags is not { Length: 2 } childTags ||
+                childTags[1] != groupTag ||
+                !TryDecode(staged, out _, out var childBytes))
                 return ["tree-child-invalid"];
             try
             {
@@ -181,6 +201,18 @@ public static class VaultLinkedTreeFilePolicy
         }
 
         return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
+    }
+
+    private static bool HasRootTag(VaultPendingMutation entry, string tag)
+    {
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(entry.EncryptedPayload);
+            return draft is not null &&
+                draft.Tags is [RootTag, var group] && group == tag &&
+                IsTypedNode(draft);
+        }
+        catch (JsonException) { return false; }
     }
 
     /// <summary>Authenticate all referenced on-chain nodes and stream only into
