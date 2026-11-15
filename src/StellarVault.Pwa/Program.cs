@@ -33,6 +33,7 @@ builder.Services.AddScoped<IVaultPreparedDeletionLedger>(
     sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
+builder.Services.AddScoped<VaultDeviceUnlockPreference>();
 builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
 builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore, IndexedDbVaultLinkedPassphraseCredentialStore>();
 builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
