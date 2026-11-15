@@ -197,6 +197,11 @@ public sealed class VaultLinkedDraftWorkspace(
                      x.State != VaultSyncState.Confirmed)))
                 throw new InvalidOperationException(
                     "An unresolved or overlapping S-key mutation must be reconciled first.");
+            var beforeRevision = await revisionReader.ReadRecordRevisionAsync(entityId, ct);
+            Check(context);
+            if (beforeRevision != expectedRevision)
+                throw new InvalidOperationException(
+                    "Published record changed before staging. Reload its current revision.");
             var remote = await ledger.ReadAsync(ct);
             Check(context);
             var original = remote.SingleOrDefault(x => x.Id == entityId)
@@ -205,7 +210,7 @@ public sealed class VaultLinkedDraftWorkspace(
             Check(context);
             if (currentRevision != expectedRevision)
                 throw new InvalidOperationException(
-                    "Published record changed since it was opened. Reload before editing or deleting.");
+                    "Published record changed during the snapshot read. Reload before editing or deleting.");
 
             LedgerRecordDraft draft;
             VaultMutationKind kind;
