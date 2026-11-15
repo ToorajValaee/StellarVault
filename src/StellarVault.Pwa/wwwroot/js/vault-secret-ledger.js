@@ -495,6 +495,14 @@ window.stellarVaultSecretLedger = (() => {
       s.inFlight=false;
     }
   }
+  async function recordRevision(id,recordId) {
+    if(!validId(recordId))fail('Invalid linked record identifier.');
+    const s=session(id);
+    if(s.inFlight)fail('A linked transaction is in progress.');
+    const current=await inventory(s);
+    const record=current.locations.get(recordId);
+    return record?.rawHeader||null;
+  }
   function inspectUncertain(id) {
     const s=session(id);
     // Return a defensive public-only copy. Presence does NOT prove that the
@@ -522,5 +530,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,inspectUncertain,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,recordRevision,inspectUncertain,cancelQuote,revokeAll});
 })();
