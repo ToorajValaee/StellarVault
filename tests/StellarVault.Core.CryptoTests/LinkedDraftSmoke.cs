@@ -176,9 +176,83 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunRemoteMutationSmokeAsync(false);
+        await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunRemoteMutationSmokeAsync(bool deleting)
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-remote-edit-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            await keys.CreateAsync("linked remote revision passphrase");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, Path.Combine(directory, "queue"), network);
+            var drafts = new VaultLinkedDraftWorkspace(
+                ledger, keys, store, consent, network);
+            var publisher = new VaultLinkedDraftPublication(
+                ledger, store, keys, consent, network);
+
+            const string id = "0123456789abcdef";
+            var original = new LedgerRecordDraft(
+                "Existing", "original secret", null, ["safe"], false);
+            var updated = original with { Title = "Updated", Content = "new secret" };
+            ledger.SeedRecord(id, original);
+            var staleRevision = (await ledger.ReadRecordRevisionAsync(id))!;
+            var staged = deleting
+                ? await drafts.StageDeleteAsync(id, staleRevision)
+                : await drafts.StageUpdateAsync(id, updated, staleRevision);
+            Require(staged.State == VaultSyncState.Pending &&
+                    (await drafts.ReviewManualSyncAsync()).NextReadyMutationId == staged.MutationId,
+                "Revision-bound linked update/delete was not offered as a separate manual review.");
+
+            ledger.BumpRemoteRevision(id);
+            await MustRejectAsync(() => publisher.PrepareAsync(staged.MutationId),
+                "A changed published record manifest was permitted to overwrite stale queue state.");
+            Require(ledger.Submissions == 0,
+                "Stale linked remote mutation was sent before an approved quote.");
+            await drafts.DiscardAsync(staged.MutationId);
+            var revision = (await ledger.ReadRecordRevisionAsync(id))!;
+            staged = deleting
+                ? await drafts.StageDeleteAsync(id, revision)
+                : await drafts.StageUpdateAsync(id, updated, revision);
+
+            var review = await publisher.PrepareAsync(staged.MutationId);
+            Require(review.Quote.Kind == (deleting ? "delete" : "update"),
+                "Wrong S-key ledger transaction kind was quoted for revision-pinned mutation.");
+            var transaction = await publisher.SubmitAsync(review.Quote, true);
+            Require(transaction.Length == 64 && ledger.Submissions == 1 &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == staged.MutationId)
+                        .State == VaultSyncState.Uncertain,
+                "Published linked update/delete did not stay durably quarantined.");
+            var remote = await ledger.ReadAsync();
+            Require(deleting ? remote.All(x => x.Id != id) :
+                    remote.Any(x => x.Id == id && x.Title == updated.Title &&
+                        x.Content == updated.Content),
+                "The fake linked ledger did not apply the approved update/delete.");
+            await MustRejectAsync(() => publisher.PrepareAsync(staged.MutationId),
+                "A submitted linked remote mutation was offered for duplicate publication.");
+            Console.WriteLine(deleting
+                ? "PASS: revision-pinned S-key deletion remains uncertain without historical proof"
+                : "PASS: revision-pinned S-key update rejects stale manifest and remains uncertain");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunPrebroadcastCheckpointFailureSmokeAsync()
