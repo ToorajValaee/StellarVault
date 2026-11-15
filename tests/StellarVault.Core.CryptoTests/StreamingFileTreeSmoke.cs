@@ -12,6 +12,72 @@ internal static class StreamingFileTreeSmoke
             .Select(x => (byte)(x * 17)).ToArray();
         try
         {
+            // The actual local encrypted object-store integration: no flat
+            // file index, whole-file queue payload, or fixed file length.
+            var vaultKey = RandomNumberGenerator.GetBytes(32);
+            var scope = System.Text.Encoding.UTF8.GetBytes("stellar:testnet:root-a");
+            var wrongScope = System.Text.Encoding.UTF8.GetBytes("stellar:testnet:root-b");
+            var encryptedObjects = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            try
+            {
+                var store = new TestChunkStore(encryptedObjects);
+                await using var source = new MemoryStream(data, writable: false);
+                var encrypted = await VaultStreamingEncryptedFileStore.StageAsync(
+                    source, "encrypted.bin", "application/octet-stream",
+                    store, vaultKey, scope);
+                Check(encrypted.RootId.Length == 64 &&
+                    encryptedObjects.ContainsKey(encrypted.RootId) &&
+                    encrypted.NodeCount == encryptedObjects.Count,
+                    "Encrypted streaming tree failed to stage ciphertext-addressed root last.");
+                await using var output = new MemoryStream();
+                var restored = await VaultStreamingEncryptedFileStore.RestoreAsync(
+                    encrypted.RootId, store, output, vaultKey, scope);
+                Check(restored.Length == data.LongLength &&
+                    output.ToArray().AsSpan().SequenceEqual(data),
+                    "Encrypted streaming file reconstruction did not match source.");
+
+                await using var isolatedOutput = new MemoryStream();
+                try
+                {
+                    await VaultStreamingEncryptedFileStore.RestoreAsync(
+                        encrypted.RootId, store, isolatedOutput, vaultKey, wrongScope);
+                    throw new Exception("Cross-vault encrypted file lookup was permitted.");
+                }
+                catch (CryptographicException)
+                {
+                    Check(isolatedOutput.Length == 0,
+                        "Wrong vault scope left a partial plaintext file.");
+                }
+
+                var damagedId = encryptedObjects.Keys.First();
+                var damaged = encryptedObjects[damagedId];
+                damaged[^1] ^= 1;
+                try
+                {
+                    await using var damagedOutput = new MemoryStream();
+                    try
+                    {
+                        await VaultStreamingEncryptedFileStore.RestoreAsync(
+                            encrypted.RootId, store, damagedOutput, vaultKey, scope);
+                        throw new Exception("Tampered encrypted file content was accepted.");
+                    }
+                    catch (CryptographicException)
+                    {
+                        Check(damagedOutput.Length == 0,
+                            "Tampered file left published or staged plaintext.");
+                    }
+                }
+                finally { damaged[^1] ^= 1; }
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(vaultKey);
+                CryptographicOperations.ZeroMemory(scope);
+                CryptographicOperations.ZeroMemory(wrongScope);
+                foreach (var value in encryptedObjects.Values)
+                    CryptographicOperations.ZeroMemory(value);
+            }
+
             var nodes = new Dictionary<string, (string Kind, byte[] Payload)>(
                 StringComparer.Ordinal);
             var emittedKinds = new List<string>();
