@@ -926,7 +926,8 @@ test('linked draft recovery remains read-only even when current record or receip
 test('existing S-key credentials unlock local encrypted drafts without Horizon or signing authority',()=>{
   const src=path.join(__dirname,'..','src');
   const core=path.join(src,'StellarVault.Core','Services');
-  const pwaPage=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','SecretVault.razor'),'utf8');
+  const pwaPage=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','Vault.razor'),'utf8');
+  const routeAlias=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','SecretVault.razor'),'utf8');
   const native=fs.readFileSync(path.join(src,'StellarVault.UI','Components','NativeVaultWorkspace.razor'),'utf8');
   const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
   const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
@@ -949,6 +950,8 @@ test('existing S-key credentials unlock local encrypted drafts without Horizon o
   assert.match(panel,/QueueKeys\.HasLocalCredentialsOfflineAsync\(_offlineRoot\.Trim\(\)\)/);
   assert.match(panel,/QueueKeys\.IsOfflineOnly/);
   assert.match(pwaPage,/<VaultLinkedLocalQueuePanel \/>/);
+  assert.match(pwaPage,/Recover independent encrypted S-key drafts offline/);
+  assert.match(routeAlias,/Navigation.NavigateTo\(mode == VaultWorkspaceMode.ConflictingSessions/);
   assert.match(native,/<VaultLinkedLocalQueuePanel \/>/);
   assert.match(publisher,/!ledger\.IsConnected/);
   assert.match(smoke,/await ledger\.DisconnectAsync\(\)/);
