@@ -346,8 +346,8 @@
                 {
                     <button type="button" class="pixel-button compact"
                             disabled="@(_busy || !QueueKeys.CanPublish)"
-                            @onclick="() => ConfirmVerifiedRecordAsync(_recoveryFinding.MutationId)">
-                        Verify signed history and finalize record journal
+                            @onclick="() => ConfirmVerifiedMutationAsync(_recoveryFinding.MutationId)">
+                        Verify signed history and finalize journal
                     </button>
                 }
             </section>
@@ -480,13 +480,17 @@
 
     private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
 
-    private async Task ConfirmVerifiedRecordAsync(string mutationId)
+    private async Task ConfirmVerifiedMutationAsync(string mutationId)
     {
         if (_busy || !QueueKeys.CanPublish) return;
         _busy = true;
         try
         {
-            var result = await VerifiedReconciliation.ConfirmVerifiedRecordAsync(mutationId);
+            var journal = _drafts.SingleOrDefault(x => x.MutationId == mutationId)
+                ?? throw new InvalidOperationException("Refresh the encrypted journal before reconciling.");
+            var result = journal.Kind == VaultMutationKind.ExtendLinkedChain
+                ? await VerifiedReconciliation.ConfirmVerifiedExpansionAsync(mutationId)
+                : await VerifiedReconciliation.ConfirmVerifiedRecordAsync(mutationId);
             _recoveryFinding = null;
             _manualSyncPlan = null;
             _drafts = await DraftWorkspace.ListAsync();
