@@ -99,7 +99,9 @@ test('unlocked PWA session redirects from access to canonical vault without dupl
   const index = fs.readFileSync(path.join(root, '..', 'Pages', 'Index.razor'), 'utf8');
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   assert.ok(index.includes('Navigation.NavigateTo("/vault", replace: true)'));
-  assert.ok(index.includes('if (!(Sessions.IsUnlocked || Ledger.IsConnected))'));
+  assert.ok(index.includes('if (!(Sessions.IsUnlocked || Ledger.IsConnected || SecretLedger.IsConnected))'));
+  assert.ok(index.includes('if (SecretLedger.IsConnected)'));
+  assert.ok(index.includes('Navigation.NavigateTo("/secret-vault", replace: true)'));
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
 });
 
@@ -126,7 +128,7 @@ test('saved local unlock navigates to the vault and disconnected state remains u
 
 test('offline vault keeps the normal ledger browser layout instead of an alternate editor', () => {
  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
- assert.ok(vault.includes('else if (Ledger.IsConnected && _registryReady != true)'));
+ assert.match(vault, /else if \(Ledger\.IsConnected && _registryReady == false\)/);
  assert.ok(vault.includes('search-console'));
  assert.ok(vault.includes('sv-folder-grid'));
  assert.ok(vault.includes('record-list'));
@@ -170,7 +172,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   assert.ok(access.includes('Stellar only — do not enable device storage'));
   assert.ok(access.includes('checked="@(!CurrentDeviceStoragePreference)"'));
-  assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
+  assert.match(access, /if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
   assert.ok(program.includes('AddScoped<VaultDeviceRetentionGate>()'));
   assert.ok(vault.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
@@ -181,7 +183,7 @@ test('on-chain-only file review never requires a local vault checkpoint', () => 
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
-  assert.ok(add.includes('if (Retention.AllowsLocalPersistence)\n                    {'));
+  assert.match(add, /if \(Retention\.AllowsLocalPersistence\)\s*\{\s*var account = Sessions\.ActiveAccountId/);
   assert.ok(add.includes('saved = await Checkpoints.LoadAsync(account)'));
   assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
@@ -191,7 +193,7 @@ test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
   const recent = fs.readFileSync(path.join(root, 'js', 'vault-v2-recent-vault.js'), 'utf8');
-  const begin = access.indexOf('if (_enableLocalStorage)\n            {');
+  const begin = access.search(/if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   const end = access.indexOf('await ReportAccessStageAsync("connecting to Stellar ledger")', begin);
   assert.ok(begin > 0 && end > begin);
   const optIn = access.slice(begin, end);
@@ -248,7 +250,7 @@ test('encrypted offline queue stores authenticated envelopes, not readable draft
   assert.ok(adapter.includes('VaultCryptoPrimitives.Open'));
   assert.ok(adapter.includes('AssociatedData(account, network, id)'));
   assert.ok(adapter.includes('retention.RequireLocalPersistence()'));
-  assert.ok(adapter.includes('sessions.ActiveAccountId != accountId'));
+  // The queue no longer reads the active account from a mutable UI session.\n  // Its key-session operation must bind the requested account and network\n  // and reject cross-scope attempts before any plaintext can be decoded.\n  assert.match(adapter, /StellarAccountAddress\.Validate\(accountId\)/);\n  assert.match(adapter, /keySession\.ExecuteAsync\(accountId, networkId/);\n  assert.match(adapter, /item\.Id != id \|\| item\.AccountId != account \|\| item\.NetworkId != network/);
   assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
   assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
   assert.ok(program.includes('IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier'));
