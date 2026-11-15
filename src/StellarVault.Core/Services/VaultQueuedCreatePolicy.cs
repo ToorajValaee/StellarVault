@@ -104,33 +104,33 @@ public static class VaultQueuedCreatePolicy
         // dictionary over duplicate IDs: both previously threw during review.
         if (item.DependsOn is { Length: 1 } edge && !duplicateMutationIds)
         {
-                var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
-                var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
-                var cursor = edge[0];
-                while (cursor is not null)
+            var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+            var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
+            var cursor = edge[0];
+            while (cursor is not null)
+            {
+                if (!seen.Add(cursor))
                 {
-                    if (!seen.Add(cursor))
-                    {
-                        problems.Add("local-folder-dependency-cycle");
-                        break;
-                    }
-                    if (!byId.TryGetValue(cursor, out var ancestor))
-                    {
-                        problems.Add("missing-parent-dependency");
-                        break;
-                    }
-                    if (ancestor.Kind != VaultMutationKind.CreateFolder)
-                    {
-                        problems.Add("dependency-target-not-folder");
-                        break;
-                    }
-                    if (ancestor.DependsOn is not { Length: <= 1 })
-                    {
-                        problems.Add("invalid-parent-dependency");
-                        break;
-                    }
-                    cursor = ancestor.DependsOn.SingleOrDefault();
+                    problems.Add("local-folder-dependency-cycle");
+                    break;
                 }
+                if (!byId.TryGetValue(cursor, out var ancestor))
+                {
+                    problems.Add("missing-parent-dependency");
+                    break;
+                }
+                if (ancestor.Kind != VaultMutationKind.CreateFolder)
+                {
+                    problems.Add("dependency-target-not-folder");
+                    break;
+                }
+                if (ancestor.DependsOn is not { Length: <= 1 })
+                {
+                    problems.Add("invalid-parent-dependency");
+                    break;
+                }
+                cursor = ancestor.DependsOn.SingleOrDefault();
+            }
         }
         return problems.Distinct(StringComparer.Ordinal).ToArray();
     }
