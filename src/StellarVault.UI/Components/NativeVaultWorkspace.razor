@@ -330,67 +330,19 @@ else
                     </div>
                 @if (_selectedRecord is not null && !_selectedRecord.IsFolder)
                 {
-                    <section class="sv-native-detail-screen" aria-label="Selected ledger record">
-                        <button type="button" class="sv-native-sheet-close" aria-label="Close record details" @onclick="ResetSelection">×</button>
-                        <div class="sv-native-sheet-heading">
-                            <span class="sv-native-sheet-icon" aria-hidden="true">@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "▤" : "▦")</span>
-                            <div><h3>@_selectedRecord.Title</h3><small>@(string.IsNullOrWhiteSpace(_selectedFolderId) ? "My vault" : NativeFolderPath(_selectedFolderId))</small></div>
-                        </div>
-                        <nav class="sv-native-sheet-tabs" aria-label="Record details tabs">
-                            <button type="button" class="@(_nativeDetailTab == "details" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "details")" @onclick='() => _nativeDetailTab = "details"'>▤ Details</button>
-                            <button type="button" class="@(_nativeDetailTab == "activity" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "activity")" @onclick='() => _nativeDetailTab = "activity"'>◷ Activity</button>
-                        </nav>
-                        @if (_nativeDetailTab == "activity")
-                        {
-                            <div class="sv-native-activity-panel">
-                                <p>Storage: Stellar ledger</p>
-                                <p>Type: @(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "Encrypted file" : "Secure record")</p>
-                                <p>Historical activity is not available from the current ledger reader.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
-                            {
-                                <div class="sv-native-detail-field"><label>Username</label><p>@_selectedRecord.UserName</p></div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
-                            {
-                                <div class="sv-native-detail-field"><label>URL</label><p>@_selectedRecord.Url</p></div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Notes))
-                            {
-                                <div class="sv-native-detail-field"><label>Notes</label><p>@_selectedRecord.Notes</p></div>
-                            }
-                            @if (_selectedRecord.Tags is { Length: > 0 })
-                            {
-                                <div class="sv-native-detail-field"><label>Tags</label><div class="sv-native-tag-list">
-                                    @foreach (var tag in _selectedRecord.Tags)
-                                    {
-                                        <span>@tag</span>
-                                    }
-                                </div></div>
-                            }
-                            @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
-                            {
-                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
-                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
-                                <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
-                                @if (!string.IsNullOrEmpty(_verifiedFileMessage))
-                                {
-                                    <p role="status">@_verifiedFileMessage</p>
-                                }
-                            }
-                            else
-                            {
-                                <button type="button" class="pixel-button compact" @onclick="ToggleSecret">@(_revealSecret ? "Hide secret" : "Reveal secret")</button>
-                                @if (_revealSecret)
-                                {
-                                    <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@_selectedRecord.Content</pre>
-                                }
-                            }
-                        }
-                    </section>
+                    <VaultRecordInspector @key="_selectedRecord.Id"
+                                          Embedded="true"
+                                          Item="_selectedRecord"
+                                          FolderPath="@(string.IsNullOrEmpty(_selectedFolderId)
+                                              ? "My vault" : NativeFolderPath(_selectedFolderId))"
+                                          CanEdit="false"
+                                          CanDelete="false"
+                                          FileStatus="_verifiedFileMessage"
+                                          CanSaveVerifiedFile="@StellarLedgerFileProtocol.IsFile(_selectedRecord)"
+                                          OnClose="ResetSelection"
+                                          OnCopy="CopyNativeRecordValueAsync"
+                                          OnVerifyFile="VerifySelectedFile"
+                                          OnSaveVerifiedFile="ExportSelectedFileAsync" />
                 }
                 }
             }
@@ -1348,6 +1300,13 @@ else
                 System.Security.Cryptography.CryptographicOperations.ZeroMemory(plaintext);
             _ledgerBusy = false;
         }
+    }
+
+    private async Task CopyNativeRecordValueAsync(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
+        catch { _verifiedFileMessage = "Clipboard is unavailable on this device."; }
     }
 
     private void ResetSelection()
