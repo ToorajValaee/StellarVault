@@ -982,7 +982,7 @@ else
     }
 
     private sealed record VerifiedNativeTree(string RootId, string FileName,
-        string RootAccount, string Network, IReadOnlyList<LedgerRecordItem> Snapshot);
+        long Length, string Sha256Hex, string RootAccount, string Network);
     private VerifiedNativeTree? _verifiedNativeTree;
 
     private async Task VerifySelectedFile()
@@ -1007,7 +1007,7 @@ else
                 if (!Ledger.IsConnected || _rootAccountId != rootAccount)
                     throw new InvalidOperationException("The HD session changed during verification.");
                 _verifiedNativeTree = new(current.Id, verified.FileName,
-                    rootAccount, _ledgerNetwork, fresh);
+                    verified.Length, verified.Sha256Hex, rootAccount, _ledgerNetwork);
                 _verifiedFileMessage = "File contents and hierarchy verified. Select Save verified file.";
             }
             else
@@ -1026,7 +1026,8 @@ else
         }
         catch (Exception ex) when (ex is InvalidDataException or FormatException or
                                      System.Text.Json.JsonException or InvalidOperationException or
-                                     System.Security.Cryptography.CryptographicException)
+                                     System.Security.Cryptography.CryptographicException or
+                                     IOException or ArgumentException)
         {
             _verifiedNativeTree = null;
             _verifiedFileMessage = "File integrity could not be verified. Nothing was exported.";
@@ -1059,8 +1060,12 @@ else
                 // snapshots. Authenticate the entire current tree instead.
                 var currentRoot = await VaultLinkedTreeFilePolicy.ReadAsync(
                     prepared.RootId, current, Stream.Null);
-                if (currentRoot.FileName != prepared.FileName)
-                    throw new InvalidDataException("The verified file name changed.");
+                if (currentRoot.FileName != prepared.FileName ||
+                    currentRoot.Length != prepared.Length ||
+                    !string.Equals(currentRoot.Sha256Hex, prepared.Sha256Hex,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        "The file changed after verification. Verify again.");
 
                 var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 256 * 1024,
                     resumeWriterThreshold: 128 * 1024));
