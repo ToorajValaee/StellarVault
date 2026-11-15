@@ -198,10 +198,12 @@ public static class VaultStreamingFileTree
         if (!temporaryDestination.CanWrite)
             throw new ArgumentException("Writable temporary stream required.", nameof(temporaryDestination));
         RequireId(rootId);
+        ct.ThrowIfCancellationRequested();
         var rootEmission = await loadAuthenticatedNode(rootId, ct);
         Root root;
         try
         {
+            ct.ThrowIfCancellationRequested();
             if (rootEmission.Id != rootId || rootEmission.Kind != RootKind)
                 throw new InvalidDataException("Invalid authenticated file root identity.");
             root = JsonSerializer.Deserialize<Root>(rootEmission.Plaintext)
@@ -229,6 +231,7 @@ public static class VaultStreamingFileTree
 
         async Task VisitAsync(Reference node, int depth)
         {
+            ct.ThrowIfCancellationRequested();
             if (depth > 64)
                 throw new InvalidDataException("Streaming file tree depth exceeded.");
             RequireId(node.Id);
@@ -239,6 +242,7 @@ public static class VaultStreamingFileTree
             var emitted = await loadAuthenticatedNode(node.Id, ct);
             try
             {
+                ct.ThrowIfCancellationRequested();
                 if (emitted.Id != node.Id ||
                     !string.Equals(Convert.ToHexString(SHA256.HashData(emitted.Plaintext)),
                         node.Sha256Hex, StringComparison.Ordinal))
@@ -256,6 +260,7 @@ public static class VaultStreamingFileTree
                         written = checked(written + leaf.Data.LongLength);
                         if (written > root.Length)
                             throw new InvalidDataException("Streaming file exceeds root length.");
+                        ct.ThrowIfCancellationRequested();
                         digest.AppendData(leaf.Data);
                         await temporaryDestination.WriteAsync(leaf.Data, ct);
                     }
@@ -290,6 +295,7 @@ public static class VaultStreamingFileTree
         }
 
         await VisitAsync(root.Tree, 0);
+        ct.ThrowIfCancellationRequested();
         if (written != root.Length ||
             !string.Equals(Convert.ToHexString(digest.GetHashAndReset()),
                 root.Sha256Hex, StringComparison.Ordinal))
