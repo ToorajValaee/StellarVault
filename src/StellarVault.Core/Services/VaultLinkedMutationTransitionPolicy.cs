@@ -66,7 +66,12 @@ public static class VaultLinkedMutationTransitionPolicy
                next.State == VaultSyncState.Submitting &&
                previous.TransactionHash is null && next.TransactionHash is not null) ||
               (previous.State == VaultSyncState.Submitting &&
-               next.State is VaultSyncState.Uncertain or VaultSyncState.Confirmed)) ||
+               next.State is VaultSyncState.Uncertain or VaultSyncState.Confirmed) ||
+              // Only the separately proof-gated reconciler may invoke this
+              // final immutable CAS transition. Never return to Pending.
+              (previous.State == VaultSyncState.Uncertain &&
+               next.State == VaultSyncState.Confirmed &&
+               previous.TransactionHash is not null)) ||
             !Equals(previous with
             {
                 State = next.State,
