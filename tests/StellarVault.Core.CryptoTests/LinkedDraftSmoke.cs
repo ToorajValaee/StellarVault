@@ -176,12 +176,104 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunSingleFileLinkedSmokeAsync();
         await RunVerifiedCreateReconciliationSmokeAsync();
         await RunRemoteMutationSmokeAsync(false);
         await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunSingleFileLinkedSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-single-file-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            await keys.CreateAsync("linked small file staging passphrase");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, Path.Combine(directory, "queue"), network);
+            var drafts = new VaultLinkedDraftWorkspace(ledger, keys, store, consent, network);
+            var publisher = new VaultLinkedDraftPublication(ledger, store, keys, consent, network);
+            var bytes = Enumerable.Range(0, 512).Select(x => (byte)x).ToArray();
+            await MustRejectAsync(
+                () => drafts.StageSmallFileAsync("Oversize", "oversize.bin",
+                    "application/octet-stream", new byte[VaultLinkedSingleFilePolicy.MaxBytes + 1]),
+                "Multipart S-key file unexpectedly bypassed the single-record limit.");
+            await MustRejectAsync(
+                () => drafts.StageSmallFileAsync("Empty", "empty.bin",
+                    "application/octet-stream", Array.Empty<byte>()),
+                "Zero-length linked file was incorrectly staged.");
+
+            var file = await drafts.StageSmallFileAsync(
+                "Backup file", "backup.bin", "application/octet-stream", bytes);
+            Require((await drafts.ListAsync()).Single(x => x.MutationId == file.MutationId)
+                        .IsFile,
+                "Encrypted linked file was not identified as a typed single-record draft.");
+            var entries = await store.ListAsync(Root, network.CredentialKey(Root));
+            try
+            {
+                var raw = entries.Single(x => x.Id == file.MutationId);
+                var draft = System.Text.Json.JsonSerializer.Deserialize<LedgerRecordDraft>(
+                    raw.EncryptedPayload)!;
+                Require(VaultLinkedSingleFilePolicy.IsSupportedDraft(draft) &&
+                    VaultQueuedCreatePolicy.Problems(raw, entries).Contains(
+                        "file-protocol-needs-staged-review") &&
+                    VaultLinkedSingleFilePolicy.Problems(raw, entries).Length == 0,
+                    "Linked file policy incorrectly allowed generic file creation or rejected a typed staged file.");
+                var stored = new LedgerRecordItem(raw.EntityId, draft.Title,
+                    draft.Content, draft.FolderId, draft.Tags);
+                var decoded = StellarLedgerFileProtocol.DecodeFile(stored, [stored]);
+                try { Require(decoded.SequenceEqual(bytes),
+                        "Encrypted staged linked file did not preserve binary contents."); }
+                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded); }
+            }
+            finally
+            {
+                foreach (var entry in entries)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
+            var review = await publisher.PrepareAsync(file.MutationId);
+            Require(review.Quote.Kind == "create",
+                "Single-record S-key file used a different or unreviewed signer protocol.");
+            var hash = await publisher.SubmitAsync(review.Quote, true);
+            var onChain = await ledger.ReadAsync();
+            var actual = onChain.Single(x => x.Id == file.EntityId);
+            var reconstructed = StellarLedgerFileProtocol.DecodeFile(actual, onChain);
+            try { Require(reconstructed.SequenceEqual(bytes),
+                    "Published S-key SVFILE1 record did not round-trip authenticated bytes."); }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(reconstructed); }
+            Require((await drafts.ListAsync()).Single(x => x.MutationId == file.MutationId)
+                    .State == VaultSyncState.Uncertain,
+                "A freshly uploaded S-key file was confirmed without independent history proof.");
+            var witness = new CapturingLinkedReceiptEvidence { AllowRecordOperations = true };
+            var reviewer = new VaultLinkedDraftRecoveryReview(
+                ledger, store, keys, consent, network, witness);
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, store, keys, consent, network, reviewer);
+            ledger.AllowHistoricalProof = true;
+            var proven = await reconciler.ConfirmVerifiedRecordAsync(file.MutationId);
+            Require(proven.Confirmed && hash == ledger.ReleasedVerifiedHash &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == file.MutationId)
+                        .State == VaultSyncState.Confirmed &&
+                    ledger.Submissions == 1,
+                "Signed-history verified single-record file was not durably finalized.");
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes);
+            Console.WriteLine("PASS: S-key single-record binary file uses shared SVFILE1, encrypted queue and signed-history reconciliation");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunVerifiedCreateReconciliationSmokeAsync()
