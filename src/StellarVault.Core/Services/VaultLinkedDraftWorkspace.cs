@@ -468,6 +468,14 @@ public sealed class VaultLinkedDraftWorkspace(
                 throw new InvalidOperationException(
                     "Published record changed during the snapshot read. Reload before editing or deleting.");
 
+            // Tree files are immutable groups of individually published
+            // ledger records. Editing/deleting one node would strand the root
+            // or silently corrupt its authenticated descendants.
+            if (original.Content?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true)
+                throw new NotSupportedException(
+                    "Tree file updates and deletion require a separately verified whole-tree operation.");
+
             LedgerRecordDraft draft;
             VaultMutationKind kind;
             if (delete)
