@@ -816,7 +816,7 @@ test('manual linked draft publication reserves durable queue state before networ
   const broadcast=publisher.indexOf('transport.SubmitWithSignedHashAsync(');
   assert.ok(reserve>=0 && broadcast>reserve);
   assert.match(publisher,/pending\.Quote, approvedQuote/);
-  assert.match(publisher,/VaultQueuedCreatePolicy\.Problems/);
+  assert.match(publisher,/VaultLinkedSingleFilePolicy\.Problems/);
   assert.match(publisher,/CryptographicOperations\.FixedTimeEquals/);
   assert.match(publisher,/Fingerprint\(original\)/);
   assert.match(publisher,/State = VaultSyncState\.Submitting/);
@@ -975,7 +975,7 @@ test('independent S-key manual sync orders encrypted draft review without automa
     'VaultLinkedLocalQueuePanel.razor'),'utf8');
   const smoke=fs.readFileSync(path.join(__dirname,'..','tests',
     'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
-  assert.match(policy,/VaultQueuedCreatePolicy\.Problems\(mutation, entries\)/);
+  assert.match(policy,/VaultLinkedSingleFilePolicy\.Problems\(mutation, entries\)/);
   assert.match(policy,/unresolved-queue-submission/);
   assert.match(policy,/connected-signer-unlock-required/);
   assert.match(policy,/NextReadyMutationId/);
@@ -1326,4 +1326,35 @@ test('linked verified recovery requires signed XDR and encrypted journal CAS, ne
   assert.match(panel,/ConfirmVerifiedRecordAsync\(mutationId\)/);
   assert.match(native,/AllowHistoricalProof = true/);
   assert.match(native,/ConfirmVerifiedExpansionAsync\(journalId\)/);
+});
+
+test('single-record linked files reuse SVFILE1 while HD and multipart file gates remain isolated',()=>{
+  const root=path.join(__dirname,'..');
+  const core=path.join(root,'src','StellarVault.Core','Services');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const filePolicy=fs.readFileSync(path.join(core,'VaultLinkedSingleFilePolicy.cs'),'utf8');
+  const createPolicy=fs.readFileSync(path.join(core,'VaultQueuedCreatePolicy.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'src','StellarVault.UI',
+    'Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const native=fs.readFileSync(path.join(root,'tests',
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  assert.match(filePolicy,/StellarLedgerFileProtocol\.BuildUpload/);
+  assert.match(filePolicy,/StellarLedgerFileProtocol\.DecodeFile/);
+  assert.match(filePolicy,/StellarLedgerFileProtocol\.MaxChunkBytes/);
+  assert.match(filePolicy,/SinglePrefix/);
+  assert.match(filePolicy,/mutation\.OriginStrategyId != VaultMutationStrategyPolicy\.Linked/);
+  assert.match(filePolicy,/mutation\.Kind != VaultMutationKind\.CreateRecord/);
+  assert.match(filePolicy,/file-protocol-needs-staged-review/);
+  assert.match(createPolicy,/file-protocol-needs-staged-review/);
+  assert.match(workspace,/StageSmallFileAsync\(/);
+  assert.match(workspace,/CreateCoreAsync\(draft, allowSingleFile: true, ct\)/);
+  assert.match(publisher,/VaultLinkedSingleFilePolicy\.Problems/);
+  assert.match(panel,/StageLinkedSmallFileAsync/);
+  assert.match(panel,/DownloadLinkedSmallFileAsync/);
+  assert.match(panel,/CryptographicOperations\.ZeroMemory\(contents\)/);
+  assert.match(panel,/CryptographicOperations\.ZeroMemory\(decoded\)/);
+  assert.match(native,/RunSingleFileLinkedSmokeAsync\(\)/);
+  assert.match(native,/VaultLinkedSingleFilePolicy\.Problems\(raw, entries\)/);
+  assert.match(native,/StellarLedgerFileProtocol\.DecodeFile/);
 });
