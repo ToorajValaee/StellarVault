@@ -64,7 +64,7 @@ else
                     <span class="sv-file-picked-name">@(_fileBytes is null ? "NO FILE SELECTED" : _fileOriginalName)</span>
                     <InputFile id="sv-ledger-file" class="sv-file-native-input sv-ledger-file-native-input" OnChange="SelectLedgerFileAsync" disabled="@(_busy || _loading)" />
                 </div>
-                <p class="advanced-help">Encrypted Stellar ledger publishing. Initial file limit: 16 KiB. Each encrypted part requires a separate fee approval; the manifest is committed last.</p>
+                <p class="advanced-help">Encrypted Stellar ledger publishing uses the existing multipart protocol (currently up to 1 MiB). Each encrypted part requires a separate fee approval and confirmed reconciliation; the manifest is committed last.</p>
                 @if (_fileBytes is not null) { <p class="advanced-help">SELECTED: @_fileOriginalName (@_fileBytes.Length bytes)</p> }
                 @if (_filePlan is not null) { <p class="advanced-help">CONFIRMED STAGES: @_fileStep / @_filePlan.Count. Each requires approval.</p> }
                 <label class="terminal-label" for="sv-ledger-file-title">FILE RECORD NAME *</label>
@@ -133,7 +133,7 @@ else
     private string _title = "", _secret = "", _username = "", _url = "", _notes = "", _tags = "";
     private string _folder = "";
     private bool _showSecret, _busy;
-    private const long MaximumLedgerFileLength = 16384;
+    private const long MaximumLedgerFileLength = StellarLedgerFileProtocol.MaxFileBytes;
     private IReadOnlyList<(string Id, LedgerRecordDraft Draft)>? _filePlan;
     private int _fileStep;
     private string? _fileFingerprint;
@@ -163,7 +163,7 @@ else
         var file = args.File;
         if (file.Size > MaximumLedgerFileLength)
         {
-            _status = "On-chain upload currently supports up to 16 KiB. No transaction was submitted.";
+            _status = "The current on-chain multipart protocol supports up to 1 MiB. No transaction was submitted.";
             return;
         }
         _busy = true;
