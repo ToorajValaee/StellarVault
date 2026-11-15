@@ -342,8 +342,8 @@
                     var id = Strategy == VaultMutationStrategyPolicy.Linked
                         ? (await LinkedDrafts.CreateAsync(draft, ct)).EntityId
                         : (await HdDrafts.CreateAsync(draft, ct)).EntityId;
-                    if (!CanStage)
-                        throw new InvalidOperationException("Unlocked account or consent changed.");
+                    if (approvedScope != CurrentImportScope())
+                        throw new InvalidOperationException("Unlocked account, network or session changed.");
                     return id;
                 });
             _message = staged + " encrypted local record/folder drafts staged. No Stellar transaction sent. Review manual synchronization separately.";
