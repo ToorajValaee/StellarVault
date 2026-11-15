@@ -102,3 +102,47 @@ test('PWA file picker accepts max-size authenticated SVRB overhead but no larger
   assert.match(adapter, /VaultEncryptedRecordBackup\.MaximumBackupBytes/);
   assert.match(backup, /MaximumBackupBytes = VaultRecordInterchange\.MaximumBytes \+/);
 });
+
+test('browser export destination is chosen before work and cannot be reused', async () => {
+  const vm = require('node:vm');
+  const code = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');
+  const activity = [];
+  let bytesWritten = 0;
+  const target = {
+    async abort() { activity.push('abort'); }
+  };
+  const handle = {
+    async createWritable() {
+      activity.push('createWritable');
+      return target;
+    }
+  };
+  const window = {
+    async showSaveFilePicker() {
+      activity.push('showSaveFilePicker');
+      return handle;
+    }
+  };
+  vm.runInNewContext(code, { window, document: {}, URL: {}, setTimeout });
+  const saver = await window.stellarVaultV2Download.selectSaveDestination('records.svrb');
+  assert.deepEqual(activity, ['showSaveFilePicker'],
+    'Selecting a destination must not start a file write');
+  // Simulate awaited ledger verification and Argon2id work between
+  // selecting a destination and committing the prepared bytes.
+  await Promise.resolve();
+  await saver.writeStream({
+    async stream() {
+      return {
+        async pipeTo(sink) {
+          assert.equal(sink, target);
+          bytesWritten = 12;
+          activity.push('pipeTo');
+        }
+      };
+    }
+  });
+  assert.equal(bytesWritten, 12);
+  assert.deepEqual(activity, ['showSaveFilePicker', 'createWritable', 'pipeTo']);
+  await assert.rejects(saver.writeStream({ stream: async () => {} }),
+    /already used/);
+});
