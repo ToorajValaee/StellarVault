@@ -1278,7 +1278,10 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.match(adapter,/stellarVaultSecretLedger\.recordRevision/);
   assert.match(workspace,/StageUpdateAsync/);
   assert.match(workspace,/StageDeleteAsync/);
-  assert.match(workspace,/ExpectedRemoteVersion/);
+  // Staging passes the original manifest through the factory parameter;
+  // publication reads the resulting immutable queue property.
+  assert.match(workspace,/expectedRemoteVersion: expectedRevision/);
+  assert.match(publisher,/item\.ExpectedRemoteVersion/);
   assert.match(workspace,/currentRevision != expectedRevision/);
   assert.match(workspace,/var beforeRevision = await revisionReader\.ReadRecordRevisionAsync\(entityId, ct\)/);
   assert.match(workspace,/beforeRevision != expectedRevision/);
