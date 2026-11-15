@@ -1523,6 +1523,10 @@ test('shared local file upload now commits a streaming encrypted tree through th
     'StreamingFileTreeSmoke.cs'),'utf8');
   assert.match(accountDb,/PutIndexedStreamingFileAsync\(/);
   assert.match(accountDb,/ReadStreamingFileAsync\(/);
+  assert.match(accountDb,/var original = await GetVersionAsync\(name, vaultKey, cancellationToken\)/);
+  assert.match(accountDb,/RestoreAsync\(\s*result.RootId, _fileObjects, Stream.Null/);
+  assert.match(smoke,/Unreadable encrypted node was committed as a visible file/);
+  assert.match(smoke,/Stale file revision consumed the source before the preflight rejection/);
   assert.match(accountDb,/PutIndexedAsync\(name, expectedVersion, pointerStream/);
   assert.match(accountDb,/FileTreePointerPrefix/);
   assert.match(binary,/database\.PutIndexedStreamingFileAsync\(/);
