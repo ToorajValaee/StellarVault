@@ -913,6 +913,20 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         {
             throw new InvalidDataException("Updated local draft payload is invalid.", ex);
         }
+        // Tree nodes form an immutable authenticated graph. Ordinary draft
+        // revision may not rewrite a leaf, branch, or root after staging.
+        try
+        {
+            var previousDraft = System.Text.Json.JsonSerializer.Deserialize<
+                LedgerRecordDraft>(previous.EncryptedPayload);
+            if (VaultHdTreeFilePolicy.IsTreeDraft(previousDraft))
+                throw new InvalidOperationException(
+                    "Encrypted file-tree nodes are immutable. Stage a new complete file instead.");
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            throw new InvalidDataException("Existing encrypted file draft is malformed.");
+        }
         var candidate = previous with
         {
             EncryptedPayload = replacementPayload.ToArray(),
