@@ -978,6 +978,7 @@
         _secretChainInspection = null;
         _message = null;
         _busy = true;
+        var recoveryStage = "checking credential and network";
         try
         {
             new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, _secretKey).Validate();
@@ -1003,26 +1004,64 @@
             };
             // Verify signer authority and chain recovery before opening the
             // independent encrypted record backend. No on-chain writes here.
+            recoveryStage = "inspecting account signers and linked chain";
             _secretChainInspection = await SecretChain.InspectAsync(_secretKey, horizon, passphrase);
+            recoveryStage = "opening encrypted Secret Key ledger";
             await SecretLedger.ConnectAsync(_secretKey, horizon, passphrase);
+            recoveryStage = "decrypting and validating ledger records";
             await SecretLedger.ReadAsync();
             NetworkSelection.Select(_network);
             Navigation.NavigateTo("/secret-vault");
         }
         catch (Exception ex)
         {
-            Logger.LogWarning("Secret Key ledger opening failed: {ErrorType}", ex.GetType().Name);
+            // Never log a credential, exception object or untrusted Horizon
+            // response; only the stage and sanitized exception type.
+            Logger.LogWarning("Secret Key unlock failed at {RecoveryStage}: {ErrorType}",
+                recoveryStage, ex.GetType().Name);
             try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
             catch { /* Do not mask the original failure. */ }
-            _message = ex.Message.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase)
-                ? "An older StellarVault record format was detected. It requires read-only migration verification before this version can unlock it; no records were overwritten."
-                : "Secret Key vault could not be recovered. Check the network, linked signers, record integrity and funding. No transaction was sent.";
+            _message = ExplainSecretKeyRecoveryFailure(recoveryStage, ex);
         }
         finally
         {
             _secretKey = string.Empty;
             _busy = false;
         }
+    }
+
+    private static string ExplainSecretKeyRecoveryFailure(string stage, Exception error)
+    {
+        // Error messages can originate from browser JS or an untrusted Horizon
+        // response. Categorize known fixed strings; never echo their raw text.
+        var detail = error.Message;
+        string advice;
+        if (detail.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase) ||
+            detail.Contains("different or historical vault record format", StringComparison.OrdinalIgnoreCase))
+            advice = "Older encrypted record format detected; read-only migration verification is required.";
+        else if (detail.Contains("HD-v2 vault root", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("registered as an HD-v2 vault", StringComparison.OrdinalIgnoreCase))
+            advice = "This is a mnemonic/HD vault account. Choose Recovery phrase / HD instead.";
+        else if (detail.Contains("404", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("Account not found", StringComparison.OrdinalIgnoreCase))
+            advice = "The root or linked account was not found. Check the selected network and fund the root account if it is new.";
+        else if (detail.Contains("network identity", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("network does not match", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("Horizon network", StringComparison.OrdinalIgnoreCase))
+            advice = "The selected Horizon endpoint does not match the network. Verify Testnet/Mainnet selection.";
+        else if (detail.Contains("signer", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("threshold", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("chain pointer", StringComparison.OrdinalIgnoreCase))
+            advice = "Signer thresholds or linked account pointers require inspection. No signing permissions were changed.";
+        else if (detail.Contains("record chunk", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("ciphertext", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("manifest", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("decrypted record", StringComparison.OrdinalIgnoreCase))
+            advice = "Encrypted ledger records could not be authenticated. No records were changed.";
+        else
+            advice = "Check browser console for a sanitized failure category, the selected network and account funding.";
+        return "Secret Key vault opening stopped while " + stage + ". " + advice +
+            " No transaction was sent.";
     }
 
     private async Task ReportAccessStageAsync(string stage)
