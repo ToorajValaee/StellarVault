@@ -1486,7 +1486,8 @@ test('linked SVFILE2 multipart staging requires historical part confirmation and
   assert.match(workspace,/VaultLinkedMultipartFilePolicy\.IsReferencedByPendingManifest/);
   assert.match(planner,/VaultLinkedMultipartFilePolicy\.Problems\(mutation, entries\)/);
   assert.match(publisher,/VaultLinkedMultipartFilePolicy\.Problems\(item, local, remote\)/);
-  assert.match(ui,/StageMultipartFileAsync\(/);
+  assert.match(ui,/StageTreeFileAsync\(/);
+  assert.doesNotMatch(ui,/VaultLinkedMultipartFilePolicy\.MaxBytes\)\"/);
   assert.match(ui,/StellarLedgerFileProtocol\.IsFile\(file\)/);
   assert.match(smoke,/RunMultipartLinkedSmokeAsync\(\)/);
   assert.match(smoke,/Multipart manifest could publish before its file parts/);
@@ -1541,4 +1542,35 @@ test('shared local file upload now commits a streaming encrypted tree through th
   assert.match(smoke,/database\.PutIndexedStreamingFileAsync\(/);
   assert.match(smoke,/database\.ReadStreamingFileAsync\(/);
   assert.match(smoke,/Stale streamed file record write was accepted/);
+});
+
+test('linked SVTREE3 streaming file stages typed nodes through existing history-verified queue',()=>{
+  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedTreeFilePolicy.cs'),'utf8');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const multipart=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');
+  const queued=fs.readFileSync(path.join(core,'VaultQueuedCreatePolicy.cs'),'utf8');
+  const smoke=fs.readFileSync(path.join(__dirname,
+    'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
+  const ui=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.UI',
+    'Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const browser=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.Pwa',
+    'Services','BrowserVaultNativeFileAccess.cs'),'utf8');
+  const js=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.Pwa',
+    'wwwroot','js','vault-v2-download.js'),'utf8');
+  assert.match(policy,/public const string Prefix = "SVTREE3:"/);
+  assert.match(policy,/tree-root-not-staged/);
+  assert.match(policy,/tree-child-not-historically-confirmed/);
+  assert.match(policy,/tree-child-changed-on-ledger/);
+  assert.match(policy,/VaultStreamingFileTree\.ReadVerifiedAsync/);
+  assert.match(workspace,/public async Task<VaultStreamingFileTree\.Result> StageTreeFileAsync/);
+  assert.match(workspace,/VaultStreamingFileTree\.WriteAsync\(input, fileName, contentType/);
+  assert.match(multipart,/VaultLinkedTreeFilePolicy\.Problems\(mutation, all, remote\)/);
+  assert.match(queued,/VaultLinkedTreeFilePolicy\.Prefix/);
+  assert.match(ui,/DraftWorkspace\.StageTreeFileAsync/);
+  assert.match(ui,/NativeFiles\.SaveAsync\(verified\.FileName, reader\)/);
+  assert.match(browser,/new DotNetStreamReference\(content, leaveOpen: true\)/);
+  assert.match(js,/async saveStream\(filename, dotnetStreamReference\)/);
+  assert.match(smoke,/RunLinkedTreeFileSmokeAsync\(\)/);
+  assert.match(smoke,/Streaming file root was ready before its children/);
 });
