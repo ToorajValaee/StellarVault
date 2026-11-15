@@ -51,6 +51,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
 
             bool? matches = null;
             var receipt = false;
+            var historicalRecordOperations = false;
+            string? historicalStorageAccount = null;
             try
             {
                 if (item.Kind == VaultMutationKind.ExtendLinkedChain)
@@ -96,6 +98,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     RequireSameScope(root, scope, epoch);
                     var evidence = await receipts.InspectAsync(diagnostic, ct);
                     receipt = evidence.ReceiptObserved;
+                    historicalRecordOperations = evidence.HistoricalRecordOperationsMatch;
+                    historicalStorageAccount = evidence.StorageAccount;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -105,6 +109,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                 // durable queue state or turn an unknown result into "absent".
                 matches = null;
                 receipt = false;
+                historicalRecordOperations = false;
+                historicalStorageAccount = null;
             }
 
             RequireSameScope(root, scope, epoch);
@@ -116,7 +122,8 @@ public sealed class VaultLinkedDraftRecoveryReview(
                     true => "A matching record is visible now. This does NOT prove the exact submitted transaction or authorize retry, release or queue confirmation.",
                     false => "The expected record is not visible with matching fields. This does NOT prove the submission failed. Do not retry.",
                     _ => "The remote record could not be established. Submission outcome remains unknown; do not retry."
-                }, item.TransactionHash);
+                }, item.TransactionHash, historicalRecordOperations,
+                historicalStorageAccount);
         }
         finally
         {
