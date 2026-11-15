@@ -291,7 +291,7 @@
                         </p>
                     }
                     <p class="terminal-alert warning" role="alert">
-                        Submitting may spend real native asset. This action writes the local draft
+                        Submitting may spend the network's native asset. This action writes the local draft
                         to Stellar. Even if a transaction hash is returned, the queue will
                         remain Uncertain until independently verified reconciliation.
                         Update historical confirmation now requires the exact manifest-commit
@@ -306,7 +306,7 @@
                     </label>
                     @if (Networks.Network == "public")
                     {
-                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend real native asset and is not reversible.</p>
+                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend the network's native asset and is not reversible.</p>
                         <label class="sv-biometric-choice">
                             <input type="checkbox" @bind="_mainnetApproved" disabled="@_busy" />
                             I understand this transaction will be submitted to STELLAR PUBLIC MAINNET.
