@@ -764,7 +764,9 @@
         try
         {
             var draft = new LedgerRecordDraft(
-                _draftTitle.Trim(), _draftIsFolder ? "folder" : _draftContent,
+                _draftTitle.Trim(),
+                _draftIsFolder && _editingRemoteId is null && _editingMutationId is null
+                    ? "folder" : _draftContent,
                 string.IsNullOrWhiteSpace(_draftFolderId) ? null : _draftFolderId.Trim(),
                 _draftTags.Split(',', StringSplitOptions.RemoveEmptyEntries |
                     StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
