@@ -176,11 +176,75 @@ internal static class LinkedDraftSmoke
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+        await RunVerifiedCreateReconciliationSmokeAsync();
         await RunRemoteMutationSmokeAsync(false);
         await RunRemoteMutationSmokeAsync(true);
         await RunPrebroadcastCheckpointFailureSmokeAsync();
         await RunSuccessfulExpansionQuarantineSmokeAsync();
         await RunUncertainExpansionSmokeAsync();
+    }
+
+    private static async Task RunVerifiedCreateReconciliationSmokeAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(),
+            "sv-linked-verified-create-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var network = new VaultNetworkSelection();
+            var consent = new VaultLinkedLocalRetentionGate();
+            consent.GrantExplicitConsent();
+            var ledger = new FakeLinkedLedger();
+            var credentials = new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(directory, "credentials"), network, consent);
+            await using var keys = new VaultLinkedQueueKeySession(
+                ledger, network, consent, credentials, new NativeVaultKeyProtector());
+            await keys.CreateAsync("linked verified create test passphrase");
+            var store = new FileSystemVaultLinkedQueueSnapshotStore(
+                keys, consent, Path.Combine(directory, "queue"), network);
+            var drafts = new VaultLinkedDraftWorkspace(ledger, keys, store, consent, network);
+            var publisher = new VaultLinkedDraftPublication(ledger, store, keys, consent, network);
+            var first = await drafts.CreateAsync(
+                new LedgerRecordDraft("First credential", "fake private field"));
+            var second = await drafts.CreateAsync(
+                new LedgerRecordDraft("Next credential", "synthetic only"));
+            var quote = await publisher.PrepareAsync(first.MutationId);
+            var hash = await publisher.SubmitAsync(quote.Quote, true);
+            Require((await drafts.ReviewManualSyncAsync()).CanReviewNext == false,
+                "An unproven linked create did not block dependent manual publication.");
+            var witness = new CapturingLinkedReceiptEvidence();
+            var reviewer = new VaultLinkedDraftRecoveryReview(
+                ledger, store, keys, consent, network, witness);
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, store, keys, consent, network, reviewer);
+            var missingReceiptOperations =
+                await reconciler.ConfirmVerifiedRecordAsync(first.MutationId);
+            Require(!missingReceiptOperations.Confirmed,
+                "A receipt without independently matching historical ciphertext was accepted.");
+            witness.AllowRecordOperations = true;
+            var unsigned = await reconciler.ConfirmVerifiedRecordAsync(first.MutationId);
+            Require(!unsigned.Confirmed,
+                "Matching ciphertext without an independently validated signer was accepted.");
+            ledger.AllowHistoricalProof = true;
+            var proven = await reconciler.ConfirmVerifiedRecordAsync(first.MutationId);
+            Require(proven.Confirmed &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == first.MutationId)
+                        .State == VaultSyncState.Confirmed &&
+                    ledger.Submissions == 1 &&
+                    ledger.ReleasedVerifiedHash == hash,
+                "Verified linked creation was not durably confirmed without duplicate broadcast.");
+            Require((await drafts.ReviewManualSyncAsync()).NextReadyMutationId ==
+                    second.MutationId,
+                "Independent historical proof did not unblock the next queued draft for fresh review.");
+            var nextReview = await publisher.PrepareAsync(second.MutationId);
+            Require(nextReview.MutationId == second.MutationId && ledger.Submissions == 1,
+                "Next encrypted draft was not reviewable without automatic publication.");
+            await publisher.CancelAsync();
+            Console.WriteLine("PASS: linked create requires operation, signature and ciphertext proof before unblocking the next manual draft");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static async Task RunRemoteMutationSmokeAsync(bool deleting)
@@ -519,6 +583,7 @@ internal static class LinkedDraftSmoke
     {
         public VaultSecretSubmissionDiagnostic? Observed { get; private set; }
         public bool AllowExpansionOperations { get; set; }
+        public bool AllowRecordOperations { get; set; }
         public Task<VaultLinkedReceiptObservation> InspectAsync(
             VaultSecretSubmissionDiagnostic diagnostic,
             CancellationToken ct = default)
@@ -526,6 +591,10 @@ internal static class LinkedDraftSmoke
             Observed = diagnostic;
             return Task.FromResult(new VaultLinkedReceiptObservation(
                 true, "Mocked receipt; historical proof must still come from the signer.",
+                HistoricalRecordOperationsMatch: AllowRecordOperations &&
+                    diagnostic.Kind == "create",
+                StorageAccount: AllowRecordOperations &&
+                    diagnostic.Kind == "create" ? Root : null,
                 HistoricalExpansionOperationsMatch: AllowExpansionOperations &&
                     diagnostic.Kind == "expand",
                 HistoricalParentAccount: AllowExpansionOperations &&
