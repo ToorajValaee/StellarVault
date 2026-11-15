@@ -219,6 +219,7 @@ public static class VaultRecordInterchange
         ArgumentNullException.ThrowIfNull(stageLocal);
         var remaining = new List<Entry>(archive.Records);
         var translated = new Dictionary<string, string>(StringComparer.Ordinal);
+        var createdRecordIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int count = 0;
         while (remaining.Count > 0)
         {
@@ -231,8 +232,10 @@ public static class VaultRecordInterchange
             var draft = new LedgerRecordDraft(ready.Title, ready.Content, parentId,
                 ready.Tags.ToArray(), ready.IsFolder, ready.UserName, ready.Url, ready.Notes);
             var newId = await stageLocal(draft, ct);
-            if (newId is not { Length: 16 } || !newId.All(Uri.IsHexDigit))
-                throw new InvalidDataException("Encrypted draft staging returned an invalid record ID.");
+            if (newId is not { Length: 16 } || !newId.All(Uri.IsHexDigit) ||
+                !createdRecordIds.Add(newId))
+                throw new InvalidDataException(
+                    "Encrypted draft staging returned an invalid or duplicate record ID.");
             translated.Add(ready.Id, newId);
             remaining.Remove(ready);
             count++;
