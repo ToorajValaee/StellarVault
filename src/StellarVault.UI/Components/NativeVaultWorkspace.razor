@@ -267,6 +267,7 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
+                    <VaultRecordTransferPanel Strategy="@VaultMutationStrategyPolicy.Hd" Records="_ledgerRecords" />
                     <div class="sv-native-mobile-collections" role="group" aria-label="Browse items">
                         <button type="button" class="@(_nativeCollection == "all" ? "selected" : "")" @onclick='() => _nativeCollection = "all"'>▱ All Items</button>
                         <button type="button" class="@(_nativeCollection == "folders" ? "selected" : "")" @onclick='() => _nativeCollection = "folders"'>▱ Folders</button>
