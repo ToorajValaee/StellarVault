@@ -171,6 +171,29 @@ internal static class StreamingFileTreeSmoke
             }
             finally { CryptographicOperations.ZeroMemory(abortedKey); }
 
+            // A backend can acknowledge an encrypted object but fail to make
+            // it durably readable. Full read-back verification must reject the
+            // upload BEFORE its small catalog/record pointer is committed.
+            var missingKey = RandomNumberGenerator.GetBytes(32);
+            try
+            {
+                var incomplete = new StellarAccountVaultDatabase(
+                    new LoseSecondStoredObject(new InMemoryVaultChunkStore()),
+                    new InMemoryVaultRecordIndex(),
+                    "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF");
+                await using var inputMissing = new MemoryStream(data, writable: false);
+                try
+                {
+                    await incomplete.PutIndexedStreamingFileAsync("missing.bin", null,
+                        inputMissing, missingKey, "application/octet-stream");
+                    throw new Exception("Unreadable encrypted node was committed as a visible file.");
+                }
+                catch (FileNotFoundException) { }
+                Check(await incomplete.GetVersionAsync("missing.bin", missingKey) is null,
+                    "Staged file pointer was committed despite a missing encrypted node.");
+            }
+            finally { CryptographicOperations.ZeroMemory(missingKey); }
+
             var nodes = new Dictionary<string, (string Kind, byte[] Payload)>(
                 StringComparer.Ordinal);
             var emittedKinds = new List<string>();
@@ -276,6 +299,26 @@ internal static class StreamingFileTreeSmoke
         finally { CryptographicOperations.ZeroMemory(data); }
 
         Console.WriteLine("PASS: arbitrary-length streaming tree planning, root-last and integrity checks");
+    }
+
+    private sealed class LoseSecondStoredObject(IVaultChunkStore inner)
+        : IVaultChunkStore
+    {
+        private int _writes;
+
+        public async Task<string> PutAsync(Stream content, CancellationToken ct = default)
+        {
+            var id = await inner.PutAsync(content, ct);
+            if (++_writes == 2)
+                await inner.DeleteAsync(id, ct);
+            return id;
+        }
+
+        public Task<Stream> OpenReadAsync(string id, CancellationToken ct = default) =>
+            inner.OpenReadAsync(id, ct);
+
+        public Task DeleteAsync(string id, CancellationToken ct = default) =>
+            inner.DeleteAsync(id, ct);
     }
 
     private sealed class FailAfterChunkWrites(IVaultChunkStore inner, int allowed)
