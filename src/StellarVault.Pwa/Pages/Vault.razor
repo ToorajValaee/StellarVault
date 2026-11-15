@@ -281,32 +281,12 @@ else
         }
         <div class="sv-mobile-collection-content sv-mobile-collection-@_mobileCollection">
         <div class="sv-explorer-layout">
-        <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
-            <div class="sv-explorer-tree-title">My Vault <span class="sv-explorer-tree-count">@Folders.Count folders</span></div>
-            <button type="button" class="sv-tree-item @(_folder is null ? "selected" : "")"
-                    aria-current="@(_folder is null ? "location" : null)"
-                    @onclick='() => _folder = null'><span aria-hidden="true">▣</span> My vault</button>
-            @foreach (var folder in Folders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase))
-            {
-                @if (IsTreeFolderVisible(folder))
-                {
-                    <div class="sv-tree-node" style="--sv-tree-depth:@FolderDepth(folder.Id)">
-                        @if (HasTreeChildren(folder.Id))
-                        {
-                            <button class="sv-tree-expander" type="button" aria-label="@($"Toggle {folder.Title} children")"
-                                    aria-expanded="@(!_collapsedFolders.Contains(folder.Id))" @onclick="() => ToggleTreeFolder(folder.Id)">
-                                <span aria-hidden="true">@(_collapsedFolders.Contains(folder.Id) ? "▸" : "▾")</span>
-                            </button>
-                        }
-                        else { <span class="sv-tree-expander-placeholder" aria-hidden="true"></span> }
-                        <button type="button" class="sv-tree-item @(_folder == folder.Id ? "selected" : "")"
-                                aria-current="@(_folder == folder.Id ? "location" : null)" @onclick="() => OpenFolder(folder.Id)">
-                            <span class="sv-tree-folder-icon" aria-hidden="true">📁</span>
-                            <span class="sv-tree-label">@folder.Title</span>
-                        </button>
-                    </div>
-                }
-            }
+        <VaultExplorerTree Folders="@Folders"
+                           SelectedFolderId="_folder"
+                           CollapsedFolderIds="_collapsedFolders"
+                           OnFolderSelected="SelectFolderFromTree"
+                           OnToggleFolder="ToggleTreeFolder">
+            <AdditionalFolders>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
                 @foreach (var draft in PendingLocalFolders)
@@ -318,7 +298,8 @@ else
                     </button>
                 }
             }
-        </aside>
+            </AdditionalFolders>
+        </VaultExplorerTree>
         <div class="sv-explorer-main @(_explorerLayout == "grid" ? "sv-view-grid" : "sv-view-list")" data-explorer-layout="@_explorerLayout">
         <section class="terminal-panel sv-explorer-folder-panel">
             <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
@@ -779,6 +760,8 @@ else
     private bool _showMobileFilters;
     private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
+    private void SelectFolderFromTree(string? id) => OpenFolder(id ?? string.Empty);
+
     private void ToggleTreeFolder(string id)
     {
         if (!_collapsedFolders.Add(id)) _collapsedFolders.Remove(id);
