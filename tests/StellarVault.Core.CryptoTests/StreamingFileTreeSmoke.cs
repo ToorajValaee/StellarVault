@@ -38,6 +38,16 @@ internal static class StreamingFileTreeSmoke
                     output.ToArray().AsSpan().SequenceEqual(data),
                     "Encrypted streaming file reconstruction did not match source.");
 
+                await using var pipeTarget = new MemoryStream();
+                await using (var forwardOnly = new ForwardOnlySink(pipeTarget))
+                {
+                    var streamed = await VaultStreamingEncryptedFileStore.CopyVerifiedToAsync(
+                        encrypted.RootId, store, forwardOnly, vaultKey, scope);
+                    Check(streamed == restored &&
+                        pipeTarget.ToArray().AsSpan().SequenceEqual(data),
+                        "Authenticated nonseekable file export changed the bytes.");
+                }
+
                 await using var isolatedOutput = new MemoryStream();
                 try
                 {
@@ -301,6 +311,32 @@ internal static class StreamingFileTreeSmoke
         finally { CryptographicOperations.ZeroMemory(data); }
 
         Console.WriteLine("PASS: arbitrary-length streaming tree planning, root-last and integrity checks");
+    }
+
+    private sealed class ForwardOnlySink(Stream destination) : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() => destination.Flush();
+        public override Task FlushAsync(CancellationToken ct) =>
+            destination.FlushAsync(ct);
+        public override void Write(byte[] buffer, int offset, int count) =>
+            destination.Write(buffer, offset, count);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
+            CancellationToken ct = default) => destination.WriteAsync(buffer, ct);
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+        public override void SetLength(long length) =>
+            throw new NotSupportedException();
     }
 
     private sealed class LoseSecondStoredObject(IVaultChunkStore inner)
