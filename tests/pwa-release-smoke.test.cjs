@@ -103,7 +103,8 @@ test('unlocked PWA session redirects from access to canonical vault without dupl
   assert.match(index, /VaultWorkspaceModeResolver\.Resolve\(/);
   assert.match(index, /VaultWorkspaceMode\.ConflictingSessions/);
   assert.doesNotMatch(index, /Navigation\.NavigateTo\("\/secret-vault"/);
-  assert.match(vault, /<VaultLinkedWorkspaceShell \/>/);
+  assert.match(vault, /<VaultSecretKeyWorkspace Embedded="true"/);
+  assert.doesNotMatch(vault, /<VaultLinkedWorkspaceShell \/>/);
   assert.match(vault, /ActiveMode == VaultWorkspaceMode\.StellarSecretKey/);
   assert.match(vault, /if \(ActiveMode != VaultWorkspaceMode\.MnemonicHd\) return;/);
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
@@ -325,9 +326,12 @@ test('PWA desktop explorer and mobile object storage share one folder model', ()
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.match(vault, /sv-explorer-layout/);
-  assert.match(vault, /sv-explorer-tree/);
+  const sharedTree = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultExplorerTree.razor'), 'utf8');
+  assert.match(vault, /<VaultExplorerTree Folders="@Folders"/);
+  assert.match(sharedTree, /sv-explorer-tree/);
   assert.match(vault, /sv-explorer-main/);
-  assert.match(vault, /FolderDepth\(folder.Id\)/);
+  assert.match(sharedTree, /Depth\(folder.Id\)/);
   assert.match(vault, /OpenFolder\(folder.Id\)/);
   assert.match(css, /\.sv-explorer-tree/);
   assert.match(css, /\.sv-explorer-main \.record-list/);
@@ -397,7 +401,10 @@ test('Explorer rows expose individual action menus and the inspector never cente
   assert.match(vault, /class="sv-object-row/);
   assert.match(vault, /class="sv-object-actions"/);
   assert.match(vault, /Actions for folder/);
-  assert.match(vault, /Actions for \{item.Title\}/);
+  const sharedRow = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
+  assert.match(vault, /<VaultExplorerItemRow Item="item"/);
+  assert.match(sharedRow, /Actions for \{Item.Title\}/);
   assert.doesNotMatch(vault, /<small>📁 @FolderPath\(item.FolderId\)<\/small>/);
   assert.match(css, /\.sv-web-shell:has\(\.sv-pwa-app\) > \.sv-adaptive-main/);
   assert.match(css, /width:calc\(100% - var\(--sv-record-inspector-width\)\)/);
@@ -410,8 +417,10 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.match(vault, /sv-tree-node/);
-  assert.match(vault, /ToggleTreeFolder\(folder.Id\)/);
+  const sharedTree = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultExplorerTree.razor'), 'utf8');
+  assert.match(sharedTree, /sv-tree-node/);
+  assert.match(vault, /OnToggleFolder="ToggleTreeFolder"/);
   assert.match(vault, /sv-current-folder/);
   assert.match(vault, /sv-explorer-list-head/);
   assert.match(vault, /sv-layout-switch/);
