@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -90,7 +91,9 @@ public sealed class HorizonVaultLinkedExpansionOperationInspector(HttpClient cli
             var create = ops[0];
             if (GetString(create, "type") != "create_account" ||
                 GetString(create, "source_account") != rootAccount ||
-                GetString(create, "account") != childAccount)
+                GetString(create, "funder") != rootAccount ||
+                GetString(create, "account") != childAccount ||
+                !PositiveXlm(GetString(create, "starting_balance")))
                 return Reject("CreateAccount does not fund the expected new linked child.");
             var options = ops[1];
             if (GetString(options, "type") != "set_options" ||
@@ -109,7 +112,8 @@ public sealed class HorizonVaultLinkedExpansionOperationInspector(HttpClient cli
                 if (GetString(funding, "type") != "payment" ||
                     GetString(funding, "source_account") != rootAccount ||
                     !Address(GetString(funding, "to")) ||
-                    GetString(funding, "asset_type") != "native")
+                    GetString(funding, "asset_type") != "native" ||
+                    !PositiveXlm(GetString(funding, "amount")))
                     return Reject("The optional tail-reserve payment is inconsistent.");
             }
 
@@ -148,6 +152,11 @@ public sealed class HorizonVaultLinkedExpansionOperationInspector(HttpClient cli
     private static string GetString(JsonElement obj, string name) =>
         obj.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty : string.Empty;
+
+    private static bool PositiveXlm(string amount) =>
+        decimal.TryParse(amount, NumberStyles.AllowDecimalPoint,
+            CultureInfo.InvariantCulture, out var value) &&
+        value > 0 && decimal.Round(value, 7) == value;
 
     private static bool IntValue(JsonElement obj, string name, int expected) =>
         obj.TryGetProperty(name, out var value) &&
