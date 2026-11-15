@@ -239,6 +239,45 @@ internal static class StreamingFileTreeSmoke
                     verified.ToArray().AsSpan().SequenceEqual(data),
                     "Streaming authenticated file reconstruction changed the bytes.");
 
+                // A storage/transport loader may ignore cancellation while
+                // awaiting I/O. Its late successful response must not publish
+                // a fully verified file after the user canceled export.
+                using (var canceledRoot = new CancellationTokenSource())
+                {
+                    await using var abortedOutput = new MemoryStream();
+                    try
+                    {
+                        await VaultStreamingFileTree.ReadVerifiedAsync(result.RootId,
+                            (id, token) =>
+                            {
+                                canceledRoot.Cancel();
+                                return Load(id, token);
+                            }, abortedOutput, canceledRoot.Token);
+                        throw new Exception("Canceled root load was accepted.");
+                    }
+                    catch (OperationCanceledException) { }
+                    Check(abortedOutput.Length == 0,
+                        "Canceled root loader wrote file plaintext.");
+                }
+
+                using (var canceledChild = new CancellationTokenSource())
+                {
+                    await using var abortedOutput = new MemoryStream();
+                    try
+                    {
+                        await VaultStreamingFileTree.ReadVerifiedAsync(result.RootId,
+                            (id, token) =>
+                            {
+                                if (id != result.RootId) canceledChild.Cancel();
+                                return Load(id, token);
+                            }, abortedOutput, canceledChild.Token);
+                        throw new Exception("Canceled child load was accepted.");
+                    }
+                    catch (OperationCanceledException) { }
+                    Check(abortedOutput.Length == 0,
+                        "Canceled child loader wrote file plaintext.");
+                }
+
                 // Tampering with a leaf must fail BEFORE the verified destination
                 // is promoted. The destination may contain partial bytes.
                 var first = nodes.First(x => x.Value.Kind ==
