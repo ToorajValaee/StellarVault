@@ -96,6 +96,121 @@ public sealed class VaultLinkedDraftWorkspace(
         return CreateCoreAsync(draft, allowSingleFile: true, ct);
     }
 
+    /// <summary>
+    /// Stages a bounded, multipart SVFILE2 group. Parts are independent
+    /// encrypted queue entries; the final manifest is staged LAST. This
+    /// method never signs or submits and rejects overlapping unresolved writes.
+    /// Confirmation of each part is required before the next part can be
+    /// fee-reviewed, and all remote bytes must match before manifest review.
+    /// </summary>
+    public async Task<IReadOnlyList<DraftItem>> StageMultipartFileAsync(
+        string title, string fileName, string contentType,
+        ReadOnlyMemory<byte> file, string? parentFolderId = null,
+        CancellationToken ct = default)
+    {
+        var plan = VaultLinkedMultipartFilePolicy.BuildUpload(
+            title, fileName, contentType, file.Span, parentFolderId);
+        var context = RequireScope();
+        var local = await ReadEntriesAsync(context, ct);
+        var created = new List<VaultPendingMutation>(plan.Count);
+        var pending = new List<VaultPendingMutation>(plan.Count);
+        try
+        {
+            if (local.Any(x => x.State is VaultSyncState.Submitting or
+                    VaultSyncState.Uncertain or VaultSyncState.Conflict ||
+                    (x.Kind == VaultMutationKind.ExtendLinkedChain &&
+                     x.State != VaultSyncState.Confirmed)))
+                throw new InvalidOperationException(
+                    "Reconcile all unresolved S-key transactions before staging a multipart file.");
+
+            IReadOnlyList<LedgerRecordItem> remote = keys.IsOfflineOnly
+                ? [] : await ledger.ReadAsync(ct);
+            Check(context);
+            if (plan.Any(x =>
+                local.Any(y => y.EntityId == x.Id) ||
+                remote.Any(y => y.Id == x.Id)))
+                throw new InvalidOperationException(
+                    "A generated linked file record identifier already exists.");
+            string[] parentDependencies = [];
+            if (parentFolderId is { Length: > 0 })
+            {
+                var parents = VaultQueuedCreatePolicy.ParentCandidates(
+                    local, parentFolderId);
+                if (parents.Length > 1)
+                    throw new InvalidOperationException("Multipart file parent folder is ambiguous.");
+                if (parents.Length == 1)
+                {
+                    var parent = parents[0];
+                    if (parent.Kind != VaultMutationKind.CreateFolder ||
+                        parent.State is not (VaultSyncState.Pending or VaultSyncState.Confirmed))
+                        throw new InvalidOperationException(
+                            "Selected local folder is not available.");
+                    if (parent.State == VaultSyncState.Pending)
+                        parentDependencies = [parent.Id];
+                }
+                else if (!keys.IsOfflineOnly &&
+                    !remote.Any(x => x.Id == parentFolderId && x.IsFolder))
+                    throw new InvalidOperationException(
+                        "The file's parent folder is not published.");
+            }
+
+            for (int i = 0; i < plan.Count; i++)
+            {
+                var step = plan[i];
+                byte[] payload = JsonSerializer.SerializeToUtf8Bytes(step.Draft);
+                try
+                {
+                    var item = VaultPendingMutation.Create(context.Root,
+                        VaultLinkedQueueStorageScope.FromNetworkScope(context.Scope),
+                        VaultMutationKind.CreateRecord, step.Id, payload,
+                        dependsOn: i == plan.Count - 1 ? parentDependencies : [])
+                        with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+                    pending.Add(item);
+                }
+                finally { CryptographicOperations.ZeroMemory(payload); }
+            }
+            // The manifest is the final queue entry. A crash during local
+            // staging may leave only pending parts; rollback below removes
+            // anything written in this invocation without on-chain effects.
+            foreach (var item in pending)
+            {
+                Check(context);
+                ct.ThrowIfCancellationRequested();
+                if (!await store.AddAsync(item, ct))
+                    throw new InvalidOperationException(
+                        "Encrypted multipart staging collided with another device change.");
+                created.Add(item);
+            }
+            return pending.Select((item, index) => new DraftItem(
+                item.Id, item.EntityId, false, plan[index].Draft.Title,
+                plan[index].Draft.FolderId, VaultSyncState.Pending,
+                item.CreatedUtc, false, false, item.Kind, true)).ToArray();
+        }
+        catch
+        {
+            var cleanupFailed = false;
+            foreach (var item in created.AsEnumerable().Reverse())
+            {
+                try
+                {
+                    if (!await store.TryDeleteAsync(item, CancellationToken.None))
+                        cleanupFailed = true;
+                }
+                catch { cleanupFailed = true; }
+            }
+            if (cleanupFailed)
+                throw new InvalidOperationException(
+                    "Multipart staging was interrupted; inspect and discard any unsent encrypted parts before retrying. Never publish an incomplete manifest.");
+            throw;
+        }
+        finally
+        {
+            foreach (var item in pending)
+                CryptographicOperations.ZeroMemory(item.EncryptedPayload);
+            ClearEntries(local);
+        }
+    }
+
     private async Task<DraftItem> CreateCoreAsync(LedgerRecordDraft draft,
         bool allowSingleFile, CancellationToken ct)
     {
@@ -514,13 +629,32 @@ public sealed class VaultLinkedDraftWorkspace(
                                 VaultMutationKind.DeleteRecord))
                             throw new InvalidDataException("Corrupt linked encrypted file draft.");
                     }
+                    else if (draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix,
+                                 StringComparison.Ordinal))
+                    {
+                        if (item.Kind != VaultMutationKind.CreateRecord ||
+                            !VaultLinkedMultipartFilePolicy.IsManifest(draft))
+                            throw new InvalidDataException("Invalid linked multipart file manifest.");
+                    }
+                    else if (draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
+                                 StringComparison.Ordinal))
+                    {
+                        if (item.Kind != VaultMutationKind.CreateRecord)
+                            throw new InvalidDataException("Invalid multipart file part mutation.");
+                        var part = JsonSerializer.Deserialize<StellarLedgerFileProtocol.Part>(
+                            draft.Content[StellarLedgerFileProtocol.ChunkPrefix.Length..]);
+                        if (part is null || !VaultLinkedMultipartFilePolicy.IsPart(
+                                draft, part.FileId, part.Index))
+                            throw new InvalidDataException("Invalid encrypted multipart part.");
+                    }
                     else ValidateDraft(draft);
                     if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
                         VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder))
                         throw new InvalidDataException("Encrypted draft type mismatch.");
                     result.Add(new(item.Id, item.EntityId, draft.IsFolder,
                         draft.Title, draft.FolderId, item.State, item.CreatedUtc, false, false, item.Kind,
-                        draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal)));
+                        (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
+                         VaultLinkedMultipartFilePolicy.IsTypedFileDraft(draft))));
                 }
                 catch (Exception ex) when (ex is JsonException or InvalidDataException or
                                            ArgumentException or InvalidOperationException)
