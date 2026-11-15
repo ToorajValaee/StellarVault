@@ -1015,7 +1015,7 @@
             // independent S-key account has a mnemonic-derived registry.
             // Existing nonempty S-key vaults go straight to their workspace.
             Navigation.NavigateTo(recovered.Count == 0
-                ? "/initialize" : "/secret-vault");
+                ? "/initialize" : "/vault");
         }
         catch (Exception ex)
         {
