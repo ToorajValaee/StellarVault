@@ -1268,6 +1268,17 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.match(planner,/VaultMutationKind\.DeleteRecord/);
   assert.match(transition,/VaultMutationKind\.UpdateFolder/);
   assert.match(transition,/VaultMutationKind\.DeleteFolder/);
+  const revisionPolicy=fs.readFileSync(path.join(core,
+    'VaultLinkedRemoteRevisionPolicy.cs'),'utf8');
+  const linkedNative=fs.readFileSync(path.join(core,
+    'FileSystemVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  const linkedPwa=fs.readFileSync(path.join(pwa,'Services',
+    'IndexedDbVaultLinkedQueueSnapshotStore.cs'),'utf8');
+  assert.match(revisionPolicy,/ReadUInt16BigEndian/);
+  assert.match(revisionPolicy,/ReadInt32BigEndian/);
+  assert.match(linkedNative,/VaultLinkedRemoteRevisionPolicy\.IsValid/);
+  assert.match(linkedPwa,/VaultLinkedRemoteRevisionPolicy\.IsValid/);
+  assert.match(transition,/A staged linked deletion must retain its original encrypted record snapshot/);
   assert.match(panel,/LoadPublishedRecordsAsync/);
   assert.match(panel,/StageUpdateAsync\(remoteId, draft, remoteRevision\)/);
   assert.match(panel,/StageDeleteAsync\(_deletePublishedId, _deletePublishedRevision\)/);
