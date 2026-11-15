@@ -403,7 +403,8 @@ test('Explorer rows expose individual action menus and the inspector never cente
   assert.match(vault, /Actions for folder/);
   const sharedRow = fs.readFileSync(path.join(root, '..', '..',
     'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
-  assert.match(vault, /<VaultExplorerItemRow Item="item"/);
+  assert.match(sharedRow, /class="sv-object-row/);
+  assert.match(sharedRow, /class="sv-object-actions"/);
   assert.match(sharedRow, /Actions for \{Item.Title\}/);
   assert.doesNotMatch(vault, /<small>📁 @FolderPath\(item.FolderId\)<\/small>/);
   assert.match(css, /\.sv-web-shell:has\(\.sv-pwa-app\) > \.sv-adaptive-main/);
