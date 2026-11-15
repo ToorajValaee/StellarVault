@@ -153,6 +153,119 @@ public static class VaultStreamingFileTree
         finally { CryptographicOperations.ZeroMemory(buffer); }
     }
 
+    /// <summary>
+    /// Verify one authenticated root and stream its contents into a TEMPORARY
+    /// destination. The caller MUST publish/rename that temporary destination
+    /// only after this method returns successfully. On failure the destination
+    /// may contain partial plaintext and must be destroyed by the caller.
+    /// The loader must authenticate/decrypt its encrypted vault records.
+    /// </summary>
+    public static async Task<Root> ReadVerifiedAsync(
+        string rootId, Func<string, CancellationToken, Task<Emission>> loadAuthenticatedNode,
+        Stream temporaryDestination, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(loadAuthenticatedNode);
+        ArgumentNullException.ThrowIfNull(temporaryDestination);
+        if (!temporaryDestination.CanWrite)
+            throw new ArgumentException("Writable temporary stream required.", nameof(temporaryDestination));
+        RequireId(rootId);
+        var rootEmission = await loadAuthenticatedNode(rootId, ct);
+        Root root;
+        try
+        {
+            if (rootEmission.Id != rootId || rootEmission.Kind != RootKind)
+                throw new InvalidDataException("Invalid authenticated file root identity.");
+            root = JsonSerializer.Deserialize<Root>(rootEmission.Plaintext)
+                ?? throw new InvalidDataException("Missing streaming file root.");
+            StellarLedgerFileProtocol.ValidateName(root.FileName);
+            if (string.IsNullOrWhiteSpace(root.ContentType) ||
+                root.ContentType.Length > 128 ||
+                root.ContentType.Any(c => c < '!' || c > '~') ||
+                root.Length < 0 || !ValidDigest(root.Sha256Hex) ||
+                root.Tree is null || root.Tree.Length != root.Length)
+                throw new InvalidDataException("Invalid root file metadata.");
+        }
+        finally { CryptographicOperations.ZeroMemory(rootEmission.Plaintext); }
+
+        using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        long written = 0;
+
+        async Task VisitAsync(Reference node, int depth)
+        {
+            if (depth > 64)
+                throw new InvalidDataException("Streaming file tree depth exceeded.");
+            RequireId(node.Id);
+            if (node.Length < 0 || !ValidDigest(node.Sha256Hex))
+                throw new InvalidDataException("Invalid streaming file tree reference.");
+            var emitted = await loadAuthenticatedNode(node.Id, ct);
+            try
+            {
+                if (emitted.Id != node.Id ||
+                    !string.Equals(Convert.ToHexString(SHA256.HashData(emitted.Plaintext)),
+                        node.Sha256Hex, StringComparison.Ordinal))
+                    throw new InvalidDataException("Streaming file node checksum mismatch.");
+                if (emitted.Kind == LeafKind)
+                {
+                    var leaf = JsonSerializer.Deserialize<Leaf>(emitted.Plaintext)
+                        ?? throw new InvalidDataException("Missing streaming file leaf.");
+                    try
+                    {
+                        if (leaf.Data is null || leaf.Data.LongLength != node.Length ||
+                            leaf.Data.Length > ChunkBytes)
+                            throw new InvalidDataException("Invalid streaming file leaf length.");
+                        written = checked(written + leaf.Data.LongLength);
+                        if (written > root.Length)
+                            throw new InvalidDataException("Streaming file exceeds root length.");
+                        digest.AppendData(leaf.Data);
+                        await temporaryDestination.WriteAsync(leaf.Data, ct);
+                    }
+                    finally
+                    {
+                        if (leaf.Data is not null) CryptographicOperations.ZeroMemory(leaf.Data);
+                    }
+                }
+                else if (emitted.Kind == BranchKind)
+                {
+                    var branch = JsonSerializer.Deserialize<Branch>(emitted.Plaintext)
+                        ?? throw new InvalidDataException("Missing streaming file branch.");
+                    if (branch.Children is not { Length: >= 1 and <= Fanout })
+                        throw new InvalidDataException("Invalid streaming branch fanout.");
+                    long length = 0;
+                    foreach (var child in branch.Children)
+                    {
+                        if (child is null)
+                            throw new InvalidDataException("Null streaming branch reference.");
+                        length = checked(length + child.Length);
+                    }
+                    if (length != node.Length)
+                        throw new InvalidDataException("Streaming branch length mismatch.");
+                    foreach (var child in branch.Children)
+                        await VisitAsync(child, depth + 1);
+                }
+                else
+                    throw new InvalidDataException("Unexpected streaming file node kind.");
+            }
+            finally { CryptographicOperations.ZeroMemory(emitted.Plaintext); }
+        }
+
+        await VisitAsync(root.Tree, 0);
+        if (written != root.Length ||
+            !string.Equals(Convert.ToHexString(digest.GetHashAndReset()),
+                root.Sha256Hex, StringComparison.Ordinal))
+            throw new InvalidDataException("Streaming file content checksum mismatch.");
+        return root;
+    }
+
+    private static bool ValidDigest(string? hex) =>
+        hex is { Length: 64 } && hex.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F');
+
+    private static void RequireId(string? id)
+    {
+        if (id is not { Length: 16 } ||
+            !id.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F'))
+            throw new InvalidDataException("Invalid streaming file node ID.");
+    }
+
     private static string NewId() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
 }
