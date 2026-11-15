@@ -373,6 +373,8 @@ public sealed class VaultLinkedDraftWorkspace(
                 // malformed file formats BEFORE sealing the original snapshot,
                 // otherwise later queue inspection would render a durable
                 // Pending entry corrupt with no safe publication path.
+                if (draft.Content is null)
+                    throw new InvalidDataException("Published linked record content is missing.");
                 if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
                         StringComparison.Ordinal))
                 {
@@ -620,6 +622,10 @@ public sealed class VaultLinkedDraftWorkspace(
                 {
                     var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
                         ?? throw new InvalidDataException("Missing encrypted local draft.");
+                    // A damaged authenticated envelope can still deserialize with
+                    // absent content. Show it as corrupt, never crash the queue UI.
+                    if (draft.Content is null)
+                        throw new InvalidDataException("Linked encrypted draft content is missing.");
                     if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
                             StringComparison.Ordinal))
                     {
