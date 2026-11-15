@@ -40,5 +40,6 @@ test('S-key setup never invokes HD registry writes or calls a connected key an H
   assert.match(init, /if \(SecretLedger\.IsConnected\)\s*\{\s*await InspectLinkedAsync\(\);\s*return;/);
   // Registry initialization remains available solely behind the HD ledger branch.
   assert.match(init, /if \(!await Ledger\.HasRegistryAsync\(\)\)\s*await Ledger\.InitializeRegistryAsync\(\)/);
-  assert.match(init, /if \(_busy \|\| !_confirmed \|\| _funding\?\.CanInitialize != true \|\| !Ledger\.IsConnected\) return;/);
+  assert.match(init, /ActiveMode != VaultWorkspaceMode\.MnemonicHd \|\| !Ledger\.IsConnected\) return;/);
+  assert.match(init, /ActiveMode == VaultWorkspaceMode\.ConflictingSessions/);
 });
