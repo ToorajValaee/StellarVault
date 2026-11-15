@@ -52,3 +52,21 @@ Record transaction hashes (public), result classification and redacted log refer
 **GO** only when every applicable gate has dated evidence reviewed by a designated security/release owner, no open critical/high security findings remain, recoverability is demonstrated on separate clean devices, and the final artifact matches the tested commit. **NO-GO** for any unresolved ambiguous submission, security gap, missing independent proof or unsupported promised capability. Any later source change invalidates the prior green automated build record.
 
 This document is a release gate, **not** a statement that verification occurred. Controlled pilot instructions: [controlled-testnet-pilot.md](controlled-testnet-pilot.md).
+
+
+## Pre-launch file format redesign — unlimited logical file lengths
+
+**Product decision:** no deployed-user file-format backward compatibility is required. The current flat SVFILE1/SVFILE2 and direct/linked 1 MiB/96 KiB paths must not be rebranded as unlimited. Do not silently increase legacy constants. New files should converge on one streamed, versioned tree format before launch; remove old writers and migration code only when every host and recovery path has moved to the replacement.
+
+**Foundation implemented:** `VaultStreamingFileTree` processes a `Stream` in small chunks, incrementally hashes the entire content, emits bounded-fanout child/branch nodes and a final file root. Its reader verifies each node digest and the complete file hash while writing to a temporary destination; that destination must be destroyed on error and promoted only after successful verification. The plaintext callback is intentionally transport-agnostic, and **does not perform encryption, staging, signing, transmission, or transaction reconciliation**. The Core smoke exercises content above the previous 1 MiB cap, corruption rejection and sink failure.
+
+**Integration remaining (REQUIRED before claiming arbitrary-size uploads):**
+
+1. Adopt one encrypted node store/journal contract for HD, linked S-key, PWA and MAUI. Each emitted node must be encrypted, durably staged and identified before any transaction; no whole-file bytes or flat file part array may enter the queue.
+2. Connect file-root/child nodes to the existing per-transaction exact fee quote, user approval, signed-hash checkpoint, verified historical receipt and CAS reconciliation. Manifest/root publishes last after all descendants are confirmed. Do not add a background retry or a parallel network signing engine.
+3. Persist a bounded resumable cursor and stable node identifiers across crashes. Refuse publication if a prior node is Submitting/Uncertain/Conflict or if any ancestor/descendant is missing; do not infer an absent transaction from a Horizon timeout.
+4. Expose streamed upload/download in PWA and MAUI without `IBrowserFile.OpenReadStream` whole-file buffering or `byte[]` download aggregation. Use temporary encrypted/native-file sinks; verify before presenting the completed file.
+5. Test multi-GiB synthetic file streams, interrupted writes at every node and root boundary, device quota exhaustion, namespace isolation, cross-device restore, and fee/reserve affordability. The Stellar ledger and device have **physical and economic limits**: 'unlimited' means *no arbitrary application-wide byte cap*, not infinite network capacity or affordable unlimited storage.
+6. Update the existing `VaultChunkObjectStore` local chunk manifest when converging protocols: it currently caps at 4,096 × 256 KiB chunks and stores total length as a 32-bit integer. Removing UI caps alone does not remove this underlying finite limit.
+
+Until the integration tests pass, the old on-chain file size caps remain enforced by the existing shipping UI. Do not expose a new unlimited-size claim.
