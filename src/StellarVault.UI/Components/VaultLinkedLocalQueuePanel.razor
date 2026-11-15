@@ -317,7 +317,7 @@
                     <p><strong>Signed transaction hash (public recovery handle, not proof):</strong>
                         <code style="overflow-wrap:anywhere">@txHash</code></p>
                 }
-                <p><strong>Current matching record:</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
+                <p><strong>Current expected mutation result (advisory):</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
                     _recoveryFinding.CurrentRecordMatches is false ? "Not observed" : "Unknown")</p>
                 <p><strong>Advisory receipt:</strong> @(_recoveryFinding.HistoricalReceiptObserved ? "Observed (insufficient for release)" : "Not established")</p>
                 <p><strong>Historical record operation check:</strong>
