@@ -281,6 +281,13 @@ internal static class LinkedDraftSmoke
             // becomes a pending deletion. Keep it typed and reviewable rather
             // than classifying the valid deletion journal as a corrupt draft.
             var originalRevision = await ledger.ReadRecordRevisionAsync(file.EntityId);
+            await MustRejectAsync(
+                () => drafts.StageUpdateAsync(file.EntityId,
+                    new LedgerRecordDraft(actual.Title, actual.Content,
+                        actual.FolderId, actual.Tags, actual.IsFolder,
+                        actual.UserName, actual.Url, actual.Notes),
+                    originalRevision!),
+                "A generic record update bypassed the separate typed S-key file protocol.");
             Require(VaultLinkedRemoteRevisionPolicy.IsValid(originalRevision),
                 "Published single-file record had no canonical remote revision.");
             var deletion = await drafts.StageDeleteAsync(file.EntityId, originalRevision!);
