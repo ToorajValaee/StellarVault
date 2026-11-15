@@ -665,6 +665,11 @@ test('local file sizes use streamed storage rather than a 1 MiB UI cap; ledger u
     'VaultItemEditor.razor'), 'utf8');
   const download = fs.readFileSync(path.join(root, 'js','vault-v2-download.js'),'utf8');
   assert.match(local,/OpenReadStream\(_file\.Size\)/);
+  assert.match(local,/Files\.CopyVerifiedToAsync\(_openName, Stream\.Null\)/);
+  assert.match(local,/Files\.StreamVerifiedToAsync\(/);
+  assert.match(local,/NativeFiles\.SaveAsync\(name, reader\)/);
+  assert.match(download,/async saveStream\(filename, dotnetStreamReference\)/);
+  assert.match(download,/await source\.pipeTo\(target\)/);
   // Documentation may explain the removed 1 MiB limit; only reject an
   // actual fixed-size validation or OpenReadStream cap.
   assert.doesNotMatch(local,/MaximumFileLength/);
