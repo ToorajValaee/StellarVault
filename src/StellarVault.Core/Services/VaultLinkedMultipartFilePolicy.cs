@@ -232,7 +232,12 @@ public static class VaultLinkedMultipartFilePolicy
         var items = entries.Where(x => x.EntityId == fileId &&
             x.Kind == VaultMutationKind.CreateRecord &&
             x.OriginStrategyId == VaultMutationStrategyPolicy.Linked).ToArray();
-        if (items.Length != 1) return null;
+        // A file part may be submitted only while its final manifest remains
+        // a never-submitted Pending intent. Failed, already-signed or confirmed
+        // manifests cannot authorize orphaned additional part transactions.
+        if (items.Length != 1 || items[0].State != VaultSyncState.Pending ||
+            items[0].TransactionHash is not null)
+            return null;
         try
         {
             var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(
