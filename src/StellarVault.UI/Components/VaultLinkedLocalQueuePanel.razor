@@ -510,7 +510,9 @@
         {
             _manualSyncPlan = null;
             var hash = await Publisher.SubmitAsync(approved.Quote, true);
-            _message = "Transaction submitted; matching current record observed. Queue remains UNCERTAIN for transaction: " + hash +
+            _message = "Transaction submitted; " +
+                (approved.Quote.Kind == "delete" ? "current record absence" : "matching current record") +
+                " observed. Queue remains UNCERTAIN for transaction: " + hash +
                 ". Current state is not historical transaction proof. Do not retry until independently reconciled.";
             try
             {
@@ -782,6 +784,7 @@
             {
                 await DraftWorkspace.CreateAsync(draft);
             }
+            if (_editingRemoteId is not null) _publishedRecords = [];
             ClearDraftEditor();
             _message = "Encrypted local draft saved. No transaction was submitted.";
             try
