@@ -1,0 +1,42 @@
+@* Published-item presentation is account-strategy neutral. Parent workspaces retain
+   ledger verification, signing, authorization and mutation callbacks. *@
+@foreach (var item in VisibleItems)
+{
+    <VaultExplorerItemRow Item="item"
+                          Selected="@(SelectedItemId == item.Id)"
+                          CanEdit="CanEdit"
+                          CanDelete="CanDelete"
+                          OnOpen="OnOpen"
+                          OnEdit="OnEdit"
+                          OnDelete="OnDelete" />
+}
+@if (!Busy && !VisibleItems.Any() && !string.IsNullOrEmpty(EmptyMessage))
+{
+    <p class="sv-secret-empty">@EmptyMessage</p>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Items { get; set; } = [];
+    [Parameter] public string? FolderId { get; set; }
+    [Parameter] public string? Search { get; set; }
+    [Parameter] public string Collection { get; set; } = "all";
+    [Parameter] public string? SelectedItemId { get; set; }
+    [Parameter] public bool CanEdit { get; set; }
+    [Parameter] public bool CanDelete { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? EmptyMessage { get; set; }
+    [Parameter] public EventCallback<LedgerRecordItem> OnOpen { get; set; }
+    [Parameter] public EventCallback<LedgerRecordItem> OnEdit { get; set; }
+    [Parameter] public EventCallback<LedgerRecordItem> OnDelete { get; set; }
+
+    private IEnumerable<LedgerRecordItem> VisibleItems => Items
+        .Where(x => !VaultPublishedFileClassification.IsInternalNode(x) &&
+            string.Equals(x.FolderId ?? "", FolderId ?? "", StringComparison.Ordinal) &&
+            (Collection == "all" || (Collection == "folders" && x.IsFolder) ||
+                (Collection == "records" && !x.IsFolder)) &&
+            (string.IsNullOrWhiteSpace(Search) ||
+                x.Title.Contains(Search, StringComparison.OrdinalIgnoreCase) ||
+                (x.Tags?.Any(tag => tag.Contains(Search, StringComparison.OrdinalIgnoreCase)) ?? false)))
+        .OrderByDescending(x => x.IsFolder)
+        .ThenBy(x => x.Title, StringComparer.OrdinalIgnoreCase);
+}
