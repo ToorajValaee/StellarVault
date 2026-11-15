@@ -561,6 +561,116 @@
     private string _draftFolderId = string.Empty;
     private string? _editingMutationId;
     private string? _editingPayloadSha256;
+    private IReadOnlyList<LedgerRecordItem> _publishedRecords = [];
+    private string? _editingRemoteId;
+    private string? _editingRemoteRevision;
+    private string? _deletePublishedId;
+    private string? _deletePublishedRevision;
+    private string? _deletePublishedTitle;
+
+    private async Task LoadPublishedRecordsAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            var records = await Ledger.ReadAsync();
+            _publishedRecords = records.OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+                .Take(200).ToArray();
+            _message = "Published S-key records loaded. Select an explicit local change.";
+        }
+        catch (Exception ex)
+        {
+            _publishedRecords = [];
+            _message = "Published records could not be loaded: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task EditPublishedRecordAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish || _review is not null ||
+            Ledger is not IStellarSecretKeyRecordRevisionReader reader) return;
+        _busy = true;
+        try
+        {
+            var remote = await Ledger.ReadAsync();
+            var record = remote.Single(x => x.Id == id);
+            var revision = await reader.ReadRecordRevisionAsync(id)
+                ?? throw new InvalidOperationException("Published record has no verified manifest.");
+            ClearDraftEditor();
+            _deletePublishedId = null;
+            _editingRemoteId = id;
+            _editingRemoteRevision = revision;
+            _draftTitle = record.Title;
+            _draftContent = record.Content;
+            _draftIsFolder = record.IsFolder;
+            _draftFolderId = record.FolderId ?? string.Empty;
+            _draftUsername = record.UserName ?? string.Empty;
+            _draftUrl = record.Url ?? string.Empty;
+            _draftNotes = record.Notes ?? string.Empty;
+            _draftTags = string.Join(", ", record.Tags ?? []);
+            _message = "Editing published record locally. Its original manifest revision must remain unchanged.";
+        }
+        catch (Exception ex)
+        {
+            ClearDraftEditor();
+            _message = "Published record cannot be opened for staging: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SelectPublishedDeletionAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish ||
+            Ledger is not IStellarSecretKeyRecordRevisionReader reader) return;
+        _busy = true;
+        try
+        {
+            var remote = await Ledger.ReadAsync();
+            var record = remote.Single(x => x.Id == id);
+            var revision = await reader.ReadRecordRevisionAsync(id)
+                ?? throw new InvalidOperationException("Published record has no verified manifest.");
+            _deletePublishedId = id;
+            _deletePublishedTitle = record.Title;
+            _deletePublishedRevision = revision;
+            _message = "Review and confirm local delete staging; no Stellar transaction is sent.";
+        }
+        catch (Exception ex)
+        {
+            CancelPublishedDeletion();
+            _message = "Cannot prepare the local deletion: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private void CancelPublishedDeletion()
+    {
+        _deletePublishedId = _deletePublishedRevision = _deletePublishedTitle = null;
+    }
+
+    private async Task ConfirmStagePublishedDeletionAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish || _deletePublishedId is null ||
+            _deletePublishedRevision is null) return;
+        _busy = true;
+        try
+        {
+            await DraftWorkspace.StageDeleteAsync(_deletePublishedId, _deletePublishedRevision);
+            CancelPublishedDeletion();
+            _manualSyncPlan = null;
+            _publishedRecords = [];
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = "Revision-pinned local deletion staged. No Stellar transaction was sent.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Deletion staging could not be verified. Refresh before retrying: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
 
     private async Task EditDraftAsync(string id)
     {
@@ -571,6 +681,7 @@
             // Explicit edit action decrypts only this draft into the local UI.
             // The secret input remains masked and no remote write occurs.
             var detail = await DraftWorkspace.OpenDraftAsync(id);
+            ClearDraftEditor();
             _editingMutationId = detail.MutationId;
             _editingPayloadSha256 = detail.PayloadSha256;
             _draftTitle = detail.Draft.Title;
@@ -620,6 +731,8 @@
         _draftIsFolder = false;
         _editingMutationId = null;
         _editingPayloadSha256 = null;
+        _editingRemoteId = null;
+        _editingRemoteRevision = null;
     }
 
     private async Task LoadDraftsAsync()
@@ -654,8 +767,13 @@
                     StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
                 _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
             _manualSyncPlan = null;
-            if (_editingMutationId is { } editingId &&
-                _editingPayloadSha256 is { } revision)
+            if (_editingRemoteId is { } remoteId &&
+                _editingRemoteRevision is { } remoteRevision)
+            {
+                await DraftWorkspace.StageUpdateAsync(remoteId, draft, remoteRevision);
+            }
+            else if (_editingMutationId is { } editingId &&
+                     _editingPayloadSha256 is { } revision)
             {
                 await DraftWorkspace.ReviseAsync(editingId, draft, revision);
             }
