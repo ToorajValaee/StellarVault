@@ -444,6 +444,7 @@ Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
 // Uses the real native encrypted queue and isolated S-key key lifecycle,
 // but a fake Stellar ledger: no transactions or GitHub CI are involved.
 await LinkedDraftSmoke.RunAsync();
+await LinkedRecordHistorySmoke.RunAsync();
 
 sealed class TestChunkStore(Dictionary<string, byte[]> objects) : IVaultChunkObjectStore
 {
