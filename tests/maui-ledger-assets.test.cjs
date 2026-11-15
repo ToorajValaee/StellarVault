@@ -310,3 +310,45 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(css, /safe-area-inset-bottom/);
   assert.doesNotMatch(workspace, /Online · Synced/);
 });
+
+
+test('native HD file upload shares the unlimited encrypted SVTREE3 Sync staging path', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const staging = fs.readFileSync(path.join(root,
+    'src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs'), 'utf8');
+  assert.match(native, /@inject VaultHybridDraftWorkspace HybridDrafts/);
+  assert.match(native, /@onclick="StageNativeTreeFileAsync"/);
+  assert.match(native, /Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked/);
+  assert.match(native, /await using var input = picked\.Stream/);
+  assert.match(native, /await HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(staging, /VaultStreamingFileTree\.WriteContentAddressedAsync\(/);
+  assert.doesNotMatch(native, /StellarLedgerUploadPlan|UploadCheckpoints|_uploadBytes|MaxFileBytes/);
+  assert.doesNotMatch(native, /ChooseUploadFileAsync|PublishUploadStageAsync/);
+});
+
+test('native HD publishing commits exact approved metadata and never just title/content', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const begin = native.indexOf('private async Task ConfirmPublishAsync()');
+  const end = native.indexOf('private string? _uploadMessage;', begin);
+  const action = native.slice(begin, end);
+  assert.ok(begin >= 0 && end > begin);
+  assert.match(action, /var draft = CurrentPublishDraft\(\)/);
+  assert.match(action, /_publishFingerprint != CurrentPublishFingerprint\(\)/);
+  assert.match(action, /Ledger\.EstimateAsync\(draft\)/);
+  assert.match(action, /Ledger\.PublishDetailedAsync\(draft\)/);
+  assert.doesNotMatch(action, /new LedgerRecordDraft\(_publishTitle\.Trim\(\), _publishContent\)/);
+});
+
+test('native HD file inspector authenticates SVTREE3 and exports through a bounded pipe', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(native, /VaultPublishedFileClassification\.IsFile\(selected\)/);
+  assert.match(native, /VaultLinkedTreeFilePolicy\.ReadAsync\(\s*current\.Id, fresh, Stream\.Null\)/);
+  assert.match(native, /currentRoot\.Sha256Hex, prepared\.Sha256Hex/);
+  assert.match(native, /new Pipe\(new PipeOptions\(/);
+  assert.match(native, /VaultLinkedTreeFilePolicy\.ReadAsync\(\s*prepared\.RootId, current, writer, cancel\.Token\)/);
+  assert.match(native, /await NativeFiles\.SaveAsync\(prepared\.FileName, reader\)/);
+  assert.match(native, /CryptographicOperations\.ZeroMemory\(plaintext\)/);
+});
