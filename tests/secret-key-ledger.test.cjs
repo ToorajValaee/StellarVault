@@ -744,7 +744,9 @@ test('linked S-key device UI requires consent and separate fee-reviewed publicat
   assert.match(panel,/Publisher\.PrepareAsync\(id\)/);
   assert.match(panel,/Publisher\.SubmitAsync\(approved\.Quote, true\)/);
   assert.doesNotMatch(panel,/Ledger\.SubmitApprovedAsync|Ledger\.QuoteCreateAsync/);
-  assert.match(workspace,/<VaultLinkedLocalQueuePanel \/>/);
+  assert.match(workspace,/<VaultLinkedLocalQueuePanel View=/);
+  assert.match(panel,/private bool ShowDrafts => View is "all" or "drafts"/);
+  assert.match(panel,/private bool ShowSync => View is "all" or "sync"/);
   assert.match(native,/<VaultSecretKeyWorkspace \/>/);
 });
 
