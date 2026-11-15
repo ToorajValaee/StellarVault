@@ -48,3 +48,9 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Simulate encrypted queue CAS failure at the hash checkpoint. Verify the signer **never** submits the transaction, and the queue is not silently returned to Pending.
 - [ ] Terminate the browser/app after signing/checkpointing but before the network outcome is known; reconnect to the same account and verify the public hash remains in the encrypted journal for read-only receipt investigation.
 - [ ] Confirm returned Horizon hash must equal the pinned signed hash; any disagreement blocks the queue without retries or auto-confirmation.
+
+## Read-only historical S-key record verification (2026-11-15)
+- [ ] Confirm a successful real Testnet S-key record creation produces a Horizon receipt and matching `skh/skc` operation history for the exact signed transaction hash.
+- [ ] Interrupt and reopen the encrypted local queue. Confirm that receipt, matching current record and historical encrypted chunk commitment remain separately labeled **advisory**; no retry or `Confirmed` transition occurs.
+- [ ] Run the new mocked `LinkedRecordHistorySmoke` suite to reject wrong generation, missing, duplicate or reordered chunks, cross-account writes and ciphertext digest mismatches.
+- [ ] Do not open the pilot with real secrets: historical signer authorization, decryption of historical ciphertext to the approved draft and durable quarantine release remain incomplete.
