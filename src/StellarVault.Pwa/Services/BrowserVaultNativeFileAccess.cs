@@ -23,10 +23,17 @@ public sealed class BrowserVaultNativeFileAccess(IJSRuntime js) : IVaultNativeFi
         byte[] bytes;
         try { bytes = Convert.FromBase64String(picked.ContentBase64); }
         catch (FormatException ex) { throw new InvalidDataException("Browser file bytes were malformed.", ex); }
-        if (bytes.Length is <= 0 or > StellarLedgerFileProtocol.MaxFileBytes)
+        // This adapter also backs portable record import. Authenticated
+        // SVRB backups are slightly larger than their 1 MiB JSON plaintext
+        // due to version, salt, nonce and GCM tag. The caller still enforces
+        // its own format-specific limit before parsing or staging.
+        if (bytes.Length <= 0 ||
+            bytes.Length > Math.Max(StellarLedgerFileProtocol.MaxFileBytes,
+                VaultEncryptedRecordBackup.MaximumBackupBytes))
         {
             CryptographicOperations.ZeroMemory(bytes);
-            throw new InvalidDataException("Selected file must be between 1 byte and 1 MiB.");
+            throw new InvalidDataException(
+                "Selected file exceeds the browser picker size limit.");
         }
         return new VaultNativePickedFile(picked.FileName,
             new ZeroingMemoryStream(bytes),
