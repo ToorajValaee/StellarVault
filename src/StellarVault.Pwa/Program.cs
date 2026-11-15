@@ -1,3 +1,4 @@
+using VaultEngine.Core;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using StellarVault.Pwa;
@@ -54,6 +55,9 @@ builder.Services.AddScoped<VaultHybridSyncReviewService>();
 builder.Services.AddScoped<VaultScopedQueueReview>();
 builder.Services.AddScoped<VaultLinkedQueueInspection>();
 builder.Services.AddScoped<VaultHybridDraftWorkspace>();
+builder.Services.AddScoped<StellarAccountObjectStoreProvider>();
+builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.GetRequiredService<StellarAccountObjectStoreProvider>());
+builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
 builder.Services.AddScoped<VaultHybridFileWorkspace>();
 builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
 builder.Services.AddTransient<IVaultNativeFileAccess, BrowserVaultNativeFileAccess>();
