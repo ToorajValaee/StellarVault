@@ -747,7 +747,9 @@ test('linked S-key device UI requires consent and separate fee-reviewed publicat
   assert.match(workspace,/<VaultLinkedLocalQueuePanel View=/);
   assert.match(panel,/private bool ShowDrafts => View is "all" or "drafts"/);
   assert.match(panel,/private bool ShowSync => View is "all" or "sync"/);
-  assert.match(native,/<VaultSecretKeyWorkspace \/>/);
+  assert.match(native,/<VaultSecretKeyWorkspace Embedded="true"/);
+  assert.match(native,/NativeContentKey => SecretLedger.IsConnected/);
+  assert.match(native,/OnViewChange="NavigateLinkedNative"/);
 });
 
 
