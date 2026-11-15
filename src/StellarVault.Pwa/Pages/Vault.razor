@@ -122,6 +122,7 @@ else
             @if (_appView == "records" && ActiveMode == VaultWorkspaceMode.MnemonicHd && Ledger.IsConnected)
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
+                <VaultRecordTransferPanel Strategy="@VaultMutationStrategyPolicy.Hd" Records="@Records.Concat(Folders).ToArray()" />
             }
         @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
         {
