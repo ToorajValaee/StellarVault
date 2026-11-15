@@ -35,10 +35,35 @@ public static class VaultStreamingFileTree
     /// </summary>
     public sealed record Emission(string Id, string Kind, byte[] Plaintext);
 
-    public static async Task<Result> WriteAsync(
+    public static Task<Result> WriteAsync(
         Stream input, string fileName, string contentType,
         Func<Emission, CancellationToken, Task> persistEncryptedNode,
         CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(persistEncryptedNode);
+        return WriteCoreAsync(input, fileName, contentType, async (node, token) =>
+        {
+            await persistEncryptedNode(node, token);
+            return node.Id;
+        }, ct);
+    }
+
+    /// <summary>
+    /// The sink returns the durable ciphertext content address. Branches refer
+    /// directly to these addresses; no file-wide node ID mapping is necessary.
+    /// The sink must authenticate/encrypt, durably store, and return the actual
+    /// object hash before this method emits another node.
+    /// </summary>
+    public static Task<Result> WriteContentAddressedAsync(
+        Stream input, string fileName, string contentType,
+        Func<Emission, CancellationToken, Task<string>> persistEncryptedNode,
+        CancellationToken ct = default) =>
+        WriteCoreAsync(input, fileName, contentType, persistEncryptedNode, ct);
+
+    private static async Task<Result> WriteCoreAsync(
+        Stream input, string fileName, string contentType,
+        Func<Emission, CancellationToken, Task<string>> persistEncryptedNode,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(persistEncryptedNode);
@@ -54,12 +79,15 @@ public static class VaultStreamingFileTree
         long total = 0;
         long emitted = 0;
 
-        async Task EmitAsync(string id, string kind, byte[] payload)
+        async Task<string> EmitAsync(string kind, byte[] payload)
         {
             try
             {
-                await persistEncryptedNode(new Emission(id, kind, payload), ct);
+                var id = await persistEncryptedNode(
+                    new Emission(NewId(), kind, payload), ct);
+                RequireId(id);
                 emitted = checked(emitted + 1);
+                return id;
             }
             finally { CryptographicOperations.ZeroMemory(payload); }
         }
@@ -85,8 +113,7 @@ public static class VaultStreamingFileTree
             var bytes = JsonSerializer.SerializeToUtf8Bytes(new Branch(children));
             // Reference digests commit to the EXACT serialized branch payload.
             var hash = Convert.ToHexString(SHA256.HashData(bytes));
-            var id = NewId();
-            await EmitAsync(id, BranchKind, bytes);
+            var id = await EmitAsync(BranchKind, bytes);
             return new Reference(id, length, hash);
         }
 
@@ -111,8 +138,7 @@ public static class VaultStreamingFileTree
                 try { payload = JsonSerializer.SerializeToUtf8Bytes(new Leaf(leafBytes)); }
                 finally { CryptographicOperations.ZeroMemory(leafBytes); }
                 var digest = Convert.ToHexString(SHA256.HashData(payload));
-                var id = NewId();
-                await EmitAsync(id, LeafKind, payload);
+                var id = await EmitAsync(LeafKind, payload);
                 await AddAsync(0, new Reference(id, filled, digest));
                 if (filled != buffer.Length) break;
             }
@@ -121,8 +147,7 @@ public static class VaultStreamingFileTree
             {
                 var empty = JsonSerializer.SerializeToUtf8Bytes(new Leaf([]));
                 var digest = Convert.ToHexString(SHA256.HashData(empty));
-                var id = NewId();
-                await EmitAsync(id, LeafKind, empty);
+                var id = await EmitAsync(LeafKind, empty);
                 await AddAsync(0, new Reference(id, 0, digest));
             }
 
@@ -146,8 +171,8 @@ public static class VaultStreamingFileTree
 
             var root = new Root(fileName, contentType, total,
                 Convert.ToHexString(totalHash.GetHashAndReset()), top);
-            var rootId = NewId();
-            await EmitAsync(rootId, RootKind, JsonSerializer.SerializeToUtf8Bytes(root));
+            var rootId = await EmitAsync(RootKind,
+                JsonSerializer.SerializeToUtf8Bytes(root));
             return new Result(rootId, root, emitted);
         }
         finally { CryptographicOperations.ZeroMemory(buffer); }
@@ -261,7 +286,7 @@ public static class VaultStreamingFileTree
 
     private static void RequireId(string? id)
     {
-        if (id is not { Length: 16 } ||
+        if (id is not { Length: 16 or 64 } ||
             !id.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F'))
             throw new InvalidDataException("Invalid streaming file node ID.");
     }
