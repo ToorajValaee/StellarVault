@@ -642,6 +642,7 @@ test('device storage stays expanded, the radio layout is stable and both credent
   assert.match(home,/DeviceUnlockPreference\.Requested/);
   assert.match(css,/\.sv-access-storage-choices \.sv-biometric-choice > span/);
   assert.match(css,/min-height:48px!important/);
+  assert.match(css,/\.sv-entry-showcase-content \{\s*margin:clamp\(34px,7vh,92px\) 0 0!important/);
   assert.match(program,/AddScoped<VaultDeviceUnlockPreference>/);
   assert.match(queue,/stellarVaultBiometric\.enroll/);
   assert.match(queue,/stellarVaultBiometric\.unlock/);
