@@ -1040,3 +1040,8 @@ This milestone extends the pre-existing `VaultLinkedAccountExpansion` approval f
 - Node mocked signer now supplies signed hash semantics and tests timeout/hash mismatch, with source assertions for scope binding. Native fake-ledger smoke supplies signed public identity after unknown expansion outcomes, verifies durable storage and refuses network, operation and epoch mismatches.
 - All code committed through the connected GitHub repository. **No Node/.NET binaries or Stellar Testnet integration tests were run here.** User previously confirmed earlier tests passing; this new batch needs fresh local execution.
 - Remaining release blockers: complete independent historical operation/signer/ciphertext verification and safe durable CAS release, linked queued update/delete, linked file publication, multi-device and MAUI real-runtime recovery, independent security audit. A controlled Testnet pilot must not use real credentials or valuable funds.
+
+## 2026-11-15 restart receipt smoke and UI transaction handle
+- Extended native linked expansion smoke to simulate losing the volatile signer diagnostic on reconnect and reopening the separately encrypted durable queue. A fake read-only receipt evidence provider receives the exact persisted public hash and selected network, but neither its positive response nor a visible tail releases the encrypted `Uncertain` reservation.
+- The shared linked recovery panel now displays the stored 64-hex signed transaction hash as a public investigation handle when available, clearly labeled **not proof**. The same UI remains rendered in PWA and native host.
+- Regression assertions cover the restart flow and non-confirmation. Code committed only; build, Node and real Horizon/Testnet verification pending on user's local PC.
