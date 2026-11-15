@@ -54,7 +54,8 @@ public enum ObjectMutationState
 
 public sealed record ObjectMutationIntent(
     string OperationId, ObjectMutationState State,
-    ObjectStorageQuote Quote, string? ApprovalRequestId = null);
+    ObjectStorageQuote Quote, string? ApprovalRequestId = null,
+    string? ObjectId = null);
 
 public sealed record StoredObject(
     ObjectDescriptor Descriptor, string Revision,
