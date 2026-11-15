@@ -98,7 +98,7 @@ else
             <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected || SecretLedger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected || SecretLedger.IsConnected ? "Stellar connected" : "Not connected")</div>
             <div class="sv-rail-attribution">Powered by <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer">badje.ir</a></div>
         </nav>
-        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="(ActiveMode == VaultWorkspaceMode.StellarSecretKey ? "linked" : _appView)">
+        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="WorkspaceRenderKey">
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
@@ -688,6 +688,9 @@ else
 </AdaptiveShell>
 
 @code {
+    private string WorkspaceRenderKey =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey ? "linked" : _appView;
+
     private VaultSecretKeyWorkspace? _linkedWorkspace;
 
     private void CreateRecordForActiveVault()
