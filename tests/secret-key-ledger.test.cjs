@@ -1493,6 +1493,20 @@ test('linked SVFILE2 multipart staging requires historical part confirmation and
   assert.match(smoke,/Multipart manifest could publish before its file parts/);
 });
 
+test('default zero-threshold S-key root recovers records but cannot plan ledger writes',async()=>{
+  const fixture=harness();
+  fixture.accounts.get(ROOT).thresholds={
+    low_threshold:0,med_threshold:0,high_threshold:0
+  };
+  await fixture.open();
+  assert.equal((await fixture.read()).length,0);
+  await assert.rejects(fixture.plan('create',recordId,{
+    Title:'blocked',Content:'private',IsFolder:false,Tags:[]
+  }),/Vault writes are blocked.*zero signing thresholds/);
+  assert.equal(fixture.history.size,0);
+  fixture.close();
+});
+
 test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling in Core',()=>{
   const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
   const tree=fs.readFileSync(path.join(core,'VaultStreamingFileTree.cs'),'utf8');
