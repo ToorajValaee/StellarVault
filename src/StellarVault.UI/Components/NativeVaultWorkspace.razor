@@ -134,7 +134,7 @@ else
                 {
                     <label class="sv-native-mainnet-consent">
                         <input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_ledgerBusy" />
-                        I understand that Mainnet uses real funds and approved transactions may cost XLM.
+                        I understand that Mainnet uses real funds and approved transactions may cost native asset.
                     </label>
                 }
                 <div class="sv-credential-mode-picker" role="group" aria-label="Vault account type">
@@ -413,7 +413,7 @@ else
             @if (Ledger.IsConnected)
             {
                 <details class="sv-native-help"><summary>About storage and transactions</summary>
-                    <p>Local records stay on this device. Publishing to Stellar needs your approval and may cost XLM.</p>
+                    <p>Local records stay on this device. Publishing to Stellar needs your approval and may cost native asset.</p>
                 </details>
             }
         </section>
