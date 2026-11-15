@@ -67,8 +67,9 @@ public static class VaultStreamingEncryptedFileStore
     {
         RequireInputs(objects, key, vaultScope);
         ArgumentNullException.ThrowIfNull(privateStaging);
-        if (!privateStaging.CanSeek || !privateStaging.CanWrite)
-            throw new ArgumentException("Seekable private staging required.", nameof(privateStaging));
+        if (!privateStaging.CanSeek || !privateStaging.CanWrite ||
+            privateStaging.Position != privateStaging.Length)
+            throw new ArgumentException("Append-only seekable private staging required.", nameof(privateStaging));
         long offset = privateStaging.Position;
         try
         {
