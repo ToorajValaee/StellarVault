@@ -33,7 +33,9 @@ public sealed class VaultLinkedDraftRecoveryReview(
             throw new ArgumentException("Invalid mutation identifier.", nameof(mutationId));
         consent.RequireLocalPersistence();
         if (!keys.IsUnlocked || !ledger.IsConnected ||
-            ledger.RootAccountId is not { } root)
+            ledger.RootAccountId is not { } root ||
+            ledger.ConnectedNetworkPassphrase is not { Length: > 0 } passphrase ||
+            keys.ActiveRootAccountId != root)
             throw new UnauthorizedAccessException(
                 "Connect the independent S-key account and unlock its encrypted queue.");
 
@@ -93,7 +95,7 @@ public sealed class VaultLinkedDraftRecoveryReview(
                                     draft.Tags ?? [], StringComparer.Ordinal);
                     }
                 }
-                RequireSameScope(root, scope, epoch);
+                RequireSameScope(root, scope, epoch, passphrase);
 
                 // The durable hash is the exact signed transaction identity
                 // captured before broadcast. The volatile runtime diagnostic is
@@ -103,7 +105,7 @@ public sealed class VaultLinkedDraftRecoveryReview(
                 var diagnostic = BuildDurableReceiptQuery(root, item);
                 if (diagnostic is not null)
                 {
-                    RequireSameScope(root, scope, epoch);
+                    RequireSameScope(root, scope, epoch, passphrase);
                     var evidence = await receipts.InspectAsync(diagnostic, ct);
                     receipt = evidence.ReceiptObserved;
                     historicalRecordOperations = evidence.HistoricalRecordOperationsMatch;
@@ -125,7 +127,7 @@ public sealed class VaultLinkedDraftRecoveryReview(
                 historicalParentAccount = null;
             }
 
-            RequireSameScope(root, scope, epoch);
+            RequireSameScope(root, scope, epoch, passphrase);
             return new(item.Id, item.EntityId, item.State, matches, receipt,
                 item.Kind == VaultMutationKind.ExtendLinkedChain
                     ? "Current linked tail inspection is advisory only. A matching or different tail does not prove the exact historical account-creation transaction, signer authorization, or permission to retry."
@@ -204,14 +206,16 @@ public sealed class VaultLinkedDraftRecoveryReview(
             expectedPassphrase, uri.GetLeftPart(UriPartial.Authority));
     }
 
-    private void RequireSameScope(string root, string scope, long epoch)
+    private void RequireSameScope(string root, string scope, long epoch,
+        string passphrase)
     {
         consent.RequireLocalPersistence();
-        if (!keys.IsUnlocked || !ledger.IsConnected ||
-            ledger.RootAccountId != root ||
+        if (!keys.IsUnlocked || keys.ActiveRootAccountId != root ||
+            !ledger.IsConnected || ledger.RootAccountId != root ||
             ledger.ConnectionEpoch != epoch ||
+            ledger.ConnectedNetworkPassphrase != passphrase ||
             network.CredentialKey(root) != scope)
             throw new InvalidOperationException(
-                "S-key session or encrypted queue scope changed during recovery assessment.");
+                "S-key signer, network identity or encrypted queue scope changed during recovery assessment.");
     }
 }
