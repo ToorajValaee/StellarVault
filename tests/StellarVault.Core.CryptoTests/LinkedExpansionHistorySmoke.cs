@@ -12,8 +12,10 @@ internal static class LinkedExpansionHistorySmoke
 
     public static async Task RunAsync()
     {
-        static object Create(string destination = Child, string source = Root) =>
+        static object Create(string destination = Child, string source = Root,
+            string funder = Root, string starting = "1.5000000") =>
             new { type = "create_account", source_account = source, account = destination,
+                funder, starting_balance = starting,
                 transaction_hash = Hash, transaction_successful = true };
         static object Options(string signer = Root, int master = 0, int high = 1) =>
             new { type = "set_options", source_account = Child,
@@ -24,9 +26,9 @@ internal static class LinkedExpansionHistorySmoke
             new { type = "manage_data", source_account = account, name = "sv:next:v1",
                 value = Convert.ToBase64String(Encoding.ASCII.GetBytes(target)),
                 transaction_hash = Hash, transaction_successful = true };
-        static object Payment(string receiver = Root) =>
+        static object Payment(string receiver = Root, string amount = "0.5000000") =>
             new { type = "payment", source_account = Root, to = receiver,
-                asset_type = "native", transaction_hash = Hash, transaction_successful = true };
+                asset_type = "native", amount, transaction_hash = Hash, transaction_successful = true };
 
         async Task<bool> MatchesAsync(object[] operations)
         {
@@ -51,6 +53,10 @@ internal static class LinkedExpansionHistorySmoke
             "Parent pointer to wrong child was accepted.");
         Check(!await MatchesAsync([Create(destination: Root), Options(), Pointer()]),
             "CreateAccount destination mismatch was accepted.");
+        Check(!await MatchesAsync([Create(funder: Child), Options(), Pointer()]),
+            "Incorrect CreateAccount funder was accepted.");
+        Check(!await MatchesAsync([Create(starting: "0.0000000"), Options(), Pointer()]),
+            "Zero funding for newly created child was accepted.");
         Check(!await MatchesAsync([Create(), Options(), Pointer(), Pointer()]),
             "Duplicate parent-pointer operation was accepted.");
         Check(!await MatchesAsync([Create(), Options(), Payment(), Pointer()]),
