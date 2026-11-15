@@ -194,8 +194,7 @@
                             <button type="button" class="pixel-button compact"
                                     disabled="@(_busy || _review is not null)"
                                     @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
-                            @if (record.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
-                                    StringComparison.Ordinal))
+                            @if (StellarLedgerFileProtocol.IsFile(record))
                             {
                                 <button type="button" class="pixel-button compact"
                                         disabled="@_busy"
@@ -215,17 +214,19 @@
                     }
                 </section>
             }
-            <section class="sv-secret-review" aria-label="Single-record encrypted S-key files">
-                <h3>Encrypted small files (single-record)</h3>
-                <p>Stage files of 1–2048 bytes using the shared SVFILE1 format.
-                   Files stay encrypted locally until separately fee-reviewed.
-                   The larger multipart file protocol is not enabled for this S-key vault.</p>
+            <section class="sv-secret-review" aria-label="Encrypted S-key files">
+                <h3>Encrypted files</h3>
+                <p>Files up to 2 KiB use one SVFILE1 record. Larger files up to 96 KiB
+                   use SVFILE2 with multiple independent fee approvals: every part
+                   must be historically confirmed before the next part, and the
+                   final manifest is published last. No transactions are sent
+                   when staging. Bigger files need the future hierarchical manifest protocol.</p>
                 <InputFile OnChange="SelectLinkedSmallFile" disabled="@_busy" />
                 @if (_smallFile is not null)
                 {
                     <p>Selected: @_smallFile.Name (@_smallFile.Size bytes)</p>
                     <button type="button" class="pixel-button compact"
-                            disabled="@(_busy || _smallFile.Size < 1 || _smallFile.Size > VaultLinkedSingleFilePolicy.MaxBytes)"
+                            disabled="@(_busy || _smallFile.Size < 1 || _smallFile.Size > VaultLinkedMultipartFilePolicy.MaxBytes)"
                             @onclick="StageLinkedSmallFileAsync">Stage encrypted file draft</button>
                 }
             </section>
@@ -640,9 +641,11 @@
     private void SelectLinkedSmallFile(InputFileChangeEventArgs args)
     {
         _smallFile = args.File;
-        _message = _smallFile.Size is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes
-            ? "This S-key single-record file mode accepts only 1–2048 bytes."
-            : "File selected. Staging will encrypt its contents locally without a Stellar transaction.";
+        _message = _smallFile.Size is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes
+            ? "S-key file staging supports 1–98304 bytes with the current bounded multipart protocol."
+            : _smallFile.Size <= VaultLinkedSingleFilePolicy.MaxBytes
+                ? "Single-record file selected. Staging will not send a transaction."
+                : "Multipart file selected. Every part needs its own future fee approval and signed-history confirmation; manifest last.";
     }
 
     private async Task StageLinkedSmallFileAsync()
@@ -652,23 +655,34 @@
         byte[]? contents = null;
         try
         {
-            if (_smallFile.Size is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes)
-                throw new InvalidDataException("The selected file exceeds the single-record limit.");
-            await using var input = _smallFile.OpenReadStream(VaultLinkedSingleFilePolicy.MaxBytes);
+            if (_smallFile.Size is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
+                throw new InvalidDataException("The selected file exceeds the supported linked multipart bound.");
+            await using var input = _smallFile.OpenReadStream(VaultLinkedMultipartFilePolicy.MaxBytes);
             using var buffer = new MemoryStream();
             await input.CopyToAsync(buffer);
             contents = buffer.ToArray();
-            await DraftWorkspace.StageSmallFileAsync(
-                _smallFile.Name.Length > 256 ? _smallFile.Name[..256] : _smallFile.Name,
-                _smallFile.Name,
-                string.IsNullOrWhiteSpace(_smallFile.ContentType)
-                    ? "application/octet-stream" : _smallFile.ContentType,
-                contents);
+            var title = _smallFile.Name.Length > 256
+                ? _smallFile.Name[..256] : _smallFile.Name;
+            var mime = string.IsNullOrWhiteSpace(_smallFile.ContentType)
+                ? "application/octet-stream" : _smallFile.ContentType;
+            var stagedCount = 1;
+            if (contents.Length <= VaultLinkedSingleFilePolicy.MaxBytes)
+                await DraftWorkspace.StageSmallFileAsync(
+                    title, _smallFile.Name, mime, contents);
+            else
+            {
+                var items = await DraftWorkspace.StageMultipartFileAsync(
+                    title, _smallFile.Name, mime, contents);
+                stagedCount = items.Count;
+            }
             _smallFile = null;
             _drafts = await DraftWorkspace.ListAsync();
             _report = await QueueInspection.InspectAsync();
             _manualSyncPlan = null;
-            _message = "Encrypted file draft staged. Review its separate fee before publication.";
+            _message = stagedCount == 1
+                ? "Encrypted single-record file staged. Review its fee before publication."
+                : "Encrypted multipart file staged as " + stagedCount +
+                  " separate records (parts plus final manifest). Approve and historically verify each transaction in order. No network write occurred during staging.";
         }
         catch (Exception ex)
         {
@@ -691,12 +705,11 @@
         {
             var records = await Ledger.ReadAsync();
             var file = records.Single(x => x.Id == recordId);
-            if (!file.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix,
-                    StringComparison.Ordinal))
-                throw new InvalidDataException("Only a verified SVFILE1 file is supported.");
+            if (!StellarLedgerFileProtocol.IsFile(file))
+                throw new InvalidDataException("Selected record is not an authenticated SVFILE1/SVFILE2 file.");
             decoded = StellarLedgerFileProtocol.DecodeFile(file, records);
-            if (decoded.Length is < 1 or > VaultLinkedSingleFilePolicy.MaxBytes)
-                throw new InvalidDataException("The linked file exceeds its safe single-record size.");
+            if (decoded.Length is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
+                throw new InvalidDataException("The linked file exceeds the supported verified multipart size.");
             await JS.InvokeVoidAsync("stellarVaultV2Download.save",
                 StellarLedgerFileProtocol.FileName(file), decoded);
             _message = "Verified encrypted S-key file decrypted and downloaded.";
@@ -727,7 +740,10 @@
         try
         {
             var records = await Ledger.ReadAsync();
-            _publishedRecords = records.OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+            _publishedRecords = records
+                .Where(x => !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
+                    StringComparison.Ordinal))
+                .OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
                 .Take(200).ToArray();
             _message = "Published S-key records loaded. Select an explicit local change.";
         }
