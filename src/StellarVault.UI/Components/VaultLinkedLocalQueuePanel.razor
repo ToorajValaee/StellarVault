@@ -282,6 +282,13 @@
                 <p><strong>Current matching record:</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
                     _recoveryFinding.CurrentRecordMatches is false ? "Not observed" : "Unknown")</p>
                 <p><strong>Advisory receipt:</strong> @(_recoveryFinding.HistoricalReceiptObserved ? "Observed (insufficient for release)" : "Not established")</p>
+                <p><strong>Historical record operation check:</strong>
+                    @(_recoveryFinding.HistoricalRecordOperationsMatch ? "skh/skc manifest and chunks match (not signer or decryption proof)" : "Not established")
+                </p>
+                @if (_recoveryFinding.HistoricalStorageAccount is { } account)
+                {
+                    <p><strong>Historical storage account:</strong> <code style="overflow-wrap:anywhere">@account</code></p>
+                }
                 <p role="alert">@_recoveryFinding.Explanation</p>
                 <p>No queue state was changed. Independent operation-level verification is required before any release or retry.</p>
             </section>
