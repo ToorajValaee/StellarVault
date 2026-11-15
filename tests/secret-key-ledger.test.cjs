@@ -1249,7 +1249,7 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
     'LinkedDraftSmoke.cs'),'utf8');
   assert.match(source,/async function recordRevision\(id,recordId\)/);
   assert.match(source,/record\?\.rawHeader\|\|null/);
-  assert.match(source,/submit,recordRevision,inspectUncertain/);
+  assert.match(source,/submit,recordRevision,verifyHistoricalRecord,verifyHistoricalExpansion,releaseVerifiedHistory,inspectUncertain/);
   assert.match(revision,/ReadRecordRevisionAsync/);
   assert.match(adapter,/IStellarSecretKeyRecordRevisionReader/);
   assert.match(adapter,/stellarVaultSecretLedger\.recordRevision/);
@@ -1290,4 +1290,40 @@ test('revision-pinned linked update/delete use encrypted queue with preflight co
   assert.match(smoke,/RunRemoteMutationSmokeAsync\(true\)/);
   assert.match(smoke,/ledger\.BumpRemoteRevision\(id\)/);
   assert.doesNotMatch(publisher,/State = VaultSyncState\.Confirmed/);
+});
+
+test('linked verified recovery requires signed XDR and encrypted journal CAS, never a replay',()=>{
+  const root=path.join(__dirname,'..');
+  const core=path.join(root,'src','StellarVault.Core','Services');
+  const pwa=path.join(root,'src','StellarVault.Pwa');
+  const app=fs.readFileSync(path.join(pwa,'Services','BrowserSecretKeyLedger.cs'),'utf8');
+  const reconciliation=fs.readFileSync(path.join(core,'VaultLinkedVerifiedReconciliation.cs'),'utf8');
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'src','StellarVault.UI','Components',
+    'VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const native=fs.readFileSync(path.join(root,'tests','StellarVault.Core.CryptoTests',
+    'LinkedDraftSmoke.cs'),'utf8');
+  assert.match(source,/async function verifyHistoricalRecord\(/);
+  assert.match(source,/async function verifyHistoricalExpansion\(/);
+  assert.match(source,/TransactionBuilder\.fromXDR\(/);
+  assert.match(source,/rootKey\.verify\(rawHash/);
+  assert.match(source,/await unseal\(s,recordId,manifest\.gen,cipher\)/);
+  assert.match(source,/hasSignature\(s\.root\)\|\|!hasSignature\(childId\)/);
+  assert.match(source,/releaseVerifiedHistory/);
+  assert.match(app,/IStellarSecretKeyHistoricalRecordVerifier/);
+  assert.match(app,/IStellarSecretKeyHistoricalExpansionVerifier/);
+  assert.match(reconciliation,/before\.CurrentRecordMatches is not true/);
+  assert.match(reconciliation,/before\.HistoricalReceiptObserved/);
+  assert.match(reconciliation,/before\.HistoricalExpansionOperationsMatch/);
+  assert.match(reconciliation,/signer\.VerifyAsync\(/);
+  assert.match(reconciliation,/historical\.VerifyExpansionAsync\(/);
+  assert.match(reconciliation,/after\.CurrentRecordMatches is not true/);
+  assert.match(reconciliation,/store\.TryReplaceAsync\(entry, confirmed, CancellationToken\.None\)/);
+  assert.match(reconciliation,/session\.ReleaseVerifiedAsync\(txHash, CancellationToken\.None\)/);
+  assert.doesNotMatch(reconciliation,/SubmitApprovedAsync|QuoteCreateAsync|QuoteUpdateAsync|QuoteDeleteAsync/);
+  assert.match(policy,/previous\.State == VaultSyncState\.Uncertain &&\s*next\.State == VaultSyncState\.Confirmed/);
+  assert.match(panel,/ConfirmVerifiedExpansionAsync\(mutationId\)/);
+  assert.match(panel,/ConfirmVerifiedRecordAsync\(mutationId\)/);
+  assert.match(native,/AllowHistoricalProof = true/);
+  assert.match(native,/ConfirmVerifiedExpansionAsync\(journalId\)/);
 });
