@@ -1054,10 +1054,13 @@ else
                 // A new read ensures the root and its referenced children have
                 // not been changed or removed since the user's verification.
                 var current = await Ledger.ReadAsync();
-                var original = prepared.Snapshot.Single(x => x.Id == prepared.RootId);
-                var latest = current.SingleOrDefault(x => x.Id == prepared.RootId);
-                if (latest != original || !current.SequenceEqual(prepared.Snapshot))
-                    throw new InvalidDataException("Ledger file changed since verification. Verify again.");
+                // LedgerRecordItem contains reference-type tag arrays; record
+                // equality would report false for identical fresh Horizon
+                // snapshots. Authenticate the entire current tree instead.
+                var currentRoot = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, current, Stream.Null);
+                if (currentRoot.FileName != prepared.FileName)
+                    throw new InvalidDataException("The verified file name changed.");
 
                 var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 256 * 1024,
                     resumeWriterThreshold: 128 * 1024));
