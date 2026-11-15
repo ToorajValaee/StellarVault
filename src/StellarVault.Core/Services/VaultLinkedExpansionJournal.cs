@@ -128,23 +128,39 @@ public sealed class VaultLinkedExpansionJournal(
                     throw new InvalidOperationException(
                         "Encrypted expansion reservation failed. Inspect the durable journal before trying again.");
 
+                var submission = reserved;
                 string? hash = null;
                 try
                 {
                     transportInvoked = true;
-                    hash = await expansion.SubmitApprovedAsync(approvedQuote, true, ct);
+                    hash = await expansion.SubmitWithSignedHashAsync(
+                        approvedQuote, true,
+                        async signedHash =>
+                        {
+                            RequireSession(root, scope, epoch);
+                            if (submission.TransactionHash is not null)
+                                throw new InvalidOperationException("Expansion signed hash already checkpointed.");
+                            var pinned = submission with { TransactionHash = signedHash };
+                            if (!await store.TryReplaceAsync(
+                                    submission, pinned, CancellationToken.None))
+                                throw new InvalidOperationException(
+                                    "Could not durably checkpoint signed expansion hash. Refuse broadcast.");
+                            submission = pinned;
+                        }, ct);
                     RequireSession(root, scope, epoch);
+                    if (submission.TransactionHash != hash)
+                        throw new InvalidDataException(
+                            "Expansion response differs from the pre-broadcast durable hash.");
                     // A successful transport result and a visible linked tail
                     // are not independent proof of the exact historical
                     // CreateAccount/SetOptions/pointer operations or signer policy.
                     // Keep the original durable reservation quarantined until
                     // independent operation history can confirm its provenance.
-                    var uncertain = reserved with
+                    var uncertain = submission with
                     {
-                        State = VaultSyncState.Uncertain,
-                        TransactionHash = hash
+                        State = VaultSyncState.Uncertain
                     };
-                    if (!await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None))
+                    if (!await store.TryReplaceAsync(submission, uncertain, CancellationToken.None))
                         throw new InvalidOperationException(
                             "Expansion was observed but encrypted journal quarantine could not be persisted. Do not retry.");
                     return hash;
@@ -154,17 +170,18 @@ public sealed class VaultLinkedExpansionJournal(
                     // The transport may have signed and transmitted the
                     // expansion before a Horizon timeout. Preserve that exact
                     // pre-broadcast hash as a public reconciliation handle.
-                    hash ??= await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
-                        ledger, root, "expand", approvedQuote.TargetAccountId,
-                        null, ledger.ConnectedNetworkPassphrase ?? "", epoch);
-                    var uncertain = reserved with
+                    hash = submission.TransactionHash ?? hash ??
+                        await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                            ledger, root, "expand", approvedQuote.TargetAccountId,
+                            null, ledger.ConnectedNetworkPassphrase ?? "", epoch);
+                    var uncertain = submission with
                     {
                         State = VaultSyncState.Uncertain,
                         TransactionHash = hash
                     };
                     try
                     {
-                        await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None);
+                        await store.TryReplaceAsync(submission, uncertain, CancellationToken.None);
                     }
                     catch
                     {
