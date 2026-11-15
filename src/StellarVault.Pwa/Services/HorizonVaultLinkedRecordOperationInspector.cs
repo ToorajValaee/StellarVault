@@ -129,7 +129,10 @@ public sealed class HorizonVaultLinkedRecordOperationInspector(HttpClient client
                         if (manifestSeen || bytes.Length != 47 || bytes[0] != 1)
                             return No("Missing, duplicate or invalid skh v1 manifest.");
                         manifestSeen = true;
-                        generation = Encoding.ASCII.GetString(bytes, 1, 8);
+                        var declaredGeneration = Encoding.ASCII.GetString(bytes, 1, 8);
+                        if (generation is not null && generation != declaredGeneration)
+                            return No("skh manifest and skc chunks use different generations.");
+                        generation = declaredGeneration;
                         if (!generation.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
                             return No("Invalid skh record generation.");
                         count = BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(9, 2));
@@ -157,7 +160,11 @@ public sealed class HorizonVaultLinkedRecordOperationInspector(HttpClient client
                         var idx = 0;
                         foreach (var c in parts[1])
                             idx = idx * 36 + (c is >= '0' and <= '9' ? c - '0' : c - 'a' + 10);
-                        if (idx > 88 || Convert.ToString(idx, 36) != parts[1])
+                        var canonical = idx < 36
+                            ? "0123456789abcdefghijklmnopqrstuvwxyz"[idx].ToString()
+                            : string.Concat("0123456789abcdefghijklmnopqrstuvwxyz"[idx / 36],
+                                "0123456789abcdefghijklmnopqrstuvwxyz"[idx % 36]);
+                        if (idx > 88 || canonical != parts[1])
                             return No("Noncanonical historical skc index.");
                         if (generation is null) generation = parts[0];
                         if (generation != parts[0] || chunkWrites.ContainsKey(idx))
