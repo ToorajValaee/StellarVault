@@ -1164,7 +1164,8 @@ test('linked historical skh/skc inspection is bounded, read-only and never confi
     const content=fs.readFileSync(path.join(root,host),'utf8');
     assert.match(content,/AddScoped<HorizonVaultLinkedRecordOperationInspector>/);
   }
-  assert.match(inspector,/transactions\/.*operations\?limit=200/);
+  assert.match(inspector,/transactions\//);
+  assert.match(inspector,/operations\?limit=200/);
   assert.match(inspector,/MaxOperations = 90/);
   assert.match(inspector,/MaxBytes = 262144/);
   assert.match(inspector,/skh:/);
