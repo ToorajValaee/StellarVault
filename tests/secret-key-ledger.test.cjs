@@ -1219,3 +1219,47 @@ test('linked expansion historical operation verification is read-only and never 
       /AddScoped<HorizonVaultLinkedExpansionOperationInspector>/);
   }
 });
+
+test('revision-pinned linked update/delete use encrypted queue with preflight conflict checks',()=>{
+  const root=path.join(__dirname,'..');
+  const core=path.join(root,'src','StellarVault.Core','Services');
+  const pwa=path.join(root,'src','StellarVault.Pwa');
+  const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
+  const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
+  const planner=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
+  const transition=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
+  const revision=fs.readFileSync(path.join(core,'IStellarSecretKeyRecordRevisionReader.cs'),'utf8');
+  const adapter=fs.readFileSync(path.join(pwa,'Services','BrowserSecretKeyLedger.cs'),'utf8');
+  const panel=fs.readFileSync(path.join(root,'src','StellarVault.UI',
+    'Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
+  const smoke=fs.readFileSync(path.join(root,'tests','StellarVault.Core.CryptoTests',
+    'LinkedDraftSmoke.cs'),'utf8');
+  assert.match(source,/async function recordRevision\(id,recordId\)/);
+  assert.match(source,/record\?\.rawHeader\|\|null/);
+  assert.match(source,/submit,recordRevision,inspectUncertain/);
+  assert.match(revision,/ReadRecordRevisionAsync/);
+  assert.match(adapter,/IStellarSecretKeyRecordRevisionReader/);
+  assert.match(adapter,/stellarVaultSecretLedger\.recordRevision/);
+  assert.match(workspace,/StageUpdateAsync/);
+  assert.match(workspace,/StageDeleteAsync/);
+  assert.match(workspace,/ExpectedRemoteVersion/);
+  assert.match(workspace,/currentRevision != expectedRevision/);
+  assert.match(workspace,/remote\.Any\(x => x\.FolderId == entityId\)/);
+  assert.match(publisher,/RequireRemoteVersionAsync\(item, ct\)/);
+  assert.match(publisher,/RequireRemoteVersionAsync\(original, ct\)/);
+  assert.match(publisher,/QuoteUpdateAsync/);
+  assert.match(publisher,/QuoteDeleteAsync/);
+  assert.match(publisher,/Deletion\(original\.Kind\)/);
+  assert.match(publisher,/SubmitWithSignedHashAsync/);
+  assert.match(planner,/VaultMutationKind\.UpdateRecord/);
+  assert.match(planner,/VaultMutationKind\.DeleteRecord/);
+  assert.match(transition,/VaultMutationKind\.UpdateFolder/);
+  assert.match(transition,/VaultMutationKind\.DeleteFolder/);
+  assert.match(panel,/LoadPublishedRecordsAsync/);
+  assert.match(panel,/StageUpdateAsync\(remoteId, draft, remoteRevision\)/);
+  assert.match(panel,/StageDeleteAsync\(_deletePublishedId, _deletePublishedRevision\)/);
+  assert.match(smoke,/RunRemoteMutationSmokeAsync\(false\)/);
+  assert.match(smoke,/RunRemoteMutationSmokeAsync\(true\)/);
+  assert.match(smoke,/ledger\.BumpRemoteRevision\(id\)/);
+  assert.doesNotMatch(publisher,/State = VaultSyncState\.Confirmed/);
+});
