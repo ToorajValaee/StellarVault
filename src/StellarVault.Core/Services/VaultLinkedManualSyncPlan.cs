@@ -34,7 +34,9 @@ public static class VaultLinkedManualSyncPlan
                 reasons.Add("foreign-origin");
             if (mutation.State != VaultSyncState.Pending)
                 reasons.Add("not-pending");
-            if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+            if (mutation.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder or
+                VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
+                VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder))
                 reasons.Add("unsupported-mutation-kind");
             if (hasUnresolved)
                 reasons.Add("unresolved-queue-submission");
@@ -42,7 +44,8 @@ public static class VaultLinkedManualSyncPlan
                 reasons.Add("connected-signer-unlock-required");
 
             string title = "Unreadable encrypted draft";
-            bool folder = mutation.Kind == VaultMutationKind.CreateFolder;
+            bool folder = mutation.Kind is VaultMutationKind.CreateFolder or
+                VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteFolder;
             try
             {
                 var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(mutation.EncryptedPayload);
@@ -68,7 +71,15 @@ public static class VaultLinkedManualSyncPlan
             }
 
             if (mutation.State == VaultSyncState.Pending)
-                reasons.AddRange(VaultQueuedCreatePolicy.Problems(mutation, entries));
+            {
+                if (mutation.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)
+                    reasons.AddRange(VaultQueuedCreatePolicy.Problems(mutation, entries));
+                else if (mutation.Kind is VaultMutationKind.UpdateRecord or
+                    VaultMutationKind.UpdateFolder or VaultMutationKind.DeleteRecord or
+                    VaultMutationKind.DeleteFolder &&
+                    mutation.ExpectedRemoteVersion is not { Length: 64 })
+                    reasons.Add("missing-remote-revision");
+            }
 
             result.Add(new(mutation.Id, mutation.EntityId, title, folder,
                 mutation.State, mutation.CreatedUtc,
