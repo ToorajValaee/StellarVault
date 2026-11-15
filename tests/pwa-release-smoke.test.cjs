@@ -741,3 +741,21 @@ test('HD and Secret Key native sessions offer the same record commands without c
   assert.match(native, /else if \(Ledger\.IsConnected\) SetNativeMode\("record"\)/);
   assert.match(linked, /<VaultExplorerTree Folders="@_items\.Where\(x => x\.IsFolder\)\.ToArray\(\)"/);
 });
+
+test('HD and independent Secret Key workspaces share one published record filter and row renderer', () => {
+  const native = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'NativeVaultWorkspace.razor'), 'utf8');
+  const linked = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultSecretKeyWorkspace.razor'), 'utf8');
+  const published = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultPublishedItemsView.razor'), 'utf8');
+  assert.match(native, /<VaultPublishedItemsView Items="_ledgerRecords"/);
+  assert.match(linked, /<VaultPublishedItemsView Items="_items"/);
+  assert.match(native, /Collection="_nativeCollection"/);
+  assert.match(linked, /OnEdit="EditLinkedRow"/);
+  assert.match(linked, /OnDelete="DeleteLinkedRowAsync"/);
+  assert.match(published, /VaultPublishedFileClassification\.IsInternalNode\(x\)/);
+  assert.match(published, /string\.Equals\(x\.FolderId \?\? "", FolderId \?\? "", StringComparison\.Ordinal\)/);
+  assert.match(published, /OrderByDescending\(x => x\.IsFolder\)/);
+  assert.match(published, /<VaultExplorerItemRow Item="item"/);
+});
