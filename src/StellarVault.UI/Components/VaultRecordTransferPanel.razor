@@ -255,10 +255,10 @@
         finally
         {
             if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
-            if (browserDestination is not null)
-                await browserDestination.DisposeAsync();
             _backupPassword = string.Empty;
             _busy = false;
+            if (browserDestination is not null)
+                await browserDestination.DisposeAsync();
         }
     }
 
