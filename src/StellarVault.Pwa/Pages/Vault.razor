@@ -45,11 +45,8 @@ else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
         }
     </section>
 }
-else if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
-{
-    <VaultLinkedWorkspaceShell />
-}
-else if (Ledger.IsConnected && _registryReady == false)
+else if (ActiveMode == VaultWorkspaceMode.MnemonicHd &&
+         Ledger.IsConnected && _registryReady == false)
 {
     <section class="terminal-panel centered-message">
         <h1>Finish setup</h1>
@@ -64,7 +61,8 @@ else
             <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark sv-rail-shield" aria-hidden="true"><svg viewBox="0 0 32 36" width="27" height="30" fill="none"><path d="M16 2 29 7v11c0 8-6.2 13.5-13 16C9.2 31.5 3 26 3 18V7L16 2Z" fill="currentColor"/><path d="m16 9 2.7 6.3L25 18l-6.3 2.7L16 27l-2.7-6.3L7 18l6.3-2.7L16 9Z" fill="#084839"/></svg></span><span><strong>StellarVault</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span class="sv-nav-vault-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1"/></svg></span> Vault</button>
-            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey ||
+                 (Retention.AllowsLocalPersistence && Sessions.IsUnlocked))
             {
                 <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
                         @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span> Drafts</button>
@@ -78,10 +76,14 @@ else
             <div class="sv-pwa-rail-divider"></div>
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
-                @if (Ledger.IsConnected)
+                @if (Ledger.IsConnected || SecretLedger.IsConnected)
                 {
                     <div class="sv-sidebar-connected"><span aria-hidden="true">●</span> Connected</div>
-                    <p>Your vault is connected to the selected Stellar network.</p>
+                    <p>@(ActiveMode == VaultWorkspaceMode.StellarSecretKey
+                        ? "Independent Secret Key account chain · " +
+                          (Networks.SelectedPreset == "public" ? "Mainnet" :
+                           Networks.SelectedPreset == "custom" ? "Custom network" : "Testnet")
+                        : "Your vault is connected to the selected Stellar network.")</p>
                 }
                 else
                 {
@@ -93,10 +95,10 @@ else
                 <a href="https://github.com/ToorajValaee/StellarVault" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌘</span> View source on GitHub <span aria-hidden="true">↗</span></a>
 
             </div>
-            <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Not connected")</div>
+            <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected || SecretLedger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected || SecretLedger.IsConnected ? "Stellar connected" : "Not connected")</div>
             <div class="sv-rail-attribution">Powered by <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer">badje.ir</a></div>
         </nav>
-        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="_appView">
+        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="(ActiveMode == VaultWorkspaceMode.StellarSecretKey ? "linked" : _appView)">
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
@@ -107,19 +109,32 @@ else
                 <div class="sv-pwa-screen-tools">
                     @if (_appView == "records")
                     {
-                        <button class="pixel-button primary sv-create-record" type="button" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span> New record</button>
-                        <button class="pixel-button sv-create-folder" type="button" @onclick='() => OpenEditor("folder")'><span aria-hidden="true">＋</span> New folder</button>
+                        <button class="pixel-button primary sv-create-record" type="button" @onclick="CreateRecordForActiveVault"><span aria-hidden="true">＋</span> New record</button>
+                        <button class="pixel-button sv-create-folder" type="button" @onclick="CreateFolderForActiveVault"><span aria-hidden="true">＋</span> New folder</button>
                     }
-                    @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
-                    <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
-                    @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ Refresh</button> }
-                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock</button>
+                    @if (!Ledger.IsConnected && !SecretLedger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
+                    <button class="pixel-button compact" type="button" disabled="@(_infoLoading || (!Ledger.IsConnected && !SecretLedger.IsConnected))" aria-label="Account information" @onclick="OpenActiveAccountInfoAsync">ⓘ Account</button>
+                    @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshActiveVaultAsync" disabled="@(_busy || (!Ledger.IsConnected && !SecretLedger.IsConnected))">↻ Refresh</button> }
+                    <button class="pixel-button compact" type="button" @onclick="LockActiveVaultAsync">Lock</button>
                 </div>
             </header>
-            @if (_appView == "records" && Ledger.IsConnected)
+            @if (_appView == "records" && ActiveMode == VaultWorkspaceMode.MnemonicHd && Ledger.IsConnected)
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
             }
+        @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+        {
+            @* Keep the S-key ledger/queue panel mounted across tabs; only its
+               strategy-specific content changes, never the application shell. *@
+            <div hidden="@(_appView == "help")" class="sv-linked-unified-workspace">
+                <VaultSecretKeyWorkspace Embedded="true"
+                                         View="@(_appView == "help" ? "records" : _appView)"
+                                         OnViewChange="SelectAppView"
+                                         @ref="_linkedWorkspace" />
+            </div>
+        }
+        else
+        {
         @if (_appView == "help")
         {
             <VaultHelpContent />
@@ -430,19 +445,24 @@ else
         </div>
         </div>
         }
+        }
+        @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey && _appView == "help")
+        {
+            <VaultHelpContent />
+        }
         </section>
         </main>
         <nav class="sv-pwa-mobile-tabs" aria-label="Mobile vault navigation">
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)" @onclick='() => SelectAppView("records")'><span aria-hidden="true">⌂</span>Home</button>
             <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
-                    @onclick='() => SelectAppView(Retention.AllowsLocalPersistence && Sessions.IsUnlocked ? "drafts" : "records")'><span aria-hidden="true">♙</span>Vault</button>
+                    @onclick='() => SelectAppView(ActiveMode == VaultWorkspaceMode.StellarSecretKey || (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) ? "drafts" : "records")'><span aria-hidden="true">♙</span>Vault</button>
             <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)"
                     @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⟳</span>Sync</button>
             <button type="button" class="@(_appView == "settings" ? "selected" : "")" aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
         </nav>
-        <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
-        @if (_editorOpen)
+        <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick="CreateRecordForActiveVault"><span aria-hidden="true">＋</span></button>
+        @if (_editorOpen && ActiveMode == VaultWorkspaceMode.MnemonicHd)
         {
             <aside class="sv-editor-sidecar" aria-label="Vault item editor">
                 <div class="sv-inspector-resize-handle sv-editor-resize-handle" role="separator"
@@ -702,6 +722,37 @@ else
 </AdaptiveShell>
 
 @code {
+    private VaultSecretKeyWorkspace? _linkedWorkspace;
+
+    private void CreateRecordForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            _linkedWorkspace?.CreateRecordFromShell();
+        else OpenEditor("record");
+    }
+
+    private void CreateFolderForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            _linkedWorkspace?.CreateFolderFromShell();
+        else OpenEditor("folder");
+    }
+
+    private Task RefreshActiveVaultAsync() =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey
+            ? _linkedWorkspace?.RefreshFromShellAsync() ?? Task.CompletedTask
+            : RefreshAsync();
+
+    private Task LockActiveVaultAsync() =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey
+            ? _linkedWorkspace?.LockFromShellAsync() ?? Task.CompletedTask
+            : LockAsync();
+
+    private Task OpenActiveAccountInfoAsync() =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey
+            ? _linkedWorkspace?.ShowAccountInfoFromShellAsync() ?? Task.CompletedTask
+            : OpenAccountInfoAsync();
+
     private int FolderDepth(string id)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
