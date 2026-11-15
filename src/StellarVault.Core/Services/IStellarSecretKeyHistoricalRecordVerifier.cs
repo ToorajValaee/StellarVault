@@ -22,3 +22,9 @@ public interface IStellarSecretKeyVerifiedSessionRelease
 {
     Task ReleaseVerifiedAsync(string transactionHash, CancellationToken ct = default);
 }
+
+public interface IStellarSecretKeyHistoricalExpansionVerifier
+{
+    Task<bool> VerifyExpansionAsync(string transactionHash, string childAccountId,
+        CancellationToken ct = default);
+}
