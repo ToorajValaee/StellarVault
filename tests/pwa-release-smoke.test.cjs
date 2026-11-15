@@ -189,6 +189,14 @@ test('on-chain-only file review never requires a local vault checkpoint', () => 
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
 });
 
+test('large HD on-chain staging requires explicit local encrypted retention', () => {
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  assert.match(add, /!Retention\.AllowsLocalPersistence \|\| !Sessions\.IsUnlocked/);
+  assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(add, /No transaction was submitted/);
+  assert.match(add, /@onclick="StageHdTreeFileAsync"/);
+});
+
 test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
@@ -658,7 +666,7 @@ test('device storage stays expanded, the radio layout is stable and both credent
   assert.match(queue,/linked-s-key:/);
 });
 
-test('local file sizes use streamed storage rather than a 1 MiB UI cap; ledger uses protocol maximum', () => {
+test('local and HD on-chain file editors stage large files with streaming instead of fixed UI caps', () => {
   const local = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
     'Components', 'VaultBinaryFilesView.razor'), 'utf8');
   const ledger = fs.readFileSync(path.join(root, '..', 'Pages',
@@ -676,6 +684,8 @@ test('local file sizes use streamed storage rather than a 1 MiB UI cap; ledger u
   assert.doesNotMatch(local,/_file\.Size\s*>\s*1024\s*\*\s*1024/);
   assert.doesNotMatch(local,/OpenReadStream\(1024\s*\*\s*1024\)/);
   assert.doesNotMatch(download,/Download exceeds limit/);
-  assert.match(ledger,/MaximumLedgerFileLength = StellarLedgerFileProtocol\.MaxFileBytes/);
-  assert.match(ledger,/Each encrypted part requires a separate fee approval/);
+  assert.match(ledger,/HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(ledger,/selected\.OpenReadStream\(selected\.Size\)/);
+  assert.match(ledger,/STAGE ENCRYPTED FILE FOR SYNC/);
+  assert.doesNotMatch(ledger,/if \(file\.Size > MaximumLedgerFileLength\)/);
 });
