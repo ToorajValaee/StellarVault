@@ -496,6 +496,40 @@ internal static class LinkedDraftSmoke
 
             for (int i = 0; i < stages.Count; i++)
             {
+                // A different device can change a confirmed part's metadata
+                // without touching its ciphertext. Quoting either a later
+                // part or the final manifest must reject that remote drift.
+                if (i > 0)
+                {
+                    var verifiedSnapshot = await store.ListAsync(
+                        Root, network.CredentialKey(Root));
+                    try
+                    {
+                        var nextPart = verifiedSnapshot.Single(
+                            x => x.Id == stages[i].MutationId);
+                        var ledgerSnapshot = await ledger.ReadAsync();
+                        var changedPart = ledgerSnapshot.Select(x =>
+                            x.Id == stages[0].EntityId
+                                ? x with { Notes = "remote part metadata changed" }
+                                : x).ToArray();
+                        var problems = VaultLinkedMultipartFilePolicy.Problems(
+                            nextPart, verifiedSnapshot, changedPart);
+                        Require(problems.Contains(i == stages.Count - 1
+                                ? "multipart-confirmed-part-changed-on-ledger"
+                                : "multipart-previous-part-changed-on-ledger"),
+                            "Metadata-only tampering of a confirmed SVFILE2 part "
+                            + "did not block later publication.");
+                        Require(VaultLinkedMultipartFilePolicy.Problems(
+                                nextPart, verifiedSnapshot, ledgerSnapshot).Length == 0,
+                            "An unchanged SVFILE2 part was incorrectly blocked.");
+                    }
+                    finally
+                    {
+                        foreach (var mutation in verifiedSnapshot)
+                            System.Security.Cryptography.CryptographicOperations
+                                .ZeroMemory(mutation.EncryptedPayload);
+                    }
+                }
                 var state = await drafts.ReviewManualSyncAsync();
                 Require(state.NextReadyMutationId == stages[i].MutationId,
                     "The next verified multipart part/manifest was not the only next review.");
