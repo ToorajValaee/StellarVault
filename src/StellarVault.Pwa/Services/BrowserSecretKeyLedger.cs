@@ -12,6 +12,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
     IStellarSecretKeyRecordRevisionReader,
     IStellarSecretKeyHistoricalRecordVerifier,
+    IStellarSecretKeyHistoricalExpansionVerifier,
     IStellarSecretKeyVerifiedSessionRelease, IAsyncDisposable
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
@@ -126,6 +127,27 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             ConnectedNetworkPassphrase != passphrase)
             throw new InvalidOperationException(
                 "The S-key signer scope changed during historical verification.");
+        return proven;
+    }
+
+    public async Task<bool> VerifyExpansionAsync(
+        string transactionHash, string childAccountId, CancellationToken ct = default)
+    {
+        RequireConnected();
+        StellarAccountAddress.Validate(childAccountId);
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid signed expansion transaction hash.", nameof(transactionHash));
+        var epoch = ConnectionEpoch;
+        var root = RootAccountId;
+        var passphrase = ConnectedNetworkPassphrase;
+        var proven = await js.InvokeAsync<bool>(
+            "stellarVaultSecretLedger.verifyHistoricalExpansion", ct,
+            _sessionId, transactionHash, childAccountId);
+        if (!IsConnected || ConnectionEpoch != epoch ||
+            RootAccountId != root || ConnectedNetworkPassphrase != passphrase)
+            throw new InvalidOperationException(
+                "Signer or network changed during signed expansion proof.");
         return proven;
     }
 
