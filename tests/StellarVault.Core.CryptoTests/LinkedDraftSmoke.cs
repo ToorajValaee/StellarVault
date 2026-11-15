@@ -332,6 +332,20 @@ internal static class LinkedDraftSmoke
                         confirmedJournal, metadataChanged)
                         .Contains("tree-child-changed-on-ledger"),
                     "Remote metadata-only child modification bypassed linked tree preflight.");
+                // The root's immediate branch is still untouched. A modified
+                // grandchild leaf must nevertheless block the root's fresh
+                // publication preflight before approving a transaction.
+                var deeperLeaf = onChain.First(x =>
+                    x.Id != tree.RootId && x.Id != directChildId &&
+                    x.Tags is ["svtree3-leaf", _]);
+                var changedGrandchild = onChain.Select(x =>
+                    x.Id == deeperLeaf.Id
+                        ? x with { Notes = "grandchild changed after branch confirmation" }
+                        : x).ToArray();
+                Require(VaultLinkedTreeFilePolicy.Problems(rootMutation,
+                        confirmedJournal, changedGrandchild)
+                        .Contains("tree-descendant-changed-on-ledger"),
+                    "A changed grandchild leaf was hidden by its unchanged confirmed branch.");
             }
             finally
             {
