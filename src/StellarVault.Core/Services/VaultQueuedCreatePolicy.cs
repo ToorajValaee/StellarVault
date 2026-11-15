@@ -93,34 +93,42 @@ public static class VaultQueuedCreatePolicy
              existingEdges[0] != localParent.Id))
             problems.Add("orphaned-parent-dependency");
 
-        if (item.DependsOn is { Length: > 0 })
+        // A corrupt encrypted queue may contain multiple dependencies or
+        // duplicate durable mutation IDs. Neither may crash an advisory review
+        // or be treated as a publishable dependency graph.
+        if (item.DependsOn is { Length: 1 } edge)
         {
-            var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
-            var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
-            var cursor = item.DependsOn.SingleOrDefault();
-            while (cursor is not null)
+            if (all.GroupBy(x => x.Id, StringComparer.Ordinal).Any(g => g.Count() != 1))
+                problems.Add("duplicate-local-mutation-id");
+            else
             {
-                if (!seen.Add(cursor))
+                var byId = all.ToDictionary(x => x.Id, StringComparer.Ordinal);
+                var seen = new HashSet<string>(StringComparer.Ordinal) { item.Id };
+                var cursor = edge[0];
+                while (cursor is not null)
                 {
-                    problems.Add("local-folder-dependency-cycle");
-                    break;
+                    if (!seen.Add(cursor))
+                    {
+                        problems.Add("local-folder-dependency-cycle");
+                        break;
+                    }
+                    if (!byId.TryGetValue(cursor, out var ancestor))
+                    {
+                        problems.Add("missing-parent-dependency");
+                        break;
+                    }
+                    if (ancestor.Kind != VaultMutationKind.CreateFolder)
+                    {
+                        problems.Add("dependency-target-not-folder");
+                        break;
+                    }
+                    if (ancestor.DependsOn is not { Length: <= 1 })
+                    {
+                        problems.Add("invalid-parent-dependency");
+                        break;
+                    }
+                    cursor = ancestor.DependsOn.SingleOrDefault();
                 }
-                if (!byId.TryGetValue(cursor, out var ancestor))
-                {
-                    problems.Add("missing-parent-dependency");
-                    break;
-                }
-                if (ancestor.Kind != VaultMutationKind.CreateFolder)
-                {
-                    problems.Add("dependency-target-not-folder");
-                    break;
-                }
-                if (ancestor.DependsOn is not { Length: <= 1 })
-                {
-                    problems.Add("invalid-parent-dependency");
-                    break;
-                }
-                cursor = ancestor.DependsOn.SingleOrDefault();
             }
         }
         return problems.Distinct(StringComparer.Ordinal).ToArray();
