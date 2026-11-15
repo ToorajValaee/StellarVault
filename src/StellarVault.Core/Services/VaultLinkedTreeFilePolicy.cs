@@ -59,6 +59,7 @@ public static class VaultLinkedTreeFilePolicy
             };
             if (expectedTag is null || draft.Tags is not { Length: 2 } tags ||
                 tags[0] != expectedTag ||
+                tags[1] is null ||
                 !tags[1].StartsWith("svtree3-group:", StringComparison.Ordinal) ||
                 tags[1].Length != "svtree3-group:".Length + 16 ||
                 !tags[1]["svtree3-group:".Length..].All(Uri.IsHexDigit) ||
@@ -133,7 +134,9 @@ public static class VaultLinkedTreeFilePolicy
                     root.Length < 0 || root.Tree is null ||
                     root.Tree.Length != root.Length ||
                     root.Sha256Hex is not { Length: 64 } digest ||
-                    !digest.All(Uri.IsHexDigit))
+                    !digest.All(Uri.IsHexDigit) ||
+                    root.ContentType is not { Length: > 0 and <= 128 } mime ||
+                    !mime.All(c => c is >= '!' and <= '~'))
                     return false;
                 StellarLedgerFileProtocol.ValidateName(root.FileName);
                 children = [root.Tree];
@@ -142,7 +145,9 @@ public static class VaultLinkedTreeFilePolicy
 
             return children.All(x => x is not null && x.Id is { Length: 16 } &&
                 x.Id.All(Uri.IsHexDigit) && x.Length >= 0 &&
-                x.Sha256Hex is { Length: 64 } && x.Sha256Hex.All(Uri.IsHexDigit));
+                x.Sha256Hex is { Length: 64 } && x.Sha256Hex.All(Uri.IsHexDigit)) &&
+                children.Select(x => x.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() ==
+                children.Length;
         }
         catch (Exception ex) when (ex is JsonException or ArgumentException or InvalidDataException)
         {
@@ -233,6 +238,7 @@ public static class VaultLinkedTreeFilePolicy
         try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(candidate.EncryptedPayload); }
         catch (JsonException) { return false; }
         if (draft?.Tags is not { Length: 2 } tags ||
+            tags[1] is null ||
             !tags[1].StartsWith("svtree3-group:", StringComparison.Ordinal) ||
             !TryDecode(draft, out var kind, out var payload))
             return false;
