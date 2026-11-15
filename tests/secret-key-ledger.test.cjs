@@ -998,7 +998,9 @@ test('independent S-key manual sync orders encrypted draft review without automa
     'VaultLinkedLocalQueuePanel.razor'),'utf8');
   const smoke=fs.readFileSync(path.join(__dirname,'..','tests',
     'StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
-  assert.match(policy,/VaultLinkedSingleFilePolicy\.Problems\(mutation, entries\)/);
+  assert.match(policy,/VaultLinkedMultipartFilePolicy\.Problems\(mutation, entries\)/);
+  const multipartPolicy=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');
+  assert.match(multipartPolicy,/VaultLinkedSingleFilePolicy\.Problems\(mutation, all\)/);
   assert.match(policy,/unresolved-queue-submission/);
   assert.match(policy,/connected-signer-unlock-required/);
   assert.match(policy,/NextReadyMutationId/);
@@ -1009,7 +1011,6 @@ test('independent S-key manual sync orders encrypted draft review without automa
   assert.match(panel,/Review next ready draft/);
   assert.match(panel,/ReviewDraftAsync\(nextId\)/);
   assert.match(smoke,/initialPlan\.NextReadyMutationId == folder\.MutationId/);
-  assert.match(smoke,/afterParentPlan\.UnresolvedCount > 0 && !afterParentPlan\.CanReviewNext/);
   assert.match(smoke,/afterParentPlan\.UnresolvedCount > 0 && !afterParentPlan\.CanReviewNext/);
 });
 
