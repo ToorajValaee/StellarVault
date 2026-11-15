@@ -14,7 +14,9 @@ public sealed class StellarAccountVaultDatabase
 {
     private const string RecordDomain = "StellarVault/account-record/v1";
     private const string ContextDomain = "StellarVault/account-manifest/v1";
+    private const string FileTreePointerPrefix = "SVFT3:";
     private readonly VaultEncryptedRecordService _records;
+    private readonly IVaultChunkObjectStore _fileObjects;
     private readonly IVaultRecordIndex _pointers;
     private readonly string _accountId;
 
@@ -33,6 +35,7 @@ public sealed class StellarAccountVaultDatabase
         _accountId = stellarAccountId;
         _pointers = pointers;
         _records = new VaultEncryptedRecordService(objects, pointers);
+        _fileObjects = new VaultChunkObjectStoreAdapter(objects);
     }
 
     /// <summary>Derive an opaque, account-bound record identifier without exposing the record name.</summary>
@@ -86,6 +89,107 @@ public sealed class StellarAccountVaultDatabase
         var recordId = GetRecordId(name, vaultKey.Span);
         byte[] context = BuildManifestContext(recordId);
         return ReadWithContextAsync(recordId, privateStaging, vaultKey, context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Stage an arbitrarily long file as individually encrypted immutable
+    /// content-addressed objects. Only after the root exists is its small
+    /// encrypted record pointer atomically committed and catalog-registered.
+    /// A crash before pointer commit leaves inaccessible orphan ciphertext,
+    /// never a partially readable file.
+    /// </summary>
+    public async Task<VaultRecordPointer> PutIndexedStreamingFileAsync(
+        string name, VaultRecordPointer? expectedVersion,
+        Stream plaintext, ReadOnlyMemory<byte> vaultKey, string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(plaintext);
+        ValidateName(name);
+        StellarLedgerFileProtocol.ValidateName(name);
+        var scope = BuildFileTreeContext(GetRecordId(name, vaultKey.Span));
+        try
+        {
+            var result = await VaultStreamingEncryptedFileStore.StageAsync(
+                plaintext, name, contentType, _fileObjects, vaultKey,
+                scope, cancellationToken);
+            var pointerBytes = Encoding.ASCII.GetBytes(FileTreePointerPrefix + result.RootId);
+            try
+            {
+                using var pointerStream = new MemoryStream(pointerBytes, writable: false);
+                return await PutIndexedAsync(name, expectedVersion, pointerStream,
+                    vaultKey, contentType, cancellationToken);
+            }
+            finally { CryptographicOperations.ZeroMemory(pointerBytes); }
+        }
+        finally { CryptographicOperations.ZeroMemory(scope); }
+    }
+
+    /// <summary>
+    /// Verify a file root and all referenced encrypted nodes into private
+    /// caller-owned seekable staging. The caller must verify its record revision
+    /// and catalog visibility again before exposing or promoting the result.
+    /// </summary>
+    public async Task<VaultStreamingFileTree.Root> ReadStreamingFileAsync(
+        string name, Stream privateStaging, ReadOnlyMemory<byte> vaultKey,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateName(name);
+        ArgumentNullException.ThrowIfNull(privateStaging);
+        using var pointerStream = new BoundedFilePointerStream();
+        await GetAsync(name, pointerStream, vaultKey, cancellationToken);
+        byte[] bytes = pointerStream.ToArray();
+        string rootId;
+        try
+        {
+            var value = Encoding.ASCII.GetString(bytes);
+            if (value.Length != FileTreePointerPrefix.Length + 64 ||
+                !value.StartsWith(FileTreePointerPrefix, StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid streamed file pointer.");
+            rootId = value[FileTreePointerPrefix.Length..];
+        }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+
+        var scope = BuildFileTreeContext(GetRecordId(name, vaultKey.Span));
+        try
+        {
+            return await VaultStreamingEncryptedFileStore.RestoreAsync(
+                rootId, _fileObjects, privateStaging, vaultKey, scope, cancellationToken);
+        }
+        finally { CryptographicOperations.ZeroMemory(scope); }
+    }
+
+    private byte[] BuildFileTreeContext(Guid recordId) =>
+        Encoding.UTF8.GetBytes("StellarVault/account-file-tree/v1\0" +
+            _accountId + "\0" + recordId.ToString("N"));
+
+    private sealed class BoundedFilePointerStream : MemoryStream
+    {
+        private const int MaximumPointerLength = 128;
+
+        private void RequireLength(int added)
+        {
+            if (added > MaximumPointerLength - Position)
+                throw new InvalidDataException("Invalid streamed file pointer length.");
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            RequireLength(count);
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            RequireLength(buffer.Length);
+            base.Write(buffer);
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            RequireLength(buffer.Length);
+            return base.WriteAsync(buffer, cancellationToken);
+        }
     }
 
     private async Task<VaultRecordPointer> WriteWithContextAsync(Guid recordId, VaultRecordPointer? expected,
