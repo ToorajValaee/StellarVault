@@ -65,6 +65,8 @@ public static class VaultLinkedTreeFilePolicy
                 (metadata.Kind != VaultStreamingFileTree.RootKind &&
                  draft.FolderId is not null))
                 return false;
+            if (metadata.Base64 is null || metadata.Base64.Length > 5500)
+                return false;
             var decoded = Convert.FromBase64String(metadata.Base64);
             if (decoded.Length is < 1 or > 4096)
             {
@@ -110,7 +112,12 @@ public static class VaultLinkedTreeFilePolicy
             if (kind == VaultStreamingFileTree.LeafKind)
             {
                 var leaf = JsonSerializer.Deserialize<VaultStreamingFileTree.Leaf>(data);
-                return leaf?.Data is { Length: <= VaultStreamingFileTree.ChunkBytes };
+                try { return leaf?.Data is { Length: <= VaultStreamingFileTree.ChunkBytes }; }
+                finally
+                {
+                    if (leaf?.Data is not null)
+                        CryptographicOperations.ZeroMemory(leaf.Data);
+                }
             }
             if (kind == VaultStreamingFileTree.BranchKind)
             {
