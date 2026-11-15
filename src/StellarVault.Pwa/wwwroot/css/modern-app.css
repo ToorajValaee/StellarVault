@@ -5348,3 +5348,27 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
     width:100%;
   }
 }
+
+/* The linked queue remains mounted between tabs to preserve unsent quote and
+   historical-recovery state. Hidden destinations must not appear visually. */
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-queue-view[hidden],
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-drafts-workspace[hidden],
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-sync-workspace[hidden] {
+  display:none!important;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-toolbar .sv-modern-search {
+  flex:1 1 240px;
+  min-width:0;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-browser.sv-view-list {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-browser.sv-view-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-explorer-main > .sv-object-row {
+  min-width:0;
+}
