@@ -15,6 +15,7 @@ public static class VaultStreamingFileTree
 {
     // JSON/base64 + encryption metadata must leave headroom for ledger transport.
     public const int ChunkBytes = 1024;
+    public const int MaxLocalChunkBytes = 32 * 1024;
     // Conservative ledger record envelope budget. Branches do not contain raw
     // file bytes; their bounded fanout is independent of total file length.
     public const int Fanout = 8;
@@ -26,7 +27,7 @@ public static class VaultStreamingFileTree
     public sealed record Leaf(byte[] Data);
     public sealed record Branch(Reference[] Children);
     public sealed record Root(string FileName, string ContentType,
-        long Length, string Sha256Hex, Reference Tree);
+        long Length, string Sha256Hex, Reference Tree, int ChunkSize);
     public sealed record Result(string RootId, Root Manifest, long NodeCount);
 
     /// <summary>
@@ -46,7 +47,7 @@ public static class VaultStreamingFileTree
         {
             await persistEncryptedNode(node, token);
             return node.Id;
-        }, ct);
+        }, ChunkBytes, ct);
     }
 
     /// <summary>
@@ -58,14 +59,16 @@ public static class VaultStreamingFileTree
     public static Task<Result> WriteContentAddressedAsync(
         Stream input, string fileName, string contentType,
         Func<Emission, CancellationToken, Task<string>> persistEncryptedNode,
-        CancellationToken ct = default) =>
-        WriteCoreAsync(input, fileName, contentType, persistEncryptedNode, ct);
+        int chunkBytes = ChunkBytes, CancellationToken ct = default) =>
+        WriteCoreAsync(input, fileName, contentType, persistEncryptedNode, chunkBytes, ct);
 
     private static async Task<Result> WriteCoreAsync(
         Stream input, string fileName, string contentType,
         Func<Emission, CancellationToken, Task<string>> persistEncryptedNode,
-        CancellationToken ct)
+        int chunkBytes, CancellationToken ct)
     {
+        if (chunkBytes is < 1 or > MaxLocalChunkBytes)
+            throw new ArgumentOutOfRangeException(nameof(chunkBytes));
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(persistEncryptedNode);
         if (!input.CanRead) throw new ArgumentException("Readable stream required.", nameof(input));
@@ -76,7 +79,7 @@ public static class VaultStreamingFileTree
 
         var pending = new List<List<Reference>> { new() };
         using var totalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = new byte[ChunkBytes];
+        var buffer = new byte[chunkBytes];
         long total = 0;
         long emitted = 0;
 
@@ -171,7 +174,7 @@ public static class VaultStreamingFileTree
                 throw new InvalidDataException("File tree length commitment is invalid.");
 
             var root = new Root(fileName, contentType, total,
-                Convert.ToHexString(totalHash.GetHashAndReset()), top);
+                Convert.ToHexString(totalHash.GetHashAndReset()), top, chunkBytes);
             var rootId = await EmitAsync(RootKind,
                 JsonSerializer.SerializeToUtf8Bytes(root));
             return new Result(rootId, root, emitted);
@@ -207,7 +210,9 @@ public static class VaultStreamingFileTree
             if (string.IsNullOrWhiteSpace(root.ContentType) ||
                 root.ContentType.Length > 128 ||
                 root.ContentType.Any(c => c < '!' || c > '~') ||
-                root.Length < 0 || !ValidDigest(root.Sha256Hex) ||
+                root.Length < 0 ||
+                root.ChunkSize is < 1 or > MaxLocalChunkBytes ||
+                !ValidDigest(root.Sha256Hex) ||
                 root.Tree is null || root.Tree.Length != root.Length)
                 throw new InvalidDataException("Invalid root file metadata.");
         }
@@ -237,7 +242,7 @@ public static class VaultStreamingFileTree
                     try
                     {
                         if (leaf.Data is null || leaf.Data.LongLength != node.Length ||
-                            leaf.Data.Length > ChunkBytes)
+                            leaf.Data.Length > root.ChunkSize)
                             throw new InvalidDataException("Invalid streaming file leaf length.");
                         written = checked(written + leaf.Data.LongLength);
                         if (written > root.Length)
