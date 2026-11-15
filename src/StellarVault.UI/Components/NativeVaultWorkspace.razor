@@ -204,7 +204,7 @@ else
                 @if (_nativeMode == "browse")
                 {
                 <div class="sv-native-browser-toolbar">
-                    <span class="sv-native-subtle-status">@_ledgerRecords.Count items</span>
+                    <span class="sv-native-subtle-status">@_ledgerRecords.Count(x => !VaultPublishedFileClassification.IsInternalNode(x)) items</span>
                     <div class="sv-native-browser-actions">
                         <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("record")'>＋ Record</button>
                         <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("folder")'>＋ Folder</button>
@@ -282,7 +282,7 @@ else
                                 {
                                     <button type="button" @onclick="() => OpenNativeFolder(shortcut.Id)">
                                         <span aria-hidden="true">📁</span><strong>@shortcut.Title</strong>
-                                        <small>@_ledgerRecords.Count(x => x.FolderId == shortcut.Id) items</small>
+                                        <small>@_ledgerRecords.Count(x => x.FolderId == shortcut.Id && !VaultPublishedFileClassification.IsInternalNode(x)) items</small>
                                     </button>
                                 }
                             </div>
