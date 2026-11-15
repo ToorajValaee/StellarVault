@@ -123,11 +123,17 @@ public sealed class StellarAccountObjectStoreProvider(
     private LedgerRecordDraft BuildDraft(ObjectDescriptor descriptor, string text)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        // The current on-chain ordinary-record layout does not retain an
+        // independent logical type discriminator. Until the versioned typed
+        // format is integrated, accepting "text" or custom types here would
+        // silently read them back as "credential".
         if (descriptor.TypeId is not
-            (VaultRecordTypeFactory.Text or VaultRecordTypeFactory.Credential or
-             VaultRecordTypeFactory.Folder))
+            (VaultRecordTypeFactory.Credential or VaultRecordTypeFactory.Folder))
             throw new NotSupportedException(
-                "This Stellar provider phase supports only ordinary text, credentials and folders.");
+                "This Stellar provider phase supports only credentials and folders; typed text/files require a versioned record discriminator.");
+        if (descriptor.ContentType is not null)
+            throw new NotSupportedException(
+                "The current Stellar ordinary-record protocol does not persist an independent MIME type.");
         recordTypes.Create(descriptor.TypeId, descriptor.Name, descriptor.ContentType);
         if (descriptor.ParentId is { } parent &&
             (parent.Length != 16 || !parent.All(Uri.IsHexDigit)))
