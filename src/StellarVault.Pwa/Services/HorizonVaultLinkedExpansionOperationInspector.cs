@@ -2,6 +2,7 @@ using System.Net;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using StellarVault.Core.Services;
 
 namespace StellarVault.Pwa.Services;
 
@@ -23,9 +24,7 @@ public sealed class HorizonVaultLinkedExpansionOperationInspector(HttpClient cli
         string childAccount, CancellationToken ct = default)
     {
         static Finding Reject(string reason) => new(false, null, reason);
-        static bool Address(string? value) => value is { Length: 56 } &&
-            value[0] == 'G' &&
-            value.All(c => c is >= 'A' and <= 'Z' or >= '2' and <= '7');
+        static bool Address(string? value) => StellarAccountAddress.IsValid(value);
         if (!Address(rootAccount) || !Address(childAccount) || childAccount == rootAccount ||
             transactionHash is not { Length: 64 } || !transactionHash.All(Uri.IsHexDigit) ||
             !Uri.TryCreate(horizonUrl, UriKind.Absolute, out var origin) ||
