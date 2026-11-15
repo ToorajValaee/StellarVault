@@ -13,3 +13,12 @@ public interface IStellarSecretKeyHistoricalRecordVerifier
         string recordId, LedgerRecordDraft expectedDraft,
         string? originalManifest, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Clears a matching volatile JS uncertain marker only AFTER encrypted journal
+/// confirmation succeeded. Does not itself authorize a queue state change.
+/// </summary>
+public interface IStellarSecretKeyVerifiedSessionRelease
+{
+    Task ReleaseVerifiedAsync(string transactionHash, CancellationToken ct = default);
+}
