@@ -38,6 +38,21 @@
                 disabled="@(_busy || !_understood || !CanStage)"
                 @onclick="PickImportAsync">Choose JSON / CSV to import</button>
     </div>
+    <div class="sv-access-actions">
+        <label>Backup password (minimum 12 characters)
+            <input type="password" class="terminal-input" autocomplete="new-password"
+                   @bind="_backupPassword" disabled="@_busy" />
+        </label>
+        <button type="button" class="pixel-button compact"
+                disabled="@(_busy || !CanExport || _backupPassword.Length < 12)"
+                @onclick="ExportEncryptedAsync">Export encrypted record backup (.svrb)</button>
+        <button type="button" class="pixel-button compact"
+                disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
+                @onclick="PickEncryptedAsync">Restore encrypted record backup (.svrb)</button>
+    </div>
+    <p class="advanced-help">Encrypted backups protect ordinary records and folders
+        with Argon2id and authenticated encryption. They do not include binary files,
+        local draft journals or Stellar signing credentials. Keep the backup password safe.</p>
     @if (_pending is not null)
     {
         <p role="status">Validated @_pending.Records.Length record(s) and folder(s).
@@ -64,6 +79,7 @@
 
     private bool _busy;
     private bool _understood;
+    private string _backupPassword = string.Empty;
     private string? _message;
     private VaultRecordInterchange.Archive? _pending;
 
@@ -86,6 +102,90 @@
     {
         _pending = null;
         _message = "Import canceled. No drafts were staged.";
+    }
+
+    private async Task ExportEncryptedAsync()
+    {
+        if (_busy || !CanExport || _backupPassword.Length < 12) return;
+        _busy = true;
+        _message = null;
+        byte[]? ciphertext = null;
+        try
+        {
+            var archive = VaultRecordInterchange.FromPublished(Records);
+            ciphertext = await VaultEncryptedRecordBackup.EncryptAsync(
+                archive, _backupPassword);
+            using var data = new MemoryStream(ciphertext, writable: false);
+            bool saved = await NativeFiles.SaveAsync("stellar-vault-records.svrb", data);
+            _message = saved
+                ? "Encrypted record backup saved. Store its password separately."
+                : "Backup export canceled. No Stellar transaction sent.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   InvalidOperationException or IOException or
+                                   OperationCanceledException or
+                                   System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Encrypted backup export failed: " + ex.Message;
+        }
+        finally
+        {
+            if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
+            _backupPassword = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task PickEncryptedAsync()
+    {
+        if (_busy || !CanStage || _backupPassword.Length < 12) return;
+        _busy = true;
+        _pending = null;
+        _message = null;
+        byte[]? ciphertext = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null) { _message = "Backup selection canceled."; return; }
+            await using var input = picked.Stream;
+            if (!picked.FileName.EndsWith(".svrb", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Select an encrypted .svrb record backup.");
+            using var output = new MemoryStream();
+            var buffer = new byte[16 * 1024];
+            try
+            {
+                int read;
+                while ((read = await input.ReadAsync(buffer)) != 0)
+                {
+                    if (output.Length + read > VaultEncryptedRecordBackup.MaximumBackupBytes)
+                        throw new InvalidDataException("Encrypted record backup exceeds the size limit.");
+                    output.Write(buffer, 0, read);
+                }
+                ciphertext = output.ToArray();
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(buffer);
+                if (output.TryGetBuffer(out var segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
+            _pending = await VaultEncryptedRecordBackup.DecryptAsync(
+                ciphertext, _backupPassword);
+            _message = "Encrypted backup verified. Review the record count before local staging.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   InvalidOperationException or IOException or
+                                   OperationCanceledException or
+                                   System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Backup restore rejected: wrong password, corrupt data, or unsupported backup.";
+        }
+        finally
+        {
+            if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
+            _backupPassword = string.Empty;
+            _busy = false;
+        }
     }
 
     private Task ExportJsonAsync() => ExportAsync(csv: false);
