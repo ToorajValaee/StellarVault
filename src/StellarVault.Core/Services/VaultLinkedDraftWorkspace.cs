@@ -23,7 +23,8 @@ public sealed class VaultLinkedDraftWorkspace(
     public sealed record DraftDetail(string MutationId,
         LedgerRecordDraft Draft, string PayloadSha256);
 
-    private sealed record Context(string Root, string Scope, long Epoch);
+    private sealed record Context(string Root, string Scope, long Epoch,
+        long UnlockEpoch);
 
     private Context RequireScope()
     {
@@ -35,7 +36,7 @@ public sealed class VaultLinkedDraftWorkspace(
                 "Unlock the matching independent S-key encrypted local queue.");
         StellarAccountAddress.Validate(root);
         return new(root, networks.CredentialKey(root),
-            keys.IsOfflineOnly ? -1 : ledger.ConnectionEpoch);
+            keys.IsOfflineOnly ? -1 : ledger.ConnectionEpoch, keys.UnlockEpoch);
     }
 
     private void Check(Context original)
@@ -43,6 +44,7 @@ public sealed class VaultLinkedDraftWorkspace(
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
         if (!keys.IsUnlocked || keys.ActiveRootAccountId != original.Root ||
+            keys.UnlockEpoch != original.UnlockEpoch ||
             (original.Epoch == -1
                 ? !keys.IsOfflineOnly
                 : keys.IsOfflineOnly || !ledger.IsConnected ||
