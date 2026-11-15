@@ -199,33 +199,17 @@ else
                 {
                                 <section aria-label="Publish Stellar item" class="terminal-panel">
                     <h3>@(_nativeMode == "folder" ? "New folder" : "New record")</h3>
-                    <label class="terminal-label" for="native-publish-title">Title</label>
-                    <input id="native-publish-title" class="terminal-input" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
-                    <label class="terminal-label" for="native-publish-folder">Folder</label>
-                    <select id="native-publish-folder" class="terminal-input" @bind="_publishFolder" disabled="@_ledgerBusy">
-                        <option value="">My vault (root)</option>
-                        @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => x.Title))
-                        { <option value="@folder.Id">@folder.Title</option> }
-                    </select>
-                    @if (_nativeMode != "folder")
-                    {
-                    <label class="terminal-label" for="native-publish-username">Username / identifier</label>
-                    <input id="native-publish-username" class="terminal-input" @bind="_publishUsername" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
-                    <label class="terminal-label" for="native-publish-url">URL</label>
-                    <input id="native-publish-url" class="terminal-input" type="url" @bind="_publishUrl" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
-                    <label class="terminal-label" for="native-publish-content">Secret / content</label>
-                    <div class="sv-native-secret-entry">
-                        <input id="native-publish-content" class="terminal-input" type="@(_showPublishSecret ? "text" : "password")"
-                               @bind="_publishContent" @bind:event="oninput" autocomplete="new-password" disabled="@_ledgerBusy" />
-                        <button type="button" class="pixel-button compact" @onclick="() => _showPublishSecret = !_showPublishSecret"
-                                aria-label="@(_showPublishSecret ? "Hide secret" : "Show secret")">@(_showPublishSecret ? "Hide" : "Show")</button>
-                    </div>
-                    <label class="terminal-label" for="native-publish-notes">Notes</label>
-                    <textarea id="native-publish-notes" class="terminal-input" @bind="_publishNotes" @bind:event="oninput" disabled="@_ledgerBusy" rows="4"></textarea>
-                    <label class="terminal-label" for="native-publish-tags">Tags</label>
-                    <input id="native-publish-tags" class="terminal-input" @bind="_publishTags" @bind:event="oninput"
-                           placeholder="work, private" disabled="@_ledgerBusy" />
-                    }
+                    <VaultRecordFields IsFolder="@(_nativeMode == "folder")"
+                                       Disabled="_ledgerBusy"
+                                       Folders="@_ledgerRecords.Where(x => x.IsFolder).ToArray()"
+                                       @bind-Title="_publishTitle"
+                                       @bind-FolderId="_publishFolder"
+                                       @bind-Username="_publishUsername"
+                                       @bind-Url="_publishUrl"
+                                       @bind-Secret="_publishContent"
+                                       @bind-Notes="_publishNotes"
+                                       @bind-Tags="_publishTags"
+                                       @bind-ShowSecret="_showPublishSecret" />
                     <details class="sv-native-help"><summary>About publishing</summary>
                         <p>Publishing writes an encrypted record to Stellar. Network fees and account reserves apply; every transaction requires explicit approval.</p>
                     </details>
