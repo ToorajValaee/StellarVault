@@ -181,6 +181,37 @@ public sealed class StellarAccountVaultDatabase
         finally { CryptographicOperations.ZeroMemory(scope); }
     }
 
+    /// <summary>Two-pass, bounded-memory authenticated export to a nonseekable
+    /// host stream. A caller must abort a partially written destination on
+    /// failure and verify catalog revision immediately afterward.</summary>
+    public async Task<VaultStreamingFileTree.Root> CopyStreamingFileToAsync(
+        string name, Stream destination, ReadOnlyMemory<byte> vaultKey,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateName(name);
+        ArgumentNullException.ThrowIfNull(destination);
+        using var pointerStream = new BoundedFilePointerStream();
+        await GetAsync(name, pointerStream, vaultKey, cancellationToken);
+        var buffer = pointerStream.ToArray();
+        string rootId;
+        try
+        {
+            var reference = Encoding.ASCII.GetString(buffer);
+            if (reference.Length != FileTreePointerPrefix.Length + 64 ||
+                !reference.StartsWith(FileTreePointerPrefix, StringComparison.Ordinal))
+                throw new InvalidDataException("Invalid streaming file root pointer.");
+            rootId = reference[FileTreePointerPrefix.Length..];
+        }
+        finally { CryptographicOperations.ZeroMemory(buffer); }
+        var scope = BuildFileTreeContext(GetRecordId(name, vaultKey.Span));
+        try
+        {
+            return await VaultStreamingEncryptedFileStore.CopyVerifiedToAsync(
+                rootId, _fileObjects, destination, vaultKey, scope, cancellationToken);
+        }
+        finally { CryptographicOperations.ZeroMemory(scope); }
+    }
+
     private byte[] BuildFileTreeContext(Guid recordId) =>
         Encoding.UTF8.GetBytes("StellarVault/account-file-tree/v1\0" +
             _accountId + "\0" + recordId.ToString("N"));
