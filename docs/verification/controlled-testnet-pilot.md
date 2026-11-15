@@ -61,3 +61,11 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Reject wrong signer weights, master weight, thresholds, duplicate parent pointer, child destination mismatch, and wrong transaction ID. A read-only match must not unblock the journal.
 
 - [ ] Test both the three-operation initial and four-operation existing-tail expansion paths against real Testnet history; confirm signer weights, root funding, and parent StrKey checksums.
+
+## Revision-pinned linked update/delete acceptance (2026-11-15)
+- [ ] With a disposable Testnet S-key and consented local queue, stage an update to an existing encrypted record. Confirm there is no network transaction before separate fee approval, and that its original `skh` manifest revision is retained after reopening the queue.
+- [ ] Modify that record through another signer/session after staging, then verify fee preparation rejects the stale original manifest without broadcasting.
+- [ ] Modify the record after a fee quote but before approval; verify pre-broadcast recheck rejects the stale quote and leaves the draft Pending.
+- [ ] Stage and explicitly approve deletion of a published record with no children; confirm its current absence and that the durable local journal remains `Uncertain`, NOT `Confirmed`, even after app restart.
+- [ ] Attempt deleting a folder with published or locally pending children and moving a folder inside its own descendant; both must fail without submission.
+- [ ] Run updated Node and Core smoke regressions and PWA/MAUI Release builds before using these UI flows. Mainnet/real credentials remain excluded.
