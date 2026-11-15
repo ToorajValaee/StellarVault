@@ -351,9 +351,16 @@ public sealed class StellarAccountObjectStoreProvider(
         await RequireSameScopeAsync(scope, checkpoint, true);
         var matching = records.Where(x => x.Id == objectId).ToArray();
         if (matching.Length == 0) return null;
-        if (matching.Length != 1 || !VaultLinkedTreeFilePolicy.IsRootRecord(matching[0]))
-            throw new NotSupportedException(
-                "Object is not an SVTREE3 root; use the corresponding legacy file protocol reader.");
+        if (matching.Length != 1)
+            throw new InvalidDataException("Duplicate published object identifier.");
+        if (!VaultLinkedTreeFilePolicy.IsRootRecord(matching[0]))
+        {
+            if (VaultPublishedFileClassification.IsFile(matching[0]) ||
+                VaultPublishedFileClassification.IsInternalNode(matching[0]))
+                throw new NotSupportedException(
+                    "Legacy file and internal file-tree records require their original verified reader.");
+            return null; // Existing ordinary credential/folder reader owns this record.
+        }
         var buffer = new VerifiedFileBuffer();
         try
         {
