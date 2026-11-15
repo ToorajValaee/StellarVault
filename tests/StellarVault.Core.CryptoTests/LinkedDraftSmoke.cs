@@ -274,11 +274,21 @@ internal static class LinkedDraftSmoke
                     await MustRejectAsync(
                         () => workspace.DiscardAsync(root.MutationId),
                         "Pending file root was discarded after a child was published.");
-                    // A connection epoch change must not erase the durable
-                    // node queue or accidentally mark the root complete.
+                    // Reconnect intentionally invalidates a signer-bound
+                    // local queue unlock. Verify stale authorization cannot
+                    // inspect the queue, then explicitly unlock the matching
+                    // account/network/epoch and recover the durable root.
                     ledger.Reconnect();
+                    Require(!keys.IsUnlocked && !keys.CanPublish,
+                        "S-key queue authorization survived a signer epoch change.");
                     var restoredWorkspace = new VaultLinkedDraftWorkspace(
                         ledger, keys, store, consent, network);
+                    await MustRejectAsync(
+                        () => restoredWorkspace.ReviewManualSyncAsync(),
+                        "Stale S-key queue unlock permitted review after reconnect.");
+                    await keys.UnlockAsync("linked streaming tree passphrase");
+                    Require(keys.IsUnlocked && keys.CanPublish,
+                        "Explicit S-key queue unlock did not rebind the new signer epoch.");
                     Require((await restoredWorkspace.ReviewManualSyncAsync())
                             .Items.Any(x => x.MutationId == root.MutationId &&
                                 x.State == VaultSyncState.Pending),
