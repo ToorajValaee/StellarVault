@@ -5265,3 +5265,86 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
     padding-top:24px;
   }
 }
+
+
+/* One authenticated /vault shell for both HD and imported S-key strategies.
+   Preserve each strategy's independent Core services; only presentation is
+   shared. The linked explorer follows the HD tree/list/details layout. */
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-workspace {
+  max-width:none;
+  min-width:0;
+  padding:0;
+  margin:0;
+  background:transparent;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-stats {
+  margin:12px 0 18px;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-toolbar {
+  margin:12px 0 16px;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout {
+  display:grid;
+  grid-template-columns:minmax(190px,240px) minmax(0,1fr) minmax(270px,360px);
+  gap:14px;
+  align-items:stretch;
+  min-height:420px;
+  min-width:0;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout:not(:has(.sv-secret-details,.sv-secret-editor)) {
+  grid-template-columns:minmax(190px,240px) minmax(0,1fr);
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-explorer-tree {
+  position:relative!important;
+  top:auto!important;
+  max-height:none!important;
+  min-height:100%;
+  overflow-y:auto;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-browser {
+  align-content:start;
+  min-width:0;
+  padding:12px;
+  background:var(--sk-panel,#fff);
+  border:1px solid var(--sk-line,#dce8e5);
+  border-radius:12px;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-details,
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-editor {
+  margin:0;
+  align-self:start;
+  min-width:0;
+  position:relative;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-secret-item {
+  border-radius:10px!important;
+}
+.sv-web-shell .sv-linked-unified-workspace .sv-linked-queue-view {
+  margin:12px 0 24px;
+}
+@media(max-width:1199px) {
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout,
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout:not(:has(.sv-secret-details,.sv-secret-editor)) {
+    grid-template-columns:minmax(160px,220px) minmax(0,1fr);
+  }
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-details,
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-editor {
+    grid-column:2;
+  }
+}
+@media(max-width:700px) {
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout,
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout:not(:has(.sv-secret-details,.sv-secret-editor)) {
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-explorer-tree {
+    min-height:0;
+    max-height:180px!important;
+  }
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-details,
+  .sv-web-shell .sv-linked-unified-workspace .sv-linked-explorer-layout > .sv-secret-editor {
+    width:100%;
+  }
+}
