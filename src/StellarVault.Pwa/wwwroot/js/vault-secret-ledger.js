@@ -55,10 +55,10 @@ window.stellarVaultSecretLedger = (() => {
     const high=Number(account.thresholds?.high_threshold);
     const low=Number(account.thresholds?.low_threshold);
     if(!Number.isInteger(weight)||!Number.isInteger(medium)||!Number.isInteger(high)||
-       !Number.isInteger(low)||weight<1||low<1||medium<1||high<1||
+       !Number.isInteger(low)||weight<1||low<0||medium<0||high<0||
        weight<low||weight<medium||weight<high)
       fail('Linked account lacks valid root signing authority.');
-    return true;
+    return low>=1 && medium>=1 && high>=1;
   }
   function next(account,sdk) {
     const data=account.data_attr||{};
@@ -77,7 +77,11 @@ window.stellarVaultSecretLedger = (() => {
       if(seen.has(id))fail('Cycle detected in linked-account vault.');
       seen.add(id);
       const account=await s.server.loadAccount(id);
-      signer(account,s.root);
+      const mutationSafe=signer(account,s.root);
+      // A fresh Stellar root can have zero thresholds. Read its encrypted
+      // vault safely, but never quote or sign a mutation under zero thresholds.
+      if(i>0 && !mutationSafe)
+        fail('Child account has unsafe zero signing thresholds.');
       if(i>0 && (account.signers||[]).some(x =>
           x.key!==s.root && Number(x.weight||0)>0))
         fail('Child account has another active signer; single-secret chain is not exclusively controlled by the root.');
@@ -275,6 +279,8 @@ window.stellarVaultSecretLedger = (() => {
     // Re-fetch network identity, fees and base reserve for each new approval.
     s.net=await verifiedNetwork(s.net.origin,s.passphrase);
     const v=await inventory(s),old=v.locations.get(recordId);
+    if(v.nodes.some(node => !signer(node,s.root)))
+      fail('Vault writes are blocked: one or more linked accounts have zero signing thresholds. Set positive low, medium and high thresholds in a trusted Stellar wallet first. Reading remains available.');
     if(kind==='create'&&old)fail('Record already exists.');
     if((kind==='update'||kind==='delete')&&!old)fail('Published record was not found.');
     if((kind==='update'||kind==='create') && draft) {
