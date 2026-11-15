@@ -53,7 +53,8 @@ public static class VaultQueuedCreatePolicy
         if (draft.Content is not null &&
             (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
              draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-             draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)))
+             draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) ||
+             draft.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal)))
             problems.Add("file-protocol-needs-staged-review");
         // The serialized FolderId and the durable dependency graph MUST
         // identify the same pending parent. Otherwise a stale or corrupt child
