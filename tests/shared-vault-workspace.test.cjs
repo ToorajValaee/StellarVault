@@ -105,3 +105,29 @@ test('shared UI retains independent S-key offline drafts and immutable file safe
   assert.match(native, /<VaultRecordFields IsFolder=/);
   assert.match(runner, /VaultWorkspaceModeSmoke\.Run\(\)/);
 });
+
+test('PWA and native hosts reuse identical inspectors, forms, trees and rows', () => {
+  const vault = read('StellarVault.Pwa/Pages/Vault.razor');
+  const linked = read('StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
+  const native = read('StellarVault.UI/Components/NativeVaultWorkspace.razor');
+  const inspector = read('StellarVault.UI/Components/VaultRecordInspector.razor');
+  const localHd = read('StellarVault.UI/Components/VaultHybridDraftEditor.razor');
+  const localSkey = read('StellarVault.UI/Components/VaultLinkedLocalQueuePanel.razor');
+
+  assert.match(vault, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(linked, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(native, /<VaultRecordInspector @key="_selectedRecord.Id"/);
+  assert.match(native, /<VaultExplorerTree Folders=/);
+  assert.match(native, /<VaultExplorerItemRow Item="item"/);
+  assert.match(native, /<VaultRecordFields IsFolder=/);
+  assert.match(localHd, /<VaultRecordFields IsFolder="_isFolder"/);
+  assert.match(localSkey, /<VaultRecordFields IsFolder="_draftIsFolder"/);
+  assert.match(inspector, /CanDelete && !IsFile/);
+  assert.match(inspector, /CanEdit && !IsFile/);
+  assert.match(inspector, /_revealed \? Item.Content : "••••••••••••"/);
+  assert.match(inspector, /sv-inspector-tabs/);
+  assert.match(native, /NativeContentKey => SecretLedger.IsConnected/);
+  assert.match(native, /OnViewChange="NavigateLinkedNative"/);
+  assert.match(localSkey, /private bool ShowDrafts => View is "all" or "drafts"/);
+  assert.match(localSkey, /private bool ShowSync => View is "all" or "sync"/);
+});
