@@ -299,6 +299,22 @@ internal static class LinkedDraftSmoke
             Require(ledger.Submissions == 1,
                 "Unknown expansion outcome was automatically retried.");
 
+            var signedHash = await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                ledger, Root, "expand", FakeLinkedLedger.ExpansionTarget,
+                null, Testnet, ledger.ConnectionEpoch);
+            Require(signedHash == 1.ToString("x64"),
+                "Unknown submission lost its signed transaction search identifier.");
+            Require(await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                ledger, Root, "expand", FakeLinkedLedger.ExpansionTarget,
+                null, "wrong network", ledger.ConnectionEpoch) is null &&
+                await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                ledger, Root, "create", Root, null,
+                Testnet, ledger.ConnectionEpoch) is null &&
+                await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                ledger, Root, "expand", FakeLinkedLedger.ExpansionTarget,
+                null, Testnet, ledger.ConnectionEpoch + 1) is null,
+                "Signed transaction identity crossed a network, operation or session boundary.");
+
             var reopenedStore = new FileSystemVaultLinkedQueueSnapshotStore(
                 keys, consent, queuePath, network);
             var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
