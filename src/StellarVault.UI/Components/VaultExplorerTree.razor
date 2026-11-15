@@ -1,0 +1,92 @@
+@* Shared folder tree for every Stellar account strategy. Tree traversal is
+   presentation-only; it never derives keys, reads a ledger or signs a write. *@
+<aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
+    <div class="sv-explorer-tree-title">
+        My Vault <span class="sv-explorer-tree-count">@Folders.Count folders</span>
+    </div>
+    <button type="button" class="sv-tree-item @(SelectedFolderId is null ? "selected" : "")"
+            aria-current="@(SelectedFolderId is null ? "location" : null)"
+            @onclick="() => OnFolderSelected.InvokeAsync(null)">
+        <span aria-hidden="true">▣</span> My vault
+    </button>
+    @foreach (var folder in Folders.OrderBy(x => FolderPath(x.Id), StringComparer.OrdinalIgnoreCase))
+    {
+        @if (IsVisible(folder))
+        {
+            <div class="sv-tree-node" style="--sv-tree-depth:@Depth(folder.Id)">
+                @if (HasChildren(folder.Id))
+                {
+                    <button class="sv-tree-expander" type="button"
+                            aria-label="@($"Toggle {folder.Title} children")"
+                            aria-expanded="@(!IsCollapsed(folder.Id))"
+                            @onclick="() => OnToggleFolder.InvokeAsync(folder.Id)">
+                        <span aria-hidden="true">@(IsCollapsed(folder.Id) ? "▸" : "▾")</span>
+                    </button>
+                }
+                else
+                {
+                    <span class="sv-tree-expander-placeholder" aria-hidden="true"></span>
+                }
+                <button type="button" class="sv-tree-item @(SelectedFolderId == folder.Id ? "selected" : "")"
+                        aria-current="@(SelectedFolderId == folder.Id ? "location" : null)"
+                        @onclick="() => OnFolderSelected.InvokeAsync(folder.Id)">
+                    <span class="sv-tree-folder-icon" aria-hidden="true">📁</span>
+                    <span class="sv-tree-label">@folder.Title</span>
+                </button>
+            </div>
+        }
+    }
+    @AdditionalFolders
+</aside>
+
+@code {
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Folders { get; set; } = [];
+    [Parameter] public string? SelectedFolderId { get; set; }
+    [Parameter] public IReadOnlySet<string>? CollapsedFolderIds { get; set; }
+    [Parameter] public EventCallback<string?> OnFolderSelected { get; set; }
+    [Parameter] public EventCallback<string> OnToggleFolder { get; set; }
+    [Parameter] public RenderFragment? AdditionalFolders { get; set; }
+
+    private bool IsCollapsed(string id) => CollapsedFolderIds?.Contains(id) == true;
+    private bool HasChildren(string id) => Folders.Any(x => x.FolderId == id);
+    private bool IsVisible(LedgerRecordItem folder)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var parent = folder.FolderId;
+        while (!string.IsNullOrEmpty(parent) && seen.Add(parent))
+        {
+            if (IsCollapsed(parent)) return false;
+            parent = Folders.FirstOrDefault(x => x.Id == parent)?.FolderId;
+        }
+        return true;
+    }
+    private int Depth(string id)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var depth = 0;
+        var parent = Folders.FirstOrDefault(x => x.Id == id)?.FolderId;
+        while (!string.IsNullOrEmpty(parent) && seen.Add(parent) && depth < 20)
+        {
+            var next = Folders.FirstOrDefault(x => x.Id == parent);
+            if (next is null) break;
+            ++depth;
+            parent = next.FolderId;
+        }
+        return depth;
+    }
+    private string FolderPath(string id)
+    {
+        var parts = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var at = id;
+        while (seen.Add(at) && parts.Count < 32)
+        {
+            var folder = Folders.FirstOrDefault(x => x.Id == at);
+            if (folder is null) break;
+            parts.Insert(0, folder.Title);
+            if (string.IsNullOrEmpty(folder.FolderId)) break;
+            at = folder.FolderId;
+        }
+        return string.Join("/", parts);
+    }
+}
