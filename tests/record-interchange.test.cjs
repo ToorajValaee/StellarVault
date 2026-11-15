@@ -82,3 +82,13 @@ test('record export uses fresh account/network pinned ledger reads, not cached U
   assert.doesNotMatch(panel, /VaultRecordInterchange\.FromPublished\(Records\)/,
     'Never export secrets from the view\'s stale record cache.');
 });
+
+test('linked offline import preview cannot survive a lock and re-unlock on same account', () => {
+  const keys = read('src/StellarVault.Core/Services/VaultLinkedQueueKeySession.cs');
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  const smoke = read('tests/StellarVault.Core.CryptoTests/LinkedDraftSmoke.cs');
+  assert.match(keys, /public long UnlockEpoch => Interlocked\.Read\(ref _unlockEpoch\)/);
+  assert.match(keys, /Interlocked\.Increment\(ref _unlockEpoch\)/);
+  assert.match(panel, /LinkedKeys\.UnlockEpoch\.ToString\(/);
+  assert.match(smoke, /Offline queue re-unlock reused a stale local authorization generation/);
+});
