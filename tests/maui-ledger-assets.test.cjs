@@ -214,7 +214,7 @@ test('native explorer has mobile object tiles, desktop folder tree and back navi
   const native = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   const styles = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
-  assert.match(native, /sv-native-folder-tree/);
+  assert.match(native, /<VaultExplorerTree Folders=/);
   assert.match(native, /sv-native-object-grid/);
   assert.match(native, /<VaultRecordInspector @key="_selectedRecord.Id"/);
   assert.match(native, /aria-label="Back to vault root"/);
@@ -296,7 +296,8 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(workspace, /sv-native-mobile-search/);
   assert.match(workspace, /sv-native-folder-shortcuts/);
   assert.match(workspace, /sv-native-shortcut-grid/);
-  assert.match(workspace, /sv-native-object-row/);
+  assert.match(workspace, /<VaultExplorerItemRow Item="item"/);
+  assert.match(workspace, /<VaultRecordInspector @key="_selectedRecord.Id"/);
   const inspector = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/VaultRecordInspector.razor'), 'utf8');
   assert.match(workspace, /<VaultRecordInspector @key="_selectedRecord.Id"/);
