@@ -11,7 +11,8 @@ namespace StellarVault.Pwa.Services;
 public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
     IStellarSecretKeyRecordRevisionReader,
-    IStellarSecretKeyHistoricalRecordVerifier, IAsyncDisposable
+    IStellarSecretKeyHistoricalRecordVerifier,
+    IStellarSecretKeyVerifiedSessionRelease, IAsyncDisposable
 {
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
@@ -126,6 +127,18 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             throw new InvalidOperationException(
                 "The S-key signer scope changed during historical verification.");
         return proven;
+    }
+
+    public async Task ReleaseVerifiedAsync(string transactionHash,
+        CancellationToken ct = default)
+    {
+        RequireConnected();
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid reconciled transaction hash.", nameof(transactionHash));
+        if (!await js.InvokeAsync<bool>(
+                "stellarVaultSecretLedger.releaseVerifiedHistory", ct, _sessionId, transactionHash))
+            throw new InvalidOperationException("Signer quarantine could not be released.");
     }
 
     public async Task<LedgerAccountInfo> InspectAccountInfoAsync(
