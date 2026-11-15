@@ -235,12 +235,17 @@ public static class VaultLinkedTreeFilePolicy
         // inventory before approving another network transaction.
         if (remote is not null && children.Length > 0)
         {
+            // Build bounded indexes once: a streamed multi-level tree can
+            // contain thousands of nodes, so rescanning the entire journal
+            // and ledger for every descendant would be quadratic.
+            var localById = all.ToLookup(x => x.EntityId, StringComparer.OrdinalIgnoreCase);
+            var remoteById = remote.ToLookup(x => x.Id, StringComparer.OrdinalIgnoreCase);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? CheckDescendant(VaultStreamingFileTree.Reference reference, int depth)
             {
                 if (depth > 64 || !seen.Add(reference.Id))
                     return "tree-descendant-cycle-or-reuse";
-                var matches = all.Where(x => x.EntityId == reference.Id &&
+                var matches = localById[reference.Id].Where(x =>
                     x.Kind == VaultMutationKind.CreateRecord &&
                     x.OriginStrategyId == VaultMutationStrategyPolicy.Linked).ToArray();
                 if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
@@ -259,7 +264,7 @@ public static class VaultLinkedTreeFilePolicy
                         !string.Equals(Convert.ToHexString(SHA256.HashData(nodeBytes)),
                             reference.Sha256Hex, StringComparison.OrdinalIgnoreCase))
                         return "tree-descendant-invalid";
-                    var published = remote.Where(x => x.Id == reference.Id).ToArray();
+                    var published = remoteById[reference.Id].ToArray();
                     if (published.Length != 1 ||
                         published[0].Title != expected.Title ||
                         published[0].Content != expected.Content ||
