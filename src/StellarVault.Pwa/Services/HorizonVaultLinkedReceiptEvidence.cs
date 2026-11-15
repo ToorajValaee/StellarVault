@@ -10,7 +10,8 @@ namespace StellarVault.Pwa.Services;
 /// </summary>
 public sealed class HorizonVaultLinkedReceiptEvidence(
     HorizonVaultNetworkInspector network,
-    HorizonVaultTransactionInspector transactions) : IVaultLinkedReceiptEvidence
+    HorizonVaultTransactionInspector transactions,
+    HorizonVaultLinkedRecordOperationInspector records) : IVaultLinkedReceiptEvidence
 {
     public async Task<VaultLinkedReceiptObservation> InspectAsync(
         VaultSecretSubmissionDiagnostic diagnostic, CancellationToken ct = default)
