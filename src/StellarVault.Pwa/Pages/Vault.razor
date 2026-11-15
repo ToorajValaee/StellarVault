@@ -175,7 +175,7 @@ else
                         </section>
                     }
                     <div class="record-list">
-                        @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
+                        @foreach (var change in _pendingItems.Where(x => !IsHdTreePart(x)).OrderBy(x => x.CreatedUtc))
                         {
                             <button type="button" class="record-card" @onclick="() => OpenPending(change)">
                                 <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>@(change.State is VaultSyncState.Submitting or VaultSyncState.Uncertain ? "Submission may have reached Stellar — do not retry" : change.State == VaultSyncState.Confirmed ? "Independently confirmed" : "On this device only · Not submitted to Stellar")</small></span><span class="record-chevron">›</span>
@@ -332,7 +332,7 @@ else
             {
                 @foreach (var draft in _pendingItems.Where(x => x.State == VaultSyncState.Pending &&
                     x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.UploadFile &&
-                    PendingFolderId(x) == _folder))
+                    PendingFolderId(x) == _folder && !IsHdTreePart(x)))
                 {
                     <div class="sv-object-row">
                         <button type="button" class="record-card sv-modern-record" @onclick="() => OpenPending(draft)">
@@ -508,7 +508,8 @@ else
                     <button class="icon-button close-button" @onclick="ClosePending" aria-label="Close local draft">×</button>
                 </header>
                 @if (_selectedPending.State == VaultSyncState.Pending &&
-                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder)
+                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder &&
+                    !IsHdTreeMutation(_selectedPending))
                 {
                     <label class="terminal-label">LOCAL DRAFT TITLE</label>
                     <input class="terminal-input" @bind="_pendingEditTitle" maxlength="256" />
@@ -957,6 +958,37 @@ else
         finally { _pendingDeleting = false; }
     }
     private void ClosePending() { if (!_pendingDeleting) { _selectedPending = null; _pendingDeleteError = null; } }
+
+    private static bool IsHdTreeMutation(VaultPendingMutation change)
+    {
+        if (change.Kind != VaultMutationKind.CreateRecord) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(change.EncryptedPayload);
+            return doc.RootElement.TryGetProperty("Content", out var content) &&
+                content.ValueKind == JsonValueKind.String &&
+                content.GetString()?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    // Hidden parts remain visible in the per-transaction Sync queue, not as
+    // thousands of unrelated user records in the file explorer.
+    private static bool IsHdTreePart(VaultPendingMutation change)
+    {
+        if (!IsHdTreeMutation(change)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(change.EncryptedPayload);
+            if (!doc.RootElement.TryGetProperty("Tags", out var tags) ||
+                tags.ValueKind != JsonValueKind.Array || tags.GetArrayLength() == 0)
+                return false;
+            var type = tags[0].GetString();
+            return type is "svtree3-leaf" or "svtree3-branch";
+        }
+        catch (JsonException) { return false; }
+    }
 
     private static string PendingTitle(VaultPendingMutation change)
     {
