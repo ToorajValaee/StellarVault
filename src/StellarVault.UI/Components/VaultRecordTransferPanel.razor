@@ -1,0 +1,202 @@
+@using System.Security.Cryptography
+@using System.Text
+@using StellarVault.Core.Services
+@inject IVaultNativeFileAccess NativeFiles
+@inject VaultHybridDraftWorkspace HdDrafts
+@inject VaultLinkedDraftWorkspace LinkedDrafts
+@inject VaultSessionManager HdSession
+@inject VaultDeviceRetentionGate HdRetention
+@inject VaultLinkedQueueKeySession LinkedKeys
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+
+<details class="terminal-panel" aria-label="Import and export ordinary vault records">
+    <summary>Import / export records (JSON or CSV)</summary>
+    <p class="advanced-help">Transfers credentials, notes and folders, not encrypted binary files.
+        JSON preserves folder hierarchy; CSV supports flat records. These interchange files
+        are <strong>plaintext</strong>, not encrypted vault backups. Save only to a trusted destination
+        and securely delete the file when finished.</p>
+    @if (!CanStage)
+    {
+        <p role="status">To import, explicitly enable and unlock this account's encrypted
+            device drafts. Import never signs or sends a Stellar transaction.</p>
+    }
+    <label class="sv-secret-approval">
+        <input type="checkbox" @bind="_understood" disabled="@_busy" />
+        I understand that exported JSON/CSV contains plaintext secrets, and that importing
+        stages local encrypted drafts only.
+    </label>
+    <div class="sv-access-actions">
+        <button type="button" class="pixel-button compact"
+                disabled="@(_busy || !_understood || Records.Count == 0)"
+                @onclick="ExportJsonAsync">Export visible records (JSON)</button>
+        <button type="button" class="pixel-button compact"
+                disabled="@(_busy || !_understood || Records.Count == 0)"
+                @onclick="ExportCsvAsync">Export flat records (CSV)</button>
+        <button type="button" class="pixel-button compact"
+                disabled="@(_busy || !_understood || !CanStage)"
+                @onclick="PickImportAsync">Choose JSON / CSV to import</button>
+    </div>
+    @if (_pending is not null)
+    {
+        <p role="status">Validated @_pending.Records.Length record(s) and folder(s).
+            They will be created as new encrypted local drafts, not replace existing records.
+            Import is not an atomic batch: a storage interruption can leave some drafts pending.</p>
+        <div class="sv-access-actions">
+            <button type="button" class="pixel-button primary"
+                    disabled="@(_busy || !CanStage || !_understood)"
+                    @onclick="ConfirmImportAsync">Stage @_pending.Records.Length encrypted drafts</button>
+            <button type="button" class="pixel-button compact" disabled="@_busy"
+                    @onclick="ClearImport">Cancel import</button>
+        </div>
+    }
+    @if (_busy) { <p role="status">Processing record interchange…</p> }
+    @if (_message is not null) { <p role="status">@_message</p> }
+</details>
+
+@code {
+    [Microsoft.AspNetCore.Components.Parameter]
+    public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+
+    [Microsoft.AspNetCore.Components.Parameter]
+    public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
+
+    private bool _busy;
+    private bool _understood;
+    private string? _message;
+    private VaultRecordInterchange.Archive? _pending;
+
+    private bool CanStage => Strategy == VaultMutationStrategyPolicy.Linked
+        ? LinkedKeys.IsUnlocked && LinkedRetention.AllowsLocalPersistence
+        : Strategy == VaultMutationStrategyPolicy.Hd &&
+          HdSession.IsUnlocked && HdRetention.AllowsLocalPersistence;
+
+    private void ClearImport()
+    {
+        _pending = null;
+        _message = "Import canceled. No drafts were staged.";
+    }
+
+    private Task ExportJsonAsync() => ExportAsync(csv: false);
+    private Task ExportCsvAsync() => ExportAsync(csv: true);
+
+    private async Task ExportAsync(bool csv)
+    {
+        if (_busy || !_understood) return;
+        _busy = true;
+        _message = null;
+        byte[]? bytes = null;
+        try
+        {
+            var archive = VaultRecordInterchange.FromPublished(Records);
+            if (archive.Records.Length == 0)
+                throw new InvalidOperationException("No ordinary records or folders to export.");
+            bytes = csv
+                ? VaultRecordInterchange.ExportCsv(archive)
+                : VaultRecordInterchange.ExportJson(archive);
+            using var stream = new MemoryStream(bytes, writable: false);
+            var saved = await NativeFiles.SaveAsync(
+                csv ? "stellar-vault-records.csv" : "stellar-vault-records.json", stream);
+            _message = saved
+                ? "Plaintext record interchange saved. Protect and remove the file after use."
+                : "Export canceled. No network operation occurred.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   NotSupportedException or InvalidOperationException or
+                                   IOException or OperationCanceledException)
+        {
+            _message = "Record export blocked or canceled: " + ex.Message;
+        }
+        finally
+        {
+            if (bytes is not null) CryptographicOperations.ZeroMemory(bytes);
+            _busy = false;
+        }
+    }
+
+    private async Task PickImportAsync()
+    {
+        if (_busy || !_understood || !CanStage) return;
+        _busy = true;
+        _message = null;
+        _pending = null;
+        byte[]? bytes = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null) { _message = "File selection canceled."; return; }
+            await using var input = picked.Stream;
+            using var output = new MemoryStream();
+            var buffer = new byte[16 * 1024];
+            try
+            {
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer);
+                    if (read == 0) break;
+                    if (output.Length + read > VaultRecordInterchange.MaximumBytes)
+                        throw new InvalidDataException("Record interchange exceeds 1 MiB.");
+                    output.Write(buffer, 0, read);
+                }
+                bytes = output.ToArray();
+                if (picked.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    _pending = VaultRecordInterchange.ImportJson(bytes);
+                else if (picked.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                    _pending = VaultRecordInterchange.ImportCsv(
+                        new UTF8Encoding(false, true).GetString(bytes));
+                else
+                    throw new InvalidDataException("Select a .json or .csv record interchange file.");
+                _message = "Format and folder references validated. Review the count before staging.";
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(buffer);
+                if (output.TryGetBuffer(out var segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   System.Text.DecoderFallbackException or IOException or
+                                   OperationCanceledException)
+        {
+            _message = "Record import rejected: " + ex.Message;
+        }
+        finally
+        {
+            if (bytes is not null) CryptographicOperations.ZeroMemory(bytes);
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmImportAsync()
+    {
+        if (_busy || !_understood || !CanStage || _pending is null) return;
+        _busy = true;
+        _message = null;
+        var archive = _pending;
+        _pending = null;
+        var staged = 0;
+        try
+        {
+            staged = await VaultRecordInterchange.StageAsync(archive,
+                async (draft, ct) =>
+                {
+                    if (!CanStage)
+                        throw new InvalidOperationException("Unlocked account or consent changed.");
+                    var id = Strategy == VaultMutationStrategyPolicy.Linked
+                        ? (await LinkedDrafts.CreateAsync(draft, ct)).EntityId
+                        : (await HdDrafts.CreateAsync(draft, ct)).EntityId;
+                    if (!CanStage)
+                        throw new InvalidOperationException("Unlocked account or consent changed.");
+                    return id;
+                });
+            _message = staged + " encrypted local record/folder drafts staged. No Stellar transaction sent. Review manual synchronization separately.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or
+                                   InvalidDataException or UnauthorizedAccessException or
+                                   IOException or OperationCanceledException)
+        {
+            _message = "Import interrupted; some encrypted drafts may have been staged. Refresh drafts before retrying to avoid duplicates. " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+}
