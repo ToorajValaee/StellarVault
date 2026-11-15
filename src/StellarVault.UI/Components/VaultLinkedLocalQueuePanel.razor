@@ -187,17 +187,22 @@
                     @foreach (var record in _publishedRecords)
                     {
                         <div class="sv-secret-workspace-actions" @key="record.Id">
-                            <span><strong>@record.Title</strong> — @(StellarLedgerFileProtocol.IsFile(record) ? "Encrypted file" : record.IsFolder ? "Folder" : "Record")</span>
+                            <span><strong>@record.Title</strong> — @((StellarLedgerFileProtocol.IsFile(record) ||
+                                 VaultLinkedTreeFilePolicy.IsRootRecord(record)) ? "Encrypted file" : record.IsFolder ? "Folder" : "Record")</span>
                             <button type="button" class="pixel-button compact"
-                                    disabled="@(_busy || _review is not null || StellarLedgerFileProtocol.IsFile(record))"
+                                    disabled="@(_busy || _review is not null || StellarLedgerFileProtocol.IsFile(record) ||
+                                        VaultLinkedTreeFilePolicy.IsRootRecord(record))"
                                     @onclick="() => EditPublishedRecordAsync(record.Id)">Stage update</button>
                             <button type="button" class="pixel-button compact"
                                     disabled="@(_busy || _review is not null ||
                                         record.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix,
+                                            StringComparison.Ordinal) ||
+                                        record.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
                                             StringComparison.Ordinal))"
                                     title="Multipart deletion needs a separately verified manifest-and-parts removal workflow"
                                     @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
-                            @if (StellarLedgerFileProtocol.IsFile(record))
+                            @if (StellarLedgerFileProtocol.IsFile(record) ||
+                                 VaultLinkedTreeFilePolicy.IsRootRecord(record))
                             {
                                 <button type="button" class="pixel-button compact"
                                         disabled="@_busy"
@@ -219,17 +224,17 @@
             }
             <section class="sv-secret-review" aria-label="Encrypted S-key files">
                 <h3>Encrypted files</h3>
-                <p>Files up to 2 KiB use one SVFILE1 record. Larger files up to 96 KiB
-                   use SVFILE2 with multiple independent fee approvals: every part
-                   must be historically confirmed before the next part, and the
-                   final manifest is published last. No transactions are sent
-                   when staging. Bigger files need the future hierarchical manifest protocol.</p>
+                <p>SVTREE3 streams files as bounded ledger records without a fixed
+                   total-byte cap. Staging never sends transactions. Each node
+                   requires an individual fee approval and signed-history confirmation;
+                   parents and the root can publish only after their children.
+                   Large files may require substantial fees, reserves and time.</p>
                 <InputFile OnChange="SelectLinkedSmallFile" disabled="@_busy" />
                 @if (_smallFile is not null)
                 {
                     <p>Selected: @_smallFile.Name (@_smallFile.Size bytes)</p>
                     <button type="button" class="pixel-button compact"
-                            disabled="@(_busy || _smallFile.Size < 1 || _smallFile.Size > VaultLinkedMultipartFilePolicy.MaxBytes)"
+                            disabled="@_busy"
                             @onclick="StageLinkedSmallFileAsync">Stage encrypted file draft</button>
                 }
             </section>
@@ -644,59 +649,35 @@
     private void SelectLinkedSmallFile(InputFileChangeEventArgs args)
     {
         _smallFile = args.File;
-        _message = _smallFile.Size is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes
-            ? "S-key file staging supports 1–98304 bytes with the current bounded multipart protocol."
-            : _smallFile.Size <= VaultLinkedSingleFilePolicy.MaxBytes
-                ? "Single-record file selected. Staging will not send a transaction."
-                : "Multipart file selected. Every part needs its own future fee approval and signed-history confirmation; manifest last.";
+        _message = "Streaming file selected. No transaction occurs until individually approved. Each file tree node needs signed-history confirmation; large files require substantial time and fees.";
     }
 
     private async Task StageLinkedSmallFileAsync()
     {
         if (_busy || !QueueKeys.IsUnlocked || _smallFile is null) return;
         _busy = true;
-        byte[]? contents = null;
         try
         {
-            if (_smallFile.Size is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
-                throw new InvalidDataException("The selected file exceeds the supported linked multipart bound.");
-            await using var input = _smallFile.OpenReadStream(VaultLinkedMultipartFilePolicy.MaxBytes);
-            using var buffer = new MemoryStream();
-            await input.CopyToAsync(buffer);
-            contents = buffer.ToArray();
+            await using var input = _smallFile.OpenReadStream(_smallFile.Size);
             var title = _smallFile.Name.Length > 256
                 ? _smallFile.Name[..256] : _smallFile.Name;
             var mime = string.IsNullOrWhiteSpace(_smallFile.ContentType)
                 ? "application/octet-stream" : _smallFile.ContentType;
-            var stagedCount = 1;
-            if (contents.Length <= VaultLinkedSingleFilePolicy.MaxBytes)
-                await DraftWorkspace.StageSmallFileAsync(
-                    title, _smallFile.Name, mime, contents);
-            else
-            {
-                var items = await DraftWorkspace.StageMultipartFileAsync(
-                    title, _smallFile.Name, mime, contents);
-                stagedCount = items.Count;
-            }
+            var staged = await DraftWorkspace.StageTreeFileAsync(
+                title, _smallFile.Name, mime, input);
             _smallFile = null;
             _drafts = await DraftWorkspace.ListAsync();
             _report = await QueueInspection.InspectAsync();
             _manualSyncPlan = null;
-            _message = stagedCount == 1
-                ? "Encrypted single-record file staged. Review its fee before publication."
-                : "Encrypted multipart file staged as " + stagedCount +
-                  " separate records (parts plus final manifest). Approve and historically verify each transaction in order. No network write occurred during staging.";
+            _message = "Encrypted file tree staged as " + staged.NodeCount +
+                " independent ledger records. Approve and reconcile each node; root " +
+                staged.RootId + " publishes last. No transaction was submitted.";
         }
         catch (Exception ex)
         {
-            _message = "S-key file staging failed. Refresh the encrypted queue before repeating: " + ex.Message;
+            _message = "Tree file staging failed; inspect encrypted queue before retrying: " + ex.Message;
         }
-        finally
-        {
-            if (contents is not null)
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(contents);
-            _busy = false;
-        }
+        finally { _busy = false; }
     }
 
     private async Task DownloadLinkedSmallFileAsync(string recordId)
@@ -745,7 +726,10 @@
             var records = await Ledger.ReadAsync();
             _publishedRecords = records
                 .Where(x => !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal) &&
+                    (!x.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                        StringComparison.Ordinal) ||
+                     VaultLinkedTreeFilePolicy.IsRootRecord(x)))
                 .OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
                 .Take(200).ToArray();
             _message = "Published S-key records loaded. Select an explicit local change.";
