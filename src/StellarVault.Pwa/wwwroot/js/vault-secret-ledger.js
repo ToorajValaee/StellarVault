@@ -363,7 +363,7 @@ window.stellarVaultSecretLedger = (() => {
       NetReserveChangeXlm:toXlm(childFunding+pointerReserve),
       CreatesChildNode:true,TargetAccountId:childId,FundingTopUpXlm:"0.0000000"};
   }
-  async function submit(id,quoteId) {
+  async function submit(id,quoteId,checkpoint=null) {
     const s=session(id),q=s.quotes.get(quoteId);
     if(!q)fail('No matching reviewed quote. Estimate again.');
     if(s.inFlight)fail('Another ledger submission is in progress.');
@@ -444,6 +444,16 @@ window.stellarVaultSecretLedger = (() => {
       const rawHash=tx.hash();
       if(!rawHash||rawHash.length!==32)fail('Signed transaction hash unavailable; no broadcast attempted.');
       const signedHash=Array.from(rawHash,b=>b.toString(16).padStart(2,'0')).join('');
+      // Journal-backed callers MUST durably CAS-checkpoint this exact hash
+      // before the first byte is broadcast. If the callback rejects, do not
+      // transmit; leave the caller's Submitting journal in quarantine.
+      if(checkpoint) {
+        if(typeof checkpoint.invokeMethodAsync!=='function')
+          fail('Durable signed-hash callback is invalid; no transaction was sent.');
+        await checkpoint.invokeMethodAsync('CheckpointSignedHash',signedHash);
+      }
+      if(sessions.get(id)!==s)
+        fail('Signing session was revoked before broadcast; keep the journal quarantined.');
       // From this point any network failure may mean the transaction was accepted.
       // Keep this session quarantined until the connected outcome is verified.
       s.needsReconciliation=true;
