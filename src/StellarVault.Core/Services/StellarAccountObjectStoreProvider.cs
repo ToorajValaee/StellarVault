@@ -9,9 +9,9 @@ namespace StellarVault.Core.Services;
 /// First real provider seam for the chain-neutral object engine. Reuses the
 /// existing authenticated Stellar ledger readers and encrypted local draft
 /// queues. Only ordinary UTF-8 records/folders are supported in this phase.
-/// File streaming, network fee quoting, revision-pinned edits/deletes and
-/// single-account capacity enforcement intentionally fail closed until their
-/// existing verified planners are connected.
+/// File uploads reuse the existing encrypted SVTREE3 queue stage operations.
+/// Network fee quoting for files, published reads, revision-pinned edits/deletes
+/// and single-account capacity enforcement remain fail-closed.
 /// </summary>
 public sealed class StellarAccountObjectStoreProvider(
     IStellarLedgerRecords hdLedger,
@@ -196,6 +196,42 @@ public sealed class StellarAccountObjectStoreProvider(
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
 
+    /// <summary>
+    /// Reuse the deployed encrypted file-tree draft workflows. Each chunk and
+    /// manifest is queued locally by the strategy-specific implementation.
+    /// The root ID is an object locator, not proof that any node was published.
+    /// Incomplete staging is rolled back by the existing draft workspace.
+    /// </summary>
+    private async Task<ObjectMutationIntent> StageFileAsync(
+        ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
+        ScopeCheckpoint checkpoint, CancellationToken ct)
+    {
+        if (descriptor.ContentType is not { Length: > 0 })
+            throw new ArgumentException("File media type is required.", nameof(descriptor));
+        recordTypes.Create(VaultRecordTypeFactory.File,
+            descriptor.Name, descriptor.ContentType, descriptor.Name);
+        if (descriptor.ParentId is { } parent &&
+            (parent.Length != 16 || !parent.All(Uri.IsHexDigit)))
+            throw new ArgumentException("Invalid Stellar parent folder ID.", nameof(descriptor));
+        if (!source.CanRead)
+            throw new ArgumentException("Readable file stream is required.", nameof(source));
+        await RequireSameScopeAsync(scope, checkpoint, false);
+        var result = scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked
+            ? await linkedDrafts.StageTreeFileAsync(
+                descriptor.Name, descriptor.Name, descriptor.ContentType,
+                source, descriptor.ParentId, ct)
+            : await hdDrafts.StageTreeFileAsync(
+                descriptor.Name, descriptor.Name, descriptor.ContentType,
+                source, descriptor.ParentId, ct);
+        await RequireSameScopeAsync(scope, checkpoint, false);
+        return new ObjectMutationIntent(
+            "staged-tree:" + result.RootId,
+            ObjectMutationState.Prepared,
+            new ObjectStorageQuote(ProviderId, scope.NetworkId, "XLM",
+                null, null, result.Manifest.Length, null),
+            ObjectId: result.RootId);
+    }
+
     public async Task<ObjectMutationIntent> PreparePutAsync(
         ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
         ObjectWriteOptions options, CancellationToken ct = default)
@@ -206,6 +242,8 @@ public sealed class StellarAccountObjectStoreProvider(
                 "Create requests must use ObjectId='new'; the encrypted queue allocates the durable record ID.",
                 nameof(descriptor));
         var checkpoint = RequireScope(scope, false);
+        if (descriptor.TypeId == VaultRecordTypeFactory.File)
+            return await StageFileAsync(scope, descriptor, source, checkpoint, ct);
         byte[] bytes = await ReadBoundedAsync(source, ct);
         try
         {
