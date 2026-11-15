@@ -109,10 +109,22 @@ test('neither host silently substitutes a secret for an HD mnemonic', () => {
   assert.match(maui, /js\/vault-secret-chain.js/);
   assert.match(csproj, /vault-secret-chain.js/);
 });
-test('zero signer thresholds are rejected rather than treated as root-only authorization', async () => {
+test('newly funded root with zero Stellar thresholds can be recovered read-only', async () => {
+  const fixture = start({ linked: false });
+  fixture.records[rootId].thresholds = {
+    low_threshold: 0, med_threshold: 0, high_threshold: 0
+  };
+  const inspected = await fixture.inspect();
+  assert.equal(inspected.RootAccountId, rootId);
+  assert.equal(inspected.Accounts.length, 1);
+  assert.match(inspected.Note, /Read-only recovery/);
+  assert.equal(fixture.writes(), 0);
+});
+
+test('child accounts with zero signing thresholds remain blocked', async () => {
   const fixture = start();
   fixture.records[childId].thresholds.med_threshold = 0;
-  await assert.rejects(fixture.inspect(), /Invalid Stellar signer or threshold state/);
+  await assert.rejects(fixture.inspect(), /unsafe zero signer thresholds/);
 });
 
 test('an HD-v2 registered root cannot be mistaken for an independent S-key chain', async () => {
