@@ -719,3 +719,25 @@ test('local and HD on-chain file editors stage large files with streaming instea
   assert.match(ledger,/STAGE ENCRYPTED FILE FOR SYNC/);
   assert.doesNotMatch(ledger,/if \(file\.Size > MaximumLedgerFileLength\)/);
 });
+
+test('HD and Secret Key native sessions offer the same record commands without changing signing flows', () => {
+  const native = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'NativeVaultWorkspace.razor'), 'utf8');
+  const linked = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultSecretKeyWorkspace.razor'), 'utf8');
+  const nativeCommands = native.slice(native.indexOf('<div class="sv-native-commandbar'), native.indexOf('@code {'));
+  const secretStart = nativeCommands.indexOf('@if (SecretLedger.IsConnected)');
+  const hdStart = nativeCommands.indexOf('else if (Ledger.IsConnected)', secretStart);
+  const disconnectedStart = nativeCommands.indexOf('else', hdStart + 'else if (Ledger.IsConnected)'.length);
+  assert.ok(secretStart >= 0 && hdStart > secretStart && disconnectedStart > hdStart);
+  const secretCommands = nativeCommands.slice(secretStart, hdStart);
+  const hdCommands = nativeCommands.slice(hdStart, disconnectedStart);
+  for (const action of ['NewNativeRecordForActiveStrategy', 'NewNativeFolderForActiveStrategy',
+    'RefreshNativeActiveStrategyAsync', 'DisconnectSelectedLedgerAsync']) {
+    assert.ok(secretCommands.includes('@onclick="' + action + '"'), 'Secret Key: ' + action);
+    assert.ok(hdCommands.includes('@onclick="' + action + '"'), 'HD: ' + action);
+  }
+  assert.match(native, /if \(SecretLedger\.IsConnected\) _linkedWorkspace\?\.CreateRecordFromShell\(\)/);
+  assert.match(native, /else if \(Ledger\.IsConnected\) SetNativeMode\("record"\)/);
+  assert.match(linked, /<VaultExplorerTree Folders="@_items\.Where\(x => x\.IsFolder\)\.ToArray\(\)"/);
+});
