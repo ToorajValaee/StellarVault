@@ -2,6 +2,18 @@
 
 GitHub Actions is **opt-in only**. The workflow `.github/workflows/manual-verify.yml` is registered on `main` so it appears in Actions, and is also available on `architecture/pluggable-vault-records-and-chains`. Its only trigger is `workflow_dispatch`. There are **no push or pull-request CI triggers**.
 
+## Preferred local release-candidate validation
+
+Run the repository-owned PowerShell verification runner on the **exact commit** under consideration:
+
+```powershell
+pwsh -File scripts/verify-release.ps1
+# Optional when MAUI Android prerequisites are installed:
+pwsh -File scripts/verify-release.ps1 -Android
+```
+
+This exercises the complete Node regression suite, signer syntax, Core/UI/PWA Release builds, and the Core native cryptography/linked queue smoke checks. It does **not** send Testnet transactions, prove actual Stellar XDR validation, or replace real-device testing or an independent security audit. The production decision is defined in [production-release-gate.md](production-release-gate.md). **Production remains blocked** until that evidence is completed. The last reported green tests were on an earlier commit; rerun after any source changes.
+
 ## Run on demand
 
 1. Open **GitHub → Actions → Manual StellarVault verification**.
