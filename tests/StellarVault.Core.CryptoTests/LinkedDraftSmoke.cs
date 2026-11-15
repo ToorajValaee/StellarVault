@@ -218,7 +218,10 @@ internal static class LinkedDraftSmoke
                 "Snapshot-visible expansion bypassed the durable quarantine.");
 
             await keys.LockAsync();
+            ledger.Reconnect(); // The volatile JS diagnostic is absent after a new session.
             await keys.UnlockAsync(passphrase);
+            Require(await ledger.InspectUncertainSubmissionAsync() is null,
+                "Fake transport retained volatile diagnostic across session restart.");
             var reopenedStore = new FileSystemVaultLinkedQueueSnapshotStore(
                 keys, consent, queuePath, network);
             var durable = await reopenedStore.ListAsync(Root, network.CredentialKey(Root));
@@ -233,8 +236,20 @@ internal static class LinkedDraftSmoke
                 foreach (var item in durable)
                     System.Security.Cryptography.CryptographicOperations.ZeroMemory(item.EncryptedPayload);
             }
+            var witness = new CapturingLinkedReceiptEvidence();
+            var reviewer = new VaultLinkedDraftRecoveryReview(
+                ledger, reopenedStore, keys, consent, network, witness);
+            var journalId = (await drafts.ListAsync()).Single(x => x.IsJournal).MutationId;
+            var recovery = await reviewer.InspectAsync(journalId);
+            Require(recovery.HistoricalReceiptObserved &&
+                    recovery.DurableState == VaultSyncState.Uncertain &&
+                    witness.Observed?.TransactionHash == hash &&
+                    witness.Observed?.NetworkPassphrase == Testnet &&
+                    witness.Observed?.RootAccountId == Root &&
+                    witness.Observed?.TargetAccountId == FakeLinkedLedger.ExpansionTarget,
+                "Restart recovery did not inspect the exact durable hash on the selected network.");
             await MustRejectAsync(() => journal.PrepareAsync(),
-                "A reopened linked expansion was offered for unsafe retry.");
+                "A mocked observed receipt wrongly released an unproven linked expansion.");
             Console.WriteLine("PASS: successful linked expansion remains unconfirmed pending historical proof");
         }
         finally
@@ -353,6 +368,19 @@ internal static class LinkedDraftSmoke
         try { await operation(); }
         catch (Exception) { return; }
         throw new Exception(message);
+    }
+
+    private sealed class CapturingLinkedReceiptEvidence : IVaultLinkedReceiptEvidence
+    {
+        public VaultSecretSubmissionDiagnostic? Observed { get; private set; }
+        public Task<VaultLinkedReceiptObservation> InspectAsync(
+            VaultSecretSubmissionDiagnostic diagnostic,
+            CancellationToken ct = default)
+        {
+            Observed = diagnostic;
+            return Task.FromResult(new VaultLinkedReceiptObservation(
+                true, "Mocked receipt is advisory; no historical operation proof."));
+        }
     }
 
     private sealed class FakeLinkedAccountStrategy(FakeLinkedLedger ledger)
@@ -487,6 +515,7 @@ internal static class LinkedDraftSmoke
         {
             IsConnected = true;
             ConnectionEpoch++;
+            _signedSubmission = null;
         }
 
         public Task DisconnectAsync()
