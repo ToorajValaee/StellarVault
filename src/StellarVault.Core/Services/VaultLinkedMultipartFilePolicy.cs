@@ -103,6 +103,7 @@ public static class VaultLinkedMultipartFilePolicy
     }
 
     public static bool IsTypedFileDraft(LedgerRecordDraft draft) =>
+        VaultLinkedTreeFilePolicy.IsTypedNode(draft) ||
         IsManifest(draft) || draft.Content is not null &&
             draft.Content.StartsWith(
                 StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
@@ -112,6 +113,17 @@ public static class VaultLinkedMultipartFilePolicy
         IReadOnlyList<VaultPendingMutation> all,
         IReadOnlyList<LedgerRecordItem>? remote = null)
     {
+        // SVTREE3 is an independently reviewed protocol whose children
+        // reconcile through the same linked signed-history queue as SVFILE2.
+        try
+        {
+            var candidate = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                mutation.EncryptedPayload);
+            if (candidate?.Content?.StartsWith(
+                    VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal) == true)
+                return VaultLinkedTreeFilePolicy.Problems(mutation, all, remote);
+        }
+        catch (JsonException) { /* Leave malformed drafts blocked below. */ }
         var normal = VaultLinkedSingleFilePolicy.Problems(mutation, all);
         if (!normal.Contains("file-protocol-needs-staged-review", StringComparer.Ordinal) ||
             mutation.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
