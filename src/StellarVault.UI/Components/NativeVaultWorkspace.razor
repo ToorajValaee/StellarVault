@@ -659,7 +659,6 @@ else
     private string _nativeMode = "browse";
     private string _nativeCollection = "all";
     private string _nativeSearch = "";
-    private string _nativeDetailTab = "details";
     private bool _nativeGrid;
 
     private void OpenNativeFolder(string id)
@@ -1203,7 +1202,6 @@ else
 
     private void SelectRecord(string id)
     {
-        _nativeDetailTab = "details";
         _revealSecret = false;
         _verifiedFileMessage = null;
         _verifiedNativeTree = null;
