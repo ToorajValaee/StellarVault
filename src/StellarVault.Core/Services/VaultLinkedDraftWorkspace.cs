@@ -176,7 +176,7 @@ public sealed class VaultLinkedDraftWorkspace(
     {
         if (entityId is not { Length: 16 } ||
             !entityId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
-            !IsManifestRevision(expectedRevision))
+            !VaultLinkedRemoteRevisionPolicy.IsValid(expectedRevision))
             throw new ArgumentException("A valid remote S-key record revision is required.");
         if (ledger is not IStellarSecretKeyRecordRevisionReader revisionReader)
             throw new NotSupportedException("This S-key host cannot verify remote revision identity.");
@@ -266,19 +266,6 @@ public sealed class VaultLinkedDraftWorkspace(
             if (payload is not null) CryptographicOperations.ZeroMemory(payload);
             ClearEntries(all);
         }
-    }
-
-    private static bool IsManifestRevision(string? value)
-    {
-        if (value is not { Length: 64 }) return false;
-        try
-        {
-            var bytes = Convert.FromBase64String(value);
-            try { return bytes.Length == 47 && bytes[0] == 1 &&
-                         Convert.ToBase64String(bytes) == value; }
-            finally { CryptographicOperations.ZeroMemory(bytes); }
-        }
-        catch (FormatException) { return false; }
     }
 
     /// <summary>
