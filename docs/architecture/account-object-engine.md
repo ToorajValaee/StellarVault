@@ -37,6 +37,12 @@ The API must never take mnemonic/secret-key bytes by default. Browser/native cal
 Names such as `StellarVault` remain appropriate for the **application and existing compatibility code**, but new chain-neutral interfaces should be under `VaultEngine.Core` or an equivalently neutral engine namespace.
 
 
+## Neutral file-write staging
+
+`IAccountObjectStore.PutAsync` now accepts `ObjectDescriptor(TypeId = "file", ObjectId = "new", Name = fileName, ContentType = explicit MIME type)` for either Stellar HD or independent linked S-key accounts, with `ObjectCapacityPolicy.ExpandWithExplicitApproval`. The provider delegates **directly** to the corresponding existing `StageTreeFileAsync` implementation, retaining the SVTREE3 encrypted-node queue, bounded streaming, root-last manifest, interrupted-staging cleanup and later manual fee/transaction approval. It returns `Prepared`, `ObjectId = RootId`, and a synthetic `OperationId = "staged-tree:" + RootId` locator (not an on-chain receipt or per-node durable queue mutation ID). `EstimatedStoredBytes` is the plaintext file length; network fee, required reserve and expansion requirement remain **unknown** until the later reviewed publication plan.
+
+Do not treat this as published file storage: files still require explicit per-node synchronization and historical proof. `GetAsync` / `OpenReadAsync` for SVTREE3 remain intentionally unsupported in the first provider; they must delegate to the existing verified tree reader when wired. Text/plain file uploads are rejected until type discriminators preserve file semantics. Real device streaming, interruption rollback, capacity and quote verification are still mandatory.
+
 ## Local authorization isolation
 
 The linked encrypted queue has its own unlock epoch independent of the ledger connection epoch. The common object provider checks that epoch before and after staging a record, and the underlying `VaultLinkedDraftWorkspace` now includes it in its scope checkpoint for *all* awaited operations. Locking and re-unlocking the same S-key root offline cannot resume a previously authorized in-flight draft operation under the replacement local key session.
