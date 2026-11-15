@@ -1319,7 +1319,7 @@ test('historical S-key record proof rejects wrong plaintext and missing root sig
   const h=harness();await h.open();
   const q=await h.plan('create',recordId,record);
   const txHash=await h.submit(q.QuoteId);
-  await assert.rejects(h.api.releaseVerifiedHistory(h.session,txHash),
+  assert.throws(()=>h.api.releaseVerifiedHistory(h.session,txHash),
     /has not verified/);
   assert.equal(await h.api.verifyHistoricalRecord(h.session,txHash,
     'create',recordId,{...record,Content:'another secret'},null),false);
