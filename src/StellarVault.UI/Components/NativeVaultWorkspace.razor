@@ -1001,6 +1001,15 @@ else
     {
         if (_ledgerBusy || !Ledger.IsConnected || !Sessions.IsUnlocked ||
             !Retention.AllowsLocalPersistence) return;
+        // A device-only unlock for some *other* HD account must never stage
+        // on-chain file mutations under the currently connected root.
+        if (_rootAccountId is null ||
+            !string.Equals(Sessions.ActiveAccountId, _rootAccountId,
+                StringComparison.Ordinal))
+        {
+            _uploadMessage = "Unlock encrypted local storage for the same Stellar HD root account before staging files.";
+            return;
+        }
         _ledgerBusy = true;
         _uploadMessage = null;
         try
