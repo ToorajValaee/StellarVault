@@ -86,3 +86,10 @@ The HD/mnemonic file editor now uses the same **SVTREE3** streamed hierarchical 
 The published HD file explorer now hides tree leaves/branches, displays file roots, and exposes a two-step read-back verification plus bounded-memory streamed export to the host file saver. Unsupported whole-tree deletion and text editing of immutable nodes are blocked.
 
 **Do not confuse source integration with production validation.** The new Core and Node regressions must pass on exact HEAD; actual Testnet publication, cross-device root recovery, interrupted upload/download, browser File System Access API support, MAUI parity, orphaned draft cleanup and independent cryptographic audit remain mandatory. Any client/network quota and ledger record count cap is a real practical maximum despite removal of arbitrary *file byte* caps. The existing obsolete flat SVFILE readers may remain read-only until removed deliberately; they no longer back new HD file uploads.
+
+
+## Shared HD/S-key UI consolidation source status (2026-11-15)
+
+Both credential strategies are wired through one PWA `/vault` application shell and the same four shared Core UI components: `VaultExplorerTree`, `VaultExplorerItemRow`, `VaultRecordFields`, `VaultRecordInspector`. Published and encrypted local-draft forms share markup; separate signers, encrypted queues and transaction history remain independent. MAUI uses the same components for native HD and linked S-key, with a stable mounted linked review across native tabs. No generic encrypted-file deletion is offered from the shared inspector.
+
+**Validation remains NO-GO** until this exact HEAD passes `powershell -File scripts/verify-release.ps1` locally and the updated PWA and real Android device have been checked visually for layout, focus, clipboard, file picker, long-record editing, offline queue unlock and pending-quote persistence. New UI source was modified via GitHub connector, not compiled here. Complete transaction and cryptographic Testnet release gates from above still apply.
