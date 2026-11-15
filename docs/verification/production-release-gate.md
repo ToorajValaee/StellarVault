@@ -70,3 +70,10 @@ This document is a release gate, **not** a statement that verification occurred.
 6. Update the existing `VaultChunkObjectStore` local chunk manifest when converging protocols: it currently caps at 4,096 × 256 KiB chunks and stores total length as a 32-bit integer. Removing UI caps alone does not remove this underlying finite limit.
 
 Until the integration tests pass, the old on-chain file size caps remain enforced by the existing shipping UI. Do not expose a new unlimited-size claim.
+
+
+## SVTREE3 implementation review (2026-11-15)
+
+The new **S-key** linked file path now stages a hierarchical streamed tree through the encrypted per-node queue with individual fees, signed hash checkpoints, history proof and manifest-last reconciliation. Published roots can be reconstructed and streamed through PWA/MAUI file savers. The local encrypted PWA file view also uses two-step verification and bounded streaming export. This is **source implementation, not live assurance**: tests on the new feature commits, real browser user-gesture behavior, native abortability, multi-account capacity expansion and actual Testnet signed-history verification are outstanding.
+
+**Still NO-GO:** HD/mnemonic on-chain file UI and hybrid file journal have not been migrated to SVTREE3, and the legacy 1 MiB cap remains there. Deleting a fully published file tree remains disabled rather than risking orphaned descendants. Native/browser file-saver interruption, root-pointer recovery after device loss, account-chain maximum depth, transaction capacity and fees can still limit practical file size. No claim of literally infinite file storage is authorized.
