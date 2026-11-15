@@ -46,6 +46,7 @@ public static class MauiProgram
         // All queue payloads and metadata are encrypted with the unlocked
         // device vault key; no native plaintext queue files are written.
         builder.Services.AddScoped<VaultDeviceRetentionGate>();
+        builder.Services.AddScoped<VaultDeviceUnlockPreference>();
         builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
         builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
         builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore>(sp =>
