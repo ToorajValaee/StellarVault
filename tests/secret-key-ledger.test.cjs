@@ -1440,7 +1440,12 @@ test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed revi
   assert.match(multipartPolicy,/VaultLinkedSingleFilePolicy\.Problems\(mutation, all\)/);
   assert.match(panel,/StageLinkedSmallFileAsync/);
   assert.match(panel,/DownloadLinkedSmallFileAsync/);
-  assert.match(panel,/CryptographicOperations\.ZeroMemory\(contents\)/);
+  // Current UI streams directly from IBrowserFile; there is no complete-file
+  // plaintext `contents` buffer left to zero. Legacy decoded downloads
+  // still wipe their temporary plaintext after use.
+  assert.match(panel,/_smallFile\.OpenReadStream\(_smallFile\.Size\)/);
+  assert.match(panel,/DraftWorkspace\.StageTreeFileAsync\(/);
+  assert.doesNotMatch(panel,/using var buffer = new MemoryStream\(\)/);
   assert.match(panel,/CryptographicOperations\.ZeroMemory\(decoded\)/);
   assert.match(native,/RunSingleFileLinkedSmokeAsync\(\)/);
   assert.match(native,/VaultLinkedSingleFilePolicy\.Problems\(raw, entries\)/);
