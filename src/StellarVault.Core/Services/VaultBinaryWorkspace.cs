@@ -84,6 +84,57 @@ public sealed class VaultBinaryWorkspace(VaultSessionManager sessions, VaultStor
             }
         }, cancellationToken);
 
+    /// <summary>
+    /// Streaming download for hosts with a disposable, private seekable output.
+    /// No whole-file byte array is allocated. The caller MUST NOT expose the
+    /// output until this method returns successfully; on failure it is rolled
+    /// back to its original length. Retains the existing catalog/version CAS
+    /// checks rather than trusting a possibly stale file pointer.
+    /// </summary>
+    public Task<VaultRecordPointer?> CopyVerifiedToAsync(string name,
+        Stream privateStaging, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(privateStaging);
+        if (!privateStaging.CanSeek || !privateStaging.CanWrite ||
+            privateStaging.Position != privateStaging.Length)
+            throw new ArgumentException("Append-only seekable private file staging required.",
+                nameof(privateStaging));
+        return sessions.ExecuteAsync<VaultRecordPointer?>(async (database, key, ct) =>
+        {
+            storageMode.Require(VaultStorageMode.LocalEncrypted);
+            long start = privateStaging.Position;
+            try
+            {
+                var catalog = await database.Catalog.ListAsync(key, ct);
+                var item = catalog.FirstOrDefault(x => string.Equals(
+                    x.Name, name, StringComparison.Ordinal));
+                if (item is null) return null;
+                if (VaultRecordTypeFactory.IsLegacyText(item.ContentType))
+                    throw new InvalidOperationException("This record is not a binary file.");
+                var before = await database.GetVersionAsync(name, key, ct);
+                if (before is null) return null;
+
+                await database.ReadStreamingFileAsync(name, privateStaging, key, ct);
+                if (await database.GetVersionAsync(name, key, ct) != before)
+                    throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+                var visible = await database.Catalog.ListAsync(key, ct);
+                var current = visible.FirstOrDefault(x => string.Equals(
+                    x.Name, name, StringComparison.Ordinal));
+                if (current is null || VaultRecordTypeFactory.IsLegacyText(current.ContentType) ||
+                    await database.GetVersionAsync(name, key, ct) != before)
+                    throw new VaultWriteConflictException(database.GetRecordId(name, key.Span));
+                storageMode.Require(VaultStorageMode.LocalEncrypted);
+                return before;
+            }
+            catch
+            {
+                privateStaging.SetLength(start);
+                privateStaging.Position = start;
+                throw;
+            }
+        }, cancellationToken);
+    }
+
     /// <summary>Retrieve the visible file revision without decrypting its contents.
     /// Used for version-checked catalog removal, not for reading file plaintext.</summary>
     public Task<VaultRecordPointer?> GetFileVersionAsync(string name,
