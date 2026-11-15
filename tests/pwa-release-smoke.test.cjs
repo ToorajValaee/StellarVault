@@ -179,12 +179,13 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   assert.ok(add.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
 });
 
-test('on-chain-only file review never requires a local vault checkpoint', () => {
+test('HD file upload uses encrypted durable queue instead of in-memory checkpoint plan', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
-  assert.match(add, /if \(Retention\.AllowsLocalPersistence\)\s*\{\s*var account = Sessions\.ActiveAccountId/);
-  assert.ok(add.includes('saved = await Checkpoints.LoadAsync(account)'));
+  assert.match(add, /!Sessions\.IsUnlocked \|\| !Retention\.AllowsLocalPersistence/);
+  assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(add, /selected\.OpenReadStream\(selected\.Size\)/);
+  assert.doesNotMatch(add, /Checkpoints\.LoadAsync|StellarLedgerUploadPlan|CurrentUploadPlan|_fileBytes/);
   assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
 });
