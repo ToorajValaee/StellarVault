@@ -84,3 +84,8 @@ Before handling real secrets or funds, finish historical operation and signer ve
 - [ ] Upload a synthetic 2 KiB file through linked local encrypted staging. Confirm it remains local before fee approval; after the signed transaction, verify and finalize the journal, then download and compare the bytes and SHA-256 with the original. Confirm 0-byte, 2049-byte, bad/missing checksum and multipart attempts are rejected.
 - [ ] Verify browser lock, offline-only unlock, consent revocation, page reload and Android backgrounding clear volatile keys and file-selection buffers without silently changing durable journal state.
 - [ ] Do not use mainnet, actual secrets or valuable funds until multipart file recovery, legacy migration as required, real-device Testnet interruption testing and independent security review are completed.
+
+## SVFILE1 deletion lifecycle regression
+- [ ] After publishing and historically confirming a disposable Testnet SVFILE1 file, stage its deletion. Verify the encrypted queue labels it as a file and does not report corruption.
+- [ ] Confirm the original file deletion snapshot cannot be opened for editing, and deleting does not submit a transaction until a *new* explicit fee approval.
+- [ ] Verify remote deletion, persistent `Uncertain` journal and explicit signed-history reconciliation to `Confirmed`; the transaction count must increase only once.
