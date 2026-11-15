@@ -78,30 +78,17 @@ else
         else
         {
             <div class="terminal-panel credential-form">
-                <div class="form-section-title">Details</div>
-                <label class="terminal-label" for="sv-title">TITLE *</label>
-                <input id="sv-title" class="terminal-input" @bind="_title" @bind:event="oninput" autocomplete="off" maxlength="256"/>
-                <label class="terminal-label" for="sv-folder">FOLDER</label>
-                <select id="sv-folder" class="terminal-input" @bind="_folder">
-                    <option value="">Unfiled</option>
-                    @foreach (var folder in AvailableFolders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase)) { <option value="@folder.Id">@FolderPath(folder.Id)</option> }
-                </select>
-                <p class="advanced-help">Move to any nested folder, or choose Unfiled for the vault root.</p>
-                @if (_kind != "folder")
-                {
-                    <label class="terminal-label">USERNAME / IDENTIFIER</label>
-                    <input class="terminal-input" @bind="_username" autocomplete="off"/>
-                    <label class="terminal-label">URL</label>
-                    <input class="terminal-input" type="url" @bind="_url" autocomplete="off"/>
-                    <div class="form-section-title"><span>02</span> SECRET PAYLOAD</div>
-                    <label class="terminal-label">SECRET / PASSWORD *</label>
-                    <input class="terminal-input" type="@(_showSecret ? "text" : "password")" @bind="_secret" autocomplete="new-password"/>
-                    <button type="button" class="pixel-button compact" @onclick="() => _showSecret = !_showSecret">@(_showSecret ? "HIDE" : "SHOW")</button>
-                    <label class="terminal-label">NOTES</label>
-                    <textarea class="terminal-input terminal-textarea" rows="4" @bind="_notes"></textarea>
-                    <label class="terminal-label">TAGS // COMMA SEPARATED</label>
-                    <input class="terminal-input" @bind="_tags" placeholder="work, infrastructure, private"/>
-                }
+                <VaultRecordFields IsFolder="@(_kind == "folder")"
+                                   ExcludedId="RecordId"
+                                   Folders="@AvailableFolders.ToArray()"
+                                   @bind-Title="_title"
+                                   @bind-FolderId="_folder"
+                                   @bind-Username="_username"
+                                   @bind-Url="_url"
+                                   @bind-Secret="_secret"
+                                   @bind-Notes="_notes"
+                                   @bind-Tags="_tags"
+                                   @bind-ShowSecret="_showSecret" />
                 @if (!string.IsNullOrWhiteSpace(_status)) { <div class="terminal-alert" role="status"><strong>COMMIT STATUS</strong><span>@_status</span></div> }
                 @if (_busy) { <p role="status"><span class="sv-loading-spinner"></span> @_status</p> }
                 <button class="pixel-button primary access-button" type="button" disabled="@(_busy || _loading || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_title) || (_kind != "folder" && string.IsNullOrWhiteSpace(_secret)))" @onclick="ReviewAsync">REVIEW AND APPROVE</button>
