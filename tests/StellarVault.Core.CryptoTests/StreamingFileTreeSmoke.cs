@@ -112,6 +112,8 @@ internal static class StreamingFileTreeSmoke
                     throw new Exception("Stale streamed file record write was accepted.");
                 }
                 catch (VaultWriteConflictException) { }
+                Check(staleInput.Position == 0,
+                    "Stale file revision consumed the source before the preflight rejection.");
                 Check(await database.GetVersionAsync("archive.bin", databaseKey) ==
                     firstVersion, "Rejected streaming write replaced the committed file pointer.");
             }
