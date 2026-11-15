@@ -1499,7 +1499,7 @@ test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling
     'StellarVault.Core.CryptoTests','StreamingFileTreeSmoke.cs'),'utf8');
   const runner=fs.readFileSync(path.join(__dirname,
     'StellarVault.Core.CryptoTests','Program.cs'),'utf8');
-  assert.match(tree,/public const int Fanout = 12/);
+  assert.match(tree,/public const int Fanout = 8/);
   assert.match(tree,/IncrementalHash\.CreateHash\(HashAlgorithmName\.SHA256\)/);
   assert.match(tree,/input\.ReadAsync\(buffer\.AsMemory\(filled\), ct\)/);
   assert.match(tree,/await EmitAsync\(rootId, RootKind/);
