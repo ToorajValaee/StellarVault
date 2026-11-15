@@ -7,7 +7,7 @@ internal static class LinkedExpansionHistorySmoke
 {
     private const string Root = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
     private const string Child = "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H";
-    private const string Tail = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    private const string Tail = "GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ";
     private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     public static async Task RunAsync()
@@ -41,6 +41,12 @@ internal static class LinkedExpansionHistorySmoke
 
         Check(await MatchesAsync([Create(), Options(), Pointer()]),
             "Expected initial root-to-child expansion was rejected.");
+        Check(await MatchesAsync([Create(), Options(), Payment(Tail), Pointer(Tail)]),
+            "Expected existing-tail expansion with reserve payment was rejected.");
+        Check(!await MatchesAsync([Create(), Options(), Payment(Tail), Pointer()]),
+            "A root pointer was accepted with a payment funding a different tail.");
+        Check(!await MatchesAsync([Create(), Options(), Payment(Tail, "0"), Pointer(Tail)]),
+            "Zero reserve payment was accepted.");
         Check(!await MatchesAsync([Create(), Pointer(), Options()]),
             "Out-of-order linked signer installation was accepted.");
         Check(!await MatchesAsync([Create(), Options(master: 1), Pointer()]),
