@@ -1208,6 +1208,7 @@ test('linked expansion historical operation verification is read-only and never 
   assert.match(inspector,/PositiveXlm\(GetString\(create, "starting_balance"\)\)/);
   assert.match(inspector,/PositiveXlm\(GetString\(funding, "amount"\)\)/);
   assert.match(inspector,/sv:next:v1/);
+  assert.match(inspector,/StellarAccountAddress\.IsValid\(value\)/);
   assert.match(inspector,/transaction_successful/);
   assert.doesNotMatch(inspector,/TryReplaceAsync|SubmitApprovedAsync|VaultSyncState\.Confirmed/);
   assert.match(evidence,/expansions\.InspectAsync\(/);
