@@ -362,7 +362,8 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
                 draft.Tags?.Any(x => x is null || x.Length > 64) == true ||
                 draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
                 draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-                draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+                draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) ||
+                draft.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal))
                 throw new InvalidDataException(
                     "Update draft is malformed, changes record kind, or embeds disabled file protocol data.");
             if (!string.IsNullOrEmpty(draft.FolderId))
