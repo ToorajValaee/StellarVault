@@ -113,7 +113,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
 
                 var after = await reviewer.InspectAsync(mutationId, ct);
                 RequireSameScope(root, scope, epoch, passphrase);
-                if (after.DurableState != VaultSyncState.Uncertain ||
+                if (after.DurableState != entry.State ||
                     after.TransactionHash != txHash ||
                     after.CurrentRecordMatches is not true ||
                     !after.HistoricalReceiptObserved ||
@@ -223,7 +223,7 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 // confirmation, even if an earlier read matched.
                 var after = await reviewer.InspectAsync(mutationId, ct);
                 RequireSameScope(root, scope, epoch, passphrase);
-                if (after.DurableState != VaultSyncState.Uncertain ||
+                if (after.DurableState != entry.State ||
                     after.TransactionHash != txHash ||
                     after.CurrentRecordMatches is not true ||
                     !after.HistoricalReceiptObserved ||
