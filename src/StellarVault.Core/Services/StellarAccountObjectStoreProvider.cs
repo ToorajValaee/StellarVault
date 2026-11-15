@@ -200,7 +200,7 @@ public sealed class StellarAccountObjectStoreProvider(
             return new ObjectMutationIntent(mutationId,
                 ObjectMutationState.Prepared,
                 new ObjectStorageQuote(ProviderId, scope.NetworkId, "XLM",
-                    null, null, bytes.Length, false), null, recordId);
+                    null, null, bytes.Length, null), null, recordId);
         }
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
