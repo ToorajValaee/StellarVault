@@ -649,6 +649,21 @@ window.stellarVaultSecretLedger = (() => {
     }
   }
 
+  // Called only AFTER durable encrypted CAS committed a full historical proof.
+  // Never clear an unrelated uncertain transaction or a different vault.
+  function releaseVerifiedHistory(id,transactionHash) {
+    const s=session(id),scope=vaultScope(s.root,s.passphrase);
+    if(!/^[0-9a-f]{64}$/.test(transactionHash))fail('Invalid verified hash.');
+    const marker=unresolvedByVault.get(scope)||s.uncertain;
+    if(marker && marker.TransactionHash!==transactionHash)
+      fail('A different uncertain transaction remains in this signer session.');
+    if(marker){
+      unresolvedByVault.delete(scope);
+      s.uncertain=null;
+      s.needsReconciliation=false;
+    }
+    return true;
+  }
   function inspectUncertain(id) {
     const s=session(id);
     // Return a defensive public-only copy. Presence does NOT prove that the
@@ -676,5 +691,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,inspectUncertain,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,releaseVerifiedHistory,inspectUncertain,cancelQuote,revokeAll});
 })();
