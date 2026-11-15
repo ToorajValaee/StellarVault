@@ -200,20 +200,46 @@
             throw new InvalidOperationException("Unsupported export strategy.");
     }
 
+    // The PWA must call showSaveFilePicker from the original click stack.
+    // The returned destination is not writable until the fresh ledger check
+    // and optional backup encryption have completed. Other hosts keep their
+    // native SaveAsync picker behavior.
+    private Task<IVaultPendingFileSave?> SelectBrowserDestinationAsync(string name) =>
+        NativeFiles is IVaultDeferredFileSaveAccess deferred
+            ? deferred.SelectSaveDestinationAsync(name)
+            : Task.FromResult<IVaultPendingFileSave?>(null);
+
+    private async Task<bool> SavePreparedAsync(
+        string name, byte[] payload, IVaultPendingFileSave? browserDestination)
+    {
+        using var stream = new MemoryStream(payload, writable: false);
+        if (browserDestination is not null)
+        {
+            await browserDestination.SaveAsync(stream);
+            return true;
+        }
+        return await NativeFiles.SaveAsync(name, stream);
+    }
+
     private async Task ExportEncryptedAsync()
     {
         if (_busy || !CanExport || _backupPassword.Length < 12) return;
         _busy = true;
         _message = null;
         byte[]? ciphertext = null;
+        IVaultPendingFileSave? browserDestination = null;
         try
         {
+            // Select a destination before the first ledger/KDF await so the
+            // browser picker retains the triggering user activation.
+            browserDestination = await SelectBrowserDestinationAsync(
+                "stellar-vault-records.svrb");
             var (archive, exportScope) = await LoadExportSnapshotAsync();
             ciphertext = await VaultEncryptedRecordBackup.EncryptAsync(
                 archive, _backupPassword);
             await RequireSameExportScopeAsync(exportScope);
-            using var data = new MemoryStream(ciphertext, writable: false);
-            bool saved = await NativeFiles.SaveAsync("stellar-vault-records.svrb", data);
+            bool saved = await SavePreparedAsync(
+                "stellar-vault-records.svrb", ciphertext, browserDestination);
             _message = saved
                 ? "Encrypted record backup saved. Store its password separately."
                 : "Backup export canceled. No Stellar transaction sent.";
@@ -228,6 +254,8 @@
         finally
         {
             if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
+            if (browserDestination is not null)
+                await browserDestination.DisposeAsync();
             _backupPassword = string.Empty;
             _busy = false;
         }
@@ -299,8 +327,11 @@
         _busy = true;
         _message = null;
         byte[]? bytes = null;
+        IVaultPendingFileSave? browserDestination = null;
+        var filename = csv ? "stellar-vault-records.csv" : "stellar-vault-records.json";
         try
         {
+            browserDestination = await SelectBrowserDestinationAsync(filename);
             var (archive, exportScope) = await LoadExportSnapshotAsync();
             if (archive.Records.Length == 0)
                 throw new InvalidOperationException("No ordinary records or folders to export.");
@@ -308,9 +339,7 @@
                 ? VaultRecordInterchange.ExportCsv(archive)
                 : VaultRecordInterchange.ExportJson(archive);
             await RequireSameExportScopeAsync(exportScope);
-            using var stream = new MemoryStream(bytes, writable: false);
-            var saved = await NativeFiles.SaveAsync(
-                csv ? "stellar-vault-records.csv" : "stellar-vault-records.json", stream);
+            var saved = await SavePreparedAsync(filename, bytes, browserDestination);
             _message = saved
                 ? "Plaintext record interchange saved. Protect and remove the file after use."
                 : "Export canceled. No network operation occurred.";
@@ -324,6 +353,8 @@
         finally
         {
             if (bytes is not null) CryptographicOperations.ZeroMemory(bytes);
+            if (browserDestination is not null)
+                await browserDestination.DisposeAsync();
             _busy = false;
         }
     }
