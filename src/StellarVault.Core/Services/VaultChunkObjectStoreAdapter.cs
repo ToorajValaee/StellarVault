@@ -24,18 +24,15 @@ public sealed class VaultChunkObjectStoreAdapter(IVaultChunkStore chunks)
         var digest = Convert.ToHexString(SHA256.HashData(ciphertext.Span)).ToLowerInvariant();
         if (!string.Equals(objectId, digest, StringComparison.Ordinal))
             throw new CryptographicException("Streaming file object ID is not its ciphertext hash.");
-        using var stream = new MemoryStream(ciphertext.ToArray(), writable: false);
+        byte[] copy = ciphertext.ToArray();
+        using var stream = new MemoryStream(copy, writable: false);
         try
         {
             var storedId = await chunks.PutAsync(stream, cancellationToken);
             if (!string.Equals(storedId, objectId, StringComparison.OrdinalIgnoreCase))
                 throw new CryptographicException("File object store returned an unexpected content identifier.");
         }
-        finally
-        {
-            if (stream.TryGetBuffer(out var region) && region.Array is not null)
-                CryptographicOperations.ZeroMemory(region.Array);
-        }
+        finally { CryptographicOperations.ZeroMemory(copy); }
     }
 
     public async Task<byte[]> GetAsync(string objectId,
