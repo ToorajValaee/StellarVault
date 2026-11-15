@@ -13,10 +13,11 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public static class VaultStreamingFileTree
 {
-    public const int ChunkBytes = StellarLedgerFileProtocol.MaxChunkBytes;
+    // JSON/base64 + encryption metadata must leave headroom for ledger transport.
+    public const int ChunkBytes = 1024;
     // Conservative ledger record envelope budget. Branches do not contain raw
     // file bytes; their bounded fanout is independent of total file length.
-    public const int Fanout = 12;
+    public const int Fanout = 8;
     public const string LeafKind = "svfile-tree-leaf";
     public const string BranchKind = "svfile-tree-branch";
     public const string RootKind = "svfile-tree-root";
@@ -253,8 +254,9 @@ public static class VaultStreamingFileTree
                 {
                     var branch = JsonSerializer.Deserialize<Branch>(emitted.Plaintext)
                         ?? throw new InvalidDataException("Missing streaming file branch.");
-                    if (branch.Children is not { Length: >= 1 and <= Fanout })
-                        throw new InvalidDataException("Invalid streaming branch fanout.");
+                    if (branch.Children is not { Length: >= 1 and <= Fanout } ||
+                        node.Length == 0)
+                        throw new InvalidDataException("Invalid streaming branch fanout or zero-length branch.");
                     long length = 0;
                     foreach (var child in branch.Children)
                     {
