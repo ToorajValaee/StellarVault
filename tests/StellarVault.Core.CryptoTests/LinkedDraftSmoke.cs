@@ -225,6 +225,17 @@ internal static class LinkedDraftSmoke
                 var failures = VaultLinkedMultipartFilePolicy.Problems(malformed, [malformed]);
                 Require(failures.Contains("missing-record-content"),
                     "Null-content linked draft was not safely blocked.");
+                var edge1 = Guid.NewGuid().ToString("N");
+                var edge2 = Guid.NewGuid().ToString("N");
+                var invalidEdges = malformed with { DependsOn = [edge1, edge2] };
+                Require(VaultQueuedCreatePolicy.Problems(invalidEdges, [invalidEdges])
+                        .Contains("invalid-parent-dependency"),
+                    "Multiple corrupt queue dependencies caused an unsafe review.");
+                var duplicateEdge = malformed with { DependsOn = [edge1] };
+                Require(VaultQueuedCreatePolicy.Problems(duplicateEdge,
+                        [duplicateEdge, duplicateEdge])
+                        .Contains("duplicate-local-mutation-id"),
+                    "Duplicate encrypted queue IDs caused an unsafe review.");
             }
             finally
             {
