@@ -72,3 +72,12 @@ test('provider refuses unversioned type loss and clears ordinary stream bytes on
   assert.match(provider, /CryptographicOperations\.ZeroMemory\(buffer\)/);
   assert.match(provider, /new ZeroingReadStream\(Encoding\.UTF8\.GetBytes\(record\.Content\)\)/);
 });
+
+test('linked draft workspace independently invalidates in-flight offline work after re-unlock', () => {
+  const workspace = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const keys = read('src/StellarVault.Core/Services/VaultLinkedQueueKeySession.cs');
+  assert.match(workspace, /private sealed record Context\(string Root, string Scope, long Epoch,\s*long UnlockEpoch\)/);
+  assert.match(workspace, /ledger\.ConnectionEpoch, keys\.UnlockEpoch\)/);
+  assert.match(workspace, /keys\.UnlockEpoch != original\.UnlockEpoch/);
+  assert.match(keys, /Interlocked\.Increment\(ref _unlockEpoch\)/);
+});
