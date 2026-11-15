@@ -97,11 +97,15 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
 
 test('unlocked PWA session redirects from access to canonical vault without duplicate workspace', () => {
   const index = fs.readFileSync(path.join(root, '..', 'Pages', 'Index.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   assert.ok(index.includes('Navigation.NavigateTo("/vault", replace: true)'));
-  assert.ok(index.includes('if (!(Sessions.IsUnlocked || Ledger.IsConnected || SecretLedger.IsConnected))'));
-  assert.ok(index.includes('if (SecretLedger.IsConnected)'));
-  assert.ok(index.includes('Navigation.NavigateTo("/secret-vault", replace: true)'));
+  assert.match(index, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(index, /VaultWorkspaceMode\.ConflictingSessions/);
+  assert.doesNotMatch(index, /Navigation\.NavigateTo\("\/secret-vault"/);
+  assert.match(vault, /<VaultLinkedWorkspaceShell \/>/);
+  assert.match(vault, /ActiveMode == VaultWorkspaceMode\.StellarSecretKey/);
+  assert.match(vault, /if \(ActiveMode != VaultWorkspaceMode\.MnemonicHd\) return;/);
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
 });
 
