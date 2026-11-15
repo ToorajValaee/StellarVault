@@ -355,6 +355,38 @@ test('mismatched Horizon hash cannot erase the pre-broadcast signed identity',as
   h.close();
 });
 
+test('signed-hash durable callback completes before linked transaction is broadcast',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('create',recordId,record);
+  let pinned;
+  const hash=await h.api.submit(h.session,quote.QuoteId,{
+    invokeMethodAsync:async(method,signed)=>{
+      assert.equal(method,'CheckpointSignedHash');
+      assert.equal(h.submissions(),0,'Network write preceded durable checkpoint');
+      assert.equal(signed,'1'.padStart(64,'0'));
+      pinned=signed;
+    }
+  });
+  assert.equal(hash,pinned);
+  assert.equal(h.submissions(),1);
+  h.close();
+});
+
+test('failed durable signed-hash checkpoint aborts network submission',async()=>{
+  const h=harness();await h.open();
+  const quote=await h.plan('create',recordId,record);
+  await assert.rejects(h.api.submit(h.session,quote.QuoteId,{
+    invokeMethodAsync:async(method,hash)=>{
+      assert.equal(method,'CheckpointSignedHash');
+      assert.match(hash,/^[0-9a-f]{64}$/);
+      throw new Error('Encrypted queue CAS rejected');
+    }
+  }),/Encrypted queue CAS rejected/);
+  assert.equal(h.submissions(),0,'Checkpoint failure submitted a Stellar transaction');
+  assert.equal(h.inspectUncertain(),null,'No transport occurred, so no runtime broadcast uncertainty');
+  h.close();
+});
+
 test('success clears the read-only uncertain snapshot',async()=>{
   const h=harness();await h.open();
   const quote=await h.plan('create',recordId,record);
@@ -781,7 +813,7 @@ test('manual linked draft publication reserves durable queue state before networ
   const pwa=fs.readFileSync(path.join(src,'StellarVault.Pwa','Program.cs'),'utf8');
   const native=fs.readFileSync(path.join(src,'StellarVault.Maui','MauiProgram.cs'),'utf8');
   const reserve=publisher.indexOf('store.TryReplaceAsync(original, reserved, ct)');
-  const broadcast=publisher.indexOf('ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct)');
+  const broadcast=publisher.indexOf('transport.SubmitWithSignedHashAsync(');
   assert.ok(reserve>=0 && broadcast>reserve);
   assert.match(publisher,/pending\.Quote, approvedQuote/);
   assert.match(publisher,/VaultQueuedCreatePolicy\.Problems/);
@@ -792,7 +824,8 @@ test('manual linked draft publication reserves durable queue state before networ
   assert.doesNotMatch(publisher,/State = VaultSyncState\.Confirmed/);
   assert.match(publisher,/Current account snapshot does not prove|matching CURRENT account snapshot/);
   assert.match(publisher,/ledger\.ReadAsync\(ct\)/);
-  assert.match(publisher,/store\.TryReplaceAsync\(reserved, uncertain, CancellationToken\.None\)/);
+  assert.match(publisher,/store\.TryReplaceAsync\(submission, uncertain, CancellationToken\.None\)/);
+  assert.match(publisher,/store\.TryReplaceAsync\(\s*submission, pinned, CancellationToken\.None\)/);
   assert.doesNotMatch(publisher,/VaultSessionManager|MnemonicHd|StellarHdAccountStrategy/);
   assert.match(panel,/Publisher\.PrepareAsync\(id\)/);
   assert.match(panel,/Publisher\.SubmitAsync\(approved\.Quote, true\)/);
@@ -977,7 +1010,7 @@ test('linked account capacity extension uses a durable single-tail encrypted jou
   assert.match(journal,/chain\.TailAccountId/);
   assert.match(journal,/Id = reservationId/);
   const reserve=journal.indexOf('store.TryReplaceAsync(draft, reserved, ct)');
-  const transmit=journal.indexOf('expansion.SubmitApprovedAsync(approvedQuote, true, ct)');
+  const transmit=journal.indexOf('expansion.SubmitWithSignedHashAsync(');
   assert.ok(reserve>0 && transmit>reserve,'Durable CAS reservation must precede network submit');
   assert.match(journal,/State = VaultSyncState\.Uncertain/);
   assert.doesNotMatch(journal,/State = VaultSyncState\.Confirmed/);
@@ -1103,4 +1136,16 @@ test('linked queue binds volatile signed transaction identity and restart receip
   assert.match(recovery,/item\.TransactionHash is not \{ Length: 64 \} hash/);
   assert.match(recovery,/ledger\.ConnectedNetworkPassphrase != expectedPassphrase/);
   assert.doesNotMatch(recovery,/store\.TryReplaceAsync|VaultSyncState\.Confirmed/);
+  const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
+  const adapter=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.Pwa','Services','BrowserSecretKeyLedger.cs'),'utf8');
+  const interfaceSource=fs.readFileSync(path.join(core,'IStellarSecretKeySignedSubmission.cs'),'utf8');
+  assert.match(policy,/previous\.State == VaultSyncState\.Submitting &&\s*next\.State == VaultSyncState\.Submitting/);
+  assert.match(policy,/previous\.TransactionHash is \{ \} pinnedHash/);
+  assert.match(adapter,/DotNetObjectReference\.Create/);
+  assert.match(adapter,/JSInvokable\("CheckpointSignedHash"\)/);
+  assert.match(adapter,/IStellarSecretKeySignedSubmission/);
+  assert.match(interfaceSource,/SubmitWithSignedHashAsync/);
+  assert.match(expansion,/submission\.TransactionHash != hash/);
+  assert.match(publisher,/submission\.TransactionHash != hash/);
+  assert.match(source,/await checkpoint\.invokeMethodAsync\('CheckpointSignedHash',signedHash\)/);
 });
