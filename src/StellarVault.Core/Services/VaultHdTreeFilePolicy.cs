@@ -46,7 +46,7 @@ public static class VaultHdTreeFilePolicy
             var matches = all.Where(x => x.Id != item.Id &&
                 x.EntityId.Equals(child.Id, StringComparison.OrdinalIgnoreCase) &&
                 x.Kind == VaultMutationKind.CreateRecord &&
-                x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd).ToArray();
+                (x.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd)).ToArray();
             if (matches.Length != 1 || matches[0].State != VaultSyncState.Confirmed)
                 return ["hd-tree-child-not-confirmed"];
             var staged = Decode(matches[0]);
@@ -81,9 +81,12 @@ public static class VaultHdTreeFilePolicy
         if (refs is null) return ["hd-tree-node-invalid"];
         foreach (var child in refs)
         {
-            var original = all.SingleOrDefault(x =>
+            var matchesInJournal = all.Where(x =>
                 x.EntityId.Equals(child.Id, StringComparison.OrdinalIgnoreCase) &&
-                x.Kind == VaultMutationKind.CreateRecord);
+                x.Kind == VaultMutationKind.CreateRecord).ToArray();
+            if (matchesInJournal.Length != 1)
+                return ["hd-tree-child-journal-ambiguous"];
+            var original = matchesInJournal[0];
             var expected = original is null ? null : Decode(original);
             var matches = remote.Where(x =>
                 x.Id.Equals(child.Id, StringComparison.OrdinalIgnoreCase)).ToArray();
