@@ -39,6 +39,14 @@ public static class VaultLinkedSingleFilePolicy
         byte[]? result = null;
         try
         {
+            var metadata = JsonSerializer.Deserialize<StellarLedgerFileProtocol.Single>(
+                draft.Content[StellarLedgerFileProtocol.SinglePrefix.Length..]);
+            if (metadata is null ||
+                metadata.Sha256Hex is not { Length: 64 } checksum ||
+                !checksum.All(c => c is >= '0' and <= '9' or >= 'A' and <= 'F') ||
+                metadata.ContentType is not { Length: > 0 and <= 128 } mime ||
+                !mime.All(c => c is >= '!' and <= '~'))
+                return false;
             var item = new LedgerRecordItem("0000000000000000",
                 draft.Title, draft.Content, draft.FolderId, draft.Tags);
             result = StellarLedgerFileProtocol.DecodeFile(item, [item]);
