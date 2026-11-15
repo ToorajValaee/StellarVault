@@ -20,7 +20,7 @@ Status: **Not a production release certificate.** This checklist is for evaluati
 - [ ] Confirm every Testnet write presents a fresh transaction-specific fee/reserve quote and explicit approval; no automatic retry occurs after unknown results.
 - [ ] Simulate uncertain record submission and linked account expansion. Confirm durable `Submitting/Uncertain` persists across restart, blocks all further queued publication, and cannot be cleared merely by a successful current-state read or receipt.
 - [ ] Validate an independent clean-device recovery of Testnet on-chain data. Do not assume locally-only drafts survive clean-device recovery.
-- [ ] Record and review the known limitations: linked historical operation/signer proof, queued update/delete, linked file publication, durable reconciliation, cross-host validation, and security audit are incomplete.
+- [ ] Record and review the known limitations: linked signed-history verification, queued record update/delete and bounded multipart publication are implemented in source but lack real-Testnet/device assurance; multipart deletion, large S-key files, legacy migration, direct-mode crash uncertainty, cross-host validation and independent security audit remain incomplete.
 - [ ] Agree on pilot stop conditions, rollback owner, and incident triage before admitting testers.
 
 ## Stop conditions — immediately suspend new writes
