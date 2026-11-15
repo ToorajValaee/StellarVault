@@ -838,6 +838,9 @@ public sealed class VaultLinkedDraftWorkspace(
                     items.Where(x => x.Id != item.Id).ToArray(), item.EntityId))
                 throw new InvalidOperationException(
                     "Discard the unpublished multipart manifest before discarding a referenced file part.");
+            if (VaultLinkedTreeFilePolicy.BlocksDiscard(item, items))
+                throw new InvalidOperationException(
+                    "A published file-tree child still needs its root, or an unpublished root still references this node. Resolve the complete file group before discarding.");
             Check(context);
             if (!await store.TryDeleteAsync(item, ct))
                 throw new InvalidOperationException(
