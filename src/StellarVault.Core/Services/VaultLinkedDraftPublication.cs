@@ -241,10 +241,30 @@ public sealed class VaultLinkedDraftPublication(
                         throw new InvalidOperationException(
                             "Local queue was changed while reserving publication.");
 
+                    var submission = reserved;
                     string? hash = null;
                     try
                     {
-                        hash = await ledger.SubmitApprovedAsync(pending.Quote.QuoteId, ct);
+                        if (ledger is not IStellarSecretKeySignedSubmission transport)
+                            throw new InvalidOperationException(
+                                "Linked queue transport cannot checkpoint a signed hash; no transaction was sent.");
+                        hash = await transport.SubmitWithSignedHashAsync(
+                            pending.Quote.QuoteId,
+                            async signedHash =>
+                            {
+                                RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                                if (submission.TransactionHash is not null)
+                                    throw new InvalidOperationException("Signed hash already checkpointed.");
+                                var pinned = submission with { TransactionHash = signedHash };
+                                if (!await store.TryReplaceAsync(
+                                        submission, pinned, CancellationToken.None))
+                                    throw new InvalidOperationException(
+                                        "Signed hash could not be persisted; refuse network transmission.");
+                                submission = pinned;
+                            }, ct);
+                        if (submission.TransactionHash != hash)
+                            throw new InvalidDataException(
+                                "Transport result did not match the durably checkpointed signed hash.");
                         var observed = await ledger.ReadAsync(ct);
                         RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
                         var published = observed.SingleOrDefault(x => x.Id == original.EntityId);
@@ -261,12 +281,11 @@ public sealed class VaultLinkedDraftPublication(
                         // this exact transaction wrote the encrypted manifest and
                         // chunks. Preserve the durable quarantine until an
                         // independent historical signer/operation verifier exists.
-                        var uncertain = reserved with
+                        var uncertain = submission with
                         {
-                            State = VaultSyncState.Uncertain,
-                            TransactionHash = hash
+                            State = VaultSyncState.Uncertain
                         };
-                        if (!await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None))
+                        if (!await store.TryReplaceAsync(submission, uncertain, CancellationToken.None))
                             throw new InvalidOperationException(
                                 "Submission was observed but queue quarantine CAS failed; do not retry.");
                         return hash;
@@ -277,17 +296,18 @@ public sealed class VaultLinkedDraftPublication(
                         // throws before returning its receipt. Bind the
                         // runtime's public diagnostic to the same signer,
                         // network, record, destination and session epoch.
-                        hash ??= await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
-                            ledger, pending.AccountId, "create",
-                            pending.Quote.TargetAccountId, original.EntityId,
-                            ledger.ConnectedNetworkPassphrase ?? "",
-                            pending.Epoch);
-                        var uncertain = reserved with
+                        hash = submission.TransactionHash ?? hash ??
+                            await VaultLinkedSignedSubmissionIdentity.TryReadAsync(
+                                ledger, pending.AccountId, "create",
+                                pending.Quote.TargetAccountId, original.EntityId,
+                                ledger.ConnectedNetworkPassphrase ?? "",
+                                pending.Epoch);
+                        var uncertain = submission with
                         {
                             State = VaultSyncState.Uncertain,
                             TransactionHash = hash
                         };
-                        try { await store.TryReplaceAsync(reserved, uncertain, CancellationToken.None); }
+                        try { await store.TryReplaceAsync(submission, uncertain, CancellationToken.None); }
                         catch { /* Durable Submitting remains fail-closed. */ }
                         throw new InvalidOperationException(
                             "Linked transaction may have reached Stellar. The encrypted queue remains blocked; reconcile its exact operation before retrying.");
