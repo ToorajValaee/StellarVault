@@ -1049,6 +1049,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
             x.State is not (VaultSyncState.Confirmed or VaultSyncState.Failed) &&
             x.DependsOn.Contains(mutationId, StringComparer.Ordinal)))
             throw new InvalidOperationException("Another pending change depends on this draft.");
+        if (VaultLinkedTreeFilePolicy.BlocksDiscard(current, entries))
+            throw new InvalidOperationException(
+                "A pending HD file-tree root still references this node, or a confirmed child still requires its root. Resolve the entire file group before discarding.");
         if (!await store.TryDeleteAsync(current, ct))
             throw new InvalidOperationException("Draft changed while discarding; refresh the local queue.");
     }
