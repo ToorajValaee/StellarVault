@@ -446,6 +446,7 @@ Console.WriteLine("PASS: SEP-53 known answer and tampering tests");
 VaultWorkspaceModeSmoke.Run();
 await StreamingFileTreeSmoke.RunAsync();
 await AccountObjectStoreContractSmoke.RunAsync();
+await StellarObjectEstimateSmoke.RunAsync();
 await VaultRecordInterchangeSmoke.RunAsync();
 await HdStreamingFileTreeSmoke.RunAsync();
 await LinkedDraftSmoke.RunAsync();
