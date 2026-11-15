@@ -289,6 +289,13 @@
                 {
                     <p><strong>Historical storage account:</strong> <code style="overflow-wrap:anywhere">@account</code></p>
                 }
+                <p><strong>Historical linked expansion operations:</strong>
+                    @(_recoveryFinding.HistoricalExpansionOperationsMatch ? "Child account, root signer and parent pointer observed (not full authorization proof)" : "Not established")
+                </p>
+                @if (_recoveryFinding.HistoricalParentAccount is { } parentAccount)
+                {
+                    <p><strong>Historical parent account:</strong> <code style="overflow-wrap:anywhere">@parentAccount</code></p>
+                }
                 <p role="alert">@_recoveryFinding.Explanation</p>
                 <p>No queue state was changed. Independent operation-level verification is required before any release or retry.</p>
             </section>
