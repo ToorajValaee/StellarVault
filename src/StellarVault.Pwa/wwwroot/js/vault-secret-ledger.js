@@ -343,7 +343,7 @@ window.stellarVaultSecretLedger = (() => {
     if((node.account_id===s.root && ownerFree<additional) ||
        spend<fees+topUp+(node.account_id===s.root?additional:0n)) {
       cipher?.fill(0);
-      fail('Insufficient root XLM for account reserve top-up and network fees.');
+      fail('Insufficient native-asset balance for account reserve top-up and network fees.');
     }
     const fingerprint=old?.rawHeader||null;
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
