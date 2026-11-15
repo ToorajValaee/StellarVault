@@ -7,7 +7,8 @@ namespace StellarVault.Core.Services;
 /// </summary>
 public sealed record VaultLinkedReceiptObservation(
     bool ReceiptObserved, string Explanation, long? LedgerSequence = null,
-    bool HistoricalRecordOperationsMatch = false, string? StorageAccount = null);
+    bool HistoricalRecordOperationsMatch = false, string? StorageAccount = null,
+    bool HistoricalExpansionOperationsMatch = false, string? HistoricalParentAccount = null);
 
 public interface IVaultLinkedReceiptEvidence
 {
