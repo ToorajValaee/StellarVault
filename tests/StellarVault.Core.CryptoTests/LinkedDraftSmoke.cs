@@ -205,6 +205,29 @@ internal static class LinkedDraftSmoke
             var drafts = new VaultLinkedDraftWorkspace(ledger, keys, store, consent, network);
             var publisher = new VaultLinkedDraftPublication(ledger, store, keys, consent, network);
             var bytes = Enumerable.Range(0, 512).Select(x => (byte)x).ToArray();
+
+            const string corruptId = "ffffffffffffffff";
+            ledger.SeedRecord(corruptId, new LedgerRecordDraft(
+                "Broken file", StellarLedgerFileProtocol.SinglePrefix + "{}",
+                null, ["file", "svfile-v1"]));
+            var corruptRevision = (await ledger.ReadRecordRevisionAsync(corruptId))!;
+            await MustRejectAsync(
+                () => drafts.StageDeleteAsync(corruptId, corruptRevision),
+                "A malformed SVFILE1 record was allowed to poison the encrypted deletion queue.");
+            Require((await drafts.ListAsync()).Count == 0,
+                "Rejected malformed file deletion left a durable pending mutation.");
+
+            const string multipartId = "eeeeeeeeeeeeeeee";
+            ledger.SeedRecord(multipartId, new LedgerRecordDraft(
+                "Unsupported multipart file", StellarLedgerFileProtocol.ManifestPrefix + "{}",
+                null, ["file", "svfile-v2"]));
+            var multipartRevision = (await ledger.ReadRecordRevisionAsync(multipartId))!;
+            await MustRejectAsync(
+                () => drafts.StageDeleteAsync(multipartId, multipartRevision),
+                "Unsupported multipart file deletion bypassed the explicit capability gate.");
+            Require((await drafts.ListAsync()).Count == 0,
+                "Unsupported multipart deletion created an unrecoverable encrypted queue entry.");
+
             await MustRejectAsync(
                 () => drafts.StageSmallFileAsync("Oversize", "oversize.bin",
                     "application/octet-stream", new byte[VaultLinkedSingleFilePolicy.MaxBytes + 1]),
