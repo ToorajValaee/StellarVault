@@ -50,9 +50,10 @@ public static class VaultQueuedCreatePolicy
         if (draft.Tags is { Length: > 24 } ||
             draft.Tags?.Any(x => x is null || x.Length > 64) == true)
             problems.Add("invalid-record-tags");
-        if (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
-            draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
-            draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal))
+        if (draft.Content is not null &&
+            (draft.Content.StartsWith(StellarLedgerFileProtocol.SinglePrefix, StringComparison.Ordinal) ||
+             draft.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix, StringComparison.Ordinal) ||
+             draft.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)))
             problems.Add("file-protocol-needs-staged-review");
         // The serialized FolderId and the durable dependency graph MUST
         // identify the same pending parent. Otherwise a stale or corrupt child
