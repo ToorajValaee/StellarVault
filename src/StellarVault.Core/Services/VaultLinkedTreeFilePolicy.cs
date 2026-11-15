@@ -216,6 +216,47 @@ public static class VaultLinkedTreeFilePolicy
         return normal.Where(x => x != "file-protocol-needs-staged-review").ToArray();
     }
 
+    /// <summary>Immutable file-tree cleanup ordering: do not discard the
+    /// root after any child has been historically confirmed, and do not
+    /// discard a child still referenced by its pending root.</summary>
+    public static bool BlocksDiscard(VaultPendingMutation candidate,
+        IReadOnlyList<VaultPendingMutation> all)
+    {
+        LedgerRecordDraft? draft;
+        try { draft = JsonSerializer.Deserialize<LedgerRecordDraft>(candidate.EncryptedPayload); }
+        catch (JsonException) { return false; }
+        if (draft?.Tags is not { Length: 2 } tags ||
+            !tags[1].StartsWith("svtree3-group:", StringComparison.Ordinal) ||
+            !TryDecode(draft, out var kind, out var payload))
+            return false;
+        CryptographicOperations.ZeroMemory(payload);
+        var groupTag = tags[1];
+        if (kind == VaultStreamingFileTree.RootKind)
+            return all.Any(x => x.Id != candidate.Id &&
+                x.State == VaultSyncState.Confirmed && SameFileGroup(x, groupTag));
+        return all.Any(x => x.Id != candidate.Id &&
+            x.State == VaultSyncState.Pending && x.TransactionHash is null &&
+            HasRootTag(x, groupTag));
+    }
+
+    private static bool SameFileGroup(VaultPendingMutation entry, string groupTag)
+    {
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(entry.EncryptedPayload);
+            return draft?.Tags is { Length: 2 } tags && tags[1] == groupTag &&
+                TryDecodeGroup(draft);
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static bool TryDecodeGroup(LedgerRecordDraft draft)
+    {
+        if (!TryDecode(draft, out _, out var data)) return false;
+        CryptographicOperations.ZeroMemory(data);
+        return true;
+    }
+
     private static bool HasRootTag(VaultPendingMutation entry, string tag)
     {
         try
