@@ -234,6 +234,8 @@ internal static class LinkedDraftSmoke
                 var duplicateEdge = malformed with { DependsOn = [edge1] };
                 Require(VaultQueuedCreatePolicy.Problems(duplicateEdge,
                         [duplicateEdge, duplicateEdge])
+                        .Contains("duplicate-local-mutation-id") &&
+                    VaultQueuedCreatePolicy.Problems(malformed, [malformed, malformed])
                         .Contains("duplicate-local-mutation-id"),
                     "Duplicate encrypted queue IDs caused an unsafe review.");
             }
