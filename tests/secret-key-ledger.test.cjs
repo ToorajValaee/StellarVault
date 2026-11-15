@@ -1502,7 +1502,8 @@ test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling
   assert.match(tree,/public const int Fanout = 8/);
   assert.match(tree,/IncrementalHash\.CreateHash\(HashAlgorithmName\.SHA256\)/);
   assert.match(tree,/input\.ReadAsync\(buffer\.AsMemory\(filled\), ct\)/);
-  assert.match(tree,/await EmitAsync\(rootId, RootKind/);
+  assert.match(tree,/var rootId = await EmitAsync\(RootKind,/);
+  assert.match(tree,/return new Result\(rootId, root, emitted\)/);
   assert.match(tree,/ReadVerifiedAsync\(/);
   assert.match(tree,/CryptographicOperations\.ZeroMemory\(payload\)/);
   assert.doesNotMatch(tree,/MaxFileBytes|MaxParts = \(MaxFileBytes/);
