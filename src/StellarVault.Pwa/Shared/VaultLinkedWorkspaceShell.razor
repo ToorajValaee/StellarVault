@@ -56,6 +56,7 @@
             <div hidden="@(_view == "help")">
                 <VaultSecretKeyWorkspace Embedded="true"
                                          View="@(_view == "help" ? "records" : _view)"
+                                         OnViewChange="SelectView"
                                          @ref="_workspace" />
             </div>
             @if (_view == "help")
