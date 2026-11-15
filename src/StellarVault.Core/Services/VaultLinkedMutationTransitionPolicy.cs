@@ -31,7 +31,10 @@ public static class VaultLinkedMutationTransitionPolicy
 
         if (previous.State == VaultSyncState.Pending && next.State == VaultSyncState.Pending)
         {
-            // Edit a never-submitted create using original durable CAS. The
+            if (previous.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
+                throw new InvalidOperationException(
+                    "A staged linked deletion must retain its original encrypted record snapshot.");
+            // Edit a never-submitted create/update using original durable CAS. The
             // record ID and creation timestamp cannot change; only payload
             // and parent dependency may change in the same atomic revision.
             if (previous.TransactionHash is not null || next.TransactionHash is not null ||
