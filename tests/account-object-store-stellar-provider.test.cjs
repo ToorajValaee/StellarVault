@@ -81,3 +81,22 @@ test('linked draft workspace independently invalidates in-flight offline work af
   assert.match(workspace, /keys\.UnlockEpoch != original\.UnlockEpoch/);
   assert.match(keys, /Interlocked\.Increment\(ref _unlockEpoch\)/);
 });
+
+test('file Put uses existing encrypted SVTREE3 staging for HD and independent S-key', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
+  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  assert.match(provider, /descriptor\.TypeId == VaultRecordTypeFactory\.File/);
+  assert.match(provider, /await linkedDrafts\.StageTreeFileAsync\(/);
+  assert.match(provider, /await hdDrafts\.StageTreeFileAsync\(/);
+  assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, false\);/);
+  assert.match(provider, /"staged-tree:" \+ result\.RootId/);
+  assert.match(provider, /ObjectId: result\.RootId/);
+  assert.match(provider, /result\.Manifest\.Length/);
+  assert.match(provider, /null, null, result\.Manifest\.Length, null/);
+  assert.match(hd, /VaultStreamingFileTree\.WriteContentAddressedAsync\(/);
+  assert.match(linked, /VaultStreamingFileTree\.WriteAsync\(/);
+  assert.match(provider, /recordTypes\.Create\(VaultRecordTypeFactory\.File/);
+  assert.doesNotMatch(provider, /PublishDetailedAsync\(|SubmitApprovedAsync\(/,
+    'Engine file staging must not skip consented publication and receipt checks');
+});
