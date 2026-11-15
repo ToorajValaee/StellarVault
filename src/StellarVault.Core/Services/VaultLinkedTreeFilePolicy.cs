@@ -220,6 +220,10 @@ public static class VaultLinkedTreeFilePolicy
                     published[0].Content != staged.Content ||
                     published[0].Title != staged.Title ||
                     published[0].FolderId != staged.FolderId ||
+                    published[0].IsFolder != staged.IsFolder ||
+                    (published[0].UserName ?? "") != (staged.UserName ?? "") ||
+                    (published[0].Url ?? "") != (staged.Url ?? "") ||
+                    (published[0].Notes ?? "") != (staged.Notes ?? "") ||
                     !(published[0].Tags ?? []).SequenceEqual(staged.Tags ?? [], StringComparer.Ordinal))
                     return ["tree-child-changed-on-ledger"];
             }
