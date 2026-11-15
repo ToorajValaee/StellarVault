@@ -79,6 +79,7 @@ builder.Services.AddScoped<VaultAccountStrategyFactory>();
 builder.Services.AddScoped<VaultLinkedAccountExpansion>();
 builder.Services.AddScoped<VaultStellarDraftClassification>();
 builder.Services.AddScoped<VaultLinkedRecordWritePlanner>();
+builder.Services.AddScoped<HorizonVaultLinkedRecordOperationInspector>();
 builder.Services.AddScoped<IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence>();
 builder.Services.AddScoped<VaultLinkedRecoveryInspector>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
