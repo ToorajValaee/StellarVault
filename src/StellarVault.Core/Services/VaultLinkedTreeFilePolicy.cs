@@ -81,6 +81,19 @@ public static class VaultLinkedTreeFilePolicy
         }
     }
 
+    public static bool IsRootRecord(LedgerRecordItem record)
+    {
+        if (record.Content is null || !record.Content.StartsWith(Prefix, StringComparison.Ordinal))
+            return false;
+        var draft = new LedgerRecordDraft(record.Title, record.Content,
+            record.FolderId, record.Tags, record.IsFolder,
+            record.UserName, record.Url, record.Notes);
+        if (!TryDecode(draft, out var kind, out var bytes)) return false;
+        try { return kind == VaultStreamingFileTree.RootKind &&
+            ValidateNode(kind, bytes, out _); }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
     public static bool IsTypedNode(LedgerRecordDraft draft)
     {
         if (!TryDecode(draft, out var kind, out var data)) return false;
