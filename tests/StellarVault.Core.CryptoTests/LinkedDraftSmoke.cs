@@ -265,6 +265,25 @@ internal static class LinkedDraftSmoke
                 "The fake linked ledger did not apply the approved update/delete.");
             await MustRejectAsync(() => publisher.PrepareAsync(staged.MutationId),
                 "A submitted linked remote mutation was offered for duplicate publication.");
+
+            var evidence = new CapturingLinkedReceiptEvidence();
+            var recovery = new VaultLinkedDraftRecoveryReview(
+                ledger, store, keys, consent, network, evidence);
+            var reconciler = new VaultLinkedVerifiedReconciliation(
+                ledger, store, keys, consent, network, recovery);
+            var unresolved = await reconciler.ConfirmVerifiedRecordAsync(staged.MutationId);
+            Require(!unresolved.Confirmed &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == staged.MutationId)
+                        .State == VaultSyncState.Uncertain,
+                "Unproven historical S-key update/delete was released.");
+            ledger.AllowHistoricalProof = true;
+            var reconciled = await reconciler.ConfirmVerifiedRecordAsync(staged.MutationId);
+            Require(reconciled.Confirmed &&
+                    (await drafts.ListAsync()).Single(x => x.MutationId == staged.MutationId)
+                        .State == VaultSyncState.Confirmed &&
+                    ledger.Submissions == 1 &&
+                    ledger.ReleasedVerifiedHash == transaction,
+                "Proof-bound linked mutation finalization did not atomically preserve its signed identity.");
             Console.WriteLine(deleting
                 ? "PASS: revision-pinned S-key deletion remains uncertain without historical proof"
                 : "PASS: revision-pinned S-key update rejects stale manifest and remains uncertain");
@@ -516,7 +535,9 @@ internal static class LinkedDraftSmoke
 
     private sealed class FakeLinkedLedger :
         IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
-        IStellarSecretKeyRecordRevisionReader
+        IStellarSecretKeyRecordRevisionReader,
+        IStellarSecretKeyHistoricalRecordVerifier,
+        IStellarSecretKeyVerifiedSessionRelease
     {
         public const string RootAddress = Root;
         private readonly List<LedgerRecordItem> _items = [];
@@ -536,6 +557,31 @@ internal static class LinkedDraftSmoke
         public long ConnectionEpoch { get; private set; } = 1;
         public int Submissions { get; private set; }
         public bool FailNextSubmission { get; set; }
+        public bool AllowHistoricalProof { get; set; }
+        public string? ReleasedVerifiedHash { get; private set; }
+
+        public Task<bool> VerifyAsync(string transactionHash, VaultMutationKind kind,
+            string recordId, LedgerRecordDraft expectedDraft,
+            string? originalManifest, CancellationToken ct = default)
+        {
+            var valid = AllowHistoricalProof &&
+                transactionHash == Submissions.ToString("x64") &&
+                (kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder
+                    ? originalManifest is null
+                    : VaultLinkedRemoteRevisionPolicy.IsValid(originalManifest)) &&
+                (kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder
+                    ? _items.All(x => x.Id != recordId)
+                    : _items.Any(x => x.Id == recordId &&
+                        x.Title == expectedDraft.Title &&
+                        x.Content == expectedDraft.Content));
+            return Task.FromResult(valid);
+        }
+
+        public Task ReleaseVerifiedAsync(string transactionHash, CancellationToken ct = default)
+        {
+            ReleasedVerifiedHash = transactionHash;
+            return Task.CompletedTask;
+        }
 
         public Task ConnectAsync(string secretKey, string horizonUrl, string networkPassphrase,
             CancellationToken cancellationToken = default) =>
