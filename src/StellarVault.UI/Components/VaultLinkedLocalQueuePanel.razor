@@ -8,6 +8,7 @@
 @inject VaultLinkedAccountExpansion LinkedExpansion
 @inject VaultLinkedExpansionJournal ExpansionJournal
 @inject VaultLinkedDraftRecoveryReview RecoveryReview
+@inject VaultLinkedVerifiedReconciliation VerifiedReconciliation
 @implements IAsyncDisposable
 
 <section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
@@ -336,6 +337,19 @@
                 }
                 <p role="alert">@_recoveryFinding.Explanation</p>
                 <p>No queue state was changed. Independent operation-level verification is required before any release or retry.</p>
+                <p>Historical proof finalization is available for record creates, updates and deletes only.
+                   It requires the currently connected S-key to verify the exact signed XDR,
+                   root signature and decrypted historical ciphertext. If any check fails,
+                   the encrypted journal stays quarantined.</p>
+                @if (_recoveryFinding.TransactionHash is not null &&
+                     _recoveryFinding.DurableState == VaultSyncState.Uncertain)
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || !QueueKeys.CanPublish)"
+                            @onclick="() => ConfirmVerifiedRecordAsync(_recoveryFinding.MutationId)">
+                        Verify signed history and finalize record journal
+                    </button>
+                }
             </section>
         }
         @if (_report is not null && QueueKeys.IsUnlocked)
@@ -465,6 +479,26 @@
 
 
     private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
+
+    private async Task ConfirmVerifiedRecordAsync(string mutationId)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            var result = await VerifiedReconciliation.ConfirmVerifiedRecordAsync(mutationId);
+            _recoveryFinding = null;
+            _manualSyncPlan = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = result.Explanation;
+        }
+        catch (Exception ex)
+        {
+            _message = "Historical transaction verification did not release the encrypted queue. Do not retry the transaction: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
 
     private async Task InspectUnresolvedAsync(string id)
     {
