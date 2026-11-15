@@ -86,6 +86,34 @@ window.stellarVaultV2Download = Object.freeze({
       data.fill(0);
     }
   },
+  // Must be invoked directly from a real user click. Acquires only a handle;
+  // no file is created or written until saveStream runs after verification.
+  // Dispose/cancel simply drops the handle if later authorization fails.
+  async selectSaveDestination(filename) {
+    if (typeof window.showSaveFilePicker !== 'function')
+      throw new Error('Verified exports require a browser Save File Picker.');
+    const safeName = typeof filename === 'string'
+      ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
+      : 'stellar-vault-record';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: safeName || 'stellar-vault-record'
+    });
+    let used = false;
+    return {
+      async writeStream(dotnetStreamReference) {
+        if (used) throw new Error('The selected export destination was already used.');
+        used = true;
+        const target = await handle.createWritable();
+        try {
+          const source = await dotnetStreamReference.stream();
+          await source.pipeTo(target);
+        } catch (error) {
+          try { await target.abort(); } catch (_) { /* already closed */ }
+          throw error;
+        }
+      }
+    };
+  },
   // Streams verified bytes to the browser's user-selected file sink without
   // constructing a whole-file Blob. The File System Access API holds writes
   // in a temporary file and only commits them once pipeTo closes normally;
