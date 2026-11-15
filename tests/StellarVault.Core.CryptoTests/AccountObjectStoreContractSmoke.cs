@@ -61,7 +61,7 @@ internal static class AccountObjectStoreContractSmoke
         using var body = new MemoryStream([1, 2, 3]);
         var quote = await storage.EstimatePutAsync(stellarScope, descriptor,
             body, new ObjectWriteOptions(ObjectCapacityPolicy.SingleAccount));
-        Check(quote.ProviderId == "stellar" && !quote.RequiresCapacityExpansion,
+        Check(quote.ProviderId == "stellar" && quote.RequiresCapacityExpansion == false,
             "A single-account request incorrectly expanded capacity.");
         body.Position = 0;
         var intent = await storage.PutAsync(evmScope, descriptor,
