@@ -98,6 +98,8 @@
             return string.Join("|", Strategy, root, Networks.CredentialKey(root),
                 LinkedKeys.IsOfflineOnly ? "offline" : "connected",
                 LinkedLedger.ConnectionEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                LinkedKeys.UnlockEpoch.ToString(
                     System.Globalization.CultureInfo.InvariantCulture));
         }
         if (HdSession.ActiveAccountId is not string account) return null;
