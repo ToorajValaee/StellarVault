@@ -242,7 +242,8 @@ public static class VaultStreamingFileTree
                     try
                     {
                         if (leaf.Data is null || leaf.Data.LongLength != node.Length ||
-                            leaf.Data.Length > root.ChunkSize)
+                            leaf.Data.Length > root.ChunkSize ||
+                            (root.Length != 0 && leaf.Data.Length == 0))
                             throw new InvalidDataException("Invalid streaming file leaf length.");
                         written = checked(written + leaf.Data.LongLength);
                         if (written > root.Length)
