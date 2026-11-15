@@ -297,6 +297,47 @@ internal static class LinkedDraftSmoke
                 sent++;
             }
             var onChain = await ledger.ReadAsync();
+            // Even a metadata-only mutation on a confirmed remote child must
+            // block parent/root publication before any new signed transaction.
+            var rootRecord = onChain.Single(x => x.Id == tree.RootId);
+            var rootDraft = new LedgerRecordDraft(rootRecord.Title,
+                rootRecord.Content, rootRecord.FolderId, rootRecord.Tags,
+                rootRecord.IsFolder, rootRecord.UserName, rootRecord.Url, rootRecord.Notes);
+            Require(VaultLinkedTreeFilePolicy.TryDecode(rootDraft, out var rootKind,
+                out var rootPayload) && rootKind == VaultStreamingFileTree.RootKind,
+                "Linked tree root could not be decoded for remote preflight.");
+            string directChildId;
+            try
+            {
+                var manifest = System.Text.Json.JsonSerializer
+                    .Deserialize<VaultStreamingFileTree.Root>(rootPayload)
+                    ?? throw new Exception("Missing linked tree manifest.");
+                directChildId = manifest.Tree.Id;
+            }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(rootPayload);
+            }
+            var metadataChanged = onChain.Select(x => x.Id == directChildId
+                ? x with { Notes = "tampered on-chain metadata" }
+                : x).ToArray();
+            var confirmedJournal = await store.ListAsync(Root, network.CredentialKey(Root));
+            try
+            {
+                var rootMutation = confirmedJournal.Single(x => x.EntityId == tree.RootId);
+                Require(VaultLinkedTreeFilePolicy.Problems(rootMutation,
+                        confirmedJournal, onChain).Length == 0,
+                    "Valid linked tree root was rejected by remote preflight.");
+                Require(VaultLinkedTreeFilePolicy.Problems(rootMutation,
+                        confirmedJournal, metadataChanged)
+                        .Contains("tree-child-changed-on-ledger"),
+                    "Remote metadata-only child modification bypassed linked tree preflight.");
+            }
+            finally
+            {
+                foreach (var entry in confirmedJournal)
+                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            }
             await using var reconstructed = new MemoryStream();
             var file = await VaultLinkedTreeFilePolicy.ReadAsync(
                 tree.RootId, onChain, reconstructed);
