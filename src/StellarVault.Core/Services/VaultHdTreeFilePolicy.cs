@@ -94,6 +94,12 @@ public static class VaultHdTreeFilePolicy
                 !SameRecord(matches[0], expected))
                 return ["hd-tree-child-remote-mismatch"];
         }
+        // The direct children may match even after a grandchild leaf changes
+        // on another device. Reuse the same complete graph verifier as the
+        // independent S-key strategy before the HD signer can be quoted.
+        var deeperProblem = VaultLinkedTreeFilePolicy.RemoteDescendantProblem(
+            refs, all, remote, draft!.Tags![1], VaultMutationStrategyPolicy.Hd);
+        if (deeperProblem is not null) return [deeperProblem];
         return [];
     }
 
