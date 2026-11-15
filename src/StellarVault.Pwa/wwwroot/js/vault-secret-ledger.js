@@ -520,6 +520,135 @@ window.stellarVaultSecretLedger = (() => {
     const record=current.locations.get(recordId);
     return record?.rawHeader||null;
   }
+  // Independent read-only history check. The queue stores the signed hash
+  // before broadcasting. Re-fetch its envelope, verify its network-bound hash
+  // AND root signature, then decrypt the exact historical operation ciphertext.
+  // No quote, signer state, network transaction or queue entry is changed here.
+  async function verifyHistoricalRecord(id,txHash,kind,recordId,draft,previousHeader) {
+    const s=session(id);
+    if(!/^[0-9a-f]{64}$/.test(txHash)||!validId(recordId)||
+       !['create','update','delete'].includes(kind))
+      fail('Invalid historical linked record verification scope.');
+    if((kind==='create'&&previousHeader!==null) ||
+       (kind!=='create'&&(typeof previousHeader!=='string'||!previousHeader)))
+      fail('Historical mutation original manifest was not bound to the queue.');
+    if(kind!=='delete')validateDraft(draft);
+    // Re-establish the selected network before accepting the historical receipt.
+    const verified=await verifiedNetwork(s.net.origin,s.passphrase);
+    if(verified.origin!==s.net.origin)fail('Selected Horizon endpoint changed.');
+    const endpoint=s.net.origin+'/transactions/'+txHash;
+    const response=await fetch(endpoint,{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok||new URL(response.url||endpoint).origin!==s.net.origin)
+      fail('Historical transaction receipt was unavailable or redirected.');
+    const receipt=await response.json();
+    if(receipt?.successful!==true||receipt?.hash?.toLowerCase()!==txHash||
+       receipt?.source_account!==s.root||
+       typeof receipt?.envelope_xdr!=='string'||receipt.envelope_xdr.length>65536)
+      fail('Historical receipt does not bind a successful root transaction.');
+    const tx=s.sdk.TransactionBuilder.fromXDR(receipt.envelope_xdr,s.passphrase);
+    const rawHash=tx.hash();
+    if(rawHash?.length!==32 ||
+       Array.from(rawHash,x=>x.toString(16).padStart(2,'0')).join('')!==txHash ||
+       tx.source!==s.root || !Array.isArray(tx.operations) ||
+       tx.operations.length<1||tx.operations.length>MAX_OPS)
+      fail('Historical signed envelope does not bind expected transaction.');
+    const rootKey=s.sdk.Keypair.fromPublicKey(s.root);
+    if(!Array.isArray(tx.signatures)||!tx.signatures.some(sig=>{
+      try{return rootKey.verify(rawHash,new Uint8Array(sig.signature()));}
+      catch{return false;}
+    }))fail('Signed historical envelope lacks a valid root signature.');
+
+    const nodes=await chain(s),nodeIds=new Set(nodes.map(n=>n.account_id));
+    let owner=null,headerRaw=null,headerAt=-1,headerRemoved=false;
+    const chunks=new Map(),removed=new Set();
+    let newGen=null,oldGen=null,oldCount=0,topUpSeen=false;
+    if(previousHeader!==null) {
+      const old=parseManifest(bytes(previousHeader));
+      oldGen=old.gen;oldCount=old.count;
+    }
+    for(let index=0;index<tx.operations.length;index++){
+      const op=tx.operations[index],source=op.source||tx.source;
+      if(op.type==='payment'){
+        if(topUpSeen||index!==0||source!==s.root||!op.destination||
+           !nodeIds.has(op.destination)||op.destination===s.root||
+           op.asset?.getCode?.()!=='XLM'||!(Number(op.amount)>0))
+          fail('Historical reserve payment does not match linked record account.');
+        owner=op.destination;topUpSeen=true;
+        continue;
+      }
+      if(op.type!=='manageData')fail('Unexpected historical operation in record mutation.');
+      const name=op.name;
+      if(typeof name!=='string'||
+         (name!=='skh:'+recordId&&!name.startsWith('skc:'+recordId+':')))
+        fail('Historical transaction modifies unrelated data.');
+      if(!nodeIds.has(source)||(owner!==null&&source!==owner))
+        fail('Historical record operation source is outside the linked chain.');
+      owner=source;
+      const value=op.value;
+      if(name==='skh:'+recordId){
+        if(headerAt!==-1)fail('Duplicate historical record manifest operation.');
+        headerAt=index;
+        if(value==null)headerRemoved=true;
+        else {
+          if(kind==='delete')fail('Delete transaction wrote a record manifest.');
+          headerRaw=new Uint8Array(value);
+          const m=parseManifest(headerRaw);
+          newGen=m.gen;
+        }
+      } else if(value==null){
+        if(!name.startsWith('skc:'+recordId+':'))fail('Unexpected historical deletion key.');
+        if(removed.has(name))fail('Duplicate historical chunk deletion.');
+        removed.add(name);
+      } else {
+        if(headerAt!==-1||kind==='delete')fail('Historical ciphertext chunk followed its manifest.');
+        if(chunks.has(name))fail('Duplicate historical encrypted record chunk.');
+        const chunk=new Uint8Array(value);
+        if(chunk.length<1||chunk.length>64)fail('Invalid historical ciphertext chunk length.');
+        chunks.set(name,chunk);
+      }
+    }
+    if(!owner||headerAt===-1||
+       (kind==='delete'?!headerRemoved:!headerRaw) ||
+       (kind==='create'&&removed.size!==0))
+      fail('Incomplete historical linked record transaction.');
+    if(kind==='update'||kind==='delete') {
+      if(removed.size!==oldCount)fail('Incomplete historical previous-generation removal.');
+      for(let i=0;i<oldCount;i++)
+        if(!removed.has(recordKey(recordId,i,oldGen)))
+          fail('Historical previous ciphertext removal key was missing.');
+    }
+    if(kind==='delete'){
+      if(chunks.size!==0)return false;
+      return true; // Signed transaction removed the exact original skh/skc key set.
+    }
+    const manifest=parseManifest(headerRaw);
+    if(chunks.size!==manifest.count||
+       (kind==='update'&&manifest.gen===oldGen))
+      fail('Incomplete historical ciphertext manifest or reused generation.');
+    const cipher=new Uint8Array(manifest.size);
+    try {
+      for(let i=0;i<manifest.count;i++){
+        const name=recordKey(recordId,i,manifest.gen),part=chunks.get(name);
+        if(!part||part.length!==Math.min(64,manifest.size-i*64))
+          fail('Historical ciphertext chunk was missing or malformed.');
+        cipher.set(part,i*64);
+      }
+      if(!equal(await hash(cipher),manifest.digest))
+        fail('Historical ciphertext digest does not match the signed manifest.');
+      const plain=await unseal(s,recordId,manifest.gen,cipher);
+      const normalized={
+        Id:recordId,Title:draft.Title,Content:draft.Content,
+        FolderId:draft.FolderId||null,Tags:draft.Tags||[],IsFolder:!!draft.IsFolder,
+        UserName:draft.UserName||'',Url:draft.Url||'',Notes:draft.Notes||''
+      };
+      return JSON.stringify(plain)===JSON.stringify(normalized);
+    } finally {
+      cipher.fill(0);
+      for(const part of chunks.values())part.fill(0);
+      if(headerRaw)headerRaw.fill(0);
+    }
+  }
+
   function inspectUncertain(id) {
     const s=session(id);
     // Return a defensive public-only copy. Presence does NOT prove that the
@@ -547,5 +676,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,recordRevision,inspectUncertain,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,inspectUncertain,cancelQuote,revokeAll});
 })();
