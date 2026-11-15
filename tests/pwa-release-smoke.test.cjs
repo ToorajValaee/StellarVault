@@ -250,7 +250,12 @@ test('encrypted offline queue stores authenticated envelopes, not readable draft
   assert.ok(adapter.includes('VaultCryptoPrimitives.Open'));
   assert.ok(adapter.includes('AssociatedData(account, network, id)'));
   assert.ok(adapter.includes('retention.RequireLocalPersistence()'));
-  // The queue no longer reads the active account from a mutable UI session.\n  // Its key-session operation must bind the requested account and network\n  // and reject cross-scope attempts before any plaintext can be decoded.\n  assert.match(adapter, /StellarAccountAddress\.Validate\(accountId\)/);\n  assert.match(adapter, /keySession\.ExecuteAsync\(accountId, networkId/);\n  assert.match(adapter, /item\.Id != id \|\| item\.AccountId != account \|\| item\.NetworkId != network/);
+  // The queue no longer reads the active account from a mutable UI session.
+  // Its key-session operation must bind the requested account and network
+  // and reject cross-scope attempts before any plaintext can be decoded.
+  assert.match(adapter, /StellarAccountAddress\.Validate\(accountId\)/);
+  assert.match(adapter, /keySession\.ExecuteAsync\(accountId, networkId/);
+  assert.match(adapter, /item\.Id != id \|\| item\.AccountId != account \|\| item\.NetworkId != network/);
   assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
   assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
   assert.ok(program.includes('IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier'));
