@@ -44,6 +44,111 @@ public sealed class VaultLinkedVerifiedReconciliation(
                 "Signer, network or encrypted local queue changed during historical verification.");
     }
 
+    private sealed record ExpansionIntent(string QuoteId, string TargetAddress,
+        string RootAddress, string NetworkScope, long SignerEpoch,
+        DateTimeOffset CreatedUtc);
+
+    /// <summary>
+    /// Finishes a linked child expansion only after independently checking a
+    /// successful exact operation trace and both the root and newly created
+    /// child signatures on the network-bound Stellar envelope.
+    /// </summary>
+    public async Task<Result> ConfirmVerifiedExpansionAsync(
+        string mutationId, CancellationToken ct = default)
+    {
+        if (!Guid.TryParseExact(mutationId, "N", out _))
+            throw new ArgumentException("Invalid linked expansion journal identifier.", nameof(mutationId));
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var (root, scope, epoch, passphrase) = RequireScope();
+            if (ledger is not IStellarSecretKeyHistoricalExpansionVerifier historical)
+                throw new NotSupportedException(
+                    "This S-key host cannot cryptographically verify signed child account expansion.");
+            var entries = await store.ListAsync(root, scope, ct);
+            try
+            {
+                var entry = entries.SingleOrDefault(x => x.Id == mutationId)
+                    ?? throw new KeyNotFoundException("Linked expansion journal not found.");
+                if (entry.AccountId != root ||
+                    entry.NetworkId != VaultLinkedQueueStorageScope.FromNetworkScope(scope) ||
+                    entry.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
+                    entry.Kind != VaultMutationKind.ExtendLinkedChain ||
+                    entry.State != VaultSyncState.Uncertain ||
+                    entry.TransactionHash is not { Length: 64 } txHash ||
+                    !txHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+                    !StellarAccountAddress.IsValid(entry.EntityId))
+                    throw new InvalidOperationException(
+                        "Only a signed hash-pinned uncertain linked expansion can be finalized.");
+                var intent = JsonSerializer.Deserialize<ExpansionIntent>(entry.EncryptedPayload)
+                    ?? throw new InvalidDataException("Encrypted linked expansion intent is missing.");
+                if (intent.RootAddress != root || intent.NetworkScope != scope ||
+                    intent.TargetAddress != entry.EntityId ||
+                    intent.QuoteId is not { Length: 32 } ||
+                    !intent.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+                    throw new InvalidDataException("Linked expansion journal intent does not match its durable account scope.");
+
+                var before = await reviewer.InspectAsync(mutationId, ct);
+                RequireSameScope(root, scope, epoch, passphrase);
+                if (before.DurableState != VaultSyncState.Uncertain ||
+                    before.TransactionHash != txHash ||
+                    before.CurrentRecordMatches is not true ||
+                    !before.HistoricalReceiptObserved ||
+                    !before.HistoricalExpansionOperationsMatch ||
+                    !StellarAccountAddress.IsValid(before.HistoricalParentAccount))
+                    return new(mutationId, txHash, false,
+                        "Historical expansion receipt, parent operation or live chain tail evidence is incomplete.");
+
+                bool proven;
+                try
+                {
+                    proven = await historical.VerifyExpansionAsync(txHash, entry.EntityId, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch { proven = false; }
+                RequireSameScope(root, scope, epoch, passphrase);
+                if (!proven)
+                    return new(mutationId, txHash, false,
+                        "Exact network-bound expansion XDR did not prove both root/child signatures and the linked parent operation.");
+
+                var after = await reviewer.InspectAsync(mutationId, ct);
+                RequireSameScope(root, scope, epoch, passphrase);
+                if (after.DurableState != VaultSyncState.Uncertain ||
+                    after.TransactionHash != txHash ||
+                    after.CurrentRecordMatches is not true ||
+                    !after.HistoricalReceiptObserved ||
+                    !after.HistoricalExpansionOperationsMatch ||
+                    after.HistoricalParentAccount != before.HistoricalParentAccount)
+                    return new(mutationId, txHash, false,
+                        "Parent lineage or historical expansion evidence changed during verification.");
+
+                var confirmed = entry with { State = VaultSyncState.Confirmed };
+                if (!await store.TryReplaceAsync(entry, confirmed, CancellationToken.None))
+                    throw new InvalidOperationException(
+                        "Expansion journal changed concurrently; confirmation was not persisted.");
+                var released = false;
+                if (ledger is IStellarSecretKeyVerifiedSessionRelease session)
+                {
+                    try
+                    {
+                        await session.ReleaseVerifiedAsync(txHash, CancellationToken.None);
+                        released = true;
+                    }
+                    catch { /* The already committed journal cannot be rolled back. */ }
+                }
+                return new(mutationId, txHash, true,
+                    "Dual-signed historical child creation and parent-pointer history were checked, then the encrypted expansion journal was confirmed without replay." +
+                    (released ? "" : " Reconnect the signer if its previous in-memory quarantine remains."));
+            }
+            finally
+            {
+                foreach (var mutation in entries)
+                    CryptographicOperations.ZeroMemory(mutation.EncryptedPayload);
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task<Result> ConfirmVerifiedRecordAsync(
         string mutationId, CancellationToken ct = default)
     {
