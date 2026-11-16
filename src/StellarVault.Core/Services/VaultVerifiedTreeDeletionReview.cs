@@ -32,7 +32,8 @@ public static class VaultVerifiedTreeDeletionReview
         // deletion: hidden/orphan records with the same group may exist, or
         // another root may claim the group. Reject such ambiguous ownership.
         var ids = verified.NodeIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (verified.NodeIds.Length == 0 || verified.NodeIds[0] != rootId ||
+        if (verified.NodeIds.Length == 0 ||
+            !verified.NodeIds[0].Equals(rootId, StringComparison.OrdinalIgnoreCase) ||
             ids.Count != verified.NodeIds.Length)
             throw new InvalidDataException("Verified file graph is ambiguous.");
         if (remote.Any(x => x.Tags is [_, var group] &&
@@ -74,7 +75,7 @@ public static class VaultVerifiedTreeDeletionReview
         ArgumentNullException.ThrowIfNull(pinned);
         ArgumentNullException.ThrowIfNull(current);
         if (pinned.Nodes is not { Length: > 0 } ||
-            pinned.Nodes[0].RecordId != pinned.RootId ||
+            !pinned.Nodes[0].RecordId.Equals(pinned.RootId, StringComparison.OrdinalIgnoreCase) ||
             pinned.Nodes.Select(x => x.RecordId)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Count() != pinned.Nodes.Length ||
             !string.Equals(pinned.InventorySha256,
