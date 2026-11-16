@@ -412,28 +412,74 @@ public static class VaultLinkedTreeFilePolicy
         catch (JsonException) { return false; }
     }
 
+    /// <summary>
+    /// A read-only, fully authenticated file inventory for future whole-tree
+    /// deletion. It is NOT a transaction approval or a stable ledger lock.
+    /// All nodes are listed only after complete SHA-256 verification.
+    /// </summary>
+    public sealed record VerifiedInventory(
+        VaultStreamingFileTree.Root Manifest, string[] NodeIds, string GroupTag);
+
+    public static async Task<VerifiedInventory> InspectVerifiedAsync(
+        string rootId, IReadOnlyList<LedgerRecordItem> ledger,
+        CancellationToken ct = default)
+    {
+        var ids = new List<string>();
+        var (manifest, group) = await ReadScopedAsync(
+            rootId, ledger, Stream.Null, ids, ct);
+        // The root is first and every node is unique. A second root with this
+        // group identity makes the ownership set ambiguous, even if its
+        // current contents happen to be identical.
+        if (ledger.Any(x => !x.Id.Equals(rootId, StringComparison.OrdinalIgnoreCase) &&
+            x.Tags is ["svtree3-root", var otherGroup] && otherGroup == group))
+            throw new InvalidDataException(
+                "Another file root claims this streaming file group; deletion ownership is ambiguous.");
+        return new VerifiedInventory(manifest, ids.ToArray(), group);
+    }
+
     /// <summary>Authenticate all referenced on-chain nodes and stream only into
     /// a private temporary stream. The caller must expose it only on success.</summary>
-    public static Task<VaultStreamingFileTree.Root> ReadAsync(
+    public static async Task<VaultStreamingFileTree.Root> ReadAsync(
         string rootId, IReadOnlyList<LedgerRecordItem> ledger,
         Stream privateStaging, CancellationToken ct = default)
     {
-        var byId = new Dictionary<string, LedgerRecordItem>(StringComparer.Ordinal);
+        var (manifest, _) = await ReadScopedAsync(rootId, ledger,
+            privateStaging, null, ct);
+        return manifest;
+    }
+
+    private static async Task<(VaultStreamingFileTree.Root Manifest, string GroupTag)>
+        ReadScopedAsync(string rootId, IReadOnlyList<LedgerRecordItem> ledger,
+            Stream privateStaging, List<string>? verifiedIds, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(ledger);
+        var byId = new Dictionary<string, LedgerRecordItem>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in ledger)
         {
-            if (!byId.TryAdd(item.Id, item))
-                throw new InvalidDataException("Duplicate linked file ledger ID.");
+            if (item is null || string.IsNullOrWhiteSpace(item.Id) ||
+                !byId.TryAdd(item.Id, item))
+                throw new InvalidDataException("Duplicate or missing linked file ledger ID.");
         }
-        return VaultStreamingFileTree.ReadVerifiedAsync(rootId, (id, token) =>
+        if (!byId.TryGetValue(rootId, out var root) ||
+            !IsRootRecord(root) ||
+            root.Tags is not ["svtree3-root", var groupTag])
+            throw new InvalidDataException("Missing or malformed authenticated file root.");
+        // ReadVerifiedAsync checks the entire tree and content checksum; the
+        // collector is never returned on a failure or cancellation.
+        var manifest = await VaultStreamingFileTree.ReadVerifiedAsync(rootId, (id, token) =>
         {
             token.ThrowIfCancellationRequested();
             if (!byId.TryGetValue(id, out var record) ||
+                record.Tags is not [_, var actualGroup] || actualGroup != groupTag ||
                 !TryDecode(new LedgerRecordDraft(record.Title, record.Content,
                     record.FolderId, record.Tags, record.IsFolder,
                     record.UserName, record.Url, record.Notes),
                     out var kind, out var bytes))
-                throw new InvalidDataException("Missing or invalid authenticated ledger tree node.");
+                throw new InvalidDataException(
+                    "Missing, cross-group or invalid authenticated ledger tree node.");
+            verifiedIds?.Add(id);
             return Task.FromResult(new VaultStreamingFileTree.Emission(id, kind, bytes));
         }, privateStaging, ct);
+        return (manifest, groupTag);
     }
 }
