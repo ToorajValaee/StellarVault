@@ -116,10 +116,13 @@ public sealed class VaultLinkedDraftWorkspace(
     /// </summary>
     public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
         string title, string fileName, string contentType,
-        Stream input, string? parentFolderId = null, CancellationToken ct = default)
+        Stream input, string? parentFolderId = null, CancellationToken ct = default,
+        ObjectCapacityPolicy capacityPolicy = ObjectCapacityPolicy.SingleAccount)
     {
         ArgumentNullException.ThrowIfNull(input);
         if (!input.CanRead) throw new ArgumentException("A readable file stream is required.", nameof(input));
+        if (!Enum.IsDefined(capacityPolicy))
+            throw new ArgumentException("Invalid file capacity policy.", nameof(capacityPolicy));
         if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
             throw new ArgumentException("Invalid linked file title.", nameof(title));
         if (parentFolderId is { Length: > 0 } parent &&
@@ -183,7 +186,8 @@ public sealed class VaultLinkedDraftWorkspace(
                             VaultLinkedQueueStorageScope.FromNetworkScope(context.Scope),
                             VaultMutationKind.CreateRecord, node.Id, payload,
                             dependsOn: isRoot ? parentDependencies : [])
-                            with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+                            with { OriginStrategyId = VaultMutationStrategyPolicy.Linked,
+                                CapacityPolicy = capacityPolicy };
                         try
                         {
                             if (!await store.AddAsync(staged, token))
