@@ -45,7 +45,7 @@ public sealed record VaultPendingMutation(
     VaultSignedDeletionManifest[]? SignedDeletionManifests = null,
     VaultSignedFileEntry[]? SignedFileEntries = null,
     string? OriginStrategyId = null,
-    ObjectCapacityPolicy? CapacityPolicy = null)
+    ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy.SingleAccount)
 {
     public static VaultPendingMutation Create(string accountId, string networkId,
         VaultMutationKind kind, string entityId, byte[] encryptedPayload,
@@ -119,7 +119,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         VaultMutationStrategyPolicy.Validate(entry.OriginStrategyId);
-        if (entry.CapacityPolicy is { } policy && !Enum.IsDefined(policy))
+        if (!Enum.IsDefined(entry.CapacityPolicy))
             throw new InvalidDataException("Unknown queued account capacity policy.");
         // The current queue authoring path is HD-bound. Linked-key entries need
         // a separately authenticated key lifecycle before they may be created.
