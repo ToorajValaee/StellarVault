@@ -122,7 +122,12 @@ else
             @if (_appView == "records" && ActiveMode == VaultWorkspaceMode.MnemonicHd && Ledger.IsConnected)
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
-                <VaultRecordTransferPanel Strategy="@VaultMutationStrategyPolicy.Hd" Records="@Records.Concat(Folders).ToArray()" />
+                <details class="sv-object-actions sv-vault-import-menu">
+                    <summary aria-label="Vault menu" title="Vault menu">⋯ Vault menu</summary>
+                    <div class="sv-object-menu">
+                        <VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy.Hd" Records="@Records.Concat(Folders).ToArray()" />
+                    </div>
+                </details>
             }
         @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
         {
@@ -399,6 +404,8 @@ else
                 @foreach (var item in Filtered)
                 {
                     <VaultExplorerItemRow Item="item"
+                                          Strategy="@VaultMutationStrategyPolicy.Hd"
+                                          Records="@Records.Concat(Folders).ToArray()"
                                           Selected="@(_selected?.Id == item.Id)"
                                           CanEdit="@(!IsLedgerFile(item))"
                                           CanDelete="@(!IsLedgerFile(item))"
@@ -462,6 +469,8 @@ else
     {
         <VaultRecordInspector @key="_selected.Id"
                               Item="_selected"
+                              Strategy="@VaultMutationStrategyPolicy.Hd"
+                              Records="@Records.Concat(Folders).ToArray()"
                               FolderPath="@FolderPath(_selected.FolderId)"
                               CanEdit="@(!IsLedgerFile(_selected))"
                               CanDelete="@(!IsLedgerFile(_selected))"
