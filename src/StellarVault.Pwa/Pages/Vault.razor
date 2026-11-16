@@ -1304,6 +1304,9 @@ else
         _pendingLoading = true;
         _pendingError = null;
         ClearSyncReview();
+        // Old decrypted items must not remain visible when this fetch fails
+        // or a previous account's encrypted queue cannot be reopened.
+        ClearPendingSnapshot();
         _recoveryInspections = [];
         try
         {
