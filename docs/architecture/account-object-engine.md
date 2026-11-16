@@ -54,3 +54,14 @@ Legacy single/multipart file formats are not yet wired to the neutral file reade
 ## Local authorization isolation
 
 The linked encrypted queue has its own unlock epoch independent of the ledger connection epoch. The common object provider checks that epoch before and after staging a record, and the underlying `VaultLinkedDraftWorkspace` now includes it in its scope checkpoint for *all* awaited operations. Locking and re-unlocking the same S-key root offline cannot resume a previously authorized in-flight draft operation under the replacement local key session.
+
+
+## Large verified streaming exports
+
+The neutral router now implements the **optional** `IVerifiedObjectExport` capability; providers opt in with `IVerifiedObjectExportProvider`. The caller supplies `IVerifiedObjectDestination`, whose `OpenTemporaryAsync` must return a **private, unobservable** writable staging stream, `CommitAsync` must publish it atomically or fail, and `AbortAsync` must destroy any partial plaintext.
+
+`StellarAccountObjectStoreProvider.ExportVerifiedAsync` supports published SVTREE3 file roots in both HD and independent Secret Key modes. It uses **the same** `VaultLinkedTreeFilePolicy.ReadAsync` authenticated tree reader against one fresh ledger snapshot. After writing and flushing to the destination, the provider closes the temporary stream, revalidates account/network/signer scope and cancellation, and only then commits the destination. Verification, read, flush or commit errors trigger `AbortAsync` without claiming success. A consumer must implement the destination's nonvisibility/atomic-commit and cleanup guarantees; accepting a public download response stream as a temporary destination violates this contract.
+
+The older `OpenReadAsync` remains a convenience method with an 8 MiB private-memory cap. `ExportVerifiedAsync` does not have that cap: it uses bounded node buffers and a destination-supplied temporary stream; disk use depends on the destination. This does not lift storage/transaction costs or protocol limitations and is not support for legacy file formats.
+
+Neither API bypasses the existing reviewed publication or historical proof pipeline. The current tests cover successful authenticated export, tampered-child abort, and unsupported-provider rejection. Real PWA/native destination implementations, cancellation/permissions and exact-head builds remain separate release gates.
