@@ -145,10 +145,36 @@ public sealed class VaultHybridDraftWorkspace(
         }
         catch
         {
-            // Roll back *only never-submitted* entries from this invocation;
-            // any CAS collision leaves a visible, blocked partial group.
+            // An encrypted store can durably commit a node and then throw
+            // cancellation BEFORE EnqueueAsync returns the new ID. Discover
+            // that last node by this invocation's random group tag, rather
+            // than relying only on the list of acknowledged mutation IDs.
+            // Never touch confirmed, submitting or foreign-group mutations.
             bool cleanupFailed = false;
-            foreach (var mutationId in stagedMutationIds.AsEnumerable().Reverse())
+            var discovered = new List<string>();
+            try
+            {
+                var snapshot = await queue.ReviewAllAsync(
+                    scope.Account, scope.NetworkId, CancellationToken.None);
+                try
+                {
+                    foreach (var entry in snapshot)
+                        if (IsPendingTreeGroupNode(entry, group) &&
+                            !stagedMutationIds.Contains(entry.Id, StringComparer.Ordinal))
+                            discovered.Add(entry.Id);
+                }
+                finally
+                {
+                    foreach (var entry in snapshot)
+                        CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+                }
+            }
+            catch { cleanupFailed = true; }
+            // Unacknowledged node was last to stage: discard it first. The
+            // typed root is always emitted last and must be removed before
+            // descendants to preserve the existing discard dependency guard.
+            foreach (var mutationId in discovered.Concat(
+                stagedMutationIds.AsEnumerable().Reverse()))
             {
                 try
                 {
@@ -171,6 +197,26 @@ public sealed class VaultHybridDraftWorkspace(
             foreach (var entry in local)
                 CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
         }
+    }
+
+    private static bool IsPendingTreeGroupNode(
+        VaultPendingMutation item, string group)
+    {
+        if (item.State != VaultSyncState.Pending ||
+            item.Kind != VaultMutationKind.CreateRecord ||
+            item.OriginStrategyId != VaultMutationStrategyPolicy.Hd ||
+            item.TransactionHash is not null)
+            return false;
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                item.EncryptedPayload);
+            return draft is not null &&
+                draft.Content?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true &&
+                draft.Tags is [_, var tag] && tag == "svtree3-group:" + group;
+        }
+        catch (JsonException) { return false; }
     }
 
     public async Task<VaultPendingMutation> ReviseAsync(
