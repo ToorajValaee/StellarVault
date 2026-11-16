@@ -472,20 +472,68 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return quarantined;
     }
 
-    /// <summary>Read-only recovery advice. Missing transaction identity never authorizes replay.</summary>
-    /// <summary>Enumerate unresolved submissions without changing durable state.</summary>
+    /// <summary>
+    /// Present the complete DURABLY CHECKPOINTED signed transaction identities
+    /// for read-only recovery. One multi-owner delete or multipart upload may
+    /// have several signed transactions and no single primary hash. These are
+    /// investigation hints, NOT receipts or permission to retry/confirm.
+    /// </summary>
+    private static VaultRecoveryInspection DescribeRecovery(VaultPendingMutation item)
+    {
+        var unresolved = item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
+        var hasHash = item.TransactionHash is string hash && IsTransactionHash(hash);
+        var checkpoints = new List<VaultRecoveryCheckpoint>();
+        var valid = true;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var manifest in item.SignedDeletionManifests ?? [])
+        {
+            if (manifest is null ||
+                !StellarAccountAddress.IsValid(manifest.SourceAccountId) ||
+                manifest.TransactionHash is not string tx || !IsTransactionHash(tx) ||
+                !seen.Add("delete:" + manifest.SourceAccountId))
+            {
+                valid = false;
+                continue;
+            }
+            checkpoints.Add(new VaultRecoveryCheckpoint(
+                "deletion-manifest", manifest.SourceAccountId, tx));
+        }
+        foreach (var file in item.SignedFileEntries ?? [])
+        {
+            if (file is null || file.LedgerRecordId is not { Length: 16 } id ||
+                !id.All(Uri.IsHexDigit) ||
+                file.TransactionHash is not string tx || !IsTransactionHash(tx) ||
+                !seen.Add("file:" + id))
+            {
+                valid = false;
+                continue;
+            }
+            checkpoints.Add(new VaultRecoveryCheckpoint(
+                "file-node", id, tx));
+        }
+        if (!valid)
+            checkpoints.Clear(); // Never present a partial malformed inventory as complete.
+        var guidance = !valid
+            ? "Signed transaction checkpoint journal is malformed. Investigate all ledger history manually; never retry or confirm automatically."
+            : !unresolved ? "No unresolved submission detected."
+            : checkpoints.Count > 0
+                ? "Independently verify EVERY checkpointed signed transaction and the final ledger object graph. A signed hash alone is not confirmation. Never resubmit automatically."
+                : hasHash
+                    ? "Independently reconcile the recorded transaction hash against the intended mutation; never resubmit automatically."
+                    : "No complete transaction hash was recorded. Investigate ledger history manually; never resubmit automatically.";
+        return new VaultRecoveryInspection(item.Id, item.State,
+            hasHash ? item.TransactionHash : null, unresolved,
+            guidance, checkpoints.ToArray(), valid);
+    }
+
+    /// <summary>Enumerate unresolved submissions without mutating their journal.</summary>
     public async Task<IReadOnlyList<VaultRecoveryInspection>> InspectOutstandingRecoveriesAsync(
         string accountId, string networkId, CancellationToken ct = default)
     {
+        retention.RequireLocalPersistence();
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
-        var outstanding = entries.Where(x =>
-            x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain);
-        return outstanding.Select(x => new VaultRecoveryInspection(x.Id, x.State,
-            x.TransactionHash is { Length: 64 } hash && IsTransactionHash(hash) ? hash : null,
-            true, x.TransactionHash is { Length: 64 } tx && IsTransactionHash(tx)
-                ? "Verify the recorded transaction against the intended record. Never resubmit automatically."
-                : "Transaction hash unavailable. Investigate ledger history manually; never resubmit automatically."
-        )).ToArray();
+        return entries.Where(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+            .Select(DescribeRecovery).ToArray();
     }
 
     public async Task<VaultRecoveryInspection> InspectRecoveryAsync(
@@ -495,15 +543,7 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var item = await store.GetAsync(accountId, networkId, mutationId, ct)
             ?? throw new KeyNotFoundException("Mutation not found.");
         RequireScope(item, accountId, networkId);
-        var unresolved = item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
-        var hasHash = item.TransactionHash is string hash && IsTransactionHash(hash);
-        var guidance = unresolved
-            ? hasHash
-                ? "Submission unresolved. Independently reconcile the recorded transaction hash; do not resubmit."
-                : "Submission unresolved without a recorded transaction hash. Investigate ledger history manually; do not resubmit."
-            : "No unresolved submission detected.";
-        return new VaultRecoveryInspection(item.Id, item.State,
-            hasHash ? item.TransactionHash : null, unresolved, guidance);
+        return DescribeRecovery(item);
     }
 
     public async Task<bool> NeedsManualRecoveryAsync(string accountId, string networkId, string mutationId, CancellationToken ct = default)
@@ -1201,5 +1241,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     }
 }
 
+/// <summary>One signed, durable transaction identity; NOT a proof of inclusion.</summary>
+public sealed record VaultRecoveryCheckpoint(string Kind, string TargetId, string TransactionHash);
+
 public sealed record VaultRecoveryInspection(string MutationId, VaultSyncState State,
-    string? TransactionHash, bool NeedsInvestigation, string Guidance);
+    string? TransactionHash, bool NeedsInvestigation, string Guidance,
+    VaultRecoveryCheckpoint[] Checkpoints, bool CheckpointJournalValid);
