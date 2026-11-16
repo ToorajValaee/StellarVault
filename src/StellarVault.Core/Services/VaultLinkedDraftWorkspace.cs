@@ -114,6 +114,27 @@ public sealed class VaultLinkedDraftWorkspace(
     /// signed or transmitted here. Each node requires later independent
     /// approval and historical reconciliation through the standard publisher.
     /// </summary>
+    private static bool IsPendingTreeGroupNode(
+        VaultPendingMutation entry, string groupId)
+    {
+        if (entry.Kind != VaultMutationKind.CreateRecord ||
+            entry.State != VaultSyncState.Pending ||
+            entry.OriginStrategyId != VaultMutationStrategyPolicy.Linked ||
+            entry.TransactionHash is not null)
+            return false;
+        try
+        {
+            var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(
+                entry.EncryptedPayload);
+            return draft is not null &&
+                draft.Content?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true &&
+                draft.Tags is [_, var groupTag] &&
+                groupTag == "svtree3-group:" + groupId;
+        }
+        catch (JsonException) { return false; }
+    }
+
     public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
         string title, string fileName, string contentType,
         Stream input, string? parentFolderId = null, CancellationToken ct = default,
@@ -214,7 +235,16 @@ public sealed class VaultLinkedDraftWorkspace(
                 {
                     foreach (var entry in entries.Reverse())
                     {
-                        if (createdIds.Contains(entry.Id) &&
+                        // Recover an encrypted commit that succeeded before
+                        // AddAsync could acknowledge the mutation ID.
+                        if (!createdIds.Contains(entry.Id) &&
+                            !IsPendingTreeGroupNode(entry, groupId))
+                            continue;
+                        // A concurrent tab may have moved the journal beyond
+                        // Pending. NEVER delete an attempted transaction.
+                        if (entry.State != VaultSyncState.Pending ||
+                            entry.TransactionHash is not null ||
+                            entry.SignedFileEntries is { Length: > 0 } ||
                             !await store.TryDeleteAsync(entry, CancellationToken.None))
                             cleanupFailed = true;
                     }
