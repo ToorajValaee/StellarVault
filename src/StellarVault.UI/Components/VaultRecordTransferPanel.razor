@@ -12,8 +12,10 @@
 @inject IStellarSecretKeyLedger LinkedLedger
 @inject VaultNetworkSelection Networks
 
-<details class="terminal-panel" aria-label="Import and export ordinary vault records">
-    <summary>Import / export records (JSON or CSV)</summary>
+@if (Mode == "import")
+{
+<details class="terminal-panel" aria-label="Import vault records">
+    <summary>Import records / restore backup</summary>
     <p class="advanced-help">Transfers credentials, notes and folders, not encrypted binary files.
         JSON preserves folder hierarchy; CSV supports flat records. These interchange files
         are <strong>plaintext</strong>, not encrypted vault backups. Save only to a trusted destination
@@ -30,12 +32,6 @@
     </label>
     <div class="sv-access-actions">
         <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !_understood || !CanExport)"
-                @onclick="ExportJsonAsync">Export published records (JSON)</button>
-        <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !_understood || Records.Count == 0)"
-                @onclick="ExportCsvAsync">Export flat records (CSV)</button>
-        <button type="button" class="pixel-button compact"
                 disabled="@(_busy || !_understood || !CanStage)"
                 @onclick="PickImportAsync">Choose JSON / CSV to import</button>
     </div>
@@ -44,9 +40,6 @@
             <input type="password" class="terminal-input" autocomplete="new-password"
                    @bind="_backupPassword" disabled="@_busy" />
         </label>
-        <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !CanExport || _backupPassword.Length < 12)"
-                @onclick="ExportEncryptedAsync">Export encrypted record backup (.svrb)</button>
         <button type="button" class="pixel-button compact"
                 disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
                 @onclick="PickEncryptedAsync">Restore encrypted record backup (.svrb)</button>
@@ -70,6 +63,27 @@
     @if (_busy) { <p role="status">Processing record interchange…</p> }
     @if (_message is not null) { <p role="status">@_message</p> }
 </details>
+}
+else if (Mode == "export" && SelectedRecordId is not null)
+{
+    <div class="sv-record-export-actions" aria-label="Export selected record">
+        <p class="advanced-help">Exporting creates a file containing this item’s plaintext secrets. Save only to a trusted destination.</p>
+        <label class="sv-secret-approval"><input type="checkbox" @bind="_understood" disabled="@_busy" /> I understand the exported JSON/CSV is plaintext.</label>
+        <div class="sv-access-actions">
+            <button type="button" class="pixel-button compact" disabled="@(_busy || !_understood || !CanExport)" @onclick="ExportJsonAsync">Export JSON</button>
+            @if (SelectedIsFlatRecord)
+            {
+                <button type="button" class="pixel-button compact" disabled="@(_busy || !_understood || !CanExport)" @onclick="ExportCsvAsync">Export CSV</button>
+            }
+        </div>
+        <label>Backup password (minimum 12 characters)
+            <input type="password" class="terminal-input" autocomplete="new-password" @bind="_backupPassword" disabled="@_busy" />
+        </label>
+        <button type="button" class="pixel-button compact" disabled="@(_busy || !CanExport || _backupPassword.Length < 12)" @onclick="ExportEncryptedAsync">Export encrypted backup (.svrb)</button>
+        @if (_busy) { <p role="status">Preparing verified record export…</p> }
+        @if (_message is not null) { <p role="status">@_message</p> }
+    </div>
+}
 
 @code {
     [Microsoft.AspNetCore.Components.Parameter]
@@ -77,6 +91,10 @@
 
     [Microsoft.AspNetCore.Components.Parameter]
     public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
+
+    [Microsoft.AspNetCore.Components.Parameter] public string Mode { get; set; } = "import";
+    [Microsoft.AspNetCore.Components.Parameter] public string? SelectedRecordId { get; set; }
+    private bool SelectedIsFlatRecord => Records.Any(x => x.Id == SelectedRecordId && !x.IsFolder && string.IsNullOrEmpty(x.FolderId) && VaultRecordInterchange.IsOrdinary(x));
 
     private bool _busy;
     private bool _understood;
@@ -155,7 +173,7 @@
                 Networks.CredentialKey(root) != scope)
                 throw new InvalidOperationException(
                     "Linked account or network changed while reading the export.");
-            return (VaultRecordInterchange.FromPublished(snapshot),
+            return (VaultRecordInterchange.FromPublished(SelectRecords(snapshot)),
                 string.Join("|", requestedStrategy, root, scope,
                     epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
@@ -170,9 +188,14 @@
             Networks.CredentialKey(before.RootAccountId) != hdScope)
             throw new InvalidOperationException(
                 "HD account or network changed while reading the export.");
-        return (VaultRecordInterchange.FromPublished(hdSnapshot),
+        return (VaultRecordInterchange.FromPublished(SelectRecords(hdSnapshot)),
             string.Join("|", requestedStrategy, before.RootAccountId, hdScope));
     }
+
+    private IEnumerable<LedgerRecordItem> SelectRecords(IEnumerable<LedgerRecordItem> snapshot) =>
+        Mode == "export" && SelectedRecordId is not null
+            ? snapshot.Where(x => x.Id == SelectedRecordId)
+            : snapshot;
 
     private async Task RequireSameExportScopeAsync(string expected)
     {
