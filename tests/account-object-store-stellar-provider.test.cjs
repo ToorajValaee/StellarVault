@@ -9,8 +9,8 @@ const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 test('first engine provider reuses existing Stellar ledger readers and encrypted drafts', () => {
   const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /: IAccountObjectStoreProvider/);
-  assert.match(provider, /await linkedDrafts\.CreateAsync\(draft, ct\)/);
-  assert.match(provider, /await hdDrafts\.CreateAsync\(draft, ct\)/);
+  assert.match(provider, /await linkedDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
+  assert.match(provider, /await hdDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
   assert.match(provider, /await linkedLedger\.ReadAsync\(ct\)/);
   assert.match(provider, /await hdLedger\.ReadAsync\(\)/);
   assert.match(provider, /ObjectMutationState\.Prepared/);
@@ -128,7 +128,7 @@ test('neutral verified export streams into private destination and only commits 
   assert.match(contract, /interface IVerifiedObjectExport/);
   assert.match(contract, /interface IVerifiedObjectExportProvider/);
   assert.match(contract, /provider is IVerifiedObjectExportProvider verified/);
-  assert.match(provider, /IAccountObjectStoreProvider, IVerifiedObjectExportProvider/);
+  assert.match(provider, /IAccountObjectStoreProvider, IAccountObjectUpdateProvider, IVerifiedObjectExportProvider/);
   assert.match(provider, /await destination\.OpenTemporaryAsync\(ct\)/);
   assert.match(provider, /await VaultLinkedTreeFilePolicy\.ReadAsync\(\s*objectId, records, temporary, ct\)/);
   assert.match(provider, /await temporary\.FlushAsync\(ct\)/);
