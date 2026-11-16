@@ -1187,6 +1187,8 @@ else
         {
             var network = Networks.CredentialKey(account);
             var review = await PendingQueue.PrepareReviewAsync(account, network);
+            try
+            {
             var mutation = review.Ready.SingleOrDefault(x => x.Id == snapshot.MutationId)
                 ?? throw new InvalidOperationException("Mutation is no longer ready.");
             VaultSyncApprovalGuard.RequireFresh(snapshot, mutation, account, network,
@@ -1200,6 +1202,12 @@ else
             _reviewedQuote = snapshot;
             _reviewedDraftTitle = draft.Title;
             _approvalStatus = "Quote checked against current queue and costs. Review the details below. Broadcasting is disabled.";
+            }
+            finally
+            {
+                foreach (var ready in review.Ready)
+                    CryptographicOperations.ZeroMemory(ready.EncryptedPayload);
+            }
         }
         catch (Exception ex) { _approvalStatus = "Quote rejected: " + ex.Message; }
         finally { _pendingLoading = false; }
