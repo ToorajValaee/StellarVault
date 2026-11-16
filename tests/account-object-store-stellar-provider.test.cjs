@@ -21,8 +21,8 @@ test('first engine provider reuses existing Stellar ledger readers and encrypted
 
 test('Stellar provider fails closed when capacity and file policies are not wired', () => {
   const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  assert.match(provider, /options\.CapacityPolicy != ObjectCapacityPolicy\.ExpandWithExplicitApproval/);
-  assert.match(provider, /Single-account capacity enforcement is not yet wired/);
+  assert.match(provider, /if \(!Enum\.IsDefined\(options\.CapacityPolicy\)\)/);
+  assert.match(provider, /File-tree publication requires per-node single-account capacity enforcement/);
   assert.match(provider, /ObjectId='new'/);
   assert.match(provider, /Large or binary objects require the verified streaming file provider/);
   assert.match(provider, /Revision-pinned updates need the existing remote-mutation journal adapter/);
@@ -214,4 +214,32 @@ test('Edit is a revision-pinned Update routed to existing encrypted mutation jou
   for (const p of ['src/StellarVault.Pwa/Program.cs', 'src/StellarVault.Maui/MauiProgram.cs']) {
     assert.match(read(p), /AddScoped<IAccountObjectUpdate>/);
   }
+});
+
+test('explicit ordinary capacity policy survives encrypted queue and blocks HD expansion before publish', () => {
+  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
+  const hdDraft = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
+  const linkedDraft = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const review = read('src/StellarVault.Core/Services/VaultHybridSyncReviewService.cs');
+  const publisher = read('src/StellarVault.Core/Services/VaultManualSyncCoordinator.cs');
+  const guard = read('src/StellarVault.Core/Services/VaultCapacityPolicyGuard.cs');
+  const approval = read('src/StellarVault.Core/Services/VaultSyncApprovalGuard.cs');
+  const linkedPublisher = read('src/StellarVault.Core/Services/VaultLinkedDraftPublication.cs');
+  const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
+  assert.match(contracts, /enum ObjectCapacityPolicy/);
+  assert.match(queue, /ObjectCapacityPolicy\? CapacityPolicy = null/);
+  assert.match(hdDraft, /CapacityPolicy = capacityPolicy/);
+  assert.match(linkedDraft, /CapacityPolicy = capacityPolicy/);
+  assert.match(provider, /hdDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
+  assert.match(provider, /linkedDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
+  assert.match(review, /VaultCapacityPolicyGuard\.AllowsCreate/);
+  assert.match(publisher, /VaultCapacityPolicyGuard\.AllowsCreate/);
+  assert.match(publisher, /VaultCapacityPolicyGuard\.RequireCreateAllowed/);
+  assert.match(approval, /writer\.Write\(item\.CapacityPolicy is/);
+  assert.match(linkedPublisher, /Unknown linked mutation capacity policy/);
+  assert.match(guard, /policy != ObjectCapacityPolicy\.SingleAccount/);
+  assert.match(program, /VaultCapacityPolicySmoke\.RunAsync\(\)/);
+  assert.doesNotMatch(provider, /\.PublishWithPreparedHashAsync\(|\.SubmitApprovedAsync\(/);
 });
