@@ -26,6 +26,10 @@
                     <summary aria-label="Record actions" title="More actions">⋯</summary>
                     <div class="sv-inspector-more-menu">
                         <button type="button" @onclick="() => OnCopy.InvokeAsync(Item.Id)">Copy record ID</button>
+                        @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
+                        {
+                            <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+                        }
                         @if (CanEdit && !IsFile)
                         {
                             <button type="button" @onclick="() => OnEdit.InvokeAsync()">Edit @(Item.IsFolder ? "folder" : "record")</button>
@@ -153,6 +157,12 @@
                 }
             }
         }
+        @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
+        {
+            <details class="sv-inspector-more"><summary>Export this item</summary>
+                <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+            </details>
+        }
         <div class="modal-action-row record-actions">
             @if (CanEdit && !IsFile)
             {
@@ -176,6 +186,8 @@
     private bool _revealed;
     [Parameter, EditorRequired] public LedgerRecordItem Item { get; set; } = default!;
     [Parameter] public bool Embedded { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
     [Parameter] public string FolderPath { get; set; } = "My vault";
     [Parameter] public bool CanEdit { get; set; } = true;
     [Parameter] public bool CanDelete { get; set; } = true;
