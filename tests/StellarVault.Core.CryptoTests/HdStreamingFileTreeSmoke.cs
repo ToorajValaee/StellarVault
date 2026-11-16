@@ -82,6 +82,50 @@ internal static class HdStreamingFileTreeSmoke
                 verified.Manifest.Sha256Hex == manifest.Sha256Hex,
                 "Authenticated SVTREE3 deletion inventory lost or duplicated nodes.");
 
+            // Complete tree deletion planning is read-only: it pins every
+            // authenticated node and must not misinterpret a missing node as
+            // confirmed deletion after a crash or another device's write.
+            var deletion = await VaultVerifiedTreeDeletionReview.BuildAsync(
+                result.RootId, remote);
+            Check(deletion.Nodes.Length == remote.Count &&
+                deletion.Nodes[0].RecordId == result.RootId &&
+                deletion.Nodes.Select(x => x.RecordId).Distinct(
+                    StringComparer.OrdinalIgnoreCase).Count() == remote.Count,
+                "SVTREE3 deletion inventory omitted or duplicated an authenticated node.");
+            var pristine = await VaultVerifiedTreeDeletionReview.InspectAsync(deletion, remote);
+            Check(pristine.Unchanged && pristine.Present == pristine.Total,
+                "Unchanged authenticated file graph failed deletion preflight.");
+            var changedNode = remote.Select(x => x.Id == leaf.EntityId
+                ? x with { Title = "Changed on other device" } : x).ToArray();
+            var drift = await VaultVerifiedTreeDeletionReview.InspectAsync(
+                deletion, changedNode);
+            Check(!drift.Unchanged && drift.Present == deletion.Nodes.Length,
+                "Mutated published file node bypassed pinned deletion snapshot.");
+            var missingNode = remote.Where(x => x.Id != leaf.EntityId).ToArray();
+            var partial = await VaultVerifiedTreeDeletionReview.InspectAsync(
+                deletion, missingNode);
+            Check(!partial.Unchanged && partial.Present == deletion.Nodes.Length - 1,
+                "Missing file node was mistaken for a historically confirmed deletion.");
+            var hiddenGroupNode = remote.Append(remote[0] with {
+                Id = "fedcba9876543210"
+            }).ToArray();
+            try
+            {
+                await VaultVerifiedTreeDeletionReview.BuildAsync(
+                    result.RootId, hiddenGroupNode);
+                throw new Exception("Orphan file group node was accepted for whole-file deletion.");
+            }
+            catch (InvalidDataException) { }
+            var tamperedPlan = deletion with { Nodes = deletion.Nodes.Select((x, i) =>
+                i == 1 ? x with { RecordSha256 = new string('0', 64) } : x).ToArray() };
+            try
+            {
+                await VaultVerifiedTreeDeletionReview.InspectAsync(
+                    tamperedPlan, remote);
+                throw new Exception("Tampered deletion plan was accepted.");
+            }
+            catch (InvalidDataException) { }
+
             // A valid content hash is not sufficient ownership: mixing two
             // distinct file groups must fail even when the child bytes are
             // otherwise identical. The downloader must fail closed too.
