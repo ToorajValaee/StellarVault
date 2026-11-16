@@ -1560,8 +1560,13 @@ else
         // remains unlocked. End the session, never clear IndexedDB.
         Workflow.Lock();
         Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
         Privacy.Clear();
+        await ClearHybridResumeIntentAsync();
+        await LinkedQueueKeys.LockAsync();
+        try { await SecretLedger.DisconnectAsync(); }
+        catch { /* No new signer session will be accepted before session lock. */ }
         try { await Ledger.DisconnectAsync(); }
         catch { /* Disconnect must not prevent opening the access screen. */ }
         Nav.NavigateTo("/", replace: true);
@@ -1572,6 +1577,7 @@ else
         // its storage consent, but does not erase separately encrypted drafts.
         Workflow.Lock();
         Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
         Privacy.Clear();
         _showImportDialog = false;
