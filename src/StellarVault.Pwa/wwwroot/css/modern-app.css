@@ -5574,3 +5574,53 @@ html .sv-web-shell .sv-transfer-export-backdrop > .sv-transfer-export-modal {
   max-height:calc(100dvh - 32px)!important;overflow-y:auto!important;
   margin:auto!important;background:#fff!important;
 }
+
+
+/* Access: a single stable help row instead of conditional disclosures whose
+   summaries disappear when the form changes strategy or device preferences. */
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-actions {
+  display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:6px;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger {
+  display:inline-flex;align-items:center;gap:6px;min-height:27px;
+  padding:3px 6px!important;margin:0!important;border:1px solid transparent!important;
+  border-radius:7px!important;background:transparent!important;box-shadow:none!important;
+  color:#246b56!important;font:600 11px/1.4 Inter,"Segoe UI",Arial,sans-serif!important;
+  cursor:pointer;text-decoration:none!important;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger:hover,
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger[aria-expanded="true"] {
+  background:#eaf5ef!important;border-color:#cfe6db!important;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger:focus-visible {
+  outline:2px solid #158360!important;outline-offset:2px;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger > span {
+  font-size:14px;line-height:1;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-help-text {
+  margin:5px 0 0!important;padding:9px 10px!important;
+  font:400 11px/1.5 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#365c52!important;background:#eef7f2!important;
+  border:1px solid #d2e8dc!important;border-radius:8px!important;
+}
+.sv-web-shell .sv-entry-showcase .sv-entry-storage-guide {
+  max-width:440px;margin-top:23px;padding:13px 15px;
+  border:1px solid rgba(170,244,215,.29);border-radius:12px;
+  background:rgba(3,35,28,.22);box-shadow:none;
+}
+.sv-web-shell .sv-entry-showcase .sv-entry-storage-guide summary {
+  cursor:pointer;color:#d0f9e8;font:650 13px/1.4 Inter,"Segoe UI",Arial,sans-serif;
+}
+.sv-web-shell .sv-entry-showcase .sv-entry-storage-guide summary:focus-visible {
+  outline:2px solid #8de9bb;outline-offset:3px;
+}
+.sv-web-shell .sv-entry-showcase .sv-entry-storage-guide p {
+  margin:9px 0 0;color:#d0e9e0;font:400 12px/1.55 Inter,"Segoe UI",Arial,sans-serif;
+}
+html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-help-trigger {
+  color:#a7e8cc!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-help-text {
+  background:#20392f!important;border-color:#395d4c!important;color:#d8ede2!important;
+}
