@@ -64,7 +64,8 @@ test('import previews are bound to the same unlocked account and network', () =>
   assert.match(panel, /Networks\.CredentialKey\(account\)/);
   assert.match(panel, /HdSession\.Epoch/);
   assert.match(panel, /LinkedLedger\.ConnectionEpoch/);
-  assert.match(panel, /initialScope != CurrentImportScope\(\)/);
+  assert.match(panel, /initialScope != CurrentPreviewScope\(\)/);
+  assert.match(panel, /_pendingScope != CurrentImportScope\(\)/);
   assert.match(panel, /approvedScope != CurrentImportScope\(\)/);
   assert.match(panel, /DiscardPending\(\)/);
   assert.match(core, /createdRecordIds\.Add\(newId\)/);
