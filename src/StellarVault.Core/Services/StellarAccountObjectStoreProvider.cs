@@ -26,7 +26,7 @@ public sealed class StellarAccountObjectStoreProvider(
     VaultHybridRemoteMutationWorkspace? hdRemoteMutations = null,
     VaultHybridSyncReviewService? hdReview = null,
     VaultLinkedDraftPublication? linkedPublication = null)
-    : IAccountObjectStoreProvider, IAccountObjectUpdateProvider, IVerifiedObjectExportProvider, IObjectMutationReviewProvider
+    : IAccountObjectStoreProvider, IAccountObjectUpdateProvider, IVerifiedObjectExportProvider, IVerifiedObjectNodeInventoryProvider, IObjectMutationReviewProvider
 {
     public string ProviderId => "stellar";
     private const int MaxOrdinaryContentBytes = 64 * 1024;
@@ -527,6 +527,39 @@ public sealed class StellarAccountObjectStoreProvider(
             await buffer.DisposeAsync();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Inspect the complete published SVTREE3 ownership graph without
+    /// buffering file plaintext. This is an authenticated snapshot only:
+    /// deletion must obtain new remote revisions and exclusive ownership
+    /// evidence immediately before each separately approved transaction.
+    /// </summary>
+    public async Task<VerifiedObjectNodeInventory> InspectNodesAsync(
+        ObjectStoreScope scope, string objectId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        if (objectId.Length != 16 || !objectId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid Stellar file root ID.", nameof(objectId));
+        var checkpoint = RequireScope(scope, true);
+        IReadOnlyList<LedgerRecordItem> records;
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            records = await linkedLedger.ReadAsync(ct);
+        else
+        {
+            var before = await hdLedger.InspectAccountInfoAsync();
+            if (before.RootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException("HD file root belongs to another account.");
+            records = await hdLedger.ReadAsync();
+        }
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        var inventory = await VaultLinkedTreeFilePolicy.InspectVerifiedAsync(
+            objectId, records, ct);
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        ct.ThrowIfCancellationRequested();
+        return new VerifiedObjectNodeInventory(objectId,
+            inventory.Manifest.Sha256Hex, inventory.Manifest.Length,
+            inventory.NodeIds, inventory.GroupTag);
     }
 
     /// <summary>
