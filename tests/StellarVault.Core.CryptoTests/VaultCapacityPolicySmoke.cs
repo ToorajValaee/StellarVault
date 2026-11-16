@@ -14,9 +14,9 @@ internal static class VaultCapacityPolicySmoke
         Check(VaultCapacityPolicyGuard.AllowsCreate(
             ObjectCapacityPolicy.ExpandWithExplicitApproval, requiresCapacityExpansion: true),
             "Explicit-expansion policy was mistaken for single-account mode.");
-        Check(VaultCapacityPolicyGuard.AllowsCreate(
-            null, requiresCapacityExpansion: true),
-            "Legacy queued mutations unexpectedly changed policy.");
+        Check(!VaultCapacityPolicyGuard.AllowsCreate(
+            ObjectCapacityPolicy.SingleAccount, requiresCapacityExpansion: true),
+            "An unspecified capacity choice must never allow account expansion.");
 
         try
         {
@@ -49,6 +49,17 @@ internal static class VaultCapacityPolicySmoke
             ?? throw new Exception("Encrypted queue mutation failed JSON roundtrip.");
         Check(restored.CapacityPolicy == ObjectCapacityPolicy.SingleAccount,
             "Queued single-account policy did not survive serialization.");
+        // No backwards-compatibility path: old queue entries missing the
+        // authenticated policy are rejected during JSON reconstruction.
+        var unversioned = System.Text.Encoding.UTF8.GetString(serialized)
+            .Replace(",\"CapacityPolicy\":0", "", StringComparison.Ordinal);
+        try
+        {
+            _ = System.Text.Json.JsonSerializer.Deserialize<VaultPendingMutation>(unversioned);
+            throw new Exception("An unversioned queue entry without policy was accepted.");
+        }
+        catch (System.Text.Json.JsonException) { }
+
         var approval = VaultSyncApprovalGuard.Capture(
             restored, 0.001m, 1.0m, DateTimeOffset.UtcNow);
         VaultSyncApprovalGuard.RequireFresh(
