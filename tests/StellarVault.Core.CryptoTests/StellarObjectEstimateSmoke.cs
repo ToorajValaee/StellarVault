@@ -65,6 +65,36 @@ internal static class StellarObjectEstimateSmoke
         public Task DisconnectAsync() => Unsupported();
     }
 
+    private sealed class PrivateTestDestination : IVerifiedObjectDestination
+    {
+        private MemoryStream? _staging;
+        public byte[]? Published { get; private set; }
+        public int Commits { get; private set; }
+        public int Aborts { get; private set; }
+        public Task<Stream> OpenTemporaryAsync(CancellationToken ct = default)
+        {
+            if (_staging is not null) throw new InvalidOperationException("Already opened.");
+            _staging = new MemoryStream();
+            return Task.FromResult<Stream>(_staging);
+        }
+
+        public Task CommitAsync(CancellationToken ct = default)
+        {
+            if (_staging is null) throw new InvalidOperationException("Nothing staged.");
+            Published = _staging.ToArray();
+            Commits++;
+            return Task.CompletedTask;
+        }
+
+        public Task AbortAsync(CancellationToken ct = default)
+        {
+            Aborts++;
+            Published = null;
+            _staging?.Dispose();
+            return Task.CompletedTask;
+        }
+    }
+
     public static async Task RunAsync()
     {
         var ledger = new QuoteOnlyLedger();
@@ -144,6 +174,16 @@ internal static class StellarObjectEstimateSmoke
                 "Engine verified file read did not reconstruct exact content.");
         }
 
+        var verifiedDestination = new PrivateTestDestination();
+        var verifiedResult = await ((IVerifiedObjectExport)fileEngine)
+            .ExportVerifiedAsync(scope, rootRecord.Id, verifiedDestination);
+        Check(verifiedDestination.Commits == 1 &&
+              verifiedDestination.Aborts == 0 &&
+              verifiedDestination.Published is not null &&
+              verifiedDestination.Published.AsSpan().SequenceEqual(original) &&
+              verifiedResult.Descriptor.TypeId == VaultRecordTypeFactory.File,
+            "Private verified export did not commit exactly one fully authenticated file.");
+
         // Corrupted published file content must never escape the private
         // verification stream as an apparently valid plaintext object.
         var damaged = published.First(x =>
@@ -156,6 +196,19 @@ internal static class StellarObjectEstimateSmoke
             throw new Exception("Engine returned a corrupted file as verified plaintext.");
         }
         catch (InvalidDataException) { }
+
+        var rejectedDestination = new PrivateTestDestination();
+        try
+        {
+            await ((IVerifiedObjectExport)fileEngine).ExportVerifiedAsync(
+                scope, rootRecord.Id, rejectedDestination);
+            throw new Exception("Tampered file was committed by verified export.");
+        }
+        catch (InvalidDataException) { }
+        Check(rejectedDestination.Commits == 0 &&
+              rejectedDestination.Aborts == 1 &&
+              rejectedDestination.Published is null,
+            "Failed file verification did not abort private destination.");
 
         Check(fileLedger.MutationCalls == 0,
             "Verified file read unexpectedly invoked a mutation operation.");
