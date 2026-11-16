@@ -89,12 +89,10 @@ else
                 NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
             }
             else return;
-            if (!await Workflow.HasLocalVaultAsync(recent.Account)) return;
-            // A fresh page load no longer auto-opens the passphrase-only
-            // privacy screen. Require the normal mnemonic + vault passphrase
-            // for a complete Stellar signing session after browser restart.
-            if (await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasEncryptedSeed", recent.Account, recent.Network))
-                _coldAccount = recent.Account;
+            // Remembered encrypted-device credentials are NOT an active
+            // session and must never hijack a new on-chain-only login. The
+            // normal VaultHome access screen lets the user choose on-chain
+            // only or explicitly reopen encrypted local storage.
         }
         catch (Exception)
         {
@@ -221,12 +219,19 @@ else
     }
     private async Task FullLockAsync()
     {
-        await LinkedQueueKeys.LockAsync();
+        // End the active session, not the persisted encrypted user backup.
+        // On a subsequent login the user must choose device storage again.
         Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
         Privacy.Clear();
         _coldAccount = null;
+        _resumePassphrase = string.Empty;
+        _resumeError = null;
         _biometricEnrolled = false;
+        Retention.Reset();
+        StorageMode.Reset();
+        await LinkedQueueKeys.LockAsync();
+        await LedgerRecords.DisconnectAsync();
+        Navigation.NavigateTo("/", replace: true);
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
