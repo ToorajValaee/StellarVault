@@ -175,7 +175,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
-  assert.ok(access.includes('Stellar only — do not enable device storage'));
+  assert.match(access, /<span>Stellar only<\/span>/);
   assert.ok(access.includes('checked="@(!CurrentDeviceStoragePreference)"'));
   assert.match(access, /if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
@@ -792,7 +792,7 @@ test('access passphrase and help controls are shared by HD and independent S-key
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   const key = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
   assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<div class="sv-storage-credential-group">/);
-  assert.match(home, /class="sv-storage-device-unlock"/);
+  assert.match(home, /class="sv-biometric-choice sv-storage-device-unlock"/);
   assert.match(home, /class="sv-storage-passphrase-field"/);
   assert.match(home, /id="sv-passphrase" form="sv-access-form"/);
   assert.equal((home.match(/id="sv-passphrase"/g) || []).length, 1);
@@ -801,7 +801,7 @@ test('access passphrase and help controls are shared by HD and independent S-key
   assert.match(home, /LinkedQueueKeys\.UnlockAsync\(_passphrase\)/);
   assert.match(home, /LinkedQueueKeys\.CreateAsync\(_passphrase\)/);
   assert.match(home, /_passphrase\.Length < 12/);
-  assert.match(home, /_passphrase = string\.Empty;\s*ClearMnemonic\(\)/);
+  assert.match(home, /private void SelectCredentialMode\(VaultCredentialMode mode\)[\s\S]*?_passphrase = string\.Empty;\s*ClearMnemonic\(\)/);
   assert.match(home, /class="sv-entry-storage-guide"/);
   assert.match(home, /About local storage and Sync/);
   assert.match(home, /aria-expanded="@_storageHelpOpen"/);
