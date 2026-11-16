@@ -101,10 +101,20 @@
                 </fieldset>
                 @if (CurrentDeviceStoragePreference)
                 {
-                    <label class="sv-biometric-choice sv-storage-device-unlock">
-                        <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
-                        <span>Enable device unlock</span>
-                    </label>
+                    <div class="sv-storage-credential-group">
+                        <label class="sv-biometric-choice sv-storage-device-unlock">
+                            <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
+                            <span>Enable device unlock <small>(optional)</small></span>
+                        </label>
+                        <div class="sv-storage-passphrase-field">
+                            <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
+                            <input id="sv-passphrase" form="sv-access-form" class="terminal-input"
+                                   type="password" autocomplete="new-password"
+                                   @bind="_passphrase" @bind:event="oninput"
+                                   disabled="@(_busy || Sessions.IsUnlocked)" />
+                            <p class="sv-storage-passphrase-hint">Protects encrypted records on this device. Device unlock can optionally use this passphrase after enrollment.</p>
+                        </div>
+                    </div>
                 }
                 <div class="sv-storage-help-actions">
                     <button type="button" class="sv-storage-help-trigger"
@@ -168,14 +178,7 @@
                     </details>
                 }
 
-                @if (CurrentDeviceStoragePreference)
-                {
-                    <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
-                    <input id="sv-passphrase" class="terminal-input" type="password"
-                           autocomplete="new-password"
-                           @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
-                    <VaultStorageSecurityNotice Strategy="@(_credentialMode == VaultCredentialMode.StellarSecretKeyChain ? VaultMutationStrategyPolicy.Linked : VaultMutationStrategyPolicy.Hd)" />
-                }
+
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
                     <div class="terminal-alert warning" role="alert">
