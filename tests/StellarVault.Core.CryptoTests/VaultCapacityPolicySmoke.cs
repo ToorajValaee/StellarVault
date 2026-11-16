@@ -49,10 +49,32 @@ internal static class VaultCapacityPolicySmoke
             ?? throw new Exception("Encrypted queue mutation failed JSON roundtrip.");
         Check(restored.CapacityPolicy == ObjectCapacityPolicy.SingleAccount,
             "Queued single-account policy did not survive serialization.");
+        Check(restored.OriginStrategyId == VaultMutationStrategyPolicy.Hd,
+            "Queued mutation must include an explicit HD origin strategy.");
+        var originalJson = System.Text.Encoding.UTF8.GetString(serialized);
+        var noOrigin = originalJson.Replace(
+            ",\"OriginStrategyId\":\"stellar-hd-v2\"", "", StringComparison.Ordinal);
+        if (noOrigin == originalJson)
+            throw new Exception("Origin field was unexpectedly absent from serialized mutation.");
+        try
+        {
+            _ = System.Text.Json.JsonSerializer.Deserialize<VaultPendingMutation>(noOrigin);
+            throw new Exception("A mutation without an explicit account strategy was accepted.");
+        }
+        catch (System.Text.Json.JsonException) { }
+        try
+        {
+            VaultMutationStrategyPolicy.Resolve(null);
+            throw new Exception("Missing mutation strategy silently defaulted to HD.");
+        }
+        catch (InvalidDataException) { }
+
         // No backwards-compatibility path: old queue entries missing the
         // authenticated policy are rejected during JSON reconstruction.
-        var unversioned = System.Text.Encoding.UTF8.GetString(serialized)
+        var unversioned = originalJson
             .Replace(",\"CapacityPolicy\":0", "", StringComparison.Ordinal);
+        if (unversioned == originalJson)
+            throw new Exception("Capacity policy unexpectedly absent from serialized mutation.");
         try
         {
             _ = System.Text.Json.JsonSerializer.Deserialize<VaultPendingMutation>(unversioned);
