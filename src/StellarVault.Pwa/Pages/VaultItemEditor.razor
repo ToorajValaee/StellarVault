@@ -352,6 +352,7 @@ else
         _directFileNextDraft = null;
         _directFileNextId = null;
         var attempted = false;
+        var mayHaveSubmitted = false;
         try
         {
             RequireDirectFileScope();
@@ -369,12 +370,19 @@ else
                 {
                     if (!SameDraft(draft, reviewed)) return false;
                     var fresh = await Ledger.EstimateAsync(draft);
-                    return fresh.NetworkFeeXlm <= approvedCost.NetworkFeeXlm &&
+                    var eligible = fresh.NetworkFeeXlm <= approvedCost.NetworkFeeXlm &&
                         fresh.PeakReserveXlm <= approvedCost.PeakReserveXlm &&
                         fresh.CreatesChildNode == approvedCost.CreatesChildNode;
+                    // After this callback returns true the coordinator may
+                    // sign/broadcast. All subsequent failures are uncertain.
+                    if (eligible) mayHaveSubmitted = true;
+                    return eligible;
                 });
             if (!published)
-                throw new InvalidOperationException("Plan changed after approval. No transaction authorized.");
+            {
+                _status = "File or costs changed before authorization. Review this file transaction again.";
+                return;
+            }
             attempted = true;
             _directFileCompleted++;
             _status = "Published and verified " + _directFileCompleted +
@@ -385,9 +393,12 @@ else
             // Once a network submission might have started, no session-only
             // identifier may be replayed without independently persisted
             // signed proof. Fail closed and require ledger investigation.
-            _directFileUncertain = true;
-            _status = "File transaction result needs investigation: " + ex.Message +
-                ". Do not retry or delete individual file chunks.";
+            _directFileUncertain = mayHaveSubmitted;
+            _status = mayHaveSubmitted
+                ? "File transaction result needs investigation: " + ex.GetType().Name +
+                    ". Do not retry or delete individual file chunks."
+                : "File review failed before signing: " + ex.GetType().Name +
+                    ". No transaction was authorized; review costs again.";
         }
         finally { _busy = false; }
         if (attempted && !_directFileUncertain)
