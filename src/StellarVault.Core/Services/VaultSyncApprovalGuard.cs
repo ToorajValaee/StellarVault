@@ -71,10 +71,8 @@ public static class VaultSyncApprovalGuard
             writer.Write(item.EncryptedPayload.Length);
             writer.Write(item.EncryptedPayload);
             writer.Write(VaultMutationStrategyPolicy.Resolve(item.OriginStrategyId));
-            // Approval must also bind the immutable capacity decision made
-            // when the encrypted draft was staged. -1 denotes a legacy
-            // mutation with no explicit policy and preserves its semantics.
-            writer.Write(item.CapacityPolicy is { } policy ? (int)policy : -1);
+            // Capacity is mandatory: any policy change invalidates approval.
+            writer.Write((int)item.CapacityPolicy);
         }
         return Convert.ToHexStringLower(SHA256.HashData(stream.ToArray()));
     }
