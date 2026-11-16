@@ -791,7 +791,12 @@ test('access passphrase and help controls are shared by HD and independent S-key
   const notice = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultStorageSecurityNotice.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   const key = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
-  assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<label class="terminal-label" for="sv-passphrase">Vault passphrase<\/label>/);
+  assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<div class="sv-storage-credential-group">/);
+  assert.match(home, /class="sv-storage-device-unlock"/);
+  assert.match(home, /class="sv-storage-passphrase-field"/);
+  assert.match(home, /id="sv-passphrase" form="sv-access-form"/);
+  assert.equal((home.match(/id="sv-passphrase"/g) || []).length, 1);
+  assert.ok(home.indexOf('id="sv-passphrase"') < home.indexOf('<form id="sv-access-form"'));
   assert.match(home, /LinkedQueueKeys\.HasLocalCredentialsAsync\(\)/);
   assert.match(home, /LinkedQueueKeys\.UnlockAsync\(_passphrase\)/);
   assert.match(home, /LinkedQueueKeys\.CreateAsync\(_passphrase\)/);
