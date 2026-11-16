@@ -1,3 +1,4 @@
+using VaultEngine.Core;
 using System.Security.Cryptography;
 using System.Text.Json;
 
@@ -19,9 +20,16 @@ public sealed class VaultHybridDraftWorkspace(
         VaultSyncState State, LedgerRecordDraft Draft, DateTimeOffset CreatedUtc,
         string PayloadSha256, bool IsCorrupt = false);
 
+    public Task<VaultPendingMutation> CreateAsync(
+        LedgerRecordDraft draft, CancellationToken ct = default) =>
+        CreateAsync(draft, capacityPolicy: null, ct);
+
     public async Task<VaultPendingMutation> CreateAsync(
-        LedgerRecordDraft draft, CancellationToken ct = default)
+        LedgerRecordDraft draft, ObjectCapacityPolicy? capacityPolicy,
+        CancellationToken ct = default)
     {
+        if (capacityPolicy is { } policy && !Enum.IsDefined(policy))
+            throw new ArgumentException("Unsupported storage capacity policy.", nameof(capacityPolicy));
         var context = RequireScope();
         var account = context.Account;
         var scope = context.NetworkId;
@@ -39,7 +47,7 @@ public sealed class VaultHybridDraftWorkspace(
             var recordId = NewUnusedRecordId(entries);
             var item = VaultPendingMutation.Create(
                 account, scope, kind, recordId, payload,
-                dependsOn: dependencies);
+                dependsOn: dependencies) with { CapacityPolicy = capacityPolicy };
             // Local dependencies intentionally remain pending. The separate
             // preflight policy blocks them until their parent is published.
             var saved = await queue.EnqueueAsync(item, ct);
