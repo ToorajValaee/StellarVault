@@ -33,7 +33,8 @@
                 </button>
                 @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
                 {
-                    <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+                    <button type="button" class="sv-row-export-action"
+                            @onclick="() => OnOpen.InvokeAsync(Item)">Export…</button>
                 }
                 @if (!IsFile && CanEdit)
                 {
