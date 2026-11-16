@@ -340,3 +340,20 @@ test('verified SVTREE3 node inventories are chain-neutral read-only and never ap
   }
   assert.doesNotMatch(reader, /PublishDetailedAsync|SubmitApprovedAsync|DeleteIfUnchanged/);
 });
+
+test('recovery inspection exposes every durable signed checkpoint but never confirms it', () => {
+  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
+  assert.match(queue, /public sealed record VaultRecoveryCheckpoint/);
+  assert.match(queue, /SignedDeletionManifests \?\? \[\]/);
+  assert.match(queue, /SignedFileEntries \?\? \[\]/);
+  assert.match(queue, /StellarAccountAddress.IsValid\(manifest.SourceAccountId\)/);
+  assert.match(queue, /file.LedgerRecordId is not \{ Length: 16 \} id/);
+  assert.match(queue, /!IsTransactionHash\(tx\)/);
+  assert.match(queue, /if \(!valid\)\s*checkpoints.Clear\(\)/);
+  assert.match(queue, /new VaultRecoveryInspection\(item.Id, item.State,/);
+  assert.match(queue, /return entries.Where\(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain\)/);
+  assert.match(queue, /return DescribeRecovery\(item\)/);
+  assert.match(queue, /Never resubmit automatically/);
+  assert.match(queue, /if \(!await verifier.IsConfirmedAsync\(current, transactionHash, ct\)\)/);
+  assert.doesNotMatch(queue, /CheckpointJournalValid\)\s*await .*ConfirmReconciledAsync/s);
+});
