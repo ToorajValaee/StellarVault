@@ -87,7 +87,7 @@ public sealed class VaultLinkedDraftWorkspace(
 
     public Task<DraftItem> CreateAsync(LedgerRecordDraft draft,
         CancellationToken ct = default) =>
-        CreateCoreAsync(draft, allowSingleFile: false, ct, null);
+        CreateCoreAsync(draft, allowSingleFile: false, ct, ObjectCapacityPolicy.SingleAccount);
 
     public Task<DraftItem> CreateAsync(LedgerRecordDraft draft,
         ObjectCapacityPolicy capacityPolicy, CancellationToken ct = default)
@@ -104,7 +104,7 @@ public sealed class VaultLinkedDraftWorkspace(
     {
         var draft = VaultLinkedSingleFilePolicy.BuildDraft(
             title, fileName, contentType, file.Span, parentFolderId);
-        return CreateCoreAsync(draft, allowSingleFile: true, ct, null);
+        return CreateCoreAsync(draft, allowSingleFile: true, ct, ObjectCapacityPolicy.SingleAccount);
     }
 
     /// <summary>
@@ -345,7 +345,7 @@ public sealed class VaultLinkedDraftWorkspace(
     }
 
     private async Task<DraftItem> CreateCoreAsync(LedgerRecordDraft draft,
-        bool allowSingleFile, CancellationToken ct, ObjectCapacityPolicy? capacityPolicy)
+        bool allowSingleFile, CancellationToken ct, ObjectCapacityPolicy capacityPolicy)
     {
         ArgumentNullException.ThrowIfNull(draft);
         if (allowSingleFile)
