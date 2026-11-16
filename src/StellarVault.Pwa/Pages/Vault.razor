@@ -74,6 +74,13 @@ else
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <button type="button" class="sv-rail-link sv-inline-help-nav @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</button>
             <div class="sv-pwa-rail-divider"></div>
+            @if (_appView == "records" && (Ledger.IsConnected || SecretLedger.IsConnected))
+            {
+                <button type="button" class="sv-rail-link sv-rail-import-action"
+                        @onclick="OpenImportDialog">
+                    <span class="sv-rail-icon" aria-hidden="true">⇩</span> Import records
+                </button>
+            }
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
                 @if (Ledger.IsConnected || SecretLedger.IsConnected)
@@ -98,6 +105,22 @@ else
             <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected || SecretLedger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected || SecretLedger.IsConnected ? "Stellar connected" : "Not connected")</div>
             <div class="sv-rail-attribution">Powered by <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer">badje.ir</a></div>
         </nav>
+        @if (_showImportDialog)
+        {
+            <div class="modal-backdrop" @onclick="CloseImportDialog">
+                <section class="record-modal terminal-panel sv-vault-import-dialog"
+                         role="dialog" aria-modal="true" aria-label="Import records"
+                         @onclick:stopPropagation="true">
+                    <header class="modal-header">
+                        <h2>Import into encrypted local drafts</h2>
+                        <button type="button" class="icon-button close-button" aria-label="Close import"
+                                @onclick="CloseImportDialog">×</button>
+                    </header>
+                    <VaultRecordTransferPanel @key="ActiveMode" Mode="import"
+                        Strategy="@(ActiveMode == VaultWorkspaceMode.StellarSecretKey ? VaultMutationStrategyPolicy.Linked : VaultMutationStrategyPolicy.Hd)" />
+                </section>
+            </div>
+        }
         <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="WorkspaceRenderKey">
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
@@ -122,12 +145,7 @@ else
             @if (_appView == "records" && ActiveMode == VaultWorkspaceMode.MnemonicHd && Ledger.IsConnected)
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
-                <details class="sv-object-actions sv-vault-import-menu">
-                    <summary aria-label="Vault menu" title="Vault menu">⋯ Vault menu</summary>
-                    <div class="sv-object-menu">
-                        <VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy.Hd" Records="@Records.Concat(Folders).ToArray()" />
-                    </div>
-                </details>
+
             }
         @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
         {
@@ -679,6 +697,19 @@ else
         ActiveMode == VaultWorkspaceMode.StellarSecretKey
             ? _linkedWorkspace?.RefreshFromShellAsync() ?? Task.CompletedTask
             : RefreshAsync();
+
+    private bool _showImportDialog;
+
+    private void OpenImportDialog()
+    {
+        if (_appView != "records" ||
+            ActiveMode is not (VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey) ||
+            (!Ledger.IsConnected && !SecretLedger.IsConnected))
+            return;
+        _showImportDialog = true;
+    }
+
+    private void CloseImportDialog() => _showImportDialog = false;
 
     private Task LockActiveVaultAsync() =>
         ActiveMode == VaultWorkspaceMode.StellarSecretKey
@@ -1502,7 +1533,18 @@ else
         catch { /* Disconnect must not prevent opening the access screen. */ }
         Nav.NavigateTo("/", replace: true);
     }
-    private async Task LockAsync() {
-        Workflow.Lock(); await Ledger.DisconnectAsync(); Nav.NavigateTo("/");
+    private async Task LockAsync()
+    {
+        // An explicit user lock invalidates the local encryption session and
+        // its storage consent, but does not erase separately encrypted drafts.
+        Workflow.Lock();
+        Retention.Reset();
+        _showImportDialog = false;
+        _revealedIds.Clear();
+        _selected = null;
+        ClearSyncApproval();
+        await LinkedQueueKeys.LockAsync();
+        await Ledger.DisconnectAsync();
+        Nav.NavigateTo("/", replace: true);
     }
 }
