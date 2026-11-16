@@ -26,7 +26,17 @@ public sealed record ObjectWriteOptions(
 /// </summary>
 public sealed record ObjectDescriptor(
     string ObjectId, string TypeId, string Name,
-    string? ContentType = null, string? ParentId = null);
+    string? ContentType = null, string? ParentId = null,
+    ObjectRecordFields? Fields = null);
+
+/// <summary>
+/// Optional structured record fields separate from content bytes. Null means
+/// the caller did not supply the full field set; empty values deliberately
+/// clear fields when supplied. Providers must not silently discard them.
+/// </summary>
+public sealed record ObjectRecordFields(
+    string? UserName = null, string? Url = null,
+    string? Notes = null, string[]? Tags = null);
 
 /// <summary>
 /// Provider-neutral estimate. Costs are quoted in the provider's asset/unit,
