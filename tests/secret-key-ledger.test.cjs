@@ -549,9 +549,12 @@ test('encrypted queue origin is versioned, immutable and not implicitly upgraded
   const linked=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
   const native=fs.readFileSync(path.join(core,'FileSystemVaultPendingMutationStore.cs'),'utf8');
   const browser=fs.readFileSync(path.join(pwa,'IndexedDbVaultPendingMutationStore.cs'),'utf8');
-  assert.match(policy,/null or Hd => Hd/,'legacy null tag must remain HD');
+  assert.match(policy,/Hd => Hd/);
+  assert.doesNotMatch(policy,/null or Hd => Hd/,'missing strategy must fail closed');
+  assert.match(policy,/Encrypted mutation requires an explicit recognized account strategy/);
   assert.match(policy,/Linked => Linked/);
-  assert.match(queue,/string\? OriginStrategyId = null/,'legacy serialized entries must be readable');
+  assert.match(queue,/string OriginStrategyId = VaultMutationStrategyPolicy\.Hd/);
+  assert.doesNotMatch(queue,/string\? OriginStrategyId = null/,'unversioned queue entries are not supported');
   assert.match(queue,/VaultMutationStrategyPolicy\.RequireHd\(entry\)/);
   assert.match(guard,/VaultMutationStrategyPolicy\.RequireHd\(mutation\)/);
   assert.match(guard,/VaultMutationStrategyPolicy\.RequireHd\(current\)/);
@@ -1442,7 +1445,7 @@ test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed revi
   assert.match(filePolicy,/file-protocol-needs-staged-review/);
   assert.match(createPolicy,/file-protocol-needs-staged-review/);
   assert.match(workspace,/StageSmallFileAsync\(/);
-  assert.match(workspace,/CreateCoreAsync\(draft, allowSingleFile: true, ct\)/);
+  assert.match(workspace,/CreateCoreAsync\(draft, allowSingleFile: true, ct, ObjectCapacityPolicy\.SingleAccount\)/);
   // The publication gate validates SVFILE1 through the multipart policy's
   // delegation to the single-file policy, rather than calling it directly.
   assert.match(publisher,/VaultLinkedMultipartFilePolicy\.Problems\(item, local, remote\)/);
