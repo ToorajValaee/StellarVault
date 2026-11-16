@@ -10,8 +10,9 @@ namespace StellarVault.Core.Services;
 /// existing authenticated Stellar ledger readers and encrypted local draft
 /// queues. Only ordinary UTF-8 records/folders are supported in this phase.
 /// File uploads reuse the existing encrypted SVTREE3 queue stage operations.
-/// Network fee quoting for files, published reads, revision-pinned edits/deletes
-/// and single-account capacity enforcement remain fail-closed.
+/// File fee estimation and full-tree deletion remain fail-closed. Ordinary
+/// published reads and revision-pinned edit/delete reuse the established
+/// strategy-specific encrypted journals and their manual approval barriers.
 /// </summary>
 public sealed class StellarAccountObjectStoreProvider(
     IStellarLedgerRecords hdLedger,
