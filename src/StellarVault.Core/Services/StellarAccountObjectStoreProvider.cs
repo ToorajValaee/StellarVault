@@ -22,9 +22,10 @@ public sealed class StellarAccountObjectStoreProvider(
     VaultLinkedQueueKeySession linkedKeys,
     VaultNetworkSelection networks,
     IVaultRecordTypeFactory recordTypes,
+    VaultHybridRemoteMutationWorkspace? hdRemoteMutations = null,
     VaultHybridSyncReviewService? hdReview = null,
     VaultLinkedDraftPublication? linkedPublication = null)
-    : IAccountObjectStoreProvider, IVerifiedObjectExportProvider, IObjectMutationReviewProvider
+    : IAccountObjectStoreProvider, IAccountObjectUpdateProvider, IVerifiedObjectExportProvider, IObjectMutationReviewProvider
 {
     public string ProviderId => "stellar";
     private const int MaxOrdinaryContentBytes = 64 * 1024;
@@ -277,6 +278,91 @@ public sealed class StellarAccountObjectStoreProvider(
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
 
+    public async Task<ObjectMutationIntent> PrepareUpdateAsync(
+        ObjectStoreScope scope, ObjectDescriptor descriptor,
+        Stream source, string expectedRevision, ObjectWriteOptions options,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedRevision);
+        if (options.ExpectedRevision is not null &&
+            options.ExpectedRevision != expectedRevision)
+            throw new ArgumentException("Conflicting update revision.", nameof(options));
+        if (options.CapacityPolicy != ObjectCapacityPolicy.ExpandWithExplicitApproval)
+            throw new NotSupportedException(
+                "Single-account publication capacity policy is not yet enforced.");
+        if (descriptor.ObjectId is not { Length: 16 } id ||
+            !id.All(Uri.IsHexDigit))
+            throw new ArgumentException("Update requires the existing 16-hex record ID.");
+        if (descriptor.TypeId is not
+            (VaultRecordTypeFactory.Credential or VaultRecordTypeFactory.Folder))
+            throw new NotSupportedException(
+                "Immutable file trees and custom types require a versioned update workflow.");
+        // These are existing *on-chain* edit operations, not a local-only
+        // overwrite and not an upsert. A valid remote version is mandatory.
+        var checkpoint = RequireScope(scope, true);
+        byte[] bytes = await ReadBoundedAsync(source, ct);
+        try
+        {
+            var draft = BuildDraft(descriptor,
+                new UTF8Encoding(false, true).GetString(bytes));
+            string mutationId;
+            if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            {
+                if (!expectedRevision.StartsWith("linked-manifest:", StringComparison.Ordinal) ||
+                    !VaultLinkedRemoteRevisionPolicy.IsValid(
+                        expectedRevision["linked-manifest:".Length..]))
+                    throw new ArgumentException(
+                        "Linked update requires a canonical remote manifest revision.");
+                if (!linkedKeys.CanPublish || linkedKeys.ActiveRootAccountId != scope.StoreId)
+                    throw new UnauthorizedAccessException(
+                        "Unlock the matching linked signer and encrypted draft queue.");
+                var epoch = linkedKeys.UnlockEpoch;
+                var staged = await linkedDrafts.StageUpdateAsync(
+                    id, draft, expectedRevision["linked-manifest:".Length..], ct);
+                await RequireSameScopeAsync(scope, checkpoint, true);
+                if (!linkedKeys.CanPublish || linkedKeys.UnlockEpoch != epoch)
+                    throw new InvalidOperationException("Linked unlock changed during update staging.");
+                mutationId = staged.MutationId;
+            }
+            else
+            {
+                if (!expectedRevision.StartsWith("hd-sha256:", StringComparison.Ordinal) ||
+                    expectedRevision.Length != "hd-sha256:".Length + 64)
+                    throw new ArgumentException(
+                        "HD update requires its original published record fingerprint.");
+                if (hdRemoteMutations is null)
+                    throw new NotSupportedException("HD remote mutation workspace is not registered.");
+                if (!hdSessions.IsUnlocked || hdSessions.ActiveAccountId != scope.StoreId)
+                    throw new UnauthorizedAccessException("Unlock the matching HD encrypted queue.");
+                var epoch = hdSessions.Epoch;
+                // Compare the caller's original Get revision to a fresh
+                // authoritative remote snapshot before staging the update.
+                var current = await ReadOrdinaryAsync(scope, id, ct)
+                    ?? throw new FileNotFoundException("Published record no longer exists.");
+                if (current.IsFolder != draft.IsFolder ||
+                    !string.Equals(expectedRevision,
+                        "hd-sha256:" + VaultHybridRemoteMutationWorkspace.Fingerprint(current),
+                        StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        "Published record changed since Edit opened. Reload before saving.");
+                await RequireSameScopeAsync(scope, checkpoint, true);
+                var staged = await hdRemoteMutations.StageUpdateAsync(id, draft, ct);
+                await RequireSameScopeAsync(scope, checkpoint, true);
+                if (!hdSessions.IsUnlocked || hdSessions.Epoch != epoch)
+                    throw new InvalidOperationException("HD unlock changed during update staging.");
+                mutationId = staged.Id;
+            }
+            return new ObjectMutationIntent(
+                mutationId, ObjectMutationState.Prepared,
+                new ObjectStorageQuote(ProviderId, scope.NetworkId, "XLM",
+                    null, null, bytes.LongLength, null),
+                ObjectId: id);
+        }
+        finally { CryptographicOperations.ZeroMemory(bytes); }
+    }
+
     private async Task<LedgerRecordItem?> ReadOrdinaryAsync(
         ObjectStoreScope scope, string objectId, CancellationToken ct)
     {
@@ -471,11 +557,27 @@ public sealed class StellarAccountObjectStoreProvider(
         try
         {
             var fingerprint = Convert.ToHexStringLower(SHA256.HashData(snapshot));
+            string revision;
+            if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            {
+                if (linkedLedger is not IStellarSecretKeyRecordRevisionReader reader)
+                    throw new NotSupportedException(
+                        "Linked ledger does not expose an authoritative record revision.");
+                var checkpoint = RequireScope(scope, true);
+                var published = await reader.ReadRecordRevisionAsync(record.Id, ct);
+                await RequireSameScopeAsync(scope, checkpoint, true);
+                if (!VaultLinkedRemoteRevisionPolicy.IsValid(published))
+                    throw new InvalidDataException("Linked published record revision is unavailable.");
+                revision = "linked-manifest:" + published;
+            }
+            else
+                revision = "hd-sha256:" +
+                    VaultHybridRemoteMutationWorkspace.Fingerprint(record);
             return new StoredObject(
                 new ObjectDescriptor(record.Id,
                     record.IsFolder ? VaultRecordTypeFactory.Folder : VaultRecordTypeFactory.Credential,
-                    record.Title, record.IsFolder ? null : "text/plain", record.FolderId),
-                "snapshot-sha256:" + fingerprint,
+                    record.Title, null, record.FolderId),
+                revision,
                 Encoding.UTF8.GetByteCount(record.Content), fingerprint);
         }
         finally { CryptographicOperations.ZeroMemory(snapshot); }
