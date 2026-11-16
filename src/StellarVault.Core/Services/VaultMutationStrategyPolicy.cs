@@ -1,9 +1,9 @@
 namespace StellarVault.Core.Services;
 
 /// <summary>
-/// Authenticated-at-rest *format discriminator*, not proof that a signer owns a
-/// queue entry. Null is reserved for historical HD entries; it MUST NOT be
-/// interpreted as an imported secret-key draft.
+/// Explicit account-strategy discriminator in every encrypted mutation.
+/// The product has not launched: missing or unknown strategy IDs are invalid,
+/// never guessed as HD or imported S-key.
 /// </summary>
 public static class VaultMutationStrategyPolicy
 {
@@ -12,9 +12,10 @@ public static class VaultMutationStrategyPolicy
 
     public static string Resolve(string? originStrategyId) => originStrategyId switch
     {
-        null or Hd => Hd,
+        Hd => Hd,
         Linked => Linked,
-        _ => throw new InvalidDataException("Unknown encrypted mutation origin strategy.")
+        _ => throw new InvalidDataException(
+            "Encrypted mutation requires an explicit recognized account strategy.")
     };
 
     public static void RequireHd(VaultPendingMutation mutation)
