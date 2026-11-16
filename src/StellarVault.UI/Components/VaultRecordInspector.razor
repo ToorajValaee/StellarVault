@@ -66,7 +66,7 @@
             {
                 <div class="data-field">
                     <span class="field-label">ENCRYPTED LEDGER FILE</span>
-                    <p>Stored in authenticated Stellar ledger nodes. File integrity must be verified before exporting plaintext.</p>
+                    <p>The file is stored as encrypted ledger records. Verify its integrity before saving or opening a decrypted copy.</p>
                     @if (OnVerifyFile.HasDelegate)
                     {
                         <button type="button" class="pixel-button primary"
@@ -79,7 +79,7 @@
                     }
                     @if (!string.IsNullOrWhiteSpace(FileStatus))
                     {
-                        <p role="status" class="advanced-help">@FileStatus</p>
+                        <p role="status" class="advanced-help sv-file-verification-status">@FileStatus</p>
                     }
                 </div>
             }
@@ -187,7 +187,7 @@
     [Parameter] public bool CanDelete { get; set; } = true;
     [Parameter] public bool CanSaveVerifiedFile { get; set; }
     [Parameter] public string? FileStatus { get; set; }
-    [Parameter] public string FileActionLabel { get; set; } = "Verify decrypted file";
+    [Parameter] public string FileActionLabel { get; set; } = "Verify file integrity";
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnEdit { get; set; }
     [Parameter] public EventCallback OnDelete { get; set; }
