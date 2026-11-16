@@ -452,6 +452,7 @@ await StellarObjectRecordFieldsSmoke.RunAsync();
 await VaultCapacityPolicySmoke.RunAsync();
 await VaultRecordInterchangeSmoke.RunAsync();
 await HdStreamingFileTreeSmoke.RunAsync();
+await VaultPublishedFileClassificationSmoke.RunAsync();
 VaultRecoveryCheckpointSmoke.Run();
 await LinkedDraftSmoke.RunAsync();
 await LinkedRecordHistorySmoke.RunAsync();
