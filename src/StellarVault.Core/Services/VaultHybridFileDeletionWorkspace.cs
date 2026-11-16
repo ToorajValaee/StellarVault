@@ -191,13 +191,53 @@ public sealed class VaultHybridFileDeletionWorkspace(
         var remote = await ReadBoundAsync(account, scope, epoch, ct);
         // Return only complete, independently decodable file manifests.
         // Never offer a malformed, missing or shared chunk collection for deletion.
-        return remote.Where(x => !x.IsFolder && StellarLedgerFileProtocol.IsFile(x))
-            .Select(x =>
+        var result = new List<RemoteFile>();
+        foreach (var item in remote.Where(x => !x.IsFolder))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (item.Content?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true)
             {
-                var snapshot = CaptureIntent(x, remote);
-                return new RemoteFile(x.Id, snapshot.FileName, snapshot.Entries.Length);
-            })
-            .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+                if (!VaultLinkedTreeFilePolicy.IsRootRecord(item))
+                    continue; // Internal tree nodes are never independent files.
+                var verified = await VaultVerifiedTreeDeletionReview.BuildAsync(
+                    item.Id, remote, ct);
+                CheckScope(account, scope, epoch);
+                result.Add(new(item.Id, verified.FileName, verified.Nodes.Length));
+            }
+            else if (StellarLedgerFileProtocol.IsFile(item))
+            {
+                var snapshot = CaptureIntent(item, remote);
+                result.Add(new(item.Id, snapshot.FileName, snapshot.Entries.Length));
+            }
+        }
+        return result.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>
+    /// Build an immutable authenticated SVTREE3 inventory for read-only
+    /// inspection and future signed-history reconciliation. It is never
+    /// permission to stage or publish deletion.
+    /// </summary>
+    public async Task<VaultVerifiedTreeDeletionReview.Plan> ReviewTreeAsync(
+        string rootId, CancellationToken ct = default)
+    {
+        var (account, scope, epoch) = RequireScope();
+        var remote = await ReadBoundAsync(account, scope, epoch, ct);
+        var plan = await VaultVerifiedTreeDeletionReview.BuildAsync(rootId, remote, ct);
+        CheckScope(account, scope, epoch);
+        return plan;
+    }
+
+    public async Task<VaultVerifiedTreeDeletionReview.Inspection> InspectTreeAsync(
+        VaultVerifiedTreeDeletionReview.Plan plan, CancellationToken ct = default)
+    {
+        var (account, scope, epoch) = RequireScope();
+        var remote = await ReadBoundAsync(account, scope, epoch, ct);
+        var inspection = await VaultVerifiedTreeDeletionReview.InspectAsync(
+            plan, remote, ct);
+        CheckScope(account, scope, epoch);
+        return inspection;
     }
 
     public async Task<DeletionDraft> StageDeleteAsync(string manifestId, CancellationToken ct = default)
