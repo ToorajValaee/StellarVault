@@ -108,6 +108,23 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         string recordId, CancellationToken ct = default) =>
         await StageAsync(recordId, null, delete: true, ct);
 
+    /// <summary>
+    /// Stage deletion only if the revision the caller inspected still matches
+    /// the same authoritative remote snapshot used to pin this queue entry.
+    /// Never silently substitute a newer published revision.
+    /// </summary>
+    public Task<VaultPendingMutation> StageDeleteAsync(
+        string recordId, string expectedBaselineSha256,
+        CancellationToken ct = default)
+    {
+        if (!ValidDigest(expectedBaselineSha256))
+            throw new ArgumentException("Invalid expected published HD fingerprint.",
+                nameof(expectedBaselineSha256));
+        return StageAsync(recordId, null, delete: true, ct,
+            expectedBaselineSha256);
+    }
+
+
     public Task<VaultPendingMutation> StageUpdateAsync(
         string recordId, LedgerRecordDraft proposed, string expectedBaselineSha256,
         ObjectCapacityPolicy capacityPolicy, CancellationToken ct = default)
