@@ -69,6 +69,10 @@
                 <div class="sv-entry-feature"><span aria-hidden="true">◇</span><span>Encrypted from the moment you unlock</span></div>
                 <div class="sv-entry-feature"><span aria-hidden="true">▣</span><span>Your records and folders, in one place</span></div>
                 <div class="sv-entry-feature"><span aria-hidden="true">◎</span><span>Stellar-backed storage when you approve</span></div>
+                <details class="sv-entry-storage-guide">
+                    <summary>About local storage and Sync</summary>
+                    <p>Optional device storage uses a separate vault passphrase for either HD or Secret Key access. Local drafts remain encrypted on this device until you explicitly review and approve publication to Stellar. Signing credentials are never saved as plaintext.</p>
+                </details>
             </div>
             <div class="sv-entry-showcase-foot">PRIVATE BY DESIGN <span aria-hidden="true">·</span> YOU STAY IN CONTROL</div>
         </aside>
@@ -101,15 +105,33 @@
                         <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
                         <span>Enable device unlock</span>
                     </label>
-                    <details class="sv-access-learn sv-device-storage-info"><summary>About device unlock</summary><p>Device unlock protects your separate local passphrase. It never stores a Stellar secret key and is available only on supported devices.</p></details>
                 }
-                @if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
+                <div class="sv-storage-help-actions">
+                    <button type="button" class="sv-storage-help-trigger"
+                            aria-expanded="@_storageHelpOpen" aria-controls="sv-storage-help"
+                            @onclick="() => _storageHelpOpen = !_storageHelpOpen">
+                        <span aria-hidden="true">ⓘ</span> About encrypted storage
+                    </button>
+                    <button type="button" class="sv-storage-help-trigger"
+                            aria-expanded="@_deviceHelpOpen" aria-controls="sv-device-help"
+                            @onclick="() => _deviceHelpOpen = !_deviceHelpOpen">
+                        <span aria-hidden="true">ⓘ</span> About device unlock
+                    </button>
+                </div>
+                @if (_storageHelpOpen)
                 {
-                    <details class="sv-access-learn sv-device-storage-info"><summary>About Secret Key device storage</summary><p>After connecting, unlock encrypted drafts separately. Your S-key is never stored, and synchronization always requires approval.</p></details>
+                    <p id="sv-storage-help" class="sv-storage-help-text">
+                        Encrypted local drafts use a separate passphrase and explicit consent.
+                        Stellar-only access does not erase previously saved encrypted data.
+                        Both HD and Secret Key vaults require separate transaction approval for publication.
+                    </p>
                 }
-                else
+                @if (_deviceHelpOpen)
                 {
-                    <details class="sv-access-learn sv-device-storage-info"><summary>About encrypted storage</summary><p>Local data uses a separate encryption passphrase. Selecting Stellar only does not delete saved encrypted data.</p></details>
+                    <p id="sv-device-help" class="sv-storage-help-text">
+                        Device unlock can protect a local vault passphrase on supported devices.
+                        It does not store or replace the mnemonic or Stellar secret key.
+                    </p>
                 }
             </section>
         }
@@ -146,13 +168,13 @@
                     </details>
                 }
 
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd && _enableLocalStorage)
+                @if (CurrentDeviceStoragePreference)
                 {
-                <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
-                <input id="sv-passphrase" class="terminal-input" type="password"
-                       autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
-                <VaultStorageSecurityNotice />
-                <details class="sv-access-learn"><summary>About local storage and Sync</summary><p>Your recovery phrase is encrypted on this device using a separate passphrase. Offline records and folders can be synced only after your approval. Hybrid file syncing is unavailable.</p></details>
+                    <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
+                    <input id="sv-passphrase" class="terminal-input" type="password"
+                           autocomplete="new-password" minlength="12"
+                           @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
+                    <VaultStorageSecurityNotice />
                 }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
@@ -183,16 +205,7 @@
                         <span>Keep this screen open.</span>
                     </div>
                 }
-                @if (!Sessions.IsUnlocked)
-                {
-                    <p id="sv-access-readiness" class="sv-access-readiness" role="status" aria-live="polite">
-                        @AccessReadiness
-                    </p>
-                }
-                <details class="sv-access-security-notice">
-                    <summary>Security and release status</summary>
-                    <p><strong>Early access — use test accounts only.</strong> StellarVault has not completed a production security audit. Do not enter recovery phrases protecting real funds. Records saved only on this device are not automatically backed up or synchronized.</p>
-                </details>
+
             }
             else
             {
@@ -686,6 +699,8 @@
         finally { _busy = false; }
     }
 
+    private bool _storageHelpOpen;
+    private bool _deviceHelpOpen;
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
@@ -763,33 +778,16 @@
     private int EnteredWordCount => _mnemonic.Split((char[]?)null,
         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
 
-    private string AccessReadiness
-    {
-        get
-        {
-            if (_busy) return "Checking vault credential…";
-            if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
-                return _secretKey.Length != 56 ? "Enter your existing 56-character Stellar S-key to unlock its independent account chain." :
-                    "Ready to unlock the Secret Key vault. Signing requires separate transaction approval.";
-            if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
-                return $"Enter a complete 12, 15, 18, 21 or 24-word recovery phrase ({EnteredWordCount} words entered).";
-            if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
-                return "Enter a vault passphrase to enable encrypted device storage.";
-            if (_network == "custom" &&
-                (string.IsNullOrWhiteSpace(_customPassphrase) ||
-                 !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
-                return "Detect your custom Horizon network before unlocking.";
-            if (_network == "public" && !_confirmMainnetAccess)
-                return "Confirm the mainnet risk notice before unlocking.";
-            return "Ready to unlock. Your recovery phrase is processed in this session.";
-        }
-    }
-
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected) return;
         if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
         {
+            if (CurrentDeviceStoragePreference && _passphrase.Length < 12)
+            {
+                _message = "Enter a vault passphrase of at least 12 characters for encrypted device storage.";
+                return;
+            }
             await InspectSecretKeyChainAsync();
             return;
         }
