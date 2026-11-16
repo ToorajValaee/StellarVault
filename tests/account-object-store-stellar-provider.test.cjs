@@ -313,3 +313,30 @@ test('file metadata Get verifies a complete tree without storing plaintext in th
   assert.match(source, /IncrementalHash.CreateHash\(HashAlgorithmName.SHA256\)/);
   assert.match(source, /temporaryDestination.WriteAsync\(leaf.Data, ct\)/);
 });
+
+test('verified SVTREE3 node inventories are chain-neutral read-only and never approve a deletion', () => {
+  const contract = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const reader = read('src/StellarVault.Core/Services/VaultLinkedTreeFilePolicy.cs');
+  const smoke = read('tests/StellarVault.Core.CryptoTests/HdStreamingFileTreeSmoke.cs');
+  assert.match(contract, /interface IVerifiedObjectNodeInventory/);
+  assert.match(contract, /interface IVerifiedObjectNodeInventoryProvider/);
+  assert.match(contract, /provider is IVerifiedObjectNodeInventoryProvider inspector/);
+  assert.match(contract, /interface IVerifiedObjectNodeInventoryProvider[\s\S]*?InspectNodesAsync/);
+  assert.match(provider, /IVerifiedObjectNodeInventoryProvider/);
+  assert.match(provider, /VaultLinkedTreeFilePolicy.InspectVerifiedAsync\(\s*objectId, records, ct\)/);
+  assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\);\s*ct.ThrowIfCancellationRequested\(\);\s*return new VerifiedObjectNodeInventory/);
+  assert.match(reader, /actualGroup != groupTag/);
+  assert.match(reader, /ReadVerifiedAsync\(rootId,/);
+  assert.match(reader, /Stream.Null, ids, ct/);
+  assert.match(reader, /Another file root claims this streaming file group/);
+  assert.match(smoke, /Cross-file SVTREE3 node ownership was accepted/);
+  assert.match(smoke, /Ambiguous shared file group became a deletion inventory/);
+  for (const host of [
+    'src/StellarVault.Pwa/Program.cs',
+    'src/StellarVault.Maui/MauiProgram.cs'
+  ]) {
+    assert.match(read(host), /AddScoped<IVerifiedObjectNodeInventory>/);
+  }
+  assert.doesNotMatch(reader, /PublishDetailedAsync|SubmitApprovedAsync|DeleteIfUnchanged/);
+});
