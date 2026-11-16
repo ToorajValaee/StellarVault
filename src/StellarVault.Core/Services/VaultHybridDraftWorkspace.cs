@@ -78,13 +78,13 @@ public sealed class VaultHybridDraftWorkspace(
         StellarLedgerFileProtocol.ValidateName(fileName);
         var scope = RequireScope();
         var local = await queue.ReviewAllAsync(scope.Account, scope.NetworkId, ct);
-        RequireSameScope(scope);
         var ids = new HashSet<string>(local.Select(x => x.EntityId),
             StringComparer.OrdinalIgnoreCase);
         var stagedMutationIds = new List<string>();
         var group = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(8));
         try
         {
+            RequireSameScope(scope);
             if (local.Any(x => x.State is VaultSyncState.Submitting or
                     VaultSyncState.Uncertain or VaultSyncState.Conflict))
                 throw new InvalidOperationException(
