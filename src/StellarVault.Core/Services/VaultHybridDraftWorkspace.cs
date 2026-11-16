@@ -66,8 +66,11 @@ public sealed class VaultHybridDraftWorkspace(
     /// </summary>
     public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
         string title, string fileName, string contentType, Stream input,
-        string? folderId = null, CancellationToken ct = default)
+        string? folderId = null, CancellationToken ct = default,
+        ObjectCapacityPolicy capacityPolicy = ObjectCapacityPolicy.SingleAccount)
     {
+        if (!Enum.IsDefined(capacityPolicy))
+            throw new ArgumentException("Invalid file capacity policy.", nameof(capacityPolicy));
         ArgumentNullException.ThrowIfNull(input);
         if (!input.CanRead) throw new ArgumentException("Readable stream required.", nameof(input));
         if (string.IsNullOrWhiteSpace(title) || title.Length > 256)
@@ -124,7 +127,8 @@ public sealed class VaultHybridDraftWorkspace(
                         var pending = VaultPendingMutation.Create(
                             scope.Account, scope.NetworkId,
                             VaultMutationKind.CreateRecord, recordId, payload,
-                            dependsOn: isRoot ? rootDependencies : []);
+                            dependsOn: isRoot ? rootDependencies : [])
+                            with { CapacityPolicy = capacityPolicy };
                         try
                         {
                             await queue.EnqueueAsync(pending, token);
