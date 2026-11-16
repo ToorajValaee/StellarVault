@@ -164,9 +164,8 @@ public sealed class StellarAccountObjectStoreProvider(
         ArgumentNullException.ThrowIfNull(options);
         if (options.ExpectedRevision is not null)
             throw new NotSupportedException("Revision-pinned updates need the existing remote-mutation journal adapter.");
-        if (options.CapacityPolicy != ObjectCapacityPolicy.ExpandWithExplicitApproval)
-            throw new NotSupportedException(
-                "Single-account capacity enforcement is not yet wired into the encrypted publisher.");
+        if (!Enum.IsDefined(options.CapacityPolicy))
+            throw new ArgumentException("Unknown requested capacity policy.", nameof(options));
     }
 
     public async Task<ObjectStorageQuote> EstimatePutAsync(
@@ -258,7 +257,12 @@ public sealed class StellarAccountObjectStoreProvider(
                 nameof(descriptor));
         var checkpoint = RequireScope(scope, false);
         if (descriptor.TypeId == VaultRecordTypeFactory.File)
+        {
+            if (options.CapacityPolicy == ObjectCapacityPolicy.SingleAccount)
+                throw new NotSupportedException(
+                    "File-tree publication requires per-node single-account capacity enforcement.");
             return await StageFileAsync(scope, descriptor, source, checkpoint, ct);
+        }
         byte[] bytes = await ReadBoundedAsync(source, ct);
         try
         {
@@ -270,13 +274,13 @@ public sealed class StellarAccountObjectStoreProvider(
             string recordId;
             if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
             {
-                var queued = await linkedDrafts.CreateAsync(draft, ct);
+                var queued = await linkedDrafts.CreateAsync(draft, options.CapacityPolicy, ct);
                 mutationId = queued.MutationId;
                 recordId = queued.EntityId;
             }
             else
             {
-                var queued = await hdDrafts.CreateAsync(draft, ct);
+                var queued = await hdDrafts.CreateAsync(draft, options.CapacityPolicy, ct);
                 mutationId = queued.Id;
                 recordId = queued.EntityId;
             }
