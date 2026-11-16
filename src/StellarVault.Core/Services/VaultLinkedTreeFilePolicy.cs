@@ -462,15 +462,16 @@ public static class VaultLinkedTreeFilePolicy
         }
         if (!byId.TryGetValue(rootId, out var root) ||
             !IsRootRecord(root) ||
-            root.Tags is not ["svtree3-root", var groupTag])
+            root.Tags is not ["svtree3-root", _])
             throw new InvalidDataException("Missing or malformed authenticated file root.");
+        var groupTag = root.Tags[1];
         // ReadVerifiedAsync checks the entire tree and content checksum; the
         // collector is never returned on a failure or cancellation.
         var manifest = await VaultStreamingFileTree.ReadVerifiedAsync(rootId, (id, token) =>
         {
             token.ThrowIfCancellationRequested();
             if (!byId.TryGetValue(id, out var record) ||
-                record.Tags is not [_, var actualGroup] || actualGroup != groupTag ||
+                record.Tags is not { Length: 2 } || record.Tags[1] != groupTag ||
                 !TryDecode(new LedgerRecordDraft(record.Title, record.Content,
                     record.FolderId, record.Tags, record.IsFolder,
                     record.UserName, record.Url, record.Notes),
