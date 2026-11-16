@@ -317,11 +317,11 @@ test('Native phone uses the approved compact vault layout and keeps critical act
 });
 
 
-test('native HD file upload shares the unlimited encrypted SVTREE3 Sync staging path', () => {
+test('native HD hybrid file upload reuses streamed SVTREE3 beside the bounded direct path', () => {
   const native = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   const staging = fs.readFileSync(path.join(root,
-    'src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs'), 'utf8');
+    'src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs'), 'utf8');
   assert.match(native, /@inject VaultHybridDraftWorkspace HybridDrafts/);
   assert.match(native, /@onclick="StageNativeTreeFileAsync"/);
   assert.match(native, /Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked/);
@@ -329,7 +329,7 @@ test('native HD file upload shares the unlimited encrypted SVTREE3 Sync staging 
   assert.match(native, /await using var input = picked\.Stream/);
   assert.match(native, /await HybridDrafts\.StageTreeFileAsync\(/);
   assert.match(staging, /VaultStreamingFileTree\.WriteContentAddressedAsync\(/);
-  assert.doesNotMatch(native, /StellarLedgerUploadPlan|UploadCheckpoints|_uploadBytes|MaxFileBytes/);
+  assert.match(native, /@inject StellarLedgerUploadCoordinator DirectFileUpload\b/);
   assert.doesNotMatch(native, /ChooseUploadFileAsync|PublishUploadStageAsync/);
 });
 

@@ -38,12 +38,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node --test tests/secret-key-ledger.test.cjs 2>&1 | tee node-linked-regressions.log
-      - name: Build Core
+          node --test tests/secret-key-ledger.test.cjs tests/api-architecture.test.cjs 2>&1 | tee node-linked-regressions.log
+      - name: Test standalone engine
+        run: dotnet run --project tests/VaultEngine.Core.Tests/VaultEngine.Core.Tests.csproj -c Release
+      - name: Build Stellar provider
+        run: dotnet build src/VaultEngine.Stellar/VaultEngine.Stellar.csproj -c Release
+      - name: Build Stellar Horizon integration
+        run: dotnet build src/VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj -c Release
+      - name: Build API
         shell: bash
         run: |
           set -o pipefail
-          dotnet build src/StellarVault.Core/StellarVault.Core.csproj -c Release 2>&1 | tee dotnet-core.log
+          dotnet build src/StellarVault.Api/StellarVault.Api.csproj -c Release 2>&1 | tee dotnet-api.log
+      - name: API network boundary tests
+        run: dotnet run --project tests/StellarVault.Api.Tests/StellarVault.Api.Tests.csproj -c Release
       - name: Build shared UI
         shell: bash
         run: |
@@ -68,7 +76,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             node-linked-regressions.log
-            dotnet-core.log
+            dotnet-api.log
             dotnet-ui.log
             dotnet-pwa.log
             dotnet-crypto-tests.log

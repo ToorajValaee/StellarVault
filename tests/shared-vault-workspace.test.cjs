@@ -8,7 +8,7 @@ const root = path.join(__dirname, '..', 'src');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 test('one canonical /vault route selects explicitly authenticated HD or S-key strategy', () => {
-  const mode = read('StellarVault.Core/Services/VaultWorkspaceModeResolver.cs');
+  const mode = read('VaultEngine.Stellar/Services/VaultWorkspaceModeResolver.cs');
   const vault = read('StellarVault.Pwa/Pages/Vault.razor');
   const index = read('StellarVault.Pwa/Pages/Index.razor');
   const legacy = read('StellarVault.Pwa/Pages/SecretVault.razor');
@@ -89,7 +89,7 @@ test('HD and S-key render the same record form fields; only their submit logic d
 test('shared UI retains independent S-key offline drafts and immutable file safeguards', () => {
   const vault = read('StellarVault.Pwa/Pages/Vault.razor');
   const linked = read('StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
-  const policy = read('StellarVault.Core/Services/VaultPublishedFileClassification.cs');
+  const policy = read('VaultEngine.Stellar/Services/VaultPublishedFileClassification.cs');
   const native = read('StellarVault.UI/Components/NativeVaultWorkspace.razor');
   const runner = fs.readFileSync(path.join(__dirname, 'StellarVault.Core.CryptoTests',
     'Program.cs'), 'utf8');
@@ -143,7 +143,7 @@ test('PWA and native hosts reuse identical inspectors, forms, trees and rows', (
 test('both PWA and native HD file forms choose direct ledger or encrypted queue without silent device retention', () => {
   const web = read('StellarVault.Pwa/Pages/VaultItemEditor.razor');
   const native = read('StellarVault.UI/Components/NativeVaultWorkspace.razor');
-  const uploader = read('StellarVault.Core/Services/StellarLedgerUploadCoordinator.cs');
+  const uploader = read('VaultEngine.Stellar/Services/StellarLedgerUploadCoordinator.cs');
   for (const ui of [web, native]) {
     assert.match(ui, /@inject StellarLedgerUploadCoordinator DirectFileUpload/);
     assert.match(ui, /HybridDrafts\.StageTreeFileAsync\(/);

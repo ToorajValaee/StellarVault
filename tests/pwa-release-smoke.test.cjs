@@ -17,7 +17,8 @@ test('startup script files exist and Blazor starts last', () => {
 });
 test('published service worker caches before activation', () => {
   const worker = fs.readFileSync(path.join(root, 'service-worker.published.js'), 'utf8');
-  assert.ok(worker.indexOf('await cache.addAll(assetsRequests)') < worker.indexOf('await self.skipWaiting()'));
+  assert.ok(worker.includes('await cache.addAll(assetsRequests)'));
+  assert.doesNotMatch(worker, /await self\.skipWaiting\(|await self\.clients\.claim\(/);
 });
 
 test('IndexedDB reads wait for transaction completion', () => {
@@ -57,9 +58,9 @@ test('offline navigation falls back to verified release shell', () => {
   const navigation = worker.indexOf("event.request.mode === 'navigate'");
   assert.ok(navigation >= 0);
   const branch = worker.slice(navigation);
-  assert.ok(branch.includes('await fetch(event.request)'));
+  assert.ok(branch.includes('return shell;'));
   assert.ok(branch.includes("await cache.match('index.html')"));
-  assert.ok(branch.indexOf('await fetch(event.request)') < branch.indexOf("await cache.match('index.html')"));
+  assert.ok(branch.includes('Verified release shell is missing'));
 });
 
 test('offline bundle does not require debug symbols', () => {
@@ -162,7 +163,7 @@ test('explicit-lock policy keeps session while switching tabs and requires mnemo
 });
 
 test('device retention requires explicit opt-in and defaults to on-chain-only', () => {
-  const core = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultStorageModeGate.cs'), 'utf8');
+  const core = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultStorageModeGate.cs'), 'utf8');
   assert.ok(core.includes('OnChainOnly = 0'));
   assert.ok(core.includes('EncryptedLocalWithManualSync = 1'));
   assert.ok(core.includes('Policy { get; private set; } = VaultDeviceRetentionPolicy.OnChainOnly'));
@@ -183,7 +184,7 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   // A connected HD ledger is a valid on-chain-only session even without
   // a local-vault unlock. The canonical route resolves credential strategy
   // explicitly instead of using the old HD-only boolean guard.
-  const mode = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core',
+  const mode = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar',
     'Services', 'VaultWorkspaceModeResolver.cs'), 'utf8');
   assert.match(vault, /ActiveMode == VaultWorkspaceMode\.Locked/);
   assert.match(vault, /VaultWorkspaceModeResolver\.Resolve\(/);
@@ -232,7 +233,7 @@ test('opt-in encrypted seed remains separate from on-chain-only login', () => {
 });
 
 test('shared offline queue requires storage consent and reconciles uncertain submissions', () => {
-  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
   for (const status of ['Pending', 'Submitting', 'Uncertain', 'Confirmed', 'Conflict', 'Failed'])
     assert.ok(queue.includes(status));
   assert.ok(queue.includes('retention.RequireLocalPersistence()'));
@@ -255,7 +256,7 @@ test('on-chain-only access distinguishes unfunded root from connection failure',
 });
 
 test('offline mutation confirmation requires independent verification and scoped status', () => {
-  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
   assert.ok(queue.includes('interface IVaultLedgerMutationVerifier'));
   assert.ok(queue.includes('await verifier.IsConfirmedAsync(current, transactionHash, ct)'));
   assert.ok(queue.includes('Queue entry belongs to another account or network.'));
@@ -349,7 +350,7 @@ test('PWA modern design overrides CRT geometry and supports resizable record ins
   assert.match(css, /--sv-crt-grid:none/);
   assert.match(css, /--sv-record-inspector-width:400px/);
   assert.match(vault, /sv-inspector-resize-handle/);
-  assert.match(host, /pointerdown/);
+  assert.match(fs.readFileSync(path.join(root, 'js/pwa-inspector.js'), 'utf8'), /pointerdown/);
 });
 
 test('PWA loads only the consolidated modern design after scoped styles', () => {
@@ -670,7 +671,7 @@ test('Inspector preserves selected grid mode and keeps explorer and details scro
 test('desktop add/edit uses the same drag width as record preview and explorer tree fills its pane', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const index = fs.readFileSync(path.join(root, 'js/pwa-inspector.js'), 'utf8');
   assert.match(vault,/sv-inspector-resize-handle sv-editor-resize-handle/);
   assert.match(index,/--sv-record-inspector-width/);
   assert.match(index,/pointerdown/);
@@ -794,7 +795,7 @@ test('access passphrase and help controls are shared by HD and independent S-key
   const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const notice = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultStorageSecurityNotice.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  const key = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
+  const key = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
   assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<div class="sv-storage-credential-group">/);
   assert.match(home, /class="sv-biometric-choice sv-storage-device-unlock"/);
   assert.match(home, /class="sv-storage-passphrase-field"/);
@@ -835,7 +836,7 @@ test('PWA disposes decrypted pending entries and Sync reviews on lock and naviga
 test('direct on-chain deletion excludes malformed file envelopes and refreshes approved snapshot', () => {
   const rootPath = path.join(root, '..', '..');
   const classifier = fs.readFileSync(path.join(rootPath,
-    'StellarVault.Core', 'Services', 'VaultPublishedFileClassification.cs'), 'utf8');
+    'VaultEngine.Stellar', 'Services', 'VaultPublishedFileClassification.cs'), 'utf8');
   const row = fs.readFileSync(path.join(rootPath,
     'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
   const inspector = fs.readFileSync(path.join(rootPath,
@@ -871,7 +872,7 @@ test('direct on-chain deletion excludes malformed file envelopes and refreshes a
 
 test('Stellar-only HD file upload uses a separate no-persistence fee-approved file plan', () => {
   const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
-  const core = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core',
+  const core = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar',
     'Services', 'StellarLedgerUploadCoordinator.cs'), 'utf8');
   assert.match(editor, /@inject StellarLedgerUploadCoordinator DirectFileUpload/);
   assert.match(editor, /@onclick="PrepareDirectFileAsync"/);

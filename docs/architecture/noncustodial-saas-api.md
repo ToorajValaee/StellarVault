@@ -1,6 +1,6 @@
 # Public StellarVault storage API / SaaS proposal
 
-Status: **product architecture proposal only — there is no deployed public API or custody backend in this repository**. This is a low-risk extension to the existing Core; do not block the Testnet application pilot on SaaS implementation.
+Status: **storage/SaaS architecture proposal; a self-hosted read-only HTTP preview now exists in `src/StellarVault.Api` (see `docs/API.md`). No deployed public storage API or custody backend exists.** This is a low-risk extension to the existing Core; do not block the Testnet application pilot on SaaS implementation.
 
 ## Two explicit storage modes
 

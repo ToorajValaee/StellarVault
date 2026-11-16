@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 /// <summary>Signed-queue policy regression without a network, signer, or
 /// plaintext persistence. Publication itself remains an independent host flow.</summary>

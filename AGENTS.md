@@ -11,11 +11,17 @@ Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying
 
 ## Architecture and product contract
 
-- Shared .NET 10 domain/services: `src/StellarVault.Core`; PWA host: `src/StellarVault.Pwa`; reusable UI: `src/StellarVault.UI`.
+- Landing host: `src/StellarVault.Landing`; serve only its `wwwroot`. Keep deployment configuration and original archive provenance outside the public root. Landing claims must match implemented capabilities and release evidence; the API currently provides authenticated read-only diagnostics, not hosted storage writes.
+
+- **Engine-first ownership (2026-11-17):** `src/VaultEngine.Core` is the independent provider-neutral engine and MUST NOT reference StellarVault or a chain provider. `src/VaultEngine.Stellar` owns the existing Stellar crypto/storage/queue/session/provider services and references the engine, never a StellarVault consumer. StellarVault PWA/MAUI/UI and the HTTP API consume the SAME engine assembly. A future EvmVault must consume it through its own provider; do not duplicate the engine. `StellarVault.Core` has been removed. App-native lifecycle/navigation event services live in `StellarVault.UI/Services`; do not recreate a separate app Core project for them. Older historical entries naming `StellarVault.Core/Services` refer to code now moved to `VaultEngine.Stellar/Services` unless explicitly application-only.
+- **Stellar integration ownership (2026-11-17):** `src/VaultEngine.Stellar.Horizon` owns pure Horizon clients, network profiles/identity checks, receipt workflow and the engine observation adapter. It references only `VaultEngine.Core`, never a consumer or signing/crypto package. `StellarVault.Application` and `StellarVault.Infrastructure` have been removed. API keys, tenant grants, rate limits and HTTP authorization remain in `StellarVault.Api`; do not move them into the engine/provider libraries.
+- Shared UI remains `src/StellarVault.UI`; PWA host remains `src/StellarVault.Pwa`. Current HTTP API consumption is provider-neutral engine transaction observation; hosted object write APIs are not implemented and must not be represented as complete.
 - **Product architecture decision (2026-11-14):** two independent first-class *intended* credential/account strategies: BIP-39 SEP-5 mnemonic / deterministic HD child accounts, and imported Stellar S-key / linked independently created child accounts with explicit root public-key signer authorization. The latter is NOT an HD mnemonic substitute or a legacy-only migration. Reuse records/folders, encryption service contracts, on-chain review and hybrid workflows where safe, but do not cross their derivation/signing/discovery paths.
 - Stellar on-chain vault is the primary mode. Optional encrypted IndexedDB local mode must be explicitly enabled. Do not silently switch to local persistence or broadcast transactions.
 - Preserve the original on-chain `/vault` experience and account/network isolation. Keep mnemonic/keys out of logs, URL parameters and unencrypted persistent storage.
 - Offline mutation queues are encrypted at rest, account/network scoped, and use compare-and-swap durable state transitions. Never retry Submitting/Uncertain mutations blindly.
+
+- Landing host: `src/StellarVault.Landing`, public document root `wwwroot`; keep host configuration and provenance outside it. Static presentation only: no engine project reference or wallet behavior. Keep feature copy aligned with the handoff and validate with `node scripts/verify-landing.cjs`.
 
 ## Safety-critical Sync rules
 

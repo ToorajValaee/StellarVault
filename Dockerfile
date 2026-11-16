@@ -1,9 +1,19 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+ARG PWA_SERVER_IMAGE=ghcr.io/nginx/nginx-unprivileged:stable-alpine
+FROM ${SDK_IMAGE} AS build
 WORKDIR /src
-COPY . .
-RUN dotnet publish src/StellarVault.Pwa/StellarVault.Pwa.csproj -c Release -o /app/publish
+COPY global.json ./
+COPY src ./src
+ARG RELEASE_REVISION=unversioned
+RUN dotnet restore src/StellarVault.Pwa/StellarVault.Pwa.csproj --source https://api.nuget.org/v3/index.json
+RUN dotnet publish src/StellarVault.Pwa/StellarVault.Pwa.csproj -c Release --no-restore -o /app/publish -p:DebugType=None -p:DebugSymbols=false -p:SourceRevisionId=${RELEASE_REVISION}
 
-FROM nginx:alpine AS final
+FROM ${PWA_SERVER_IMAGE} AS final
+ARG RELEASE_REVISION=unversioned
+ARG WORKTREE_DIGEST=unrecorded
+ARG PREVIEW=true
+LABEL org.opencontainers.image.revision=${RELEASE_REVISION} io.stellarvault.source-digest=${WORKTREE_DIGEST} io.stellarvault.preview=${PREVIEW}
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/publish/wwwroot /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 CMD wget -q --spider http://127.0.0.1:8080/health/ready || exit 1

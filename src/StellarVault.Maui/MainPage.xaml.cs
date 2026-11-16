@@ -1,4 +1,5 @@
-using StellarVault.Core.Services;
+using StellarVault.UI.Services;
+using VaultEngine.Stellar.Services;
 using Microsoft.AspNetCore.Components.WebView;
 
 namespace StellarVault.Maui;
@@ -33,10 +34,12 @@ public partial class MainPage : ContentPage
         try
         {
             var api = (int)Android.OS.Build.VERSION.SdkInt;
-            var webview = Android.Webkit.WebView.CurrentWebViewPackage;
+            var webviewVersion = OperatingSystem.IsAndroidVersionAtLeast(26)
+                ? Android.Webkit.WebView.CurrentWebViewPackage?.VersionName
+                : "unavailable before API 26";
             // Android API level / WebView version are public OS metadata,
             // never account identifiers or captured JavaScript messages.
-            _androidWebViewInfo = $"Android API {api} / WebView {webview?.VersionName ?? "not found"}";
+            _androidWebViewInfo = $"Android API {api} / WebView {webviewVersion ?? "not found"}";
             LogStartupStage(_androidWebViewInfo);
         }
         catch (Exception)

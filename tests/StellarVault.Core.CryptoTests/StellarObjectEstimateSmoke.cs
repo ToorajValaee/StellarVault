@@ -1,5 +1,5 @@
 using System.Text;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 using VaultEngine.Core;
 
 internal static class StellarObjectEstimateSmoke

@@ -29,16 +29,23 @@ $tests = @(Get-ChildItem -LiteralPath (Join-Path $repo 'tests') -Filter '*.test.
 if ($tests.Count -eq 0) { throw 'No Node regression tests found.' }
 Invoke-Checked 'Node syntax (Stellar signer)' { & node --check 'src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js' }
 Invoke-Checked 'Complete Node regression suite' { & node --test @tests }
-Invoke-Checked 'Core Release build' { & dotnet build 'src/StellarVault.Core/StellarVault.Core.csproj' -c Release }
+Invoke-Checked 'Standalone engine tests' { & dotnet run --project 'tests/VaultEngine.Core.Tests/VaultEngine.Core.Tests.csproj' -c Release }
+Invoke-Checked 'Stellar provider Release build' { & dotnet build 'src/VaultEngine.Stellar/VaultEngine.Stellar.csproj' -c Release }
+Invoke-Checked 'Stellar Horizon integration Release build' { & dotnet build 'src/VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj' -c Release }
+Invoke-Checked 'API Release build' { & dotnet build 'src/StellarVault.Api/StellarVault.Api.csproj' -c Release }
+Invoke-Checked 'API network boundary tests' { & dotnet run --project 'tests/StellarVault.Api.Tests/StellarVault.Api.Tests.csproj' -c Release }
+if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+    Invoke-Checked 'Authenticated API HTTP smoke' { & powershell -NoProfile -File 'scripts/verify-api-http.ps1' }
+}
 Invoke-Checked 'Shared UI Release build' { & dotnet build 'src/StellarVault.UI/StellarVault.UI.csproj' -c Release }
 Invoke-Checked 'PWA Release build' { & dotnet build 'src/StellarVault.Pwa/StellarVault.Pwa.csproj' -c Release }
 Invoke-Checked 'Core cryptography and linked-journal smoke' { & dotnet run --project 'tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj' -c Release }
 if ($Android) {
-    Invoke-Checked 'MAUI Android Release build' { & dotnet build 'src/StellarVault.Maui/StellarVault.Maui.csproj' -c Release -f net10.0-android }
+    Invoke-Checked 'MAUI Android Release build' { & dotnet build 'src/StellarVault.Maui/StellarVault.Maui.csproj' -c Release -f net10.0-android -p:VaultBuildTargetFramework=net10.0-android }
 }
 if ($WindowsNative) {
     # Requires the MAUI Windows target and Windows SDK on this machine.
-    Invoke-Checked 'MAUI Windows Release build' { & dotnet build 'src/StellarVault.Maui/StellarVault.Maui.csproj' -c Release -f net10.0-windows10.0.19041.0 }
+    Invoke-Checked 'MAUI Windows Release build' { & dotnet build 'src/StellarVault.Maui/StellarVault.Maui.csproj' -c Release -f net10.0-windows10.0.19041.0 -p:VaultBuildTargetFramework=net10.0-windows10.0.19041.0 }
 }
 Write-Host "`nOffline release-candidate checks PASSED for $commit."
 Write-Host 'PRODUCTION GATE IS STILL CLOSED: real Testnet, device restart and independent audit remain mandatory.'

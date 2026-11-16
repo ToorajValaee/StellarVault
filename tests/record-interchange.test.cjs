@@ -30,7 +30,7 @@ test('record import/export is accessible in PWA and both native/shared account m
 
 test('encrypted record backup stays client-side and requires explicit password', () => {
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
-  const backup = read('src/StellarVault.Core/Services/VaultEncryptedRecordBackup.cs');
+  const backup = read('src/VaultEngine.Stellar/Services/VaultEncryptedRecordBackup.cs');
   const smoke = read('tests/StellarVault.Core.CryptoTests/VaultRecordInterchangeSmoke.cs');
   assert.match(panel, /VaultEncryptedRecordBackup\.EncryptAsync/);
   assert.match(panel, /VaultEncryptedRecordBackup\.DecryptAsync/);
@@ -46,7 +46,7 @@ test('encrypted record backup stays client-side and requires explicit password',
 });
 
 test('record interchange is a bounded and versioned local-only Core operation', () => {
-  const source = read('src/StellarVault.Core/Services/VaultRecordInterchange.cs');
+  const source = read('src/VaultEngine.Stellar/Services/VaultRecordInterchange.cs');
   const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
   assert.match(source, /MaximumBytes = 1024 \* 1024/);
   assert.match(source, /MaximumRecords = 500/);
@@ -58,7 +58,7 @@ test('record interchange is a bounded and versioned local-only Core operation', 
 
 test('import previews are bound to the same unlocked account and network', () => {
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
-  const core = read('src/StellarVault.Core/Services/VaultRecordInterchange.cs');
+  const core = read('src/VaultEngine.Stellar/Services/VaultRecordInterchange.cs');
   assert.match(panel, /private string\? CurrentImportScope\(\)/);
   assert.match(panel, /Networks\.CredentialKey\(root\)/);
   assert.match(panel, /Networks\.CredentialKey\(account\)/);
@@ -86,7 +86,7 @@ test('record export uses fresh account/network pinned ledger reads, not cached U
 });
 
 test('linked offline import preview cannot survive a lock and re-unlock on same account', () => {
-  const keys = read('src/StellarVault.Core/Services/VaultLinkedQueueKeySession.cs');
+  const keys = read('src/VaultEngine.Stellar/Services/VaultLinkedQueueKeySession.cs');
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
   const smoke = read('tests/StellarVault.Core.CryptoTests/LinkedDraftSmoke.cs');
   assert.match(keys, /public long UnlockEpoch => Interlocked\.Read\(ref _unlockEpoch\)/);
@@ -98,7 +98,7 @@ test('linked offline import preview cannot survive a lock and re-unlock on same 
 test('PWA file picker accepts max-size authenticated SVRB overhead but no larger file', () => {
   const js = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');
   const adapter = read('src/StellarVault.Pwa/Services/BrowserVaultNativeFileAccess.cs');
-  const backup = read('src/StellarVault.Core/Services/VaultEncryptedRecordBackup.cs');
+  const backup = read('src/VaultEngine.Stellar/Services/VaultEncryptedRecordBackup.cs');
   assert.match(js, /maxPortableRecordBackupBytes = 1024 \* 1024 \+ 5 \+ 16 \+ 12 \+ 16/);
   assert.match(js, /file\.size > maxPortableRecordBackupBytes/);
   assert.match(adapter, /VaultEncryptedRecordBackup\.MaximumBackupBytes/);
@@ -152,7 +152,7 @@ test('browser export destination is chosen before work and cannot be reused', as
 test('record exports select browser destination before any asynchronous ledger read', () => {
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
   const adapter = read('src/StellarVault.Pwa/Services/BrowserVaultNativeFileAccess.cs');
-  const contract = read('src/StellarVault.Core/Services/IVaultNativeFileAccess.cs');
+  const contract = read('src/VaultEngine.Stellar/Services/IVaultNativeFileAccess.cs');
   const js = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');
   assert.match(contract, /interface IVaultDeferredFileSaveAccess/);
   assert.match(contract, /interface IVaultPendingFileSave/);

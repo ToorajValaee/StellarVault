@@ -1,0 +1,125 @@
+using System.Text.Json;
+using VaultEngine.Stellar.Abstractions;
+
+namespace VaultEngine.Stellar.Services;
+
+/// <summary>Local-filesystem compare-and-swap index using an exclusive lock file for cooperating writers.
+/// Requires trusted storage and working OS file-sharing semantics; it is not a rollback anchor.</summary>
+public sealed class FileSystemVaultRecordIndex : IVaultRecordIndex
+{
+    private readonly string _directory;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly string _lockPath;
+    private static readonly TimeSpan LockWaitTimeout = TimeSpan.FromSeconds(30);
+
+    public FileSystemVaultRecordIndex(string directory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        _directory = Path.GetFullPath(directory);
+        Directory.CreateDirectory(_directory);
+        _lockPath = Path.Combine(_directory, ".record-index.lock");
+    }
+
+    public async Task<VaultRecordPointer?> ReadAsync(Guid recordId, CancellationToken cancellationToken = default)
+    {
+        ValidateRecord(recordId);
+        await _gate.WaitAsync(cancellationToken);
+        try { return await ReadCoreAsync(recordId, cancellationToken); }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<bool> CompareExchangeAsync(Guid recordId, VaultRecordPointer? expected,
+        VaultRecordPointer next, CancellationToken cancellationToken = default)
+    {
+        ValidateRecord(recordId);
+        ArgumentNullException.ThrowIfNull(next);
+        if (next.Generation < 0 || next.ManifestContentId is null ||
+            next.ManifestContentId.Length != 64 || next.ManifestContentId.Any(c => !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))))
+            throw new ArgumentException("Expected lowercase SHA-256 manifest ID and nonnegative generation.", nameof(next));
+        if (next.Generation != (expected is null ? 0 : checked(expected.Generation + 1)))
+            throw new ArgumentException("Next generation must advance exactly once.", nameof(next));
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var exclusive = await AcquireProcessLockAsync(cancellationToken);
+            var current = await ReadCoreAsync(recordId, cancellationToken);
+            if (current != expected) return false;
+            string target = PathFor(recordId);
+            string temporary = Path.Combine(_directory, $".pending-{Guid.NewGuid():N}");
+            try
+            {
+                byte[] data = JsonSerializer.SerializeToUtf8Bytes(next);
+                await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
+                    FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough))
+                {
+                    await stream.WriteAsync(data, cancellationToken);
+                    await stream.FlushAsync(cancellationToken);
+                }
+                File.Move(temporary, target, overwrite: true);
+                return true;
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<FileStream> AcquireProcessLockAsync(CancellationToken cancellationToken)
+    {
+        // The exclusive lock file is held for the complete read/compare/replace transaction.
+        // A crashed process releases its handle automatically; never delete this lock file.
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(LockWaitTimeout);
+        while (true)
+        {
+            if (timeout.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new TimeoutException("Timed out waiting for the record-index filesystem lock.");
+            }
+            try
+            {
+                return new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
+                    FileShare.None, 1, FileOptions.None);
+            }
+            catch (IOException)
+            {
+                try { await Task.Delay(25, timeout.Token); }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new TimeoutException("Timed out waiting for the record-index filesystem lock.");
+                }
+            }
+        }
+    }
+
+    private async Task<VaultRecordPointer?> ReadCoreAsync(Guid recordId, CancellationToken cancellationToken)
+    {
+        string path = PathFor(recordId);
+        if (!File.Exists(path)) return null;
+        await using var source = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
+        if (source.Length > 4096) throw new InvalidDataException("Record pointer exceeds size limit.");
+        byte[] buffer = new byte[4097];
+        int total = 0;
+        while (true)
+        {
+            int read = await source.ReadAsync(buffer.AsMemory(total, buffer.Length - total), cancellationToken);
+            if (read == 0) break;
+            total += read;
+            if (total > 4096) throw new InvalidDataException("Record pointer exceeds size limit.");
+        }
+        byte[] bytes = buffer.AsSpan(0, total).ToArray();
+        var pointer = JsonSerializer.Deserialize<VaultRecordPointer>(bytes)
+            ?? throw new InvalidDataException("Record pointer is invalid.");
+        if (pointer.Generation < 0 || pointer.ManifestContentId is null ||
+            pointer.ManifestContentId.Length != 64 || pointer.ManifestContentId.Any(c => !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))))
+            throw new InvalidDataException("Stored record pointer is invalid.");
+        return pointer;
+    }
+
+    private string PathFor(Guid recordId) => Path.Combine(_directory, recordId.ToString("N") + ".json");
+    private static void ValidateRecord(Guid recordId)
+    {
+        if (recordId == Guid.Empty) throw new ArgumentException("Record ID required.", nameof(recordId));
+    }
+}

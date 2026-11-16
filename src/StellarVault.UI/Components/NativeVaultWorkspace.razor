@@ -1,5 +1,5 @@
 @using StellarVault.UI.Components
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @using Microsoft.JSInterop
 @using System.IO.Pipelines
 @inject VaultSessionManager Sessions
@@ -94,10 +94,10 @@ else
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
-            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Vault</span></button>
-            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Device</span></button>
-            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
-            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
+            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" data-native-destination="stellar" title="Vault (Ctrl+1)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Vault</span></button>
+            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" data-native-destination="local" title="Device (Ctrl+2)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Device</span></button>
+            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" data-native-destination="sync" title="Sync (Ctrl+3)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
+            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" data-native-destination="settings" title="Settings (Ctrl+4)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
@@ -301,7 +301,7 @@ else
                     <label class="sv-native-mobile-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Search vault items" placeholder="Search your vault…" @bind="_nativeSearch" @bind:event="oninput" /></label>
                     @if (_ledgerRecords.Any(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)) && string.IsNullOrEmpty(_selectedFolderId))
                     {
-                        <section class="sv-native-folder-shortcuts" aria-label="Folder shortcuts">
+                        <details class="sv-native-folder-shortcuts"><summary>Quick folders</summary>
                             <div class="sv-native-section-title"><h2>Folder Shortcuts</h2><button type="button" @onclick='() => _nativeCollection = "folders"'>See all ›</button></div>
                             <div class="sv-native-shortcut-grid">
                                 @foreach (var shortcut in _ledgerRecords.Where(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)).Take(4))
@@ -312,7 +312,7 @@ else
                                     </button>
                                 }
                             </div>
-                        </section>
+                        </details>
                     }
                     <div class="sv-native-list-toolbar">
                         @if (!string.IsNullOrEmpty(_selectedFolderId))

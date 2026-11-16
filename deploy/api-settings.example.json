@@ -1,0 +1,4 @@
+{
+  "ApiAccess": { "Tenants": [] },
+  "ApiLimits": { "GlobalRequestsPerMinute": 600, "TenantRequestsPerMinute": 60, "GlobalConcurrency": 16, "TenantConcurrency": 4 }
+}

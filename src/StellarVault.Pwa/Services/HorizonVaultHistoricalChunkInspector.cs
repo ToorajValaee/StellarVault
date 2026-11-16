@@ -1,3 +1,4 @@
+using VaultEngine.Stellar.Horizon;
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.JSInterop;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Pwa.Services;
 

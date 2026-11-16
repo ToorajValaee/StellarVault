@@ -1,0 +1,21 @@
+# SVAULT by Badje
+
+Development preview of an encrypted Stellar-backed vault. Not yet production validated or independently security audited.
+
+- Landing: https://svault.ir/
+- Browser PWA: https://app.svault.ir/
+- API hostname: https://api.svault.ir/ (availability depends on deployment)
+- Separate account strategies: BIP-39 SEP-5 deterministic HD accounts; imported Stellar S-key with independently linked accounts.
+- Networks: Testnet, Public and explicitly configured custom Stellar networks.
+- Record content is encrypted in the browser before submission. Transaction metadata remains public.
+- Records, folders and encrypted files. Direct uploads are limited to 1 MiB; opt-in local storage enables staged streaming file trees. Whole-tree deletion remains under development.
+- Explicit opt-in encrypted device storage, offline drafts and manual fee-reviewed Sync. Uncertain submissions are never blindly retried.
+- API: authenticated read-only network and receipt diagnostics, including operator-configured customer networks. No hosted storage writes or server-held signing keys.
+- EVM and native app releases are future work. VaultEngine is independent of StellarVault consumers.
+- A receipt alone does not prove complete record publication. Release, device, live-network and independent security validation remain incomplete.
+- Protect your recovery phrase or S-key, separate local passphrase, device and backups. Lost secrets cannot be recovered by Badje.
+- Privacy: https://svault.ir/privacy.html
+- Terms: https://svault.ir/terms.html
+- Contact: tooraj.valaee@live.com
+- Creator: https://badje.ir/
+- English only; archived Persian routes redirect to English.

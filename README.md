@@ -7,7 +7,10 @@ A .NET 10, Stellar-account-centered encrypted vault/database. The native **.NET 
 ```text
 StellarVault.sln
 src/
-  StellarVault.Core/       Encrypted database, records, account authorization contracts
+  VaultEngine.Core/       Independent provider-neutral engine and contracts
+  VaultEngine.Stellar/    Stellar provider, encrypted storage, queues and signing ports
+  VaultEngine.Stellar.Horizon/ Stellar network checks, HTTP clients and receipt adapters
+  StellarVault.Api/        Authenticated customer-network HTTP host
   StellarVault.UI/         Shared Razor components
   StellarVault.Maui/       Android, iOS, Windows, Mac Catalyst native host
   StellarVault.Pwa/        Browser/WebAssembly host, IndexedDB, PWA assets
@@ -15,7 +18,7 @@ tests/
   StellarVault.Core.CryptoTests/
 docs/
   architecture/
-website/                  Independent landing site
+src/StellarVault.Landing/                  Independent landing site
 .github/workflows/        Cross-platform CI
 Dockerfile                .NET 10 browser build and Nginx hosting
 ```
@@ -43,6 +46,21 @@ dotnet restore src/StellarVault.Pwa/StellarVault.Pwa.csproj
 dotnet run --project src/StellarVault.Pwa/StellarVault.Pwa.csproj
 ```
 
+## Customer-network HTTP API
+
+The self-hosted API supports configured customer/private Stellar networks with
+exact expected-passphrase checks. All `/v1` routes require a per-tenant Bearer
+key and expose only that tenant's network grants. Configuration stores key
+digests, never raw keys. No configured tenant means access is denied.
+See [API setup and limitations](docs/API.md) and
+[credential generation](scripts/new-api-credential.ps1).
+
+The HTTP surface currently provides authenticated discovery and read-only
+receipt inspection. The independent `VaultEngine.Core` assembly is used by both the application and HTTP API; real HTTP receipt inspection executes through its provider router. The object engine supports one-shot
+approved submission and proof-gated reconciliation through the original HD and
+linked publishers. Neither API credentials nor a successful receipt confer
+Stellar signing authority. Hosted storage preparation/submission, durable relay
+idempotency and whole-tree deletion remain unfinished; production is NO-GO.
 ## Native development
 
 Open `StellarVault.sln` and select `StellarVault.Maui` as the startup project. Install .NET 10 MAUI workload and the target platform toolchain. Build a target framework explicitly, for example `dotnet build src/StellarVault.Maui/StellarVault.Maui.csproj -f net10.0-android`.
@@ -118,4 +136,4 @@ manual `PWA-RELEASE-GATE.md` checklist before any release decision.
 
 **Not yet production-ready.** Complete .NET 10 builds, platform testing, live Stellar Testnet recovery and independent security review before entering secrets protecting real funds. Current-state ledger recovery and mocked transaction receipts alone are not production proof. Do not use this preview with valuable secrets.
 
-The landing site in `website/` is independently maintained.
+The landing site in `src/StellarVault.Landing/` is independently maintained.

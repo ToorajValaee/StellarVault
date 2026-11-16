@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
-using StellarVault.Core.Services;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Services;
+using VaultEngine.Stellar.Abstractions;
 
 internal static class StreamingFileTreeSmoke
 {

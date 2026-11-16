@@ -7,3 +7,7 @@
 artifacts/
 TestResults/
 .DS_Store
+
+deploy/.env
+deploy/*settings.local.json
+deploy/secrets/

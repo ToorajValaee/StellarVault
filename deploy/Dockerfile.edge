@@ -1,0 +1,5 @@
+ARG CADDY_IMAGE=mirror.gcr.io/library/caddy:2-alpine
+FROM ${CADDY_IMAGE}
+USER root
+RUN mkdir -p /data/caddy /config/caddy && chown -R 10001:10001 /data /config
+USER 10001:10001

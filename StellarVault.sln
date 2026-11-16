@@ -2,13 +2,21 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Core", "src\StellarVault.Core\StellarVault.Core.csproj", "{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.UI", "src\StellarVault.UI\StellarVault.UI.csproj", "{856C74B3-CC15-4843-8AAF-9E23973B20A4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Maui", "src\StellarVault.Maui\StellarVault.Maui.csproj", "{DC6C3954-6464-4FD8-BB5C-CA1E05CD214A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Pwa", "src\StellarVault.Pwa\StellarVault.Pwa.csproj", "{A053EEA5-7811-94A8-B754-6E4C70930EF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StellarVault.Api", "src\StellarVault.Api\StellarVault.Api.csproj", "{E912CA20-6A5A-4E44-AD0A-04C8A7A0F919}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VaultEngine.Core", "src\VaultEngine.Core\VaultEngine.Core.csproj", "{9350E03C-B9DF-4E68-814C-2AF9929E5931}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VaultEngine.Stellar", "src\VaultEngine.Stellar\VaultEngine.Stellar.csproj", "{32354520-2361-4FCE-9024-33951099FA76}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VaultEngine.Stellar.Horizon", "src\VaultEngine.Stellar.Horizon\VaultEngine.Stellar.Horizon.csproj", "{EE81BB13-1E50-4C1C-8D03-0B29B562DD04}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,10 +24,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{58F47009-164C-4FD9-A8DD-6A98ED8BA1A1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{856C74B3-CC15-4843-8AAF-9E23973B20A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -32,8 +36,29 @@ Global
 		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A053EEA5-7811-94A8-B754-6E4C70930EF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E912CA20-6A5A-4E44-AD0A-04C8A7A0F919}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E912CA20-6A5A-4E44-AD0A-04C8A7A0F919}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E912CA20-6A5A-4E44-AD0A-04C8A7A0F919}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E912CA20-6A5A-4E44-AD0A-04C8A7A0F919}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9350E03C-B9DF-4E68-814C-2AF9929E5931}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9350E03C-B9DF-4E68-814C-2AF9929E5931}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9350E03C-B9DF-4E68-814C-2AF9929E5931}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9350E03C-B9DF-4E68-814C-2AF9929E5931}.Release|Any CPU.Build.0 = Release|Any CPU
+		{32354520-2361-4FCE-9024-33951099FA76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32354520-2361-4FCE-9024-33951099FA76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32354520-2361-4FCE-9024-33951099FA76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32354520-2361-4FCE-9024-33951099FA76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE81BB13-1E50-4C1C-8D03-0B29B562DD04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE81BB13-1E50-4C1C-8D03-0B29B562DD04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE81BB13-1E50-4C1C-8D03-0B29B562DD04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE81BB13-1E50-4C1C-8D03-0B29B562DD04}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9350E03C-B9DF-4E68-814C-2AF9929E5931} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{32354520-2361-4FCE-9024-33951099FA76} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{EE81BB13-1E50-4C1C-8D03-0B29B562DD04} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

@@ -1,5 +1,5 @@
 using CommunityToolkit.Maui.Storage;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Maui;
 

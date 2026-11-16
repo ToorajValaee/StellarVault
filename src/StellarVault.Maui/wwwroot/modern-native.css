@@ -1477,3 +1477,37 @@ html[data-theme="dark"] .sv-native-shell :is(
 .sv-native-shell .sv-native-object-grid > .sv-object-row .sv-object-storage {
   display:none;
 }
+
+/* Platform conventions: desktop workspace, mobile touch destinations. */
+.native-windows { font-family:'Segoe UI Variable','Segoe UI',sans-serif; }
+.native-ios,.native-maccatalyst { font-family:-apple-system,BlinkMacSystemFont,sans-serif; }
+.native-android { font-family:Roboto,'Noto Sans',sans-serif; }
+.sv-native-shell .sv-native-folder-shortcuts { margin:8px 0; }
+.sv-native-shell .sv-native-folder-shortcuts > summary { cursor:pointer;padding:10px 0;font-weight:600; }
+.sv-native-shell .sv-native-content { padding-top:16px; }
+.sv-native-shell .sv-native-page-heading h1 { margin:0 0 12px;font-size:1.5rem; }
+.sv-native-shell :is(button,input,select,textarea):focus-visible { outline:2px solid var(--sv-work-accent,#087d56);outline-offset:2px; }
+@media (min-width:900px) {
+ .native-windows { grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto; }
+ .native-windows .sv-native-content { max-width:none;padding:16px 24px; }
+ .native-windows .sv-native-topbar { min-height:48px;padding:8px 20px; }
+ .native-windows .sv-native-nav button { min-height:38px;padding:8px 12px;border-radius:5px; }
+ .native-windows .sv-native-explorer,.native-windows .sv-linked-explorer-layout { display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start;gap:16px; }
+ .native-windows :is(.sv-native-explorer,.sv-linked-explorer-layout) > .sv-explorer-tree { max-height:calc(100dvh - 240px);position:sticky;top:0; }
+ .native-windows .sv-native-folder-select { display:none; }
+ .native-windows .sv-native-object-grid > .sv-object-row { border-radius:5px;min-height:40px; }
+}
+/* iPhone uses bottom tabs even in landscape; iPad can retain the existing rail. */
+@media (max-width:899px) {
+ .native-ios { grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto; }
+ .native-ios .sv-native-topbar { grid-column:1;grid-row:1;padding-top:max(8px,env(safe-area-inset-top)); }
+ .native-ios .sv-native-nav { grid-column:1;grid-row:4;flex-direction:row;padding-top:6px; }
+ .native-ios .sv-native-nav button { flex:1;flex-direction:column;justify-content:center;padding:6px;gap:3px;min-height:48px; }
+ .native-ios .sv-native-scroll { grid-column:1;grid-row:2; }
+ .native-ios .sv-native-commandbar { grid-column:1;grid-row:3; }
+ .native-ios .sv-native-footer { display:none; }
+ .native-android .sv-native-nav button { min-height:56px;border-radius:20px; }
+ .native-ios .sv-native-nav button { border-radius:10px; }
+ .sv-native-shell .sv-native-content { padding:12px 16px 20px; }
+ .sv-native-shell :is(.pixel-button,.sv-native-command) { min-height:44px; }
+}

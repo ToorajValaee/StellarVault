@@ -3,6 +3,8 @@
     <TargetFrameworks>net10.0-android;net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <!-- Select only this host's target without overriding shared-project TFMs. -->
+    <TargetFrameworks Condition="'$(VaultBuildTargetFramework)' != ''">$(VaultBuildTargetFramework)</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <!-- Unpackaged Windows preview: no generated AppxManifest is required. -->
     <WindowsPackageType Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">None</WindowsPackageType>
@@ -48,7 +50,9 @@
              Link="SharedStellarLedger/HorizonVaultDeletionTombstoneReader.cs" />
     <Compile Include="../StellarVault.Pwa/Services/HorizonVaultUnrecordedSubmissionReader.cs"
              Link="SharedStellarLedger/HorizonVaultUnrecordedSubmissionReader.cs" />
-    <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Core/VaultEngine.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Stellar/VaultEngine.Stellar.csproj" />
+    <ProjectReference Include="../VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
   <ItemGroup>

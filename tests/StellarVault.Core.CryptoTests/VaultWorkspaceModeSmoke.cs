@@ -1,4 +1,4 @@
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 /// <summary>Credential-strategy boundaries for the one-route PWA workspace.
 /// These are pure state tests; no vault key or signer is synthesized.</summary>

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 internal static class VaultRecordInterchangeSmoke
 {

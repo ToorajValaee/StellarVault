@@ -1,0 +1,10 @@
+services:
+  stellarvault-landing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stellarvault-landing:latest
+    container_name: stellarvault-landing
+    restart: unless-stopped
+    ports:
+      - "8080:80"

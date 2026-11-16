@@ -7,7 +7,7 @@ const root = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 
 test('first engine provider reuses existing Stellar ledger readers and encrypted drafts', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /: IAccountObjectStoreProvider/);
   assert.match(provider, /await linkedDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
   assert.match(provider, /await hdDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
@@ -20,7 +20,7 @@ test('first engine provider reuses existing Stellar ledger readers and encrypted
 });
 
 test('Stellar provider validates capacity mode and keeps unsupported mutation paths fail closed', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /if \(!Enum\.IsDefined\(options\.CapacityPolicy\)\)/);
   assert.match(provider, /options\.CapacityPolicy, ct\)/);
   assert.match(provider, /ObjectId='new'/);
@@ -41,7 +41,7 @@ test('Stellar provider validates capacity mode and keeps unsupported mutation pa
 });
 
 test('Stellar adapter binds tenant-free engine scope to selected wallet, network, and local queue', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /StellarAccountAddress\.Validate\(scope\.StoreId\)/);
   assert.match(provider, /scope\.NetworkId != networks\.Network/);
   assert.match(provider, /networks\.CredentialKey\(scope\.StoreId\)/);
@@ -67,7 +67,7 @@ test('PWA and native host register the same engine-facing interface and provider
 });
 
 test('provider refuses unversioned type loss and clears ordinary stream bytes on disposal', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /descriptor\.TypeId is not/);
   assert.match(provider, /VaultRecordTypeFactory\.Credential or VaultRecordTypeFactory\.Folder/);
   assert.match(provider, /descriptor\.ContentType is not null/);
@@ -78,8 +78,8 @@ test('provider refuses unversioned type loss and clears ordinary stream bytes on
 });
 
 test('linked draft workspace independently invalidates in-flight offline work after re-unlock', () => {
-  const workspace = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
-  const keys = read('src/StellarVault.Core/Services/VaultLinkedQueueKeySession.cs');
+  const workspace = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
+  const keys = read('src/VaultEngine.Stellar/Services/VaultLinkedQueueKeySession.cs');
   assert.match(workspace, /private sealed record Context\(string Root, string Scope, long Epoch,\s*long UnlockEpoch\)/);
   assert.match(workspace, /ledger\.ConnectionEpoch, keys\.UnlockEpoch\)/);
   assert.match(workspace, /keys\.UnlockEpoch != original\.UnlockEpoch/);
@@ -87,9 +87,9 @@ test('linked draft workspace independently invalidates in-flight offline work af
 });
 
 test('file Put uses existing encrypted SVTREE3 staging for HD and independent S-key', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const hd = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
-  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs');
+  const linked = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
   assert.match(provider, /descriptor\.TypeId == VaultRecordTypeFactory\.File/);
   assert.match(provider, /await linkedDrafts\.StageTreeFileAsync\(/);
   assert.match(provider, /await hdDrafts\.StageTreeFileAsync\(/);
@@ -106,7 +106,7 @@ test('file Put uses existing encrypted SVTREE3 staging for HD and independent S-
 });
 
 test('neutral Get/OpenRead verifies SVTREE3 before exposing any bytes', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   const smoke = read('tests/StellarVault.Core.CryptoTests/StellarObjectEstimateSmoke.cs');
   assert.match(provider, /VaultLinkedTreeFilePolicy\.ReadAsync\(objectId, records, buffer, ct\)/);
   assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\)/);
@@ -122,8 +122,8 @@ test('neutral Get/OpenRead verifies SVTREE3 before exposing any bytes', () => {
 });
 
 test('neutral verified export streams into private destination and only commits after full hash and scope checks', () => {
-  const contract = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const contract = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
   const smoke = read('tests/StellarVault.Core.CryptoTests/StellarObjectEstimateSmoke.cs');
   assert.match(contract, /interface IVerifiedObjectDestination/);
   assert.match(contract, /interface IVerifiedObjectExport/);
@@ -140,7 +140,7 @@ test('neutral verified export streams into private destination and only commits 
 });
 
 test('trusted filesystem verified export destination is atomic, one-use and cleans up failures', () => {
-  const destination = read('src/StellarVault.Core/Abstractions/AtomicFileObjectDestination.cs');
+  const destination = read('src/VaultEngine.Core/Abstractions/AtomicFileObjectDestination.cs');
   const smoke = read('tests/StellarVault.Core.CryptoTests/AtomicFileObjectDestinationSmoke.cs');
   const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
   assert.match(destination, /: IVerifiedObjectDestination, IAsyncDisposable/);
@@ -157,9 +157,9 @@ test('trusted filesystem verified export destination is atomic, one-use and clea
 });
 
 test('neutral publication reviews reuse the existing HD and Secret Key publishers without a second submit path', () => {
-  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const publisher = read('src/StellarVault.Core/Services/VaultLinkedDraftPublication.cs');
+  const contracts = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const publisher = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftPublication.cs');
   assert.match(contracts, /interface IObjectMutationReview/);
   assert.match(contracts, /interface IObjectMutationReviewProvider/);
   assert.match(contracts, /provider is IObjectMutationReviewProvider reviewer/);
@@ -181,10 +181,10 @@ test('neutral publication reviews reuse the existing HD and Secret Key publisher
 });
 
 test('Edit is a revision-pinned Update routed to existing encrypted mutation journals', () => {
-  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const hd = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
-  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const contracts = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/VaultEngine.Stellar/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const linked = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
   assert.match(contracts, /interface IAccountObjectUpdate/);
   assert.match(contracts, /interface IAccountObjectUpdateProvider/);
   assert.match(contracts, /provider is IAccountObjectUpdateProvider updater/);
@@ -218,23 +218,23 @@ test('Edit is a revision-pinned Update routed to existing encrypted mutation jou
 });
 
 test('explicit ordinary capacity policy survives encrypted queue and blocks HD expansion before publish', () => {
-  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
-  const hdDraft = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
-  const linkedDraft = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
-  const review = read('src/StellarVault.Core/Services/VaultHybridSyncReviewService.cs');
-  const publisher = read('src/StellarVault.Core/Services/VaultManualSyncCoordinator.cs');
-  const guard = read('src/StellarVault.Core/Services/VaultCapacityPolicyGuard.cs');
-  const approval = read('src/StellarVault.Core/Services/VaultSyncApprovalGuard.cs');
-  const linkedPublisher = read('src/StellarVault.Core/Services/VaultLinkedDraftPublication.cs');
+  const contracts = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const queue = read('src/VaultEngine.Stellar/Services/VaultPendingMutationQueue.cs');
+  const hdDraft = read('src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs');
+  const linkedDraft = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
+  const review = read('src/VaultEngine.Stellar/Services/VaultHybridSyncReviewService.cs');
+  const publisher = read('src/VaultEngine.Stellar/Services/VaultManualSyncCoordinator.cs');
+  const guard = read('src/VaultEngine.Stellar/Services/VaultCapacityPolicyGuard.cs');
+  const approval = read('src/VaultEngine.Stellar/Services/VaultSyncApprovalGuard.cs');
+  const linkedPublisher = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftPublication.cs');
   const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
   assert.match(contracts, /enum ObjectCapacityPolicy/);
   assert.match(queue, /ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy\.SingleAccount/);
   assert.match(queue, /JsonRequired/);
   assert.match(queue, /string OriginStrategyId = VaultMutationStrategyPolicy\.Hd/);
   assert.match(queue, /ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy\.SingleAccount/);
-  const origin = read('src/StellarVault.Core/Services/VaultMutationStrategyPolicy.cs');
+  const origin = read('src/VaultEngine.Stellar/Services/VaultMutationStrategyPolicy.cs');
   assert.match(origin, /Hd => Hd/);
   assert.doesNotMatch(origin, /null or Hd => Hd/);
   assert.match(origin, /Encrypted mutation requires an explicit recognized account strategy/);
@@ -253,12 +253,12 @@ test('explicit ordinary capacity policy survives encrypted queue and blocks HD e
 });
 
 test('all SVTREE3 nodes and revision-pinned edits carry mandatory policy to reviewed publish paths', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const hdFiles = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
-  const linkedFiles = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
-  const hdEdits = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
-  const review = read('src/StellarVault.Core/Services/VaultHybridSyncReviewService.cs');
-  const publisher = read('src/StellarVault.Core/Services/VaultManualSyncCoordinator.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const hdFiles = read('src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs');
+  const linkedFiles = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
+  const hdEdits = read('src/VaultEngine.Stellar/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const review = read('src/VaultEngine.Stellar/Services/VaultHybridSyncReviewService.cs');
+  const publisher = read('src/VaultEngine.Stellar/Services/VaultManualSyncCoordinator.cs');
   assert.match(provider, /StageFileAsync\(scope, descriptor, source, checkpoint,/);
   assert.match(provider, /source, descriptor\.ParentId, ct, capacityPolicy/);
   assert.match(hdFiles, /with \{ CapacityPolicy = capacityPolicy \}/);
@@ -273,10 +273,10 @@ test('all SVTREE3 nodes and revision-pinned edits carry mandatory policy to revi
 });
 
 test('neutral Delete requires original remote revision and stages only in existing encrypted queues', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const hd = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
-  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
-  const router = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/VaultEngine.Stellar/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const linked = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
+  const router = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
   assert.match(router, /provider\.PrepareDeleteAsync\(scope, objectId, expectedRevision, ct\)/);
   assert.match(provider, /public async Task<ObjectMutationIntent> PrepareDeleteAsync\(/);
   assert.match(provider, /ReadOrdinaryAsync\(scope, objectId, ct\)/);
@@ -297,8 +297,8 @@ test('neutral Delete requires original remote revision and stages only in existi
 });
 
 test('file metadata Get verifies a complete tree without storing plaintext in the 8 MiB read buffer', () => {
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const source = read('src/StellarVault.Core/Services/VaultStreamingFileTree.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const source = read('src/VaultEngine.Stellar/Services/VaultStreamingFileTree.cs');
   assert.match(provider, /private async Task<VaultStreamingFileTree.Root\?> ReadVerifiedTreeMetadataAsync\(/);
   assert.match(provider, /VaultLinkedTreeFilePolicy.ReadAsync\(\s*objectId, records, Stream.Null, ct\)/);
   assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\);\s*ct.ThrowIfCancellationRequested\(\);\s*return manifest;/);
@@ -315,9 +315,9 @@ test('file metadata Get verifies a complete tree without storing plaintext in th
 });
 
 test('verified SVTREE3 node inventories are chain-neutral read-only and never approve a deletion', () => {
-  const contract = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
-  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
-  const reader = read('src/StellarVault.Core/Services/VaultLinkedTreeFilePolicy.cs');
+  const contract = read('src/VaultEngine.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/VaultEngine.Stellar/Services/StellarAccountObjectStoreProvider.cs');
+  const reader = read('src/VaultEngine.Stellar/Services/VaultLinkedTreeFilePolicy.cs');
   const smoke = read('tests/StellarVault.Core.CryptoTests/HdStreamingFileTreeSmoke.cs');
   assert.match(contract, /interface IVerifiedObjectNodeInventory/);
   assert.match(contract, /interface IVerifiedObjectNodeInventoryProvider/);
@@ -342,7 +342,7 @@ test('verified SVTREE3 node inventories are chain-neutral read-only and never ap
 });
 
 test('recovery inspection exposes every durable signed checkpoint but never confirms it', () => {
-  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
+  const queue = read('src/VaultEngine.Stellar/Services/VaultPendingMutationQueue.cs');
   assert.match(queue, /public sealed record VaultRecoveryCheckpoint/);
   assert.match(queue, /SignedDeletionManifests \?\? \[\]/);
   assert.match(queue, /SignedFileEntries \?\? \[\]/);
@@ -362,8 +362,8 @@ test('recovery inspection exposes every durable signed checkpoint but never conf
 });
 
 test('interrupted HD and linked file staging cleans up unacknowledged encrypted nodes safely', () => {
-  const hd = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
-  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const hd = read('src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs');
+  const linked = read('src/VaultEngine.Stellar/Services/VaultLinkedDraftWorkspace.cs');
   for (const workspace of [hd, linked]) {
     assert.match(workspace, /private static bool IsPendingTreeGroupNode\(/);
     assert.match(workspace, /VaultLinkedTreeFilePolicy\.Prefix/);
@@ -383,9 +383,9 @@ test('interrupted HD and linked file staging cleans up unacknowledged encrypted 
 });
 
 test('prelaunch HD records have no legacy local ID migration or silent version upgrades', () => {
-  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
+  const queue = read('src/VaultEngine.Stellar/Services/VaultPendingMutationQueue.cs');
   const pwa = read('src/StellarVault.Pwa/Pages/Vault.razor');
-  const origin = read('src/StellarVault.Core/Services/VaultMutationStrategyPolicy.cs');
+  const origin = read('src/VaultEngine.Stellar/Services/VaultMutationStrategyPolicy.cs');
   assert.doesNotMatch(queue, /MigrateLegacyCreateIdAsync/);
   assert.doesNotMatch(pwa, /MigrateSelectedLegacyIdAsync|MIGRATE LEGACY LOCAL ID/);
   assert.match(origin, /Encrypted mutation requires an explicit recognized account strategy/);

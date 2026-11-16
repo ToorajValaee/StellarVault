@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.JSInterop;
 using StellarVaultPwa.Core;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVaultPwa.Services;
 

@@ -497,7 +497,7 @@ test('simultaneous approved submissions in one runtime cannot both reach Horizon
 });
 
 test('HD and independent linked approval workflows reuse the same scope freshness policy',()=>{
-  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const root=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const shared=fs.readFileSync(path.join(root,'VaultApprovalScopeGuard.cs'),'utf8');
   const hd=fs.readFileSync(path.join(root,'VaultSyncApprovalGuard.cs'),'utf8');
   const linked=fs.readFileSync(path.join(root,'VaultLinkedAccountExpansion.cs'),'utf8');
@@ -514,7 +514,7 @@ test('HD and independent linked approval workflows reuse the same scope freshnes
 
 test('both hosts reuse the existing consent-bound queue review without S-key publication',()=>{
   const root=path.join(__dirname,'..');
-  const core=path.join(root,'src','StellarVault.Core','Services');
+  const core=path.join(root,'src','VaultEngine.Stellar','Services');
   const shared=fs.readFileSync(path.join(core,'VaultScopedQueueReview.cs'),'utf8');
   const linked=fs.readFileSync(path.join(core,'VaultLinkedQueueInspection.cs'),'utf8');
   const hd=fs.readFileSync(path.join(core,'VaultHybridSyncReviewService.cs'),'utf8');
@@ -540,7 +540,7 @@ test('both hosts reuse the existing consent-bound queue review without S-key pub
 
 test('encrypted queue origin is versioned, immutable and not implicitly upgraded to S-key',()=>{
   const root=path.join(__dirname,'..','src');
-  const core=path.join(root,'StellarVault.Core','Services');
+  const core=path.join(root,'VaultEngine.Stellar','Services');
   const pwa=path.join(root,'StellarVault.Pwa','Services');
   const policy=fs.readFileSync(path.join(core,'VaultMutationStrategyPolicy.cs'),'utf8');
   const queue=fs.readFileSync(path.join(core,'VaultPendingMutationQueue.cs'),'utf8');
@@ -572,7 +572,7 @@ test('encrypted queue origin is versioned, immutable and not implicitly upgraded
 
 test('existing encrypted queue stores delegate transient key use to the shared session interface',()=>{
   const root=path.join(__dirname,'..','src');
-  const core=path.join(root,'StellarVault.Core','Services');
+  const core=path.join(root,'VaultEngine.Stellar','Services');
   const pwa=path.join(root,'StellarVault.Pwa','Services');
   const seam=fs.readFileSync(path.join(core,'IVaultQueueKeySession.cs'),'utf8');
   const native=fs.readFileSync(path.join(core,'FileSystemVaultPendingMutationStore.cs'),'utf8');
@@ -600,7 +600,7 @@ test('existing encrypted queue stores delegate transient key use to the shared s
 
 
 test('queue readiness and folder graph use one authenticated mutation snapshot',()=>{
-  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const root=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const scoped=fs.readFileSync(path.join(root,'VaultScopedQueueReview.cs'),'utf8');
   const queue=fs.readFileSync(path.join(root,'VaultPendingMutationQueue.cs'),'utf8');
   const policy=fs.readFileSync(path.join(root,'VaultPendingMutationReviewPolicy.cs'),'utf8');
@@ -629,7 +629,7 @@ test('existing tail record update cannot consume the reserved next-account link 
 });
 
 test('linked expansion preflight cancellation is structurally distinct from transport uncertainty',()=>{
-  const root=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const root=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const expansion=fs.readFileSync(path.join(root,'VaultLinkedAccountExpansion.cs'),'utf8');
   const ui=fs.readFileSync(path.join(__dirname,'..','src','StellarVault.UI','Components',
     'VaultSecretKeyWorkspace.razor'),'utf8');
@@ -668,7 +668,7 @@ test('linked vault cannot silently treat one session sibling uncertainty as safe
 
 test('independent S-key local queue key and ciphertext namespaces never alias HD storage',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const browser=path.join(src,'StellarVault.Pwa','Services');
   const scope=fs.readFileSync(path.join(core,'VaultLinkedQueueStorageScope.cs'),'utf8');
   const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
@@ -720,7 +720,7 @@ test('linked queue key is revoked on PWA and MAUI app lifecycle boundaries',()=>
   const native=fs.readFileSync(path.join(src,'StellarVault.UI','Components','NativeVaultWorkspace.razor'),'utf8');
   const linked=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultSecretKeyWorkspace.razor'),'utf8');
   const transport=fs.readFileSync(path.join(src,'StellarVault.Pwa','Services','BrowserSecretKeyLedger.cs'),'utf8');
-  const interfaceSource=fs.readFileSync(path.join(src,'StellarVault.Core','Services','IStellarSecretKeyLedger.cs'),'utf8');
+  const interfaceSource=fs.readFileSync(path.join(src,'VaultEngine.Stellar','Services','IStellarSecretKeyLedger.cs'),'utf8');
   assert.match(interfaceSource,/ConnectedNetworkPassphrase/);
   assert.match(transport,/ConnectedNetworkPassphrase => _connected/);
   assert.match(pwa,/await LinkedQueueKeys\.LockAsync\(\)/);
@@ -760,7 +760,7 @@ test('linked S-key device UI requires consent and separate fee-reviewed publicat
 
 test('independent S-key local retention is not granted by mnemonic-HD consent',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const pwa=path.join(src,'StellarVault.Pwa','Services');
   const gate=fs.readFileSync(path.join(core,'VaultLinkedLocalRetentionGate.cs'),'utf8');
   const session=fs.readFileSync(path.join(core,'VaultLinkedQueueKeySession.cs'),'utf8');
@@ -807,7 +807,7 @@ test('GitHub verification is manual-only and cannot consume Actions minutes on p
 
 test('independent linked staging reuses original encrypted stores and parent dependency rules',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const pwa=path.join(src,'StellarVault.Pwa','Services');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const interfaceSource=fs.readFileSync(path.join(core,'VaultLinkedQueueStorageScope.cs'),'utf8');
@@ -839,7 +839,7 @@ test('independent linked staging reuses original encrypted stores and parent dep
 
 test('manual linked draft publication reserves durable queue state before network broadcast',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
   const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
   const pwa=fs.readFileSync(path.join(src,'StellarVault.Pwa','Program.cs'),'utf8');
@@ -879,7 +879,7 @@ test('native Core smoke suite includes independent linked encrypted staging and 
   assert.match(smoke,/VaultLinkedDraftWorkspace/);
   assert.match(smoke,/VaultLinkedDraftPublication/);
   assert.match(smoke,/VaultLinkedLocalRetentionGate/);
-  assert.match(smoke,/publisher\.SubmitAsync\(folderReview\.Quote, true\)/);
+  assert.match(smoke,/engine\.SubmitApprovedAsync\(objectScope,/);
   assert.match(smoke,/Successful linked expansion was confirmed without historical signer proof/);
   assert.match(smoke,/VaultSyncState\.Uncertain or VaultSyncState\.Submitting/);
   assert.match(smoke,/MustRejectAsync\(\(\) => publisher\.PrepareAsync\(child\.MutationId\)/);
@@ -889,7 +889,7 @@ test('native Core smoke suite includes independent linked encrypted staging and 
 
 test('independent S-key local storage never turns on the HD device-retention gate',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
   const gate=fs.readFileSync(path.join(core,'VaultLinkedLocalRetentionGate.cs'),'utf8');
   const smoke=fs.readFileSync(path.join(__dirname,'..','tests','StellarVault.Core.CryptoTests','LinkedDraftSmoke.cs'),'utf8');
@@ -904,7 +904,7 @@ test('independent S-key local storage never turns on the HD device-retention gat
 
 test('linked draft recovery remains read-only even when current record or receipt is visible',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const recovery=fs.readFileSync(path.join(core,'VaultLinkedDraftRecoveryReview.cs'),'utf8');
   const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
   const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components',
@@ -934,7 +934,7 @@ test('linked draft recovery remains read-only even when current record or receip
 
 test('existing S-key credentials unlock local encrypted drafts without Horizon or signing authority',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const pwaPage=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','Vault.razor'),'utf8');
   const routeAlias=fs.readFileSync(path.join(src,'StellarVault.Pwa','Pages','SecretVault.razor'),'utf8');
   const native=fs.readFileSync(path.join(src,'StellarVault.UI','Components','NativeVaultWorkspace.razor'),'utf8');
@@ -971,7 +971,7 @@ test('existing S-key credentials unlock local encrypted drafts without Horizon o
 
 test('linked unpublished encrypted draft edits reuse atomic CAS and reject cycles or stale fingerprints',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const browser=fs.readFileSync(path.join(src,'StellarVault.Pwa','Services',
@@ -1006,7 +1006,7 @@ test('linked unpublished encrypted draft edits reuse atomic CAS and reject cycle
 
 test('independent S-key manual sync orders encrypted draft review without automatic submission',()=>{
   const src=path.join(__dirname,'..','src');
-  const core=path.join(src,'StellarVault.Core','Services');
+  const core=path.join(src,'VaultEngine.Stellar','Services');
   const policy=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const panel=fs.readFileSync(path.join(src,'StellarVault.UI','Components',
@@ -1032,7 +1032,7 @@ test('independent S-key manual sync orders encrypted draft review without automa
 
 test('linked account capacity extension uses a durable single-tail encrypted journal',()=>{
   const root=path.join(__dirname,'..','src');
-  const core=path.join(root,'StellarVault.Core','Services');
+  const core=path.join(root,'VaultEngine.Stellar','Services');
   const journal=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
   const policy=fs.readFileSync(path.join(core,'VaultLinkedMutationTransitionPolicy.cs'),'utf8');
   const queue=fs.readFileSync(path.join(core,'VaultPendingMutationQueue.cs'),'utf8');
@@ -1075,7 +1075,7 @@ test('linked account capacity extension uses a durable single-tail encrypted jou
 
 test('pending-only linked expansion journal cleanup cannot clear uncertain or submitting transaction',()=>{
   const root=path.join(__dirname,'..','src');
-  const core=path.join(root,'StellarVault.Core','Services');
+  const core=path.join(root,'VaultEngine.Stellar','Services');
   const journal=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
   const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components','VaultLinkedLocalQueuePanel.razor'),'utf8');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
@@ -1097,7 +1097,7 @@ test('pending-only linked expansion journal cleanup cannot clear uncertain or su
 
 
 test('linked expansion abandon is limited to pre-transport journal failures',()=>{
-  const src=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const src=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const journal=fs.readFileSync(path.join(src,'VaultLinkedExpansionJournal.cs'),'utf8');
   const audit=fs.readFileSync(path.join(__dirname,'..','docs','architecture','implementation-reality-check.md'),'utf8');
   assert.match(journal,/var transportInvoked = false/);
@@ -1113,7 +1113,7 @@ test('linked expansion abandon is limited to pre-transport journal failures',()=
 
 test('linked read-only inspection clears decrypted queue payloads after counting',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','src',
-    'StellarVault.Core','Services','VaultLinkedQueueInspection.cs'),'utf8');
+    'VaultEngine.Stellar','Services','VaultLinkedQueueInspection.cs'),'utf8');
   assert.match(source,/using System\.Security\.Cryptography/);
   assert.match(source,/var mutations = await store\.ListAsync\(root, scope, ct\)/);
   assert.match(source,/finally\s*\{[\s\S]*?CryptographicOperations\.ZeroMemory\(mutation\.EncryptedPayload\)/);
@@ -1121,7 +1121,7 @@ test('linked read-only inspection clears decrypted queue payloads after counting
 
 
 test('linked queue scope rejection zeroes decrypted snapshots before throwing',()=>{
-  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const core=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
   assert.match(workspace,/catch\s*\{\s*ClearEntries\(all\);\s*throw;/);
@@ -1152,7 +1152,7 @@ test('PWA device storage choice stays outside credential tabs and keeps mode-sco
 });
 
 test('linked queue binds volatile signed transaction identity and restart receipt inspection to network scope',()=>{
-  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const core=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const identifier=fs.readFileSync(path.join(core,'VaultLinkedSignedSubmissionIdentity.cs'),'utf8');
   const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
   const expansion=fs.readFileSync(path.join(core,'VaultLinkedExpansionJournal.cs'),'utf8');
@@ -1195,7 +1195,7 @@ test('linked historical skh/skc inspection is bounded, read-only and never confi
     'HorizonVaultLinkedRecordOperationInspector.cs'),'utf8');
   const receipt=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
     'HorizonVaultLinkedReceiptEvidence.cs'),'utf8');
-  const recovery=fs.readFileSync(path.join(root,'StellarVault.Core','Services',
+  const recovery=fs.readFileSync(path.join(root,'VaultEngine.Stellar','Services',
     'VaultLinkedDraftRecoveryReview.cs'),'utf8');
   const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components',
     'VaultLinkedLocalQueuePanel.razor'),'utf8');
@@ -1227,7 +1227,7 @@ test('linked expansion historical operation verification is read-only and never 
     'HorizonVaultLinkedExpansionOperationInspector.cs'),'utf8');
   const evidence=fs.readFileSync(path.join(root,'StellarVault.Pwa','Services',
     'HorizonVaultLinkedReceiptEvidence.cs'),'utf8');
-  const review=fs.readFileSync(path.join(root,'StellarVault.Core','Services',
+  const review=fs.readFileSync(path.join(root,'VaultEngine.Stellar','Services',
     'VaultLinkedDraftRecoveryReview.cs'),'utf8');
   const panel=fs.readFileSync(path.join(root,'StellarVault.UI','Components',
     'VaultLinkedLocalQueuePanel.razor'),'utf8');
@@ -1274,7 +1274,7 @@ test('linked signer rejects a published folder move that creates a parent cycle'
 
 test('revision-pinned linked update/delete use encrypted queue with preflight conflict checks',()=>{
   const root=path.join(__dirname,'..');
-  const core=path.join(root,'src','StellarVault.Core','Services');
+  const core=path.join(root,'src','VaultEngine.Stellar','Services');
   const pwa=path.join(root,'src','StellarVault.Pwa');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const publisher=fs.readFileSync(path.join(core,'VaultLinkedDraftPublication.cs'),'utf8');
@@ -1393,7 +1393,7 @@ test('historical linked expansion proof requires matching root and child signatu
 
 test('linked verified recovery requires signed XDR and encrypted journal CAS, never a replay',()=>{
   const root=path.join(__dirname,'..');
-  const core=path.join(root,'src','StellarVault.Core','Services');
+  const core=path.join(root,'src','VaultEngine.Stellar','Services');
   const pwa=path.join(root,'src','StellarVault.Pwa');
   const app=fs.readFileSync(path.join(pwa,'Services','BrowserSecretKeyLedger.cs'),'utf8');
   const reconciliation=fs.readFileSync(path.join(core,'VaultLinkedVerifiedReconciliation.cs'),'utf8');
@@ -1429,7 +1429,7 @@ test('linked verified recovery requires signed XDR and encrypted journal CAS, ne
 
 test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed review gates',()=>{
   const root=path.join(__dirname,'..');
-  const core=path.join(root,'src','StellarVault.Core','Services');
+  const core=path.join(root,'src','VaultEngine.Stellar','Services');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const filePolicy=fs.readFileSync(path.join(core,'VaultLinkedSingleFilePolicy.cs'),'utf8');
   const createPolicy=fs.readFileSync(path.join(core,'VaultQueuedCreatePolicy.cs'),'utf8');
@@ -1478,7 +1478,7 @@ test('single-record SVFILE1 and linked multipart SVFILE2 use separate typed revi
 
 test('linked SVFILE2 multipart staging requires historical part confirmation and manifest-last integrity',()=>{
   const root=path.join(__dirname,'..');
-  const core=path.join(root,'src','StellarVault.Core','Services');
+  const core=path.join(root,'src','VaultEngine.Stellar','Services');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const policy=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');
   const planner=fs.readFileSync(path.join(core,'VaultLinkedManualSyncPlan.cs'),'utf8');
@@ -1528,7 +1528,7 @@ test('default zero-threshold S-key root recovers records but cannot plan ledger 
 });
 
 test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling in Core',()=>{
-  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const core=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const tree=fs.readFileSync(path.join(core,'VaultStreamingFileTree.cs'),'utf8');
   const smoke=fs.readFileSync(path.join(__dirname,
     'StellarVault.Core.CryptoTests','StreamingFileTreeSmoke.cs'),'utf8');
@@ -1549,7 +1549,7 @@ test('new pre-launch streaming file protocol has no arbitrary total-byte ceiling
 });
 
 test('shared local file upload now commits a streaming encrypted tree through the vault CAS pointer',()=>{
-  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const core=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const accountDb=fs.readFileSync(path.join(core,'StellarAccountVaultDatabase.cs'),'utf8');
   const binary=fs.readFileSync(path.join(core,'VaultBinaryWorkspace.cs'),'utf8');
   const adapter=fs.readFileSync(path.join(core,'VaultChunkObjectStoreAdapter.cs'),'utf8');
@@ -1579,7 +1579,7 @@ test('shared local file upload now commits a streaming encrypted tree through th
 });
 
 test('linked SVTREE3 streaming file stages typed nodes through existing history-verified queue',()=>{
-  const core=path.join(__dirname,'..','src','StellarVault.Core','Services');
+  const core=path.join(__dirname,'..','src','VaultEngine.Stellar','Services');
   const policy=fs.readFileSync(path.join(core,'VaultLinkedTreeFilePolicy.cs'),'utf8');
   const workspace=fs.readFileSync(path.join(core,'VaultLinkedDraftWorkspace.cs'),'utf8');
   const multipart=fs.readFileSync(path.join(core,'VaultLinkedMultipartFilePolicy.cs'),'utf8');

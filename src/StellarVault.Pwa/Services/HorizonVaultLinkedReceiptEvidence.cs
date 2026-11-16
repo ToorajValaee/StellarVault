@@ -1,4 +1,5 @@
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Horizon;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Pwa.Services;
 

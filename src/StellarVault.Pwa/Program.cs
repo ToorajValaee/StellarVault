@@ -1,10 +1,11 @@
+using VaultEngine.Stellar.Horizon;
 using VaultEngine.Core;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using StellarVault.Pwa;
 using StellarVault.Pwa.Services;
-using StellarVault.Core.Services;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Services;
+using VaultEngine.Stellar.Abstractions;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -60,6 +61,10 @@ builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.Get
 builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
 builder.Services.AddScoped<IAccountObjectUpdate>(services =>
     (IAccountObjectUpdate)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IObjectMutationReconciliation>(services =>
+    (IObjectMutationReconciliation)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IObjectMutationExecution>(services =>
+    (IObjectMutationExecution)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<IObjectMutationReview>(services =>
     (IObjectMutationReview)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<IVerifiedObjectExport>(services =>

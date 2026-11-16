@@ -93,7 +93,7 @@ test('secret key input is checksum-validated by the Stellar SDK', async () => {
 test('neither host silently substitutes a secret for an HD mnemonic', () => {
   const home = fs.readFileSync(path.join(root, 'src/StellarVault.UI/Components/VaultHome.razor'), 'utf8');
   const native = fs.readFileSync(path.join(root, 'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
-  const core = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services/VaultCredentialMode.cs'), 'utf8');
+  const core = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services/VaultCredentialMode.cs'), 'utf8');
   const pwa = fs.readFileSync(path.join(root, 'src/StellarVault.Pwa/wwwroot/index.html'), 'utf8');
   const maui = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/wwwroot/index.html'), 'utf8');
   const csproj = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/StellarVault.Maui.csproj'), 'utf8');
@@ -142,7 +142,7 @@ test('an additional active child signer blocks single-secret chain recovery',asy
 });
 
 test('linked recovery rechecks network identity and queue root across asynchronous reads', () => {
-  const code = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services',
+  const code = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services',
     'VaultLinkedDraftRecoveryReview.cs'), 'utf8');
   assert.match(code, /ledger\.ConnectedNetworkPassphrase is not \{ Length: > 0 \} passphrase/);
   assert.match(code, /keys\.ActiveRootAccountId != root/);
@@ -153,7 +153,7 @@ test('linked recovery rechecks network identity and queue root across asynchrono
 });
 
 test('linked historical reconciliation fails closed if storage provenance changes', () => {
-  const code = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services',
+  const code = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services',
     'VaultLinkedVerifiedReconciliation.cs'), 'utf8');
   assert.match(code, /after\.HistoricalStorageAccount != before\.HistoricalStorageAccount/);
   assert.match(code, /if \(!await store\.TryReplaceAsync\(entry, confirmed, CancellationToken\.None\)\)/);

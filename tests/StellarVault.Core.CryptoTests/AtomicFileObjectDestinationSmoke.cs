@@ -44,7 +44,7 @@ internal static class AtomicFileObjectDestinationSmoke
             await using (var destination = new AtomicFileObjectDestination(droppedTarget))
             {
                 await using var temporary = await destination.OpenTemporaryAsync();
-                await temporary.WriteAsync([1, 2, 3]);
+                await temporary.WriteAsync(new byte[] { 1, 2, 3 });
             }
             Check(!File.Exists(droppedTarget) &&
                 Directory.GetFiles(root, "*.partial").Length == 0,
@@ -69,7 +69,7 @@ internal static class AtomicFileObjectDestinationSmoke
             await using (var destination = new AtomicFileObjectDestination(racedTarget))
             {
                 await using (var temporary = await destination.OpenTemporaryAsync())
-                    await temporary.WriteAsync([4, 5, 6]);
+                    await temporary.WriteAsync(new byte[] { 4, 5, 6 });
                 File.WriteAllText(racedTarget, "created separately");
                 try
                 {

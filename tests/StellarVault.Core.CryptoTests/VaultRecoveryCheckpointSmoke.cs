@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 /// <summary>
 /// A signed transaction is not a ledger receipt. This exercises the pure

@@ -1,5 +1,5 @@
 using Microsoft.JSInterop;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 using StellarVaultPwa.Core;
 using StellarVaultPwa.Services;
 

@@ -1,4 +1,4 @@
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 /// <summary>
 /// Executable regression for UI file-protocol classification. Malformed or

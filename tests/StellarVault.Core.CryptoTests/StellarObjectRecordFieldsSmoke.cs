@@ -1,5 +1,5 @@
 using System.Reflection;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 using VaultEngine.Core;
 
 internal static class StellarObjectRecordFieldsSmoke

@@ -1,4 +1,4 @@
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject VaultRecordWorkspace Workspace
 
 <section class="form-page" aria-label="Encrypted text records">
@@ -83,7 +83,7 @@
     private string _name = string.Empty;
     private string? _loadedName;
     private string _text = string.Empty;
-    private StellarVault.Core.Abstractions.VaultRecordPointer? _version;
+    private VaultEngine.Stellar.Abstractions.VaultRecordPointer? _version;
     private bool _busy;
     private bool _editingScreen;
     private string? _message;

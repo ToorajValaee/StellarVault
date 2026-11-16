@@ -17,57 +17,20 @@
     <!-- Apply platform classes before the stylesheet is evaluated. This keeps
          the installed iOS header below the status/navigation safe area from the
          very first paint, rather than waiting for app.js to load. -->
-    <script>
-        (() => {
-            const ua = navigator.userAgent || '';
-            const ios =
-                /iphone|ipad|ipod/i.test(ua) ||
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-            const android = /android/i.test(ua);
-            const standalone =
-                window.matchMedia('(display-mode: standalone)').matches ||
-                navigator.standalone === true;
-
-            document.documentElement.classList.toggle('ios-device', ios);
-            document.documentElement.classList.toggle('android-device', android);
-            document.documentElement.classList.toggle('standalone-app', standalone);
-        })();
-    </script>
+    <script src="js/pwa-platform.js"></script>
 
     <link rel="stylesheet" href="StellarVault.Pwa.styles.css" />
     <link rel="stylesheet" href="css/modern-app.css?v=20261114-secret-key-chain-phase2" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="css/pwa-update.css" />
     <title>StellarVault — Your Encrypted Records, Files &amp; Stellar Storage</title>
 
     <!-- Capture Chromium's one-shot install event before Blazor or the large
          Stellar SDK bundle starts loading. This is especially important on
          slower Android devices. -->
-    <script>
-        (() => {
-            window.__stellarVaultInstallPrompt = null;
-            window.__stellarVaultInstallEventSeen = false;
-
-            window.addEventListener('beforeinstallprompt', event => {
-                event.preventDefault();
-                window.__stellarVaultInstallPrompt = event;
-                window.__stellarVaultInstallEventSeen = true;
-                window.dispatchEvent(new CustomEvent('stellarvault:install-ready'));
-            }, { capture: true });
-
-            window.addEventListener('appinstalled', () => {
-                window.__stellarVaultInstallPrompt = null;
-                window.dispatchEvent(new CustomEvent('stellarvault:installed'));
-            });
-
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker
-                    .register('service-worker.js', { updateViaCache: 'none' })
-                    .catch(error => console.error('Service worker registration failed:', error));
-            }
-        })();
-    </script>
+    <script src="js/pwa-install.js"></script>
 </head>
 <body>
     <div id="app">
@@ -77,6 +40,8 @@
             <div class="boot-progress"><i></i></div>
         </div>
     </div>
+
+    <div id="pwa-update-notice" role="status" aria-live="polite" hidden>An update is ready. Lock your vault and close all StellarVault tabs to apply it.</div>
 
     <div id="blazor-error-ui">
         StellarVault could not load. <a href="." class="reload">RELOAD</a>
@@ -112,39 +77,8 @@
     <script src="js/vault-v2-upload-checkpoint.js"></script>
 
     <!-- User-resizable record inspector: no secrets or record data are persisted. -->
-    <script>
-      (() => {
-        const root = document.documentElement;
-        let drag = null;
-        const clamp = value => Math.max(320, Math.min(value, Math.min(720, innerWidth * .58)));
-        const setWidth = width => root.style.setProperty('--sv-record-inspector-width', Math.round(clamp(width)) + 'px');
-        document.addEventListener('pointerdown', event => {
-          const handle = event.target.closest?.('.sv-inspector-resize-handle');
-          if (!handle || innerWidth < 1100) return;
-          drag = { id: event.pointerId };
-          handle.setPointerCapture(event.pointerId);
-          event.preventDefault();
-        });
-        document.addEventListener('pointermove', event => {
-          if (!drag || drag.id !== event.pointerId) return;
-          setWidth(innerWidth - event.clientX);
-        });
-        const release = event => { if (drag?.id === event.pointerId) drag = null; };
-        document.addEventListener('pointerup', release);
-        document.addEventListener('pointercancel', release);
-        document.addEventListener('keydown', event => {
-          const handle = event.target.closest?.('.sv-inspector-resize-handle');
-          if (!handle || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-          const current = parseFloat(getComputedStyle(root).getPropertyValue('--sv-record-inspector-width')) || 400;
-          setWidth(current + (event.key === 'ArrowLeft' ? 24 : -24));
-          event.preventDefault();
-        });
-        addEventListener('resize', () => {
-          const current = parseFloat(root.style.getPropertyValue('--sv-record-inspector-width'));
-          if (current) setWidth(current);
-        });
-      })();
-    </script>
-    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="js/pwa-inspector.js"></script>
+    <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+    <script src="js/pwa-start.js"></script>
 </body>
 </html>

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const core = path.join(root, 'src', 'StellarVault.Core', 'Services');
+const core = path.join(root, 'src', 'VaultEngine.Stellar', 'Services');
 const pwa = path.join(root, 'src', 'StellarVault.Pwa', 'Pages');
 
 const read = file => fs.readFileSync(file, 'utf8');

@@ -1,4 +1,5 @@
-using StellarVault.Core.Services;
+using VaultEngine.Core;
+using VaultEngine.Stellar.Services;
 
 internal static class LinkedDraftSmoke
 {
@@ -75,10 +76,53 @@ internal static class LinkedDraftSmoke
             Require(ledger.Submissions == 0,
                 "Rejected changed quote sent a network transaction.");
 
-            var folderReview = await publisher.PrepareAsync(folder.MutationId);
-            Require(ledger.Submissions == 0,
-                "Preparing a linked draft quote unexpectedly broadcast a transaction.");
-            var submittedHash = await publisher.SubmitAsync(folderReview.Quote, true);
+            var provider = new StellarAccountObjectStoreProvider(
+                null!, ledger, null!, drafts, null!, keys, network,
+                new VaultRecordTypeFactory(), linkedPublication: publisher);
+            var engine = new AccountObjectStoreRouter([provider]);
+            var objectScope = new ObjectStoreScope("stellar", "testnet", Root,
+                VaultMutationStrategyPolicy.Linked);
+            var neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            Require(ledger.Submissions == 0 && neutralReview.ReviewReference is { Length: 32 },
+                "Neutral review broadcast or failed to issue an opaque one-shot reference.");
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval("wrong-reference", true, true)),
+                "Mismatched neutral reference was accepted.");
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "A consumed mismatched neutral approval could be replayed.");
+            neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope with { NetworkId = "public" },
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "A neutral review was transferable to a foreign scope.");
+            neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            await engine.CancelReviewAsync(objectScope);
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "Cancelled neutral review remained executable.");
+            neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            network.CustomHorizonUrl = "https://changed.example";
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "An endpoint change did not invalidate neutral review.");
+            network.CustomHorizonUrl = "";
+            neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            var folderBeforeEdit = await drafts.OpenDraftAsync(folder.MutationId);
+            await drafts.ReviseAsync(folder.MutationId,
+                folderBeforeEdit.Draft with { Notes = "new revision after quote" }, folderBeforeEdit.PayloadSha256);
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "A stale neutral review authorized a changed durable mutation.");
+            Require(ledger.Submissions == 0, "Rejected neutral approvals reached the signer.");
+            neutralReview = await engine.ReviewAsync(objectScope, folder.MutationId);
+            var neutralSubmission = await engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true));
+            Require(neutralSubmission.State == ObjectMutationState.SubmittedUncertain,
+                "Neutral submit falsely claimed historical verification.");
+            var submittedHash = neutralSubmission.TransactionHash!;
+            await MustRejectAsync(() => engine.SubmitApprovedAsync(objectScope,
+                new ObjectMutationApproval(neutralReview.ReviewReference!, true, true)),
+                "Neutral approval was replayable after submission.");
             Require(submittedHash.Length > 0 && ledger.Submissions == 1 &&
                     (await drafts.ListAsync()).Single(x => x.MutationId == folder.MutationId)
                         .State == VaultSyncState.Uncertain,
@@ -1501,7 +1545,7 @@ internal static class LinkedDraftSmoke
                 _items.RemoveAll(x => x.Id == _quotedId);
             var draft = _quotedDraft!;
             _items.Add(new LedgerRecordItem(
-                _quotedId, draft.Title, draft.Content, draft.FolderId,
+                _quotedId ?? throw new InvalidOperationException("No quoted record ID."), draft.Title, draft.Content, draft.FolderId,
                 draft.Tags, draft.IsFolder, draft.UserName, draft.Url, draft.Notes));
             _revisions[_quotedId!] = _revisions.GetValueOrDefault(_quotedId!) + 1;
             return Task.FromResult(Submissions.ToString("x64"));

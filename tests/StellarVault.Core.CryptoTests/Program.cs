@@ -1,13 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
-using StellarVault.Core.Services;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Services;
+using VaultEngine.Stellar.Abstractions;
 
 static void Check(bool condition, string message)
 {
     if (!condition) throw new Exception(message);
 }
 
+Check(typeof(VaultEngine.Core.AccountObjectStoreRouter).Assembly.GetName().Name == "VaultEngine.Core", "Engine is not independently packaged");
+Check(typeof(StellarAccountObjectStoreProvider).Assembly.GetName().Name == "VaultEngine.Stellar", "Stellar provider is still owned by the consumer");
 // Canonical Stellar StrKey vector: G-address encoding of the zero Ed25519 key.
 // This catches accidental use of reflected CRC16 instead of CRC16-XModem.
 const string zeroAccount = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
@@ -447,6 +449,8 @@ VaultWorkspaceModeSmoke.Run();
 await StreamingFileTreeSmoke.RunAsync();
 await AccountObjectStoreContractSmoke.RunAsync();
 await StellarObjectEstimateSmoke.RunAsync();
+await NeutralHdExecutionSmoke.RunAsync();
+await ReconciliationCleanupSmoke.RunAsync();
 await AtomicFileObjectDestinationSmoke.RunAsync();
 await StellarObjectRecordFieldsSmoke.RunAsync();
 await VaultCapacityPolicySmoke.RunAsync();
