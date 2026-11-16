@@ -268,8 +268,7 @@
                 }
                 else
                 {
-                    <button class="pixel-button primary" type="submit" form="sv-access-form" disabled="@_busy"
-                            aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
+                    <button class="pixel-button primary" type="submit" form="sv-access-form" disabled="@_busy">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
                 }
             </div>
         }
