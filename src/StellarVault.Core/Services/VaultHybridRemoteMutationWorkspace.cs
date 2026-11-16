@@ -165,6 +165,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         }
 
         var previous = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        try
+        {
         if (previous.Any(x =>
             string.Equals(x.EntityId, recordId, StringComparison.OrdinalIgnoreCase) &&
             x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)))
@@ -213,18 +215,24 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             // Recheck the scoped queue after network I/O as well; concurrent
             // tabs can add a competing mutation while Horizon is queried.
             var latest = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
-            if (latest.Any(x =>
-                x.EntityId.Equals(recordId, StringComparison.OrdinalIgnoreCase) &&
-                x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)))
-                throw new InvalidOperationException("A concurrent draft now targets this remote record.");
-            var mutation = VaultPendingMutation.Create(scope.Account,
-                scope.Network, kind, original.Id, payload,
-                expectedRemoteVersion: baseline)
-                with { CapacityPolicy = capacityPolicy };
-            EnsureScope(scope);
-            return await queue.EnqueueAsync(mutation, ct);
+            try
+            {
+                if (latest.Any(x =>
+                    x.EntityId.Equals(recordId, StringComparison.OrdinalIgnoreCase) &&
+                    x.State is not (VaultSyncState.Failed or VaultSyncState.Confirmed)))
+                    throw new InvalidOperationException("A concurrent draft now targets this remote record.");
+                var mutation = VaultPendingMutation.Create(scope.Account,
+                    scope.Network, kind, original.Id, payload,
+                    expectedRemoteVersion: baseline)
+                    with { CapacityPolicy = capacityPolicy };
+                EnsureScope(scope);
+                return await queue.EnqueueAsync(mutation, ct);
+            }
+            finally { ClearReviewPayloads(latest); }
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
+        }
+        finally { ClearReviewPayloads(previous); }
     }
 
     public async Task<VaultPendingMutation> ReviseUpdateAsync(
@@ -233,6 +241,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     {
         var scope = Capture();
         var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        try
+        {
         var current = entries.SingleOrDefault(x => x.Id == mutationId)
             ?? throw new KeyNotFoundException("Staged remote change not found.");
         if (current.Kind is not (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder) ||
@@ -263,6 +273,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                 expectedPayloadSha256, payload, ct);
         }
         finally { CryptographicOperations.ZeroMemory(payload); }
+        }
+        finally { ClearReviewPayloads(entries); }
     }
 
     /// <summary>
@@ -278,6 +290,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
     {
         var scope = Capture();
         var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        try
+        {
         var source = entries.SingleOrDefault(x => x.Id == mutationId)
             ?? throw new KeyNotFoundException("Offline update is missing.");
         if (source.Kind != VaultMutationKind.UpdateRecord ||
@@ -311,12 +325,16 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         var created = await drafts.CreateAsync(copy, ct);
         EnsureScope(scope);
         return created;
+        }
+        finally { ClearReviewPayloads(entries); }
     }
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
     {
         var scope = Capture();
         var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        try
+        {
         var item = entries.SingleOrDefault(x => x.Id == mutationId);
         if (item is null || item.Kind is not
             (VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
@@ -324,12 +342,16 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             throw new InvalidOperationException("Not a staged record/folder modification.");
         EnsureScope(scope);
         await queue.DiscardPendingAsync(scope.Account, scope.Network, mutationId, ct);
+        }
+        finally { ClearReviewPayloads(entries); }
     }
 
     public async Task<IReadOnlyList<StagedItem>> ListAsync(CancellationToken ct = default)
     {
         var scope = Capture();
         var entries = await queue.ReviewAllAsync(scope.Account, scope.Network, ct);
+        try
+        {
         var results = new List<StagedItem>();
         foreach (var item in entries.Where(x => x.Kind is
             VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
@@ -348,6 +370,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         }
         EnsureScope(scope);
         return results.OrderBy(x => x.CreatedUtc).ToArray();
+        }
+        finally { ClearReviewPayloads(entries); }
     }
 
     /// <summary>Read-only drift report; never changes queue state or broadcasts.</summary>
@@ -374,6 +398,15 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         }
         EnsureScope(scope);
         return states;
+    }
+
+    private static void ClearReviewPayloads(IEnumerable<VaultPendingMutation> entries)
+    {
+        // The encrypted queue returns decrypted snapshots. They are not owned
+        // by the UI or by the durable encrypted store and must not survive an
+        // exception, cancellation, conflict, or failed optimistic CAS.
+        foreach (var entry in entries)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
     }
 
     private static LedgerRecordDraft ToDraft(LedgerRecordItem item) =>
