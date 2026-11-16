@@ -827,3 +827,34 @@ test('PWA disposes decrypted pending entries and Sync reviews on lock and naviga
   const lock = vault.slice(vault.indexOf('private async Task LockAsync()'));
   assert.match(lock, /ClearPendingSnapshot\(\);\s*ClearSyncReview\(\);/);
 });
+
+test('direct on-chain deletion excludes malformed file envelopes and refreshes approved snapshot', () => {
+  const rootPath = path.join(root, '..', '..');
+  const classifier = fs.readFileSync(path.join(rootPath,
+    'StellarVault.Core', 'Services', 'VaultPublishedFileClassification.cs'), 'utf8');
+  const row = fs.readFileSync(path.join(rootPath,
+    'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
+  const inspector = fs.readFileSync(path.join(rootPath,
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.match(classifier, /public static bool IsManagedFileProtocolRecord\(/);
+  for (const marker of ['SinglePrefix', 'ManifestPrefix', 'ChunkPrefix', 'VaultLinkedTreeFilePolicy.Prefix'])
+    assert.ok(classifier.includes(marker), 'must recognize ' + marker);
+  assert.match(row, /!VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\) && CanDelete/);
+  assert.match(inspector, /CanDelete && !VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\)/);
+  const prepare = vault.slice(vault.indexOf('private async Task SelectDelete('),
+    vault.indexOf('private async Task DeleteSelectedAsync()'));
+  const submit = vault.slice(vault.indexOf('private async Task DeleteSelectedAsync()'),
+    vault.indexOf('private string? _error;', vault.indexOf('private async Task DeleteSelectedAsync()')));
+  assert.match(prepare, /VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(item\)/);
+  assert.match(prepare, /var remote = await Ledger\.ReadAsync\(\)/);
+  assert.match(prepare, /SamePublishedDeleteSnapshot\(item, current\)/);
+  assert.match(prepare, /current\.IsFolder && remote\.Any/);
+  assert.match(submit, /var remote = await Ledger\.ReadAsync\(\)/);
+  assert.match(submit, /SamePublishedDeleteSnapshot\(candidate, current\)/);
+  assert.match(submit, /freshCost\.NetworkFeeXlm > _deleteEstimate\.NetworkFeeXlm/);
+  assert.match(submit, /freshCost\.PeakReserveXlm > _deleteEstimate\.PeakReserveXlm/);
+  assert.match(submit, /await Ledger\.DeleteAsync\(candidate\.Id\)/);
+  assert.ok(submit.indexOf('SamePublishedDeleteSnapshot(candidate, current)') <
+    submit.indexOf('await Ledger.DeleteAsync(candidate.Id)'), 'preflight must run before deletion');
+});
