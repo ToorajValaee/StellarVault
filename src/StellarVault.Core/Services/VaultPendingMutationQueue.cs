@@ -483,7 +483,13 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         var unresolved = item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
         var hasHash = item.TransactionHash is string hash && IsTransactionHash(hash);
         var checkpoints = new List<VaultRecoveryCheckpoint>();
-        var valid = true;
+        // A malformed primary hash or checkpoint on the wrong mutation type
+        // is a corrupted recovery journal, not merely "no hash available".
+        var valid = (item.TransactionHash is null || hasHash) &&
+            (item.SignedDeletionManifests is not { Length: > 0 } ||
+             item.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder) &&
+            (item.SignedFileEntries is not { Length: > 0 } ||
+             item.Kind == VaultMutationKind.UploadFile);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var manifest in item.SignedDeletionManifests ?? [])
         {
