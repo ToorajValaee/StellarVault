@@ -480,6 +480,9 @@
             if (!await Workflow.HasLocalVaultAsync(_recentAccount))
                 throw new InvalidOperationException("Local vault was not found.");
             await Workflow.UnlockAsync(_recentAccount, _passphrase);
+            if (Platform == "WEB PWA")
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.markHybridSession",
+                    _recentAccount, _network);
             StorageMode.Select(VaultStorageMode.LocalEncrypted);
             _workspaceMode = "record";
             // Local reopening succeeds without Stellar signing; route out of the
@@ -845,6 +848,10 @@
                     return;
                 }
             }
+            // Re-entering on-chain-only explicitly replaces any prior tab's
+            // hybrid-resume intent. Saved encrypted data is not erased.
+            if (!_enableLocalStorage)
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession");
             Retention.Select(_enableLocalStorage
                 ? VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync
                 : VaultDeviceRetentionPolicy.OnChainOnly);
@@ -869,6 +876,10 @@
                 await ReportAccessStageAsync("encrypting on-device recovery credentials");
                 await JS.InvokeVoidAsync("stellarVaultRecentVault.saveEncryptedSeed",
                     account, _network, _mnemonic, _passphrase);
+                // Mark a resumable HYBRID tab only after its credential unlock
+                // and encrypted recovery seed have both succeeded.
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.markHybridSession",
+                    account, _network);
             }
             await ReportAccessStageAsync("connecting to Stellar ledger");
             _message = !_enableLocalStorage ? "Opening on-chain-only vault." : exists ? "Vault opened." : "Your local encrypted vault is ready.";
@@ -1079,6 +1090,11 @@
     {
         if (_busy) return;
         Workflow.Lock();
+        if (Platform == "WEB PWA")
+        {
+            try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+            catch (JSException) { /* In-memory vault session is already locked. */ }
+        }
         Retention.Reset();
         LinkedRetention.Reset();
         StorageMode.Reset();
