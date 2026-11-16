@@ -5402,3 +5402,55 @@ html[data-theme="dark"] .sv-secret-workspace :is(input,textarea){
 .sv-web-shell .sv-linked-unified-workspace .sv-record-inspector-inline-surface .modal-action-row {
   display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;
 }
+
+
+/* Shared record import/export — use the vault's existing flat, compact
+   typography, themed surfaces and standard action buttons, not nested cards
+   or unstyled disclosure summaries. Both PWA and MAUI load this stylesheet. */
+.sv-transfer-content { display:grid;gap:14px;min-width:0; }
+.sv-transfer-intro h3 {font-size:20px;line-height:1.25;margin:5px 0 6px;font-weight:750;}
+.sv-transfer-intro p {font-size:13px;line-height:1.55;margin:0;color:var(--sv-muted,#637b75);}
+.sv-transfer-option {padding:16px;border:1px solid var(--sv-border,#dae6e1);
+  border-radius:12px;background:var(--sv-card,#f8faf9);display:grid;gap:12px;min-width:0;}
+.sv-transfer-option-heading {display:flex;align-items:center;gap:12px;min-width:0;}
+.sv-transfer-option-heading > div {display:grid;gap:3px;min-width:0;}
+.sv-transfer-option-heading strong {font-weight:750;font-size:14px;}
+.sv-transfer-option-heading small {font-size:12px;color:var(--sv-muted,#637b75);}
+.sv-transfer-option-icon {display:grid;place-items:center;width:37px;height:37px;flex:0 0 37px;
+  border:1px solid #d4e8de;border-radius:9px;background:#eaf4ee;color:#176c52;font-size:19px;}
+.sv-transfer-option .advanced-help {margin:0;font-size:12px;line-height:1.55;}
+.sv-transfer-option .sv-secret-approval {padding:0;margin:0;font-size:12px;line-height:1.5;}
+.sv-transfer-field {display:grid;gap:7px;font-size:12px;font-weight:700;}
+.sv-transfer-field .terminal-input {width:100%;min-width:0;min-height:41px;box-sizing:border-box;}
+.sv-transfer-actions {display:flex;flex-wrap:wrap;align-items:center;gap:9px;}
+.sv-transfer-action {justify-self:start;}
+.sv-transfer-preview {padding:14px 16px;border:1px solid #c9e4d5;border-radius:10px;
+  background:#eef8f0;display:grid;gap:9px;}
+.sv-transfer-preview p {margin:0;font-size:12px;line-height:1.5;}
+.sv-transfer-message {margin:0;padding:11px 13px;border:1px solid var(--sv-border,#dae6e1);
+  border-radius:9px;font-size:12px;line-height:1.55;}
+.sv-transfer-export-entry {display:inline-flex;align-items:center;min-width:0;}
+.sv-transfer-export-trigger {display:inline-flex!important;gap:7px;align-items:center;
+  justify-content:center;text-decoration:none!important;min-height:35px;cursor:pointer;}
+.sv-transfer-export-trigger span {font-size:17px;line-height:1;}
+.sv-transfer-export-modal {max-width:600px;}
+.sv-transfer-export-modal .modal-header {display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.sv-transfer-export-modal .modal-header h2 {margin:4px 0 0;}
+.sv-vault-import-dialog {width:min(100%,650px);max-width:650px;}
+.sv-vault-import-dialog > .modal-header {display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.sv-vault-import-dialog .sv-transfer-import {margin-top:14px;}
+.sv-vault-import-dialog .sv-transfer-intro {display:none;}
+/* Export dialogs remain above the inspector and explorer action popovers. */
+html .sv-web-shell .sv-transfer-export-backdrop,
+.sv-transfer-export-backdrop {z-index:10050!important;}
+@media (max-width:640px) {
+  .sv-transfer-option {padding:13px;}
+  .sv-transfer-actions > button {flex:1 1 auto;}
+  .sv-vault-import-dialog .sv-transfer-content {gap:12px;}
+}
+:root[data-theme="dark"] .sv-transfer-option,
+html[data-theme="dark"] .sv-transfer-option {background:#182a28;border-color:#35514b;}
+:root[data-theme="dark"] .sv-transfer-option-icon,
+html[data-theme="dark"] .sv-transfer-option-icon {background:#19392d;border-color:#315a49;color:#a3dbc0;}
+:root[data-theme="dark"] .sv-transfer-preview,
+html[data-theme="dark"] .sv-transfer-preview {background:#173a2b;border-color:#396b54;}
