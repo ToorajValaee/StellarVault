@@ -183,6 +183,27 @@ public interface IVerifiedObjectExportProvider
 }
 
 /// <summary>
+/// An authenticated snapshot of one immutable file's on-ledger node inventory.
+/// NodeIds is ordered root-first. This is NOT authorization to delete any
+/// node, nor a promise that ownership or revisions remain unchanged later.
+/// </summary>
+public sealed record VerifiedObjectNodeInventory(
+    string ObjectId, string ContentSha256, long Length,
+    string[] NodeIds, string GroupId);
+
+public interface IVerifiedObjectNodeInventory
+{
+    Task<VerifiedObjectNodeInventory> InspectNodesAsync(
+        ObjectStoreScope scope, string objectId, CancellationToken ct = default);
+}
+
+public interface IVerifiedObjectNodeInventoryProvider
+{
+    Task<VerifiedObjectNodeInventory> InspectNodesAsync(
+        ObjectStoreScope scope, string objectId, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Read-only planning result for a previously staged mutation. An approval
 /// reference is NOT authorization to sign, spend or submit a transaction.
 /// </summary>
@@ -217,7 +238,7 @@ public interface IObjectMutationReviewProvider
 /// Strict router: no implicit default chain, network, account, provider or
 /// authorization strategy. A missing provider fails closed.
 /// </summary>
-public sealed class AccountObjectStoreRouter : IAccountObjectStore, IAccountObjectUpdate, IVerifiedObjectExport, IObjectMutationReview
+public sealed class AccountObjectStoreRouter : IAccountObjectStore, IAccountObjectUpdate, IVerifiedObjectExport, IVerifiedObjectNodeInventory, IObjectMutationReview
 {
     private readonly IReadOnlyDictionary<string, IAccountObjectStoreProvider> _providers;
 
@@ -334,6 +355,18 @@ public sealed class AccountObjectStoreRouter : IAccountObjectStore, IAccountObje
             ? verified.ExportVerifiedAsync(scope, objectId, destination, ct)
             : Task.FromException<StoredObject>(
                 new NotSupportedException("Selected storage provider has no verified streaming export."));
+    }
+
+    public Task<VerifiedObjectNodeInventory> InspectNodesAsync(
+        ObjectStoreScope scope, string objectId, CancellationToken ct = default)
+    {
+        var provider = Resolve(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        return provider is IVerifiedObjectNodeInventoryProvider inspector
+            ? inspector.InspectNodesAsync(scope, objectId, ct)
+            : Task.FromException<VerifiedObjectNodeInventory>(
+                new NotSupportedException(
+                    "Selected storage provider does not expose verified file node inventories."));
     }
 
     public Task<ObjectMutationReview> ReviewAsync(
