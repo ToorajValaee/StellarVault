@@ -38,23 +38,27 @@ public sealed class VaultHybridDraftWorkspace(
             ? VaultMutationKind.CreateFolder : VaultMutationKind.CreateRecord;
         ValidateDraft(draft, kind);
         var entries = await queue.ReviewAllAsync(account, scope, ct);
-        RequireSameScope(context);
-        var dependencies = ParentDependencies(draft, entries, null);
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
         try
         {
             RequireSameScope(context);
-            var recordId = NewUnusedRecordId(entries);
-            var item = VaultPendingMutation.Create(
-                account, scope, kind, recordId, payload,
-                dependsOn: dependencies) with { CapacityPolicy = capacityPolicy };
-            // Local dependencies intentionally remain pending. The separate
-            // preflight policy blocks them until their parent is published.
-            var saved = await queue.EnqueueAsync(item, ct);
-            RequireSameScope(context);
-            return saved;
+            var dependencies = ParentDependencies(draft, entries, null);
+            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+            try
+            {
+                RequireSameScope(context);
+                var recordId = NewUnusedRecordId(entries);
+                var item = VaultPendingMutation.Create(
+                    account, scope, kind, recordId, payload,
+                    dependsOn: dependencies) with { CapacityPolicy = capacityPolicy };
+                // Local dependencies intentionally remain pending. The separate
+                // preflight policy blocks them until their parent is published.
+                var saved = await queue.EnqueueAsync(item, ct);
+                RequireSameScope(context);
+                return saved;
+            }
+            finally { CryptographicOperations.ZeroMemory(payload); }
         }
-        finally { CryptographicOperations.ZeroMemory(payload); }
+        finally { ClearReviewPayloads(entries); }
     }
 
     /// <summary>
@@ -227,34 +231,38 @@ public sealed class VaultHybridDraftWorkspace(
         var account = context.Account;
         var scope = context.NetworkId;
         var entries = await queue.ReviewAllAsync(account, scope, ct);
-        RequireSameScope(context);
-        var current = entries.SingleOrDefault(x => x.Id == mutationId)
-            ?? throw new KeyNotFoundException("Local draft does not exist.");
-        if (current.State != VaultSyncState.Pending ||
-            current.TransactionHash is not null ||
-            current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
-            throw new InvalidOperationException("Only unpublished local creates can be revised.");
-        if (expectedPayloadSha256 is not { Length: 64 } ||
-            !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
-            !string.Equals(Convert.ToHexStringLower(
-                SHA256.HashData(current.EncryptedPayload)),
-                expectedPayloadSha256, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                "This draft was modified in another tab. Reopen the latest version.");
-        ValidateDraft(draft, current.Kind);
-        var proposedDependencies = ParentDependencies(draft, entries, current.EntityId);
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
         try
         {
-            // The encrypted payload and dependency edge must be committed in
-            // the SAME durable CAS revision; never leave the parent pointer and
-            // queue dependency out of sync.
             RequireSameScope(context);
-            return await queue.RevisePendingCreateAsync(
-                current, payload, proposedDependencies,
-                expectedPayloadSha256, ct);
+            var current = entries.SingleOrDefault(x => x.Id == mutationId)
+                ?? throw new KeyNotFoundException("Local draft does not exist.");
+            if (current.State != VaultSyncState.Pending ||
+                current.TransactionHash is not null ||
+                current.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+                throw new InvalidOperationException("Only unpublished local creates can be revised.");
+            if (expectedPayloadSha256 is not { Length: 64 } ||
+                !expectedPayloadSha256.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
+                !string.Equals(Convert.ToHexStringLower(
+                    SHA256.HashData(current.EncryptedPayload)),
+                    expectedPayloadSha256, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "This draft was modified in another tab. Reopen the latest version.");
+            ValidateDraft(draft, current.Kind);
+            var proposedDependencies = ParentDependencies(draft, entries, current.EntityId);
+            byte[] payload = JsonSerializer.SerializeToUtf8Bytes(draft);
+            try
+            {
+                // The encrypted payload and dependency edge must be committed in
+                // the SAME durable CAS revision; never leave the parent pointer and
+                // queue dependency out of sync.
+                RequireSameScope(context);
+                return await queue.RevisePendingCreateAsync(
+                    current, payload, proposedDependencies,
+                    expectedPayloadSha256, ct);
+            }
+            finally { CryptographicOperations.ZeroMemory(payload); }
         }
-        finally { CryptographicOperations.ZeroMemory(payload); }
+        finally { ClearReviewPayloads(entries); }
     }
 
     public async Task DiscardAsync(string mutationId, CancellationToken ct = default)
@@ -272,34 +280,46 @@ public sealed class VaultHybridDraftWorkspace(
         var account = context.Account;
         var scope = context.NetworkId;
         var entries = await queue.ReviewAllAsync(account, scope, ct);
-        RequireSameScope(context);
-        var result = new List<DraftItem>();
-        foreach (var item in entries.Where(x =>
-            x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            LedgerRecordDraft draft;
-            var corrupt = false;
-            try
+            RequireSameScope(context);
+            var result = new List<DraftItem>();
+            foreach (var item in entries.Where(x =>
+                x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder))
             {
-                draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
-                    ?? throw new JsonException("Draft is empty.");
-                ValidateDraft(draft, item.Kind);
+                ct.ThrowIfCancellationRequested();
+                LedgerRecordDraft draft;
+                var corrupt = false;
+                try
+                {
+                    draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
+                        ?? throw new JsonException("Draft is empty.");
+                    ValidateDraft(draft, item.Kind);
+                }
+                catch (Exception ex) when (ex is JsonException or ArgumentException
+                                           or InvalidOperationException)
+                {
+                    // Keep the damaged mutation visible with its stable identity.
+                    // Never offer an edit/parent action for untrusted draft content.
+                    corrupt = true;
+                    draft = new LedgerRecordDraft("UNREADABLE ENCRYPTED DRAFT", "");
+                }
+                result.Add(new(item.Id, item.EntityId, item.Kind,
+                    item.State, draft, item.CreatedUtc,
+                    Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload)), corrupt));
             }
-            catch (Exception ex) when (ex is JsonException or ArgumentException
-                                       or InvalidOperationException)
-            {
-                // Keep the damaged mutation visible with its stable identity.
-                // Never offer an edit/parent action for untrusted draft content.
-                corrupt = true;
-                draft = new LedgerRecordDraft("UNREADABLE ENCRYPTED DRAFT", "");
-            }
-            result.Add(new(item.Id, item.EntityId, item.Kind,
-                item.State, draft, item.CreatedUtc,
-                Convert.ToHexStringLower(SHA256.HashData(item.EncryptedPayload)), corrupt));
+            RequireSameScope(context);
+            return result.OrderBy(x => x.CreatedUtc).ToArray();
         }
-        RequireSameScope(context);
-        return result.OrderBy(x => x.CreatedUtc).ToArray();
+        finally { ClearReviewPayloads(entries); }
+    }
+
+    private static void ClearReviewPayloads(IEnumerable<VaultPendingMutation> entries)
+    {
+        // ReviewAllAsync returns decrypted, disposable queue copies. The
+        // durable encrypted store retains its own independent bytes.
+        foreach (var entry in entries)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
     }
 
     private sealed record DraftScope(string Account, string NetworkId,
