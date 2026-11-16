@@ -360,3 +360,22 @@ test('recovery inspection exposes every durable signed checkpoint but never conf
   assert.match(queue, /if \(!await verifier.IsConfirmedAsync\(current, transactionHash, ct\)\)/);
   assert.doesNotMatch(queue, /CheckpointJournalValid\)\s*await .*ConfirmReconciledAsync/s);
 });
+
+test('interrupted HD and linked file staging cleans up unacknowledged encrypted nodes safely', () => {
+  const hd = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
+  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  for (const workspace of [hd, linked]) {
+    assert.match(workspace, /private static bool IsPendingTreeGroupNode\(/);
+    assert.match(workspace, /VaultLinkedTreeFilePolicy\.Prefix/);
+    assert.match(workspace, /svtree3-group:/);
+    assert.match(workspace, /VaultSyncState\.Pending/);
+    assert.match(workspace, /CryptographicOperations\.ZeroMemory/);
+  }
+  assert.match(hd, /var snapshot = await queue\.ReviewAllAsync\(/);
+  assert.match(hd, /discovered\.Concat\(\s*stagedMutationIds\.AsEnumerable\(\)\.Reverse\(\)\)/);
+  assert.match(hd, /foreach \(var entry in local\)\s*CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.match(linked, /!IsPendingTreeGroupNode\(entry, groupId\)/);
+  assert.match(linked, /entry\.SignedFileEntries is \{ Length: > 0 \}/);
+  assert.match(linked, /!await store\.TryDeleteAsync\(entry, CancellationToken\.None\)/);
+  assert.match(linked, /finally \{ ClearEntries\(entries\); \}/);
+});
