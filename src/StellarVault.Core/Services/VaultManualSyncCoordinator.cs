@@ -85,8 +85,8 @@ public sealed class VaultManualSyncCoordinator(
                 remote, DateTimeOffset.UtcNow, ct);
             var cost = await ledger.EstimateAsync(draft);
             await RequireConnectedRootAsync(context, ct);
-            if (mutation.CapacityPolicy == ObjectCapacityPolicy.SingleAccount &&
-                cost.CreatesChildNode)
+            if (!VaultCapacityPolicyGuard.AllowsCreate(
+                mutation.CapacityPolicy, cost.CreatesChildNode))
                 return false;
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
@@ -125,9 +125,8 @@ public sealed class VaultManualSyncCoordinator(
         var remote = await ledger.ReadAsync();
         await queue.PreflightCreateAsync(quote, accountId, network, remote, DateTimeOffset.UtcNow, ct);
         var cost = await ledger.EstimateAsync(draft);
-        if (mutation.CapacityPolicy == ObjectCapacityPolicy.SingleAccount &&
-            cost.CreatesChildNode)
-            throw new VaultAccountCapacityRequiredException();
+        VaultCapacityPolicyGuard.RequireCreateAllowed(
+            mutation.CapacityPolicy, cost.CreatesChildNode);
         if (cost.NetworkFeeXlm > quote.QuotedFeeXlm ||
             cost.PeakReserveXlm > quote.QuotedPeakReserveXlm)
             throw new InvalidOperationException("Transaction costs exceed approved quote.");
