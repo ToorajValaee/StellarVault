@@ -58,6 +58,8 @@ builder.Services.AddScoped<VaultHybridDraftWorkspace>();
 builder.Services.AddScoped<StellarAccountObjectStoreProvider>();
 builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.GetRequiredService<StellarAccountObjectStoreProvider>());
 builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
+builder.Services.AddScoped<IAccountObjectUpdate>(services =>
+    (IAccountObjectUpdate)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<IObjectMutationReview>(services =>
     (IObjectMutationReview)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<IVerifiedObjectExport>(services =>
