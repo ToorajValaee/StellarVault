@@ -777,7 +777,8 @@ public sealed class StellarAccountObjectStoreProvider(
             const string prefix = "hd-sha256:";
             if (!expectedRevision.StartsWith(prefix, StringComparison.Ordinal) ||
                 expectedRevision.Length != prefix.Length + 64 ||
-                !expectedRevision[prefix.Length..].All(Uri.IsHexDigit))
+                !expectedRevision[prefix.Length..].All(c =>
+                    c is >= '0' and <= '9' or >= 'a' and <= 'f'))
                 throw new ArgumentException(
                     "HD deletion requires the original published record fingerprint.",
                     nameof(expectedRevision));
