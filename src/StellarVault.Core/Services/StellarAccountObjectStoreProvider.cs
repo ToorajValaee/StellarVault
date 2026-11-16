@@ -144,8 +144,19 @@ public sealed class StellarAccountObjectStoreProvider(
             throw new ArgumentException("Invalid Stellar parent folder ID.");
         if (text.Length == 0 || !VaultRecordInterchange.IsOrdinaryContent(text))
             throw new InvalidDataException("Empty or reserved file-protocol content is not an ordinary record.");
+        var fields = descriptor.Fields;
+        if (fields?.Tags is { Length: > 24 } ||
+            fields?.Tags?.Any(tag => tag is null || tag.Length > 64) == true)
+            throw new ArgumentException("Invalid record tag metadata.", nameof(descriptor));
+        if (fields is not null && descriptor.TypeId == VaultRecordTypeFactory.Folder &&
+            (!string.IsNullOrEmpty(fields.UserName) || !string.IsNullOrEmpty(fields.Url)))
+            throw new ArgumentException("Folder records cannot carry credential fields.", nameof(descriptor));
         return new LedgerRecordDraft(descriptor.Name, text, descriptor.ParentId,
-            IsFolder: descriptor.TypeId == VaultRecordTypeFactory.Folder);
+            fields?.Tags?.ToArray(),
+            IsFolder: descriptor.TypeId == VaultRecordTypeFactory.Folder,
+            UserName: fields?.UserName,
+            Url: fields?.Url,
+            Notes: fields?.Notes);
     }
 
     private static void RequireSupportedCreate(ObjectWriteOptions options)
@@ -307,18 +318,16 @@ public sealed class StellarAccountObjectStoreProvider(
         {
             var draft = BuildDraft(descriptor,
                 new UTF8Encoding(false, true).GetString(bytes));
-            // The neutral descriptor does not yet carry the legacy Stellar
-            // structured fields. Fail closed rather than accidentally remove
-            // username, URL, notes or tags during an otherwise valid Edit.
+            // Null Fields represents an older caller which did not provide
+            // the complete structured payload. Updating such a record could
+            // silently clear credentials; require an explicit field snapshot.
+            if (descriptor.Fields is null)
+                throw new ArgumentException(
+                    "Updates require explicit complete structured fields.", nameof(descriptor));
             var currentRecord = await ReadOrdinaryAsync(scope, id, ct)
                 ?? throw new FileNotFoundException("Published record no longer exists.");
-            if (currentRecord.IsFolder != draft.IsFolder ||
-                !string.IsNullOrEmpty(currentRecord.UserName) ||
-                !string.IsNullOrEmpty(currentRecord.Url) ||
-                !string.IsNullOrEmpty(currentRecord.Notes) ||
-                currentRecord.Tags is { Length: > 0 })
-                throw new NotSupportedException(
-                    "Structured Stellar record fields require the full typed-record update contract.");
+            if (currentRecord.IsFolder != draft.IsFolder)
+                throw new InvalidOperationException("Record type changed during editing.");
             await RequireSameScopeAsync(scope, checkpoint, true);
             string mutationId;
             if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
@@ -590,7 +599,9 @@ public sealed class StellarAccountObjectStoreProvider(
             return new StoredObject(
                 new ObjectDescriptor(record.Id,
                     record.IsFolder ? VaultRecordTypeFactory.Folder : VaultRecordTypeFactory.Credential,
-                    record.Title, null, record.FolderId),
+                    record.Title, null, record.FolderId,
+                    new ObjectRecordFields(record.UserName, record.Url,
+                        record.Notes, record.Tags?.ToArray())),
                 revision,
                 Encoding.UTF8.GetByteCount(record.Content), fingerprint);
         }
