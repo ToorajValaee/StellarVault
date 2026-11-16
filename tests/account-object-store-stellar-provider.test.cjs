@@ -189,7 +189,10 @@ test('Edit is a revision-pinned Update routed to existing encrypted mutation jou
   assert.match(contracts, /provider is IAccountObjectUpdateProvider updater/);
   assert.match(contracts, /options\.ExpectedRevision != expectedRevision/);
   assert.match(provider, /IAccountObjectUpdateProvider/);
-  assert.match(provider, /await hdRemoteMutations\.StageUpdateAsync\(id, draft, ct\)/);
+  assert.match(provider, /await hdRemoteMutations\.StageUpdateAsync\(/);
+  assert.match(provider, /expectedRevision\["hd-sha256:"\.Length\.\.\]/);
+  assert.match(hd, /string expectedBaselineSha256/);
+  assert.match(hd, /!string\.Equals\(baseline, expectedBaselineSha256, StringComparison\.Ordinal\)/);
   assert.match(provider, /await linkedDrafts\.StageUpdateAsync\(/);
   assert.match(provider, /VaultHybridRemoteMutationWorkspace\.Fingerprint\(current\)/);
   assert.match(provider, /VaultLinkedRemoteRevisionPolicy\.IsValid\(published\)/);
