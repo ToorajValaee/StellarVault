@@ -307,6 +307,19 @@ public sealed class StellarAccountObjectStoreProvider(
         {
             var draft = BuildDraft(descriptor,
                 new UTF8Encoding(false, true).GetString(bytes));
+            // The neutral descriptor does not yet carry the legacy Stellar
+            // structured fields. Fail closed rather than accidentally remove
+            // username, URL, notes or tags during an otherwise valid Edit.
+            var currentRecord = await ReadOrdinaryAsync(scope, id, ct)
+                ?? throw new FileNotFoundException("Published record no longer exists.");
+            if (currentRecord.IsFolder != draft.IsFolder ||
+                !string.IsNullOrEmpty(currentRecord.UserName) ||
+                !string.IsNullOrEmpty(currentRecord.Url) ||
+                !string.IsNullOrEmpty(currentRecord.Notes) ||
+                currentRecord.Tags is { Length: > 0 })
+                throw new NotSupportedException(
+                    "Structured Stellar record fields require the full typed-record update contract.");
+            await RequireSameScopeAsync(scope, checkpoint, true);
             string mutationId;
             if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
             {
