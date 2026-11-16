@@ -65,3 +65,12 @@ The neutral router now implements the **optional** `IVerifiedObjectExport` capab
 The older `OpenReadAsync` remains a convenience method with an 8 MiB private-memory cap. `ExportVerifiedAsync` does not have that cap: it uses bounded node buffers and a destination-supplied temporary stream; disk use depends on the destination. This does not lift storage/transaction costs or protocol limitations and is not support for legacy file formats.
 
 Neither API bypasses the existing reviewed publication or historical proof pipeline. The current tests cover successful authenticated export, tampered-child abort, and unsupported-provider rejection. Real PWA/native destination implementations, cancellation/permissions and exact-head builds remain separate release gates.
+
+
+## Atomic private filesystem destination
+
+`VaultEngine.Core.AtomicFileObjectDestination` is a concrete `IVerifiedObjectDestination` for native applications and trusted hosted-server filesystem storage. It requires a fully qualified output path in an existing trusted private directory. `OpenTemporaryAsync` creates an exclusive unpredictable `.vaultengine-*.partial` file in the same directory; the public final path is absent during verification. Once the provider has verified all SVTREE3 node commitments and closed the temporary writer, `CommitAsync` moves the staging file to the final name with `overwrite: false`, rejecting both pre-existing targets and concurrent final-path creation. `AbortAsync` and asynchronous disposal remove unfinished staging files.
+
+This is **not** a generic browser download implementation and must not be pointed at a web/static serving directory, a shared untrusted directory, or a location with unreviewed filesystem/symlink permissions. Rename is atomic only for suitable local filesystems, not a guarantee of crash-durable writes or secure SSD erasure. Enforce destination-directory privacy and user consent outside Core. There is no automatic host-level destination registration; a native/hosted caller must supply a trusted, authorized target path explicitly.
+
+The Core smoke harness now exercises temporary invisibility, commit, abort, disposal, existing-target rejection, and concurrent-target creation. The tests are committed but require an actual .NET execution run.
