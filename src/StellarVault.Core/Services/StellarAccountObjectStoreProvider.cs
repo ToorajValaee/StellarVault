@@ -21,7 +21,10 @@ public sealed class StellarAccountObjectStoreProvider(
     VaultSessionManager hdSessions,
     VaultLinkedQueueKeySession linkedKeys,
     VaultNetworkSelection networks,
-    IVaultRecordTypeFactory recordTypes) : IAccountObjectStoreProvider, IVerifiedObjectExportProvider
+    IVaultRecordTypeFactory recordTypes,
+    VaultHybridSyncReviewService? hdReview = null,
+    VaultLinkedDraftPublication? linkedPublication = null)
+    : IAccountObjectStoreProvider, IVerifiedObjectExportProvider, IObjectMutationReviewProvider
 {
     public string ProviderId => "stellar";
     private const int MaxOrdinaryContentBytes = 64 * 1024;
@@ -509,6 +512,94 @@ public sealed class StellarAccountObjectStoreProvider(
         // Caller owns plaintext and must dispose the stream. This simple text
         // reader is not the streaming SVTREE3 file reader.
         return new ZeroingReadStream(Encoding.UTF8.GetBytes(record.Content));
+    }
+
+    /// <summary>
+    /// Connect the neutral API to the EXACT existing manual-review services.
+    /// No alternate transaction transport, signer, CAS reservation or implicit
+    /// capacity expansion is introduced by this method.
+    /// </summary>
+    public async Task<ObjectMutationReview> ReviewAsync(
+        ObjectStoreScope scope, string operationId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+        var checkpoint = RequireScope(scope, true);
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+        {
+            if (linkedPublication is null)
+                throw new NotSupportedException("Linked publication review is not registered.");
+            if (!linkedKeys.CanPublish || linkedKeys.ActiveRootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException(
+                    "Linked publication requires the matching unlocked signer and local queue.");
+            var unlockEpoch = linkedKeys.UnlockEpoch;
+            var review = await linkedPublication.PrepareAsync(operationId, ct);
+            try
+            {
+                await RequireSameScopeAsync(scope, checkpoint, true);
+                if (!linkedKeys.CanPublish || linkedKeys.UnlockEpoch != unlockEpoch)
+                    throw new InvalidOperationException("Linked queue authorization changed during fee review.");
+                if (review.Quote.CreatesChildNode)
+                    throw new InvalidOperationException(
+                        "Account expansion requires a separately authorized review.");
+                return new ObjectMutationReview(
+                    review.MutationId, review.EntityId, ObjectMutationState.AwaitingApproval,
+                    new ObjectStorageQuote(
+                        ProviderId, scope.NetworkId, "XLM",
+                        review.Quote.NetworkFeeXlm, review.Quote.PeakReserveXlm,
+                        null, false),
+                    review.Explanation, review.Quote.QuoteId);
+            }
+            catch
+            {
+                try { await linkedPublication.CancelAsync(CancellationToken.None); }
+                catch { /* Failure still must not become a usable neutral approval. */ }
+                throw;
+            }
+        }
+
+        if (hdReview is null)
+            throw new NotSupportedException("HD publication review is not registered.");
+        if (!hdSessions.IsUnlocked || hdSessions.ActiveAccountId != scope.StoreId)
+            throw new UnauthorizedAccessException("Unlock the matching HD encrypted queue.");
+        var hdEpoch = hdSessions.Epoch;
+        var report = await hdReview.ReviewAsync(scope.StoreId, true, ct);
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        if (!hdSessions.IsUnlocked || hdSessions.Epoch != hdEpoch ||
+            hdSessions.ActiveAccountId != scope.StoreId)
+            throw new InvalidOperationException("HD queue session changed during review.");
+        var mutation = report.Queue.Ready.SingleOrDefault(x => x.Id == operationId);
+        var item = report.Estimates.SingleOrDefault(x => x.MutationId == operationId);
+        if (mutation is null || item?.Quote is not { } quote ||
+            report.Queue.Conflicts != 0 || report.Queue.NeedsReconciliation != 0)
+            throw new InvalidOperationException(
+                "The requested HD mutation has no current approved-fee preview; inspect the existing Sync review.");
+        return new ObjectMutationReview(
+            operationId, mutation.EntityId, ObjectMutationState.AwaitingApproval,
+            new ObjectStorageQuote(
+                ProviderId, scope.NetworkId, "XLM",
+                quote.QuotedFeeXlm.ToString("0.0000000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                quote.QuotedPeakReserveXlm.ToString("0.0000000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                null, null),
+            "Indicative HD fee review. The existing session-bound Sync approval must be confirmed separately.",
+            quote.DraftSha256);
+    }
+
+    public async Task CancelReviewAsync(
+        ObjectStoreScope scope, CancellationToken ct = default)
+    {
+        var checkpoint = RequireScope(scope, true);
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+        {
+            if (linkedPublication is null)
+                throw new NotSupportedException("Linked publication review is not registered.");
+            if (!linkedKeys.CanPublish || linkedKeys.ActiveRootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException("Linked queue authorization is unavailable.");
+            await linkedPublication.CancelAsync(ct);
+        }
+        // HD review is read-only; it has no live signer quote to cancel.
+        await RequireSameScopeAsync(scope, checkpoint, true);
     }
 
     public Task<ObjectMutationIntent> PrepareDeleteAsync(
