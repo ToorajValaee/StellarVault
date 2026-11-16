@@ -151,3 +151,27 @@ test('trusted filesystem verified export destination is atomic, one-use and clea
   assert.match(smoke, /Disposing an uncommitted destination did not clean up/);
   assert.match(program, /AtomicFileObjectDestinationSmoke\.RunAsync\(\)/);
 });
+
+test('neutral publication reviews reuse the existing HD and Secret Key publishers without a second submit path', () => {
+  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const publisher = read('src/StellarVault.Core/Services/VaultLinkedDraftPublication.cs');
+  assert.match(contracts, /interface IObjectMutationReview/);
+  assert.match(contracts, /interface IObjectMutationReviewProvider/);
+  assert.match(contracts, /provider is IObjectMutationReviewProvider reviewer/);
+  assert.match(provider, /IObjectMutationReviewProvider/);
+  assert.match(provider, /await hdReview\.ReviewAsync\(scope\.StoreId, true, ct\)/);
+  assert.match(provider, /await linkedPublication\.PrepareAsync\(operationId, ct\)/);
+  assert.match(provider, /await linkedPublication\.CancelAsync\(CancellationToken\.None\)/);
+  assert.match(provider, /await linkedPublication\.CancelAsync\(ct\)/);
+  assert.match(provider, /ObjectMutationState\.AwaitingApproval/);
+  assert.match(provider, /Account expansion requires a separately authorized review/);
+  assert.match(provider, /report\.Queue\.Ready\.SingleOrDefault/);
+  assert.match(provider, /report\.Queue\.Conflicts != 0/);
+  assert.doesNotMatch(provider, /PublishApprovedCreateAsync\(|SubmitApprovedAsync\(|PublishWithPreparedHashAsync\(/);
+  assert.match(publisher, /long Epoch, long UnlockEpoch, byte\[\] Fingerprint/);
+  assert.match(publisher, /keys\.UnlockEpoch/);
+  assert.match(publisher, /current\.UnlockEpoch != unlockEpoch/);
+  assert.match(publisher, /_pending = new\(item\.Id, root, scope, epoch, unlockEpoch/);
+  assert.match(publisher, /pending\.UnlockEpoch/);
+});
