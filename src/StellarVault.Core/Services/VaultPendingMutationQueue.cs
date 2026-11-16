@@ -45,6 +45,7 @@ public sealed record VaultPendingMutation(
     VaultSignedDeletionManifest[]? SignedDeletionManifests = null,
     VaultSignedFileEntry[]? SignedFileEntries = null,
     string? OriginStrategyId = null,
+    [property: System.Text.Json.Serialization.JsonRequired]
     ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy.SingleAccount)
 {
     public static VaultPendingMutation Create(string accountId, string networkId,
