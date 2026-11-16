@@ -438,13 +438,24 @@ public sealed class VaultLinkedDraftWorkspace(
         CancellationToken ct = default) =>
         StageRemoteMutationAsync(entityId, draft, expectedRemoteRevision, false, ct);
 
+    public Task<DraftItem> StageUpdateAsync(string entityId,
+        LedgerRecordDraft draft, string expectedRemoteRevision,
+        ObjectCapacityPolicy capacityPolicy, CancellationToken ct = default)
+    {
+        if (!Enum.IsDefined(capacityPolicy))
+            throw new ArgumentException("Unknown update capacity policy.", nameof(capacityPolicy));
+        return StageRemoteMutationAsync(entityId, draft, expectedRemoteRevision,
+            false, ct, capacityPolicy);
+    }
+
     public Task<DraftItem> StageDeleteAsync(string entityId,
         string expectedRemoteRevision, CancellationToken ct = default) =>
         StageRemoteMutationAsync(entityId, null, expectedRemoteRevision, true, ct);
 
     private async Task<DraftItem> StageRemoteMutationAsync(string entityId,
         LedgerRecordDraft? proposed, string expectedRevision, bool delete,
-        CancellationToken ct)
+        CancellationToken ct,
+        ObjectCapacityPolicy capacityPolicy = ObjectCapacityPolicy.SingleAccount)
     {
         if (entityId is not { Length: 16 } ||
             !entityId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
@@ -554,7 +565,8 @@ public sealed class VaultLinkedDraftWorkspace(
             var mutation = VaultPendingMutation.Create(context.Root,
                 VaultLinkedQueueStorageScope.FromNetworkScope(context.Scope),
                 kind, entityId, payload, expectedRemoteVersion: expectedRevision)
-                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked };
+                with { OriginStrategyId = VaultMutationStrategyPolicy.Linked,
+                    CapacityPolicy = capacityPolicy };
             try
             {
                 Check(context);
