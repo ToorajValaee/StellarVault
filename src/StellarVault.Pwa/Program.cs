@@ -64,6 +64,8 @@ builder.Services.AddScoped<IObjectMutationReview>(services =>
     (IObjectMutationReview)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<IVerifiedObjectExport>(services =>
     (IVerifiedObjectExport)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IVerifiedObjectNodeInventory>(services =>
+    (IVerifiedObjectNodeInventory)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<VaultHybridFileWorkspace>();
 builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
 builder.Services.AddTransient<IVaultNativeFileAccess, BrowserVaultNativeFileAccess>();
