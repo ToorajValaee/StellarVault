@@ -96,6 +96,8 @@ public sealed class VaultLinkedDraftPublication(
             throw new InvalidOperationException(
                 "Only never-submitted linked record/folder mutations can be reviewed.");
 
+        if (item.CapacityPolicy is { } policy && !Enum.IsDefined(policy))
+            throw new InvalidDataException("Unknown linked mutation capacity policy.");
         var draft = JsonSerializer.Deserialize<LedgerRecordDraft>(item.EncryptedPayload)
             ?? throw new InvalidDataException("Encrypted draft is missing.");
         if (draft.IsFolder != (item.Kind is VaultMutationKind.CreateFolder or
