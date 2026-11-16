@@ -88,3 +88,17 @@ The Stellar provider reuses the existing `VaultHybridSyncReviewService.ReviewAsy
 The linked publisher's own `PendingReview` scope now includes `VaultLinkedQueueKeySession.UnlockEpoch`. A lock followed by re-unlock of the same account invalidates its old reviewed quote even if the Stellar connection epoch is unchanged. The neutral adapter also checks the local epoch after awaits and cancels stale quotes.
 
 **Capacity-policy limitation:** this work has not yet persisted `SingleAccount`/expansion intent in the encrypted mutation journal, nor made the publisher enforce it. Until those rules are wired, single-account `PutAsync` stays blocked and account expansion remains a separately reviewed operation. SaaS approval endpoints and UI migration are still pending.
+
+## UI Edit and explicit business-layer Update
+
+In the application, **Edit is a read-modify-write interaction**, not a separate blockchain operation. The UI loads the record and original revision, lets the user change values, then requests `IAccountObjectUpdate.UpdateAsync(scope, descriptor, source, expectedRevision, options)`. This is **not** an upsert and not an immediate on-chain save: it stages a revision-pinned encrypted mutation that must pass the original separate fee review, approval, signer authorization and historical ledger verification.
+
+The neutral router now offers `IAccountObjectUpdate` as an optional capability; PWA and MAUI alias it to the existing scoped engine router. The Stellar adapter delegates to the **existing** `VaultHybridRemoteMutationWorkspace.StageUpdateAsync` for HD and `VaultLinkedDraftWorkspace.StageUpdateAsync` for independent Secret Key accounts. There is no duplicate ledger writer.
+
+Revisions are deliberately different across strategies:
+- HD: `GetAsync` returns `hd-sha256:<fingerprint>`, using the exact existing `VaultHybridRemoteMutationWorkspace.Fingerprint` format. Before staging the engine confirms the current published record matches the caller's original version; the workspace does its own fresh remote preflight before enqueuing.
+- Independent Secret Key: `GetAsync` retrieves the authoritative base64 manifest version via `IStellarSecretKeyRecordRevisionReader` and returns `linked-manifest:<version>`. StageUpdate rechecks that canonical revision before sealing the new mutation. A generic SHA256 fingerprint cannot authorize an S-key update.
+
+**Compatibility limits:** this first neutral update path supports ordinary credential/folder records without legacy username/URL/notes/tags, because the current neutral descriptor doesn't preserve those fields. It rejects richer records and immutable SVTREE3 files rather than silently losing metadata. The original full-featured UI edit paths remain operational. `SingleAccount` publication enforcement and live rich typed-record updates are not yet wired. `ObjectMutationIntent.State = Prepared` does **not** mean that an on-chain edit succeeded.
+
+The existing device-local UI already uses a versioned compare-and-swap call, `VaultRecordWorkspaceView.SaveAsync -> Workspace.SaveTextAsync(name, text, version)`. That is a different local encrypted-record workflow; the new neutral update adapter concerns published Stellar records. Do not conflate a local save with a ledger publication.
