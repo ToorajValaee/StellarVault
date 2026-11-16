@@ -1,3 +1,4 @@
+using VaultEngine.Core;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -107,9 +108,23 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         string recordId, CancellationToken ct = default) =>
         await StageAsync(recordId, null, delete: true, ct);
 
+    public Task<VaultPendingMutation> StageUpdateAsync(
+        string recordId, LedgerRecordDraft proposed, string expectedBaselineSha256,
+        ObjectCapacityPolicy capacityPolicy, CancellationToken ct = default)
+    {
+        if (!ValidDigest(expectedBaselineSha256))
+            throw new ArgumentException("Invalid expected published HD fingerprint.",
+                nameof(expectedBaselineSha256));
+        if (!Enum.IsDefined(capacityPolicy))
+            throw new ArgumentException("Invalid requested capacity policy.", nameof(capacityPolicy));
+        return StageAsync(recordId, proposed, delete: false, ct,
+            expectedBaselineSha256, capacityPolicy);
+    }
+
     private async Task<VaultPendingMutation> StageAsync(
         string recordId, LedgerRecordDraft? proposed, bool delete, CancellationToken ct,
-        string? expectedBaselineSha256 = null)
+        string? expectedBaselineSha256 = null,
+        ObjectCapacityPolicy capacityPolicy = ObjectCapacityPolicy.SingleAccount)
     {
         if (!ValidRecordId(recordId)) throw new ArgumentException("Invalid record ID.", nameof(recordId));
         var scope = Capture();
@@ -187,7 +202,8 @@ public sealed class VaultHybridRemoteMutationWorkspace(
                 throw new InvalidOperationException("A concurrent draft now targets this remote record.");
             var mutation = VaultPendingMutation.Create(scope.Account,
                 scope.Network, kind, original.Id, payload,
-                expectedRemoteVersion: baseline);
+                expectedRemoteVersion: baseline)
+                with { CapacityPolicy = capacityPolicy };
             EnsureScope(scope);
             return await queue.EnqueueAsync(mutation, ct);
         }
