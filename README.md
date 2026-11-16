@@ -20,6 +20,22 @@ website/                  Independent landing site
 Dockerfile                .NET 10 browser build and Nginx hosting
 ```
 
+## PWA session and Import behavior
+
+The left navigation pane provides **Import records**, opening the local encrypted
+draft import/backup dialog. Export remains attached to each published ordinary
+record's context actions and inspector. Imports never silently sign or
+submit a Stellar transaction.
+
+For opt-in hybrid access, the passphrase-only resume screen after a same-tab
+refresh is guarded by a tab-scoped active-hybrid marker in `sessionStorage`.
+Remembered encrypted device data **alone** must never activate that screen.
+**Lock and End Session** clears the marker, volatile HD and linked signing
+sessions, privacy suspension and in-memory device-storage consent. A later
+on-chain-only or independent S-key login does not reuse hybrid credentials.
+Lock deliberately does **not** erase user-owned encrypted device backups;
+deleting saved data is a separate explicit destructive action.
+
 ## Run the browser preview
 
 ```bash
