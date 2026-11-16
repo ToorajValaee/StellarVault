@@ -838,6 +838,12 @@ test('direct on-chain deletion excludes malformed file envelopes and refreshes a
     'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   assert.match(classifier, /public static bool IsManagedFileProtocolRecord\(/);
+  const smoke = fs.readFileSync(path.join(rootPath, '..', 'tests',
+    'StellarVault.Core.CryptoTests', 'VaultPublishedFileClassificationSmoke.cs'), 'utf8');
+  const runner = fs.readFileSync(path.join(rootPath, '..', 'tests',
+    'StellarVault.Core.CryptoTests', 'Program.cs'), 'utf8');
+  assert.match(smoke, /Malformed published file was not protected from ordinary mutation/);
+  assert.match(runner, /VaultPublishedFileClassificationSmoke\.RunAsync\(\)/);
   for (const marker of ['SinglePrefix', 'ManifestPrefix', 'ChunkPrefix', 'VaultLinkedTreeFilePolicy.Prefix'])
     assert.ok(classifier.includes(marker), 'must recognize ' + marker);
   assert.match(row, /!VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\) && CanDelete/);
