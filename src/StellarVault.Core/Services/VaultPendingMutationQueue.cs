@@ -538,8 +538,16 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
-        return entries.Where(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
-            .Select(DescribeRecovery).ToArray();
+        try
+        {
+            return entries.Where(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                .Select(DescribeRecovery).ToArray();
+        }
+        finally
+        {
+            foreach (var entry in entries)
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+        }
     }
 
     public async Task<VaultRecoveryInspection> InspectRecoveryAsync(
@@ -548,8 +556,15 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         retention.RequireLocalPersistence();
         var item = await store.GetAsync(accountId, networkId, mutationId, ct)
             ?? throw new KeyNotFoundException("Mutation not found.");
-        RequireScope(item, accountId, networkId);
-        return DescribeRecovery(item);
+        try
+        {
+            RequireScope(item, accountId, networkId);
+            return DescribeRecovery(item);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(item.EncryptedPayload);
+        }
     }
 
     public async Task<bool> NeedsManualRecoveryAsync(string accountId, string networkId, string mutationId, CancellationToken ct = default)
