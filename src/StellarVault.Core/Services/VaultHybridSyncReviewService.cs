@@ -184,8 +184,10 @@ public sealed class VaultHybridSyncReviewService(
                         "Network selection changed; review again."));
                     continue;
                 }
-                if (isCreate && !VaultCapacityPolicyGuard.AllowsCreate(
-                    mutation.CapacityPolicy, cost.CreatesChildNode))
+                if ((isCreate || mutation.Kind is VaultMutationKind.UpdateRecord or
+                        VaultMutationKind.UpdateFolder) &&
+                    !VaultCapacityPolicyGuard.AllowsCreate(
+                        mutation.CapacityPolicy, cost.CreatesChildNode))
                 {
                     details.Add(new(mutation.Id, mutation.Kind, draft.Title,
                         "Single-account policy: record needs another storage account. Change policy only by staging a new authorized mutation."));
