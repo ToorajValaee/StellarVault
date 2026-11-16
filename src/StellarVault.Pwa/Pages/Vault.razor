@@ -387,7 +387,10 @@ else
                         <div class="sv-object-menu">
                             <button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
                             <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
-                            <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                            @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(item))
+                            {
+                                <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                            }
                         </div>
                     </details>
                 </div>
@@ -1329,7 +1332,19 @@ else
 
     [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
     private static bool IsLedgerFile(LedgerRecordItem item) =>
-        LedgerFileProtocol.IsFile(item) || VaultLinkedTreeFilePolicy.IsRootRecord(item);
+        VaultPublishedFileClassification.IsFile(item);
+
+    private static bool SamePublishedDeleteSnapshot(
+        LedgerRecordItem expected, LedgerRecordItem actual) =>
+        string.Equals(expected.Id, actual.Id, StringComparison.OrdinalIgnoreCase) &&
+        expected.Title == actual.Title &&
+        expected.Content == actual.Content &&
+        expected.FolderId == actual.FolderId &&
+        expected.IsFolder == actual.IsFolder &&
+        expected.UserName == actual.UserName &&
+        expected.Url == actual.Url &&
+        expected.Notes == actual.Notes &&
+        (expected.Tags ?? []).SequenceEqual(actual.Tags ?? [], StringComparer.Ordinal);
 
     private sealed record VerifiedTreeDownload(string RootId, string FileName,
         IReadOnlyList<LedgerRecordItem> Records);
@@ -1468,24 +1483,87 @@ else
         if (local is not null) OpenFolder(PendingFolderId(local) ?? string.Empty);
     }
     private LedgerRecordItem? _deleteCandidate;
-    private async Task SelectDelete(LedgerRecordItem item) {
+    private async Task SelectDelete(LedgerRecordItem item)
+    {
         if (_busy) return;
-        _deleteCandidate = item; _deleteEstimate = null;
-        _busy = true; _busyMessage = "ESTIMATING DELETE COST...";
-        try { _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id); }
-        catch (Exception ex) { _error = "Delete estimate failed: " + ex.Message; }
+        // File trees require their own durable, per-node deletion journal.
+        // Never treat a malformed file manifest as an ordinary record.
+        if (VaultPublishedFileClassification.IsManagedFileProtocolRecord(item))
+        {
+            _error = "Encrypted file deletion requires a verified file lifecycle. No record was deleted.";
+            return;
+        }
+        _deleteCandidate = null;
+        _deleteEstimate = null;
+        _busy = true;
+        _busyMessage = "ESTIMATING DELETE COST...";
+        try
+        {
+            var remote = await Ledger.ReadAsync();
+            var current = remote.SingleOrDefault(x =>
+                x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            if (current is null || !SamePublishedDeleteSnapshot(item, current) ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(current))
+                throw new InvalidOperationException(
+                    "Record changed since it was displayed. Refresh before deleting.");
+            if (current.IsFolder && remote.Any(x =>
+                string.Equals(x.FolderId, current.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Folder is not empty; delete its children first.");
+            _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id);
+            _deleteCandidate = item;
+        }
+        catch (Exception ex)
+        {
+            _error = "Delete review failed: " + ex.Message;
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+        }
         finally { _busy = false; }
     }
-    private async Task DeleteSelectedAsync() {
-        if (_busy || _deleteCandidate is null) return;
-        _busy = true; _busyMessage = "DELETING FROM STELLAR...";
-        var id = _deleteCandidate.Id;
-        try {
-            var result = await Ledger.DeleteAsync(id);
-            _deleteCandidate = null; _deleteEstimate = null; _selected = null;
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (_busy || _deleteCandidate is not { } candidate || _deleteEstimate is null) return;
+        _busy = true;
+        _busyMessage = "DELETING FROM STELLAR...";
+        try
+        {
+            if (!Ledger.IsConnected ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(candidate))
+                throw new InvalidOperationException("File deletion is not authorized by ordinary record actions.");
+            // A fresh remote snapshot catches stale forms or conflicting
+            // tabs before signing. The Stellar transport itself does not yet
+            // provide atomic remote-version CAS; do not claim that it does.
+            var remote = await Ledger.ReadAsync();
+            var current = remote.SingleOrDefault(x =>
+                x.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase));
+            if (current is null || !SamePublishedDeleteSnapshot(candidate, current) ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(current))
+                throw new InvalidOperationException(
+                    "Published record changed since deletion was approved. Refresh and review again.");
+            if (current.IsFolder && remote.Any(x =>
+                string.Equals(x.FolderId, candidate.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Folder is no longer empty.");
+            var freshCost = await Ledger.EstimateDeleteAsync(candidate.Id);
+            if (freshCost.NetworkFeeXlm > _deleteEstimate.NetworkFeeXlm ||
+                freshCost.PeakReserveXlm > _deleteEstimate.PeakReserveXlm)
+                throw new InvalidOperationException(
+                    "Delete fee or reserve increased. Reopen the cost review.");
+            var result = await Ledger.DeleteAsync(candidate.Id);
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+            _selected = null;
             _records = await Ledger.ReadAsync();
-            _error = "Deletion committed: " + result.TransactionHash + (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
-        } catch (Exception ex) { _error = "Deletion failed or refresh unavailable: " + ex.Message; }
+            _error = "Deletion committed: " + result.TransactionHash +
+                (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
+        }
+        catch (Exception ex)
+        {
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+            _error = "Deletion canceled or outcome uncertain: " + ex.Message +
+                " If submission may have started, inspect the ledger before retrying.";
+        }
         finally { _busy = false; }
     }
     private string? _error;
