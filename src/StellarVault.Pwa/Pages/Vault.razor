@@ -214,11 +214,23 @@ else
                             <strong>RECOVERY INSPECTION — READ ONLY</strong>
                             @foreach (var recovery in _recoveryInspections)
                             {
-                                <p role="status">
-                                    MUTATION: @recovery.MutationId · STATE: @recovery.State
-                                    · HASH: @(recovery.TransactionHash ?? "NOT RECORDED")
-                                    · @recovery.Guidance
-                                </p>
+                                <div class="sv-recovery-checkpoint-group" role="status">
+                                    <p>
+                                        MUTATION: @recovery.MutationId · STATE: @recovery.State
+                                        · PRIMARY HASH: @(recovery.TransactionHash ?? "NOT RECORDED")
+                                        · @recovery.Guidance
+                                    </p>
+                                    @if (!recovery.CheckpointJournalValid)
+                                    {
+                                        <p role="alert">The signed checkpoint journal is malformed. Do not retry, confirm or discard this submission.</p>
+                                    }
+                                    @foreach (var checkpoint in recovery.Checkpoints)
+                                    {
+                                        <p>Signed @checkpoint.Kind · TARGET: <code>@checkpoint.TargetId</code>
+                                            · TRANSACTION HASH: <code>@checkpoint.TransactionHash</code>
+                                            · NOT VERIFIED</p>
+                                    }
+                                </div>
                             }
                         </section>
                     }
