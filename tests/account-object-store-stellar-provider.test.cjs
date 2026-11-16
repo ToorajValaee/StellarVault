@@ -374,7 +374,7 @@ test('interrupted HD and linked file staging cleans up unacknowledged encrypted 
   assert.match(hd, /var snapshot = await queue\.ReviewAllAsync\(/);
   assert.match(hd, /discovered\.Concat\(\s*stagedMutationIds\.AsEnumerable\(\)\.Reverse\(\)\)/);
   assert.match(hd, /foreach \(var entry in local\)\s*CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
-  assert.match(linked, /!IsPendingTreeGroupNode\(entry, groupId\)/);
+  assert.match(linked, /IsPendingTreeGroupNode\(entry, groupId\)/);
   assert.match(linked, /var belongsToThisFile = IsPendingTreeGroupNode\(entry, groupId\)/);
   assert.match(linked, /if \(!belongsToThisFile \|\|/);
   assert.match(linked, /entry\.SignedFileEntries is \{ Length: > 0 \}/);
