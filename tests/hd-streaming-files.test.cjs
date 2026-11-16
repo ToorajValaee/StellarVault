@@ -40,7 +40,10 @@ test('HD SVTREE3 file upload shares encrypted queue and existing verified public
 test('HD file root is a single visible file with verified streamed export', () => {
   const vault = read(path.join(pwa, 'Vault.razor'));
   const corePolicy = read(path.join(core, 'VaultHybridRemoteMutationWorkspace.cs'));
-  assert.match(vault, /VaultLinkedTreeFilePolicy\.IsRootRecord\(item\)/);
+  const classification = read(path.join(core, 'VaultPublishedFileClassification.cs'));
+  assert.match(vault, /VaultPublishedFileClassification\.IsFile\(item\)/);
+  assert.match(classification, /VaultLinkedTreeFilePolicy\.IsRootRecord\(item\)/);
+  assert.match(classification, /public static bool IsManagedFileProtocolRecord\(/);
   assert.match(vault, /VaultLinkedTreeFilePolicy\.ReadAsync\(\s*current\.Id, all, Stream\.Null\)/);
   assert.match(vault, /NativeFiles\.SaveAsync\(prepared\.FileName, reader\)/);
   assert.match(vault, /IsHdTreePart\(x\)/);
