@@ -78,7 +78,8 @@ else
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <button type="button" class="sv-rail-link sv-inline-help-nav @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</button>
             <div class="sv-pwa-rail-divider"></div>
-            @if (_appView == "records" && (Ledger.IsConnected || SecretLedger.IsConnected))
+            @if (_appView == "records" &&
+                 ActiveMode is VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey)
             {
                 <button type="button" class="sv-rail-link sv-rail-import-action"
                         @onclick="OpenImportDialog">
@@ -707,8 +708,7 @@ else
     private void OpenImportDialog()
     {
         if (_appView != "records" ||
-            ActiveMode is not (VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey) ||
-            (!Ledger.IsConnected && !SecretLedger.IsConnected))
+            ActiveMode is not (VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey))
             return;
         _showImportDialog = true;
     }
