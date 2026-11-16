@@ -326,7 +326,7 @@ test('verified SVTREE3 node inventories are chain-neutral read-only and never ap
   assert.match(provider, /IVerifiedObjectNodeInventoryProvider/);
   assert.match(provider, /VaultLinkedTreeFilePolicy.InspectVerifiedAsync\(\s*objectId, records, ct\)/);
   assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\);\s*ct.ThrowIfCancellationRequested\(\);\s*return new VerifiedObjectNodeInventory/);
-  assert.match(reader, /actualGroup != groupTag/);
+  assert.match(reader, /record\.Tags\[1\] != groupTag/);
   assert.match(reader, /ReadVerifiedAsync\(rootId,/);
   assert.match(reader, /Stream.Null, ids, ct/);
   assert.match(reader, /Another file root claims this streaming file group/);
