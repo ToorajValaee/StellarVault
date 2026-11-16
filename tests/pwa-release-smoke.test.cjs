@@ -760,3 +760,27 @@ test('HD and independent Secret Key workspaces share one published record filter
   assert.match(published, /OrderByDescending\(x => x\.IsFolder\)/);
   assert.match(published, /<VaultExplorerItemRow Item="item"/);
 });
+
+test('ending a hybrid session cannot force passphrase unlock on a later on-chain-only login', () => {
+  const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const recent = fs.readFileSync(path.join(root, 'js', 'vault-v2-recent-vault.js'), 'utf8');
+  assert.match(recent, /sessionStorage\.setItem\(activeHybridTabKey/);
+  assert.match(recent, /sessionStorage\.removeItem\(activeHybridTabKey/);
+  assert.match(recent, /function hasHybridSession\(account, network\)/);
+  assert.match(app, /stellarVaultRecentVault\.hasHybridSession/);
+  assert.match(app, /_coldAccount = recent\.Account/);
+  assert.match(app, /stellarVaultRecentVault\.clearHybridSession/);
+  assert.match(app, /Retention\.Reset\(\)/);
+  assert.match(app, /StorageMode\.Reset\(\)/);
+  assert.match(app, /SecretLedger\.DisconnectAsync\(\)/);
+  assert.match(access, /stellarVaultRecentVault\.markHybridSession/);
+  assert.match(access, /if \(!_enableLocalStorage\)\s*await JS\.InvokeVoidAsync\("stellarVaultRecentVault\.clearHybridSession"\)/);
+  assert.match(access, /Retention\.Reset\(\)/);
+  assert.match(vault, /private async Task ClearHybridResumeIntentAsync\(\)/);
+  assert.match(vault, /await ClearHybridResumeIntentAsync\(\)/);
+  assert.match(vault, /Privacy\.Clear\(\)/);
+  assert.match(vault, /StorageMode\.Reset\(\)/);
+  assert.match(vault, /@onclick="LockActiveVaultAsync">Lock vault/);
+});
