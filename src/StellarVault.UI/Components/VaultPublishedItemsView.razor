@@ -6,6 +6,8 @@
                           Selected="@(SelectedItemId == item.Id)"
                           CanEdit="CanEdit"
                           CanDelete="CanDelete"
+                          Strategy="Strategy"
+                          Records="Items"
                           OnOpen="OnOpen"
                           OnEdit="OnEdit"
                           OnDelete="OnDelete" />
@@ -21,6 +23,7 @@
     [Parameter] public string? Search { get; set; }
     [Parameter] public string Collection { get; set; } = "all";
     [Parameter] public string? SelectedItemId { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
     [Parameter] public bool CanEdit { get; set; }
     [Parameter] public bool CanDelete { get; set; }
     [Parameter] public bool Busy { get; set; }
