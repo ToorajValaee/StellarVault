@@ -22,6 +22,7 @@
 @inject VaultUnrecordedSubmissionDiagnostic UnknownHashInvestigation
 @inject VaultNetworkSelection Networks
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
 @if (ActiveMode == VaultWorkspaceMode.Locked)
@@ -714,6 +715,12 @@ else
 
     private void CloseImportDialog() => _showImportDialog = false;
 
+    private async Task ClearHybridResumeIntentAsync()
+    {
+        try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+        catch (JSException) { /* Volatile signing keys are still revoked by lock. */ }
+    }
+
     private async Task LockActiveVaultAsync()
     {
         if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
@@ -727,6 +734,7 @@ else
             StorageMode.Reset();
             Privacy.Clear();
             _showImportDialog = false;
+            await ClearHybridResumeIntentAsync();
             return;
         }
         await LockAsync();
@@ -1499,7 +1507,9 @@ else
         LinkedRetention.Reset();
         StorageMode.Reset();
         Privacy.Clear();
+        await ClearHybridResumeIntentAsync();
         try { await Ledger.DisconnectAsync(); } catch { failed = true; }
+        await ClearHybridResumeIntentAsync();
         if (failed)
         {
             _conflictLockError = "Not all sessions could be closed. Restart the application before unlocking another vault.";
@@ -1568,6 +1578,7 @@ else
         _revealedIds.Clear();
         _selected = null;
         ClearSyncApproval();
+        await ClearHybridResumeIntentAsync();
         await LinkedQueueKeys.LockAsync();
         await Ledger.DisconnectAsync();
         Nav.NavigateTo("/", replace: true);
