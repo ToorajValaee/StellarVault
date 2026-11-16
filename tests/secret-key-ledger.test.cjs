@@ -608,7 +608,9 @@ test('queue readiness and folder graph use one authenticated mutation snapshot',
   assert.match(scoped,/VaultPendingMutationReviewPolicy\.Build\(all\)/);
   assert.match(scoped,/VaultHybridFolderSyncPlan\.Build\(all, review\)/);
   assert.doesNotMatch(scoped,/queue\.PrepareReviewAsync\(/);
-  assert.match(queue,/return VaultPendingMutationReviewPolicy\.Build\(all\)/);
+  assert.match(queue,/var review = VaultPendingMutationReviewPolicy\.Build\(all\)/);
+  assert.match(queue,/ClearNonReturnedSnapshots\(all, review\.Ready\)/);
+  assert.match(queue,/catch\s*\{\s*ClearSnapshots\(all\);\s*throw;/);
   assert.match(policy,/VaultMutationStrategyPolicy\.Resolve\(item\.OriginStrategyId\)/);
   assert.match(policy,/Independent linked-key queue intent cannot be published/);
   assert.match(policy,/VaultQueuedCreatePolicy\.Problems\(item, all\)/);
