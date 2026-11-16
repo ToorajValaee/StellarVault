@@ -231,6 +231,12 @@ test('explicit ordinary capacity policy survives encrypted queue and blocks HD e
   assert.match(contracts, /enum ObjectCapacityPolicy/);
   assert.match(queue, /ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy\.SingleAccount/);
   assert.match(queue, /JsonRequired/);
+  assert.match(queue, /string OriginStrategyId = VaultMutationStrategyPolicy\.Hd/);
+  assert.match(queue, /ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy\.SingleAccount/);
+  const origin = read('src/StellarVault.Core/Services/VaultMutationStrategyPolicy.cs');
+  assert.match(origin, /Hd => Hd/);
+  assert.doesNotMatch(origin, /null or Hd => Hd/);
+  assert.match(origin, /Encrypted mutation requires an explicit recognized account strategy/);
   assert.match(hdDraft, /CapacityPolicy = capacityPolicy/);
   assert.match(linkedDraft, /CapacityPolicy = capacityPolicy/);
   assert.match(provider, /hdDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
