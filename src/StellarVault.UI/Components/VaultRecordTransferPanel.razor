@@ -14,74 +14,126 @@
 
 @if (Mode == "import")
 {
-<section class="terminal-panel sv-import-records-form" aria-label="Import vault records">
-    <h3>Import records / restore backup</h3>
-    <p class="advanced-help">Imports credentials, notes and folders, not encrypted binary files.
-        JSON preserves folder hierarchy; CSV supports flat records. Interchange files
-        are <strong>plaintext</strong>, not encrypted vault backups. Import only from a trusted source
-        and securely delete plaintext source files when finished.</p>
-    @if (!CanStage)
-    {
-        <p role="status">To import, explicitly enable and unlock this account's encrypted
-            device drafts. Import never signs or sends a Stellar transaction.</p>
-    }
-    <label class="sv-secret-approval">
-        <input type="checkbox" @bind="_understood" disabled="@_busy" />
-        I understand that exported JSON/CSV contains plaintext secrets, and that importing
-        stages local encrypted drafts only.
-    </label>
-    <div class="sv-access-actions">
-        <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !_understood || !CanStage)"
-                @onclick="PickImportAsync">Choose JSON / CSV to import</button>
-    </div>
-    <div class="sv-access-actions">
-        <label>Backup password (minimum 12 characters)
-            <input type="password" class="terminal-input" autocomplete="new-password"
-                   @bind="_backupPassword" disabled="@_busy" />
-        </label>
-        <button type="button" class="pixel-button compact"
-                disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
-                @onclick="PickEncryptedAsync">Restore encrypted record backup (.svrb)</button>
-    </div>
-    <p class="advanced-help">Encrypted backups protect ordinary records and folders
-        with Argon2id and authenticated encryption. They do not include binary files,
-        local draft journals or Stellar signing credentials. Keep the backup password safe.</p>
-    @if (_pending is not null)
-    {
-        <p role="status">Validated @_pending.Records.Length record(s) and folder(s).
-            They will be created as new encrypted local drafts, not replace existing records.
-            Import is not an atomic batch: a storage interruption can leave some drafts pending.</p>
-        <div class="sv-access-actions">
-            <button type="button" class="pixel-button primary"
-                    disabled="@(_busy || !CanStage || !_understood)"
-                    @onclick="ConfirmImportAsync">Stage @_pending.Records.Length encrypted drafts</button>
-            <button type="button" class="pixel-button compact" disabled="@_busy"
-                    @onclick="ClearImport">Cancel import</button>
+    <div class="sv-transfer-content sv-transfer-import" aria-label="Import vault records">
+        <div class="sv-transfer-intro">
+            <span class="panel-kicker">RECORD TRANSFER</span>
+            <h3>Import records</h3>
+            <p>Restore credentials, notes and folders to encrypted local drafts. Nothing is sent to Stellar until separately approved.</p>
         </div>
-    }
-    @if (_busy) { <p role="status">Processing record interchange…</p> }
-    @if (_message is not null) { <p role="status">@_message</p> }
-</section>
+
+        @if (!CanStage)
+        {
+            <p class="terminal-alert warning" role="status">Unlock encrypted device storage to import records. On-chain-only mode does not store local drafts.</p>
+        }
+
+        <div class="sv-transfer-option">
+            <div class="sv-transfer-option-heading">
+                <span class="sv-transfer-option-icon" aria-hidden="true">▤</span>
+                <div><strong>JSON or CSV</strong><small>Plaintext records · JSON supports folders</small></div>
+            </div>
+            <p class="advanced-help">Plaintext files may contain secrets. Only use a trusted file and delete the source securely when finished.</p>
+            <label class="sv-secret-approval">
+                <input type="checkbox" @bind="_understood" disabled="@_busy" />
+                I understand plaintext imports must be handled securely and will be staged as local encrypted drafts.
+            </label>
+            <button type="button" class="pixel-button compact sv-transfer-action"
+                    disabled="@(_busy || !_understood || !CanStage)"
+                    @onclick="PickImportAsync">Choose JSON / CSV file</button>
+        </div>
+        <div class="sv-transfer-option">
+            <div class="sv-transfer-option-heading">
+                <span class="sv-transfer-option-icon" aria-hidden="true">▣</span>
+                <div><strong>Encrypted backup</strong><small>.svrb · Argon2id protected</small></div>
+            </div>
+            <label class="sv-transfer-field" for="sv-import-backup-password">Backup password
+                <input id="sv-import-backup-password" type="password" class="terminal-input"
+                       autocomplete="new-password" placeholder="At least 12 characters"
+                       @bind="_backupPassword" disabled="@_busy" />
+            </label>
+            <button type="button" class="pixel-button compact sv-transfer-action"
+                    disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
+                    @onclick="PickEncryptedAsync">Restore encrypted backup</button>
+            <p class="advanced-help">Backups include ordinary records and folders, not binary files, transaction journals or signing credentials.</p>
+        </div>
+        @if (_pending is not null)
+        {
+            <div class="sv-transfer-preview" role="status">
+                <strong>@_pending.Records.Length items validated</strong>
+                <p>These become new local encrypted drafts. Import is not atomic; an interrupted import may leave some drafts pending.</p>
+                <div class="sv-transfer-actions">
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !CanStage || !_understood)"
+                            @onclick="ConfirmImportAsync">Stage encrypted drafts</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ClearImport">Cancel</button>
+                </div>
+            </div>
+        }
+        @if (_busy) { <p role="status">Processing record transfer…</p> }
+        @if (_message is not null) { <p class="sv-transfer-message" role="status">@_message</p> }
+    </div>
 }
 else if (Mode == "export" && SelectedRecordId is not null)
 {
-    <div class="sv-record-export-actions" aria-label="Export selected record">
-        <p class="advanced-help">Exporting creates a file containing this item’s plaintext secrets. Save only to a trusted destination.</p>
-        <label class="sv-secret-approval"><input type="checkbox" @bind="_understood" disabled="@_busy" /> I understand the exported JSON/CSV is plaintext.</label>
-        <div class="sv-access-actions">
-            <button type="button" class="pixel-button compact" disabled="@(_busy || !_understood || !CanExport)" @onclick="ExportJsonAsync">Export JSON</button>
-            @if (SelectedIsFlatRecord)
-            {
-                <button type="button" class="pixel-button compact" disabled="@(_busy || !_understood || !CanExport)" @onclick="ExportCsvAsync">Export CSV</button>
-            }
-        </div>
-        <label>Backup password (minimum 12 characters)
-            <input type="password" class="terminal-input" autocomplete="new-password" @bind="_backupPassword" disabled="@_busy" />
-        </label>
-        <button type="button" class="pixel-button compact" disabled="@(_busy || !CanExport || _backupPassword.Length < 12)" @onclick="ExportEncryptedAsync">Export encrypted backup (.svrb)</button>
-        @if (_busy) { <p role="status">Preparing verified record export…</p> }
-        @if (_message is not null) { <p role="status">@_message</p> }
+    <div class="sv-transfer-export-entry" aria-label="Export selected record">
+        <button type="button" class="pixel-button compact sv-transfer-export-trigger"
+                aria-haspopup="dialog" aria-expanded="@_showExportDialog"
+                @onclick="OpenExportDialog">
+            <span aria-hidden="true">⇧</span> Export
+        </button>
+        @if (_showExportDialog)
+        {
+            <div class="modal-backdrop sv-transfer-export-backdrop" @onclick="CloseExportDialog">
+                <section class="record-modal terminal-panel sv-transfer-export-modal" role="dialog"
+                         aria-modal="true" aria-label="Export record" @onclick:stopPropagation="true">
+                    <header class="modal-header">
+                        <div><span class="panel-kicker">RECORD TRANSFER</span><h2>Export record</h2></div>
+                        <button type="button" class="icon-button close-button" aria-label="Close export"
+                                @onclick="CloseExportDialog">×</button>
+                    </header>
+                    <div class="sv-transfer-content">
+                        <p class="advanced-help">Choose a format for this item. Export creates a local file; it does not broadcast a Stellar transaction.</p>
+                        <div class="sv-transfer-option">
+                            <div class="sv-transfer-option-heading">
+                                <span class="sv-transfer-option-icon" aria-hidden="true">▤</span>
+                                <div><strong>Plaintext export</strong><small>JSON or CSV · contains unencrypted secrets</small></div>
+                            </div>
+                            <label class="sv-secret-approval">
+                                <input type="checkbox" @bind="_understood" disabled="@_busy" />
+                                I understand the exported JSON/CSV contains plaintext secrets.
+                            </label>
+                            <div class="sv-transfer-actions">
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || !_understood || !CanExport)"
+                                        @onclick="ExportJsonAsync">Export JSON</button>
+                                @if (SelectedIsFlatRecord)
+                                {
+                                    <button type="button" class="pixel-button compact"
+                                            disabled="@(_busy || !_understood || !CanExport)"
+                                            @onclick="ExportCsvAsync">Export CSV</button>
+                                }
+                            </div>
+                        </div>
+                        <div class="sv-transfer-option">
+                            <div class="sv-transfer-option-heading">
+                                <span class="sv-transfer-option-icon" aria-hidden="true">▣</span>
+                                <div><strong>Encrypted backup</strong><small>.svrb · password protected</small></div>
+                            </div>
+                            <label class="sv-transfer-field" for="@_backupPasswordId">Backup password
+                                <input id="@_backupPasswordId" type="password" class="terminal-input"
+                                       autocomplete="new-password" placeholder="At least 12 characters"
+                                       @bind="_backupPassword" disabled="@_busy" />
+                            </label>
+                            <button type="button" class="pixel-button compact sv-transfer-action"
+                                    disabled="@(_busy || !CanExport || _backupPassword.Length < 12)"
+                                    @onclick="ExportEncryptedAsync">Save encrypted backup</button>
+                        </div>
+                        @if (_busy) { <p role="status">Preparing verified record export…</p> }
+                        @if (_message is not null) { <p class="sv-transfer-message" role="status">@_message</p> }
+                    </div>
+                </section>
+            </div>
+        }
     </div>
 }
 
@@ -95,6 +147,26 @@ else if (Mode == "export" && SelectedRecordId is not null)
     [Microsoft.AspNetCore.Components.Parameter] public string Mode { get; set; } = "import";
     [Microsoft.AspNetCore.Components.Parameter] public string? SelectedRecordId { get; set; }
     private bool SelectedIsFlatRecord => Records.Any(x => x.Id == SelectedRecordId && !x.IsFolder && string.IsNullOrEmpty(x.FolderId) && VaultRecordInterchange.IsOrdinary(x));
+
+    private bool _showExportDialog;
+    private readonly string _backupPasswordId = "sv-export-pass-" + Guid.NewGuid().ToString("N");
+
+    private void OpenExportDialog()
+    {
+        _message = null;
+        _understood = false;
+        _backupPassword = string.Empty;
+        _showExportDialog = true;
+    }
+
+    private void CloseExportDialog()
+    {
+        if (_busy) return;
+        _showExportDialog = false;
+        _backupPassword = string.Empty;
+        _understood = false;
+        _message = null;
+    }
 
     private bool _busy;
     private bool _understood;
