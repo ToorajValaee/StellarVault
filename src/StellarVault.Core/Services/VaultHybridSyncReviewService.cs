@@ -1,3 +1,4 @@
+using VaultEngine.Core;
 using System.Text.Json;
 
 namespace StellarVault.Core.Services;
@@ -181,6 +182,13 @@ public sealed class VaultHybridSyncReviewService(
                 {
                     details.Add(new(mutation.Id, mutation.Kind, draft.Title,
                         "Network selection changed; review again."));
+                    continue;
+                }
+                if (isCreate && mutation.CapacityPolicy == ObjectCapacityPolicy.SingleAccount &&
+                    cost.CreatesChildNode)
+                {
+                    details.Add(new(mutation.Id, mutation.Kind, draft.Title,
+                        "Single-account policy: record needs another storage account. Change policy only by staging a new authorized mutation."));
                     continue;
                 }
                 var quote = VaultSyncApprovalGuard.Capture(mutation,
