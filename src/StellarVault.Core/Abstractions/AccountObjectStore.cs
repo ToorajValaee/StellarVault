@@ -121,10 +121,41 @@ public interface IAccountObjectStoreProvider
 }
 
 /// <summary>
+/// A destination owns a PRIVATE, unobservable staging stream until CommitAsync
+/// succeeds. AbortAsync must destroy partial plaintext. Implementations must
+/// not expose the staging path or bytes in an API response before commit.
+/// </summary>
+public interface IVerifiedObjectDestination
+{
+    Task<Stream> OpenTemporaryAsync(CancellationToken ct = default);
+    Task CommitAsync(CancellationToken ct = default);
+    Task AbortAsync(CancellationToken ct = default);
+}
+
+/// <summary>
+/// Optional verified large-object streaming capability. It does not weaken
+/// OpenReadAsync's small-buffer guarantee or imply every provider supports it.
+/// </summary>
+public interface IVerifiedObjectExport
+{
+    Task<StoredObject> ExportVerifiedAsync(
+        ObjectStoreScope scope, string objectId,
+        IVerifiedObjectDestination destination, CancellationToken ct = default);
+}
+
+/// <summary>Provider-specific verified streaming support.</summary>
+public interface IVerifiedObjectExportProvider
+{
+    Task<StoredObject> ExportVerifiedAsync(
+        ObjectStoreScope scope, string objectId,
+        IVerifiedObjectDestination destination, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Strict router: no implicit default chain, network, account, provider or
 /// authorization strategy. A missing provider fails closed.
 /// </summary>
-public sealed class AccountObjectStoreRouter : IAccountObjectStore
+public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObjectExport
 {
     private readonly IReadOnlyDictionary<string, IAccountObjectStoreProvider> _providers;
 
@@ -208,6 +239,19 @@ public sealed class AccountObjectStoreRouter : IAccountObjectStore
         var provider = Resolve(scope);
         ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
         return provider.OpenReadAsync(scope, objectId, ct);
+    }
+
+    public Task<StoredObject> ExportVerifiedAsync(
+        ObjectStoreScope scope, string objectId,
+        IVerifiedObjectDestination destination, CancellationToken ct = default)
+    {
+        var provider = Resolve(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        ArgumentNullException.ThrowIfNull(destination);
+        return provider is IVerifiedObjectExportProvider verified
+            ? verified.ExportVerifiedAsync(scope, objectId, destination, ct)
+            : Task.FromException<StoredObject>(
+                new NotSupportedException("Selected storage provider has no verified streaming export."));
     }
 
     public Task<ObjectMutationIntent> DeleteAsync(
