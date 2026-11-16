@@ -241,8 +241,10 @@ test('access-page storage options stay compact and required content remains reac
   assert.match(access, /class="sv-storage-optional"/);
   assert.match(access, /<span>Stellar only<\/span>/);
   assert.match(access, /<span>Encrypted on this device<\/span>/);
-  assert.match(access, /<span>Enable device unlock<\/span>/);
-  assert.match(access, /sv-device-storage-info/);
+  assert.match(access, /<span>Enable device unlock <small>\(optional\)<\/small><\/span>/);
+  assert.match(access, /sv-storage-credential-group/);
+  assert.match(access, /sv-storage-passphrase-field/);
+  assert.match(access, /sv-storage-help-actions/);
   assert.match(css, /\.sv-entry-storage-outside \.sv-access-storage-choices \{/);
   assert.match(css, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /@media \(min-width:1021px\) and \(max-height:780px\)/);
