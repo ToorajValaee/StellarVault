@@ -82,3 +82,20 @@ test('HD draft and remote mutation reviews zero decrypted snapshots on all exits
   assert.match(remote, /await queue\.EnqueueAsync\(mutation, ct\)/,
     'Queue stage still uses the existing durable CAS store');
 });
+
+test('HD queue readiness discards non-ready plaintext while Sync clears retained ready drafts', () => {
+  const queue = read(path.join(core, 'VaultPendingMutationQueue.cs'));
+  const manual = read(path.join(core, 'VaultManualSyncCoordinator.cs'));
+  assert.match(queue, /private static void ClearNonReturnedSnapshots\(/);
+  assert.match(queue, /ReferenceEqualityComparer\.Instance/);
+  assert.match(queue, /ClearNonReturnedSnapshots\(entries, ready\)/);
+  assert.match(queue, /ClearNonReturnedSnapshots\(all, review\.Ready\)/);
+  assert.match(queue, /catch\s*\{\s*ClearSnapshots\(all\);\s*throw;/);
+  const reviewCalls = (manual.match(/await queue\.PrepareReviewAsync\(/g) || []).length;
+  const reviewCleanups = (manual.match(/finally \{ ClearReviewPayloads\((?:ready|review)\); \}/g) || []).length;
+  assert.equal(reviewCalls, 4);
+  assert.equal(reviewCleanups, reviewCalls,
+    'Each quote check or publication attempt must dispose its own plaintext review');
+  assert.match(manual, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.match(manual, /MarkUncertainAsync\(submissionRevision, hash, CancellationToken\.None\)/);
+});
