@@ -14,8 +14,8 @@
 
 @if (Mode == "import")
 {
-<details class="terminal-panel" aria-label="Import vault records">
-    <summary>Import records / restore backup</summary>
+<section class="terminal-panel sv-import-records-form" aria-label="Import vault records">
+    <h3>Import records / restore backup</h3>
     <p class="advanced-help">Imports credentials, notes and folders, not encrypted binary files.
         JSON preserves folder hierarchy; CSV supports flat records. Interchange files
         are <strong>plaintext</strong>, not encrypted vault backups. Import only from a trusted source
@@ -62,7 +62,7 @@
     }
     @if (_busy) { <p role="status">Processing record interchange…</p> }
     @if (_message is not null) { <p role="status">@_message</p> }
-</details>
+</section>
 }
 else if (Mode == "export" && SelectedRecordId is not null)
 {
