@@ -561,19 +561,61 @@ public sealed class StellarAccountObjectStoreProvider(
         }
     }
 
+    /// <summary>
+    /// Verify file metadata without allocating a plaintext file buffer.
+    /// Authentication of the entire tree (including its content hash) must
+    /// finish before the descriptor is returned. OpenRead retains its separate
+    /// bounded memory contract; large files use ExportVerifiedAsync instead.
+    /// </summary>
+    private async Task<VaultStreamingFileTree.Root?> ReadVerifiedTreeMetadataAsync(
+        ObjectStoreScope scope, string objectId, CancellationToken ct)
+    {
+        if (objectId.Length != 16 || !objectId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid Stellar file root ID.", nameof(objectId));
+        var checkpoint = RequireScope(scope, true);
+        IReadOnlyList<LedgerRecordItem> records;
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            records = await linkedLedger.ReadAsync(ct);
+        else
+        {
+            var before = await hdLedger.InspectAccountInfoAsync();
+            if (before.RootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException("HD ledger root differs from file object scope.");
+            records = await hdLedger.ReadAsync();
+        }
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        var matching = records.Where(x => x.Id == objectId).ToArray();
+        if (matching.Length == 0) return null;
+        if (matching.Length != 1)
+            throw new InvalidDataException("Duplicate published object identifier.");
+        if (!VaultLinkedTreeFilePolicy.IsRootRecord(matching[0]))
+        {
+            if (VaultPublishedFileClassification.IsFile(matching[0]) ||
+                VaultPublishedFileClassification.IsInternalNode(matching[0]))
+                throw new NotSupportedException(
+                    "Legacy file and internal file-tree records require their original verified reader.");
+            return null;
+        }
+        // Stream.Null discards every verified output chunk. No file plaintext
+        // escapes, and no memory-bound OpenRead stream is materialized.
+        var manifest = await VaultLinkedTreeFilePolicy.ReadAsync(
+            objectId, records, Stream.Null, ct);
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        ct.ThrowIfCancellationRequested();
+        return manifest;
+    }
+
     public async Task<StoredObject?> GetAsync(
         ObjectStoreScope scope, string objectId, CancellationToken ct = default)
     {
-        var file = await LoadVerifiedTreeAsync(scope, objectId, ct);
+        var file = await ReadVerifiedTreeMetadataAsync(scope, objectId, ct);
         if (file is not null)
         {
-            await using var verifiedBytes = file.Value.Bytes;
-            var root = file.Value.Manifest;
             return new StoredObject(
                 new ObjectDescriptor(objectId, VaultRecordTypeFactory.File,
-                    root.FileName, root.ContentType),
-                "content-sha256:" + root.Sha256Hex,
-                root.Length, root.Sha256Hex);
+                    file.FileName, file.ContentType),
+                "content-sha256:" + file.Sha256Hex,
+                file.Length, file.Sha256Hex);
         }
         var record = await ReadOrdinaryAsync(scope, objectId, ct);
         if (record is null) return null;
