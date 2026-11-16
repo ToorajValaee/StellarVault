@@ -361,7 +361,8 @@ public sealed class StellarAccountObjectStoreProvider(
                     throw new InvalidOperationException(
                         "Published record changed since Edit opened. Reload before saving.");
                 await RequireSameScopeAsync(scope, checkpoint, true);
-                var staged = await hdRemoteMutations.StageUpdateAsync(id, draft, ct);
+                var staged = await hdRemoteMutations.StageUpdateAsync(
+                    id, draft, expectedRevision["hd-sha256:".Length..], ct);
                 await RequireSameScopeAsync(scope, checkpoint, true);
                 if (!hdSessions.IsUnlocked || hdSessions.Epoch != epoch)
                     throw new InvalidOperationException("HD unlock changed during update staging.");
