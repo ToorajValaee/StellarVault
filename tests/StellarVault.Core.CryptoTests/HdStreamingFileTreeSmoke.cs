@@ -72,6 +72,44 @@ internal static class HdStreamingFileTreeSmoke
                 restored.ToArray().AsSpan().SequenceEqual(input),
                 "HD file tree did not reconstruct authenticated bytes.");
 
+            var verified = await VaultLinkedTreeFilePolicy.InspectVerifiedAsync(
+                result.RootId, remote);
+            Check(verified.NodeIds.Length == remote.Count &&
+                verified.NodeIds[0] == result.RootId &&
+                verified.NodeIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() ==
+                    verified.NodeIds.Length &&
+                verified.GroupTag == "svtree3-group:" + group &&
+                verified.Manifest.Sha256Hex == manifest.Sha256Hex,
+                "Authenticated SVTREE3 deletion inventory lost or duplicated nodes.");
+
+            // A valid content hash is not sufficient ownership: mixing two
+            // distinct file groups must fail even when the child bytes are
+            // otherwise identical. The downloader must fail closed too.
+            var crossGroup = remote.Select(x => x.Id == leaf.EntityId
+                ? x with { Tags = ["svtree3-leaf", "svtree3-group:fedcba9876543210"] }
+                : x).ToArray();
+            try
+            {
+                await VaultLinkedTreeFilePolicy.InspectVerifiedAsync(result.RootId, crossGroup);
+                throw new Exception("Cross-file SVTREE3 node ownership was accepted.");
+            }
+            catch (InvalidDataException) { }
+            try
+            {
+                await VaultLinkedTreeFilePolicy.ReadAsync(result.RootId, crossGroup, Stream.Null);
+                throw new Exception("Cross-file SVTREE3 download was accepted.");
+            }
+            catch (InvalidDataException) { }
+            var duplicateRoot = remote.Append(remote[^1] with {
+                Id = "fedcba9876543210"
+            }).ToArray();
+            try
+            {
+                await VaultLinkedTreeFilePolicy.InspectVerifiedAsync(result.RootId, duplicateRoot);
+                throw new Exception("Ambiguous shared file group became a deletion inventory.");
+            }
+            catch (InvalidDataException) { }
+
             // The last root can have an unchanged immediate branch while an
             // earlier leaf was modified from another device. A fresh HD quote
             // must reject this deep drift exactly as the independent S-key
