@@ -1,5 +1,6 @@
 using VaultEngine.Core;
 using System.Text.Json;
+using System.Security.Cryptography;
 
 namespace StellarVault.Core.Services;
 
@@ -39,6 +40,8 @@ public sealed class VaultHybridSyncReviewService(
         // Reuse the same consent-bound encrypted queue and folder-graph
         // inspection as any other Stellar account strategy.
         var snapshot = await scopedQueue.ReadAsync(accountId, ct);
+        try
+        {
         if (snapshot.NetworkId != networkId || snapshot.LocalSessionEpoch != sessionEpoch)
             throw new InvalidOperationException("Encrypted queue scope changed during review.");
         // Legacy untagged entries retain HD semantics. A tagged independent
@@ -217,7 +220,23 @@ public sealed class VaultHybridSyncReviewService(
             throw new InvalidOperationException(
                 "Unlocked vault session or selected network changed during hybrid review.");
 
+        // Only Ready entries are intentionally returned to the caller. A
+        // full same-snapshot folder review requires ALL entries temporarily,
+        // but keeping blocked/conflicted plaintext afterward is unnecessary.
+        var retained = new HashSet<VaultPendingMutation>(
+            review.Ready, ReferenceEqualityComparer.Instance);
+        foreach (var item in snapshot.Mutations)
+            if (!retained.Contains(item))
+                CryptographicOperations.ZeroMemory(item.EncryptedPayload);
         return new(accountId, networkId, review, details, ledger.IsConnected,
             snapshot.FolderPlan);
+        }
+        catch
+        {
+            // On error no review is returned: zero ALL copies, even Ready.
+            foreach (var entry in snapshot.Mutations)
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            throw;
+        }
     }
 }
