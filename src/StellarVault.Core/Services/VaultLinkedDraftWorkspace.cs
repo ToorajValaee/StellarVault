@@ -107,13 +107,6 @@ public sealed class VaultLinkedDraftWorkspace(
         return CreateCoreAsync(draft, allowSingleFile: true, ct, ObjectCapacityPolicy.SingleAccount);
     }
 
-    /// <summary>
-    /// Stream a file of any logical length into the existing encrypted S-key
-    /// queue as bounded SVTREE3 ledger records. All child nodes are durably
-    /// staged before the root is created. No fee is approved and nothing is
-    /// signed or transmitted here. Each node requires later independent
-    /// approval and historical reconciliation through the standard publisher.
-    /// </summary>
     private static bool IsPendingTreeGroupNode(
         VaultPendingMutation entry, string groupId)
     {
@@ -135,6 +128,13 @@ public sealed class VaultLinkedDraftWorkspace(
         catch (JsonException) { return false; }
     }
 
+    /// <summary>
+    /// Stream a file of any logical length into the existing encrypted S-key
+    /// queue as bounded SVTREE3 ledger records. All child nodes are durably
+    /// staged before the root is created. No fee is approved and nothing is
+    /// signed or transmitted here. Each node requires later independent
+    /// approval and historical reconciliation through the standard publisher.
+    /// </summary>
     public async Task<VaultStreamingFileTree.Result> StageTreeFileAsync(
         string title, string fileName, string contentType,
         Stream input, string? parentFolderId = null, CancellationToken ct = default,
