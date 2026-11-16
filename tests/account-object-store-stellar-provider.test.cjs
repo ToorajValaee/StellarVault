@@ -26,7 +26,8 @@ test('Stellar provider validates capacity mode and keeps unsupported mutation pa
   assert.match(provider, /ObjectId='new'/);
   assert.match(provider, /Large or binary objects require the verified streaming file provider/);
   assert.match(provider, /Revision-pinned updates need the existing remote-mutation journal adapter/);
-  assert.match(provider, /Deletion requires an authenticated, revision-pinned remote mutation journal/);
+  assert.match(provider, /await hdRemoteMutations\.StageDeleteAsync\(/);
+  assert.match(provider, /await linkedDrafts\.StageDeleteAsync\(/);
   assert.match(provider, /Linked-account fees require the existing approval-quote lifecycle adapter/);
   assert.match(provider, /await hdLedger\.EstimateAsync\(draft\)/);
   assert.match(provider, /await hdLedger\.InspectAccountInfoAsync\(\)/);
@@ -269,4 +270,28 @@ test('all SVTREE3 nodes and revision-pinned edits carry mandatory policy to revi
   assert.match(linkedFiles, /with \{ OriginStrategyId = VaultMutationStrategyPolicy\.Linked,\s*CapacityPolicy = capacityPolicy \}/);
   assert.match(review, /mutation\.Kind is VaultMutationKind\.UpdateRecord/);
   assert.match(publisher, /VaultCapacityPolicyGuard\.RequireCreateAllowed/);
+});
+
+test('neutral Delete requires original remote revision and stages only in existing encrypted queues', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const router = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  assert.match(router, /provider\.PrepareDeleteAsync\(scope, objectId, expectedRevision, ct\)/);
+  assert.match(provider, /public async Task<ObjectMutationIntent> PrepareDeleteAsync\(/);
+  assert.match(provider, /ReadOrdinaryAsync\(scope, objectId, ct\)/);
+  assert.match(provider, /linked-manifest:/);
+  assert.match(provider, /hd-sha256:/);
+  assert.match(provider, /VaultLinkedRemoteRevisionPolicy\.IsValid\(expectedRevision\[prefix\.Length\.\.\]\)/);
+  assert.match(provider, /hdRemoteMutations\.StageDeleteAsync\(\s*objectId, expectedRevision\[prefix\.Length\.\.\], ct\)/);
+  assert.match(provider, /linkedDrafts\.StageDeleteAsync\(\s*objectId, expectedRevision\[prefix\.Length\.\.\], ct\)/);
+  assert.match(provider, /hdSessions\.Epoch != epoch/);
+  assert.match(provider, /linkedKeys\.UnlockEpoch != epoch/);
+  assert.match(provider, /ObjectMutationState\.Prepared/);
+  assert.match(hd, /StageDeleteAsync\(\s*string recordId, string expectedBaselineSha256,/);
+  assert.match(hd, /StageAsync\(recordId, null, delete: true, ct,\s*expectedBaselineSha256\)/);
+  assert.match(hd, /!string\.Equals\(baseline, expectedBaselineSha256, StringComparison\.Ordinal\)/);
+  assert.match(linked, /beforeRevision != expectedRevision/);
+  assert.match(linked, /currentRevision != expectedRevision/);
+  assert.doesNotMatch(provider, /PublishWithPreparedHashAsync\(|PublishDetailedAsync\(|SubmitApprovedAsync\(/);
 });
