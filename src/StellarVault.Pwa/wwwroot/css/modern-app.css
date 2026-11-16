@@ -5624,3 +5624,47 @@ html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-help
 html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-help-text {
   background:#20392f!important;border-color:#395d4c!important;color:#d8ede2!important;
 }
+
+
+/* The local vault passphrase and device unlock are one storage choice,
+   not a second disconnected form below the signer credentials. */
+.sv-web-shell .sv-entry-storage-outside .sv-storage-credential-group {
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,1.35fr);
+  align-items:start;gap:8px 14px;margin-top:8px;padding:10px 11px;
+  background:#f3f9f6;border:1px solid #d4e9de;border-radius:9px;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-credential-group .sv-storage-device-unlock {
+  margin:1px 0 0!important;min-height:35px!important;background:transparent!important;
+  border:0!important;box-shadow:none!important;padding:5px 1px!important;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-device-unlock small {
+  font-size:10px;font-weight:400;opacity:.7;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-field {
+  min-width:0;display:grid;gap:4px;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-field .terminal-label {
+  font:650 11px/1.25 Inter,"Segoe UI",Arial,sans-serif!important;
+  color:#294a42!important;margin:0!important;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-field .terminal-input {
+  width:100%;min-height:34px!important;height:34px!important;
+  padding:5px 10px!important;box-sizing:border-box;
+}
+.sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-hint {
+  margin:0!important;color:#60776e!important;
+  font:400 10px/1.35 Inter,"Segoe UI",Arial,sans-serif!important;
+}
+@media (max-width:600px) {
+  .sv-web-shell .sv-entry-storage-outside .sv-storage-credential-group {
+    grid-template-columns:minmax(0,1fr)!important;gap:5px!important;
+    padding:8px!important;
+  }
+}
+html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-credential-group {
+  background:#1c332b!important;border-color:#365a48!important;
+}
+html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-field .terminal-label,
+html[data-theme="dark"] .sv-web-shell .sv-entry-storage-outside .sv-storage-passphrase-hint {
+  color:#bfdecf!important;
+}
