@@ -5,6 +5,8 @@
 @inject VaultSessionManager Sessions
 @inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject IStellarLedgerRecords LedgerRecords
+@inject IStellarSecretKeyLedger SecretLedger
+@inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultSessionWorkflow Workflow
 @inject VaultStorageModeGate StorageMode
@@ -228,8 +230,10 @@ else
         _resumeError = null;
         _biometricEnrolled = false;
         Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
         await LinkedQueueKeys.LockAsync();
+        await SecretLedger.DisconnectAsync();
         await LedgerRecords.DisconnectAsync();
         Navigation.NavigateTo("/", replace: true);
     }
