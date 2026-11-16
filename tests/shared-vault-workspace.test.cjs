@@ -139,3 +139,27 @@ test('PWA and native hosts reuse identical inspectors, forms, trees and rows', (
   assert.match(localSkey, /private bool ShowDrafts => View is "all" or "drafts"/);
   assert.match(localSkey, /private bool ShowSync => View is "all" or "sync"/);
 });
+
+test('both PWA and native HD file forms choose direct ledger or encrypted queue without silent device retention', () => {
+  const web = read('StellarVault.Pwa/Pages/VaultItemEditor.razor');
+  const native = read('StellarVault.UI/Components/NativeVaultWorkspace.razor');
+  const uploader = read('StellarVault.Core/Services/StellarLedgerUploadCoordinator.cs');
+  for (const ui of [web, native]) {
+    assert.match(ui, /@inject StellarLedgerUploadCoordinator DirectFileUpload/);
+    assert.match(ui, /HybridDrafts\.StageTreeFileAsync\(/);
+    assert.match(ui, /new StellarLedgerUploadPlan\(/);
+    assert.match(ui, /DirectFileUpload\.ReviewAsync\(/);
+    assert.match(ui, /DirectFileUpload\.PublishNextApprovedAsync\(/);
+    assert.match(ui, /StellarLedgerFileProtocol\.DecodeFile\(/);
+    assert.match(ui, /NetworkFeeXlm <= .*NetworkFeeXlm/);
+    assert.match(ui, /CryptographicOperations\.ZeroMemory\(content\)/);
+  }
+  assert.match(web, /@if \(CanSaveOffline\)/);
+  assert.match(web, /PrepareDirectFileAsync/);
+  assert.match(native, /@if \(Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked &&/);
+  assert.match(native, /PrepareNativeDirectFileAsync/);
+  assert.match(native, /_nativeDirectFileUncertain = true/);
+  assert.match(native, /_nativeDirectFileScope != NetworkSelection\.CredentialKey/);
+  assert.match(uploader, /mode\.Require\(VaultStorageMode\.StellarLedger\)/);
+  assert.match(uploader, /plan\.Remaining\(finalSnapshot\)/);
+});
