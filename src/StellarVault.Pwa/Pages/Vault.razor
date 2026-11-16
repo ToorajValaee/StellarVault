@@ -13,6 +13,7 @@
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
 @inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultStorageModeGate StorageMode
 @inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
 @inject VaultPendingMutationQueue PendingQueue
@@ -188,7 +189,7 @@ else
                         <p>@(Retention.AllowsLocalPersistence ? "Device storage allowed" : "Stellar-only session")</p></div>
                     </div>
                     <p class="advanced-help">Offline data stays on this device until you explicitly approve synchronization. Keep your own backup.</p>
-                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock vault</button>
+                    <button class="pixel-button compact" type="button" @onclick="LockActiveVaultAsync">Lock vault</button>
                 </div>
             </section>
         }
@@ -722,6 +723,7 @@ else
             await _linkedWorkspace.LockFromShellAsync();
             Workflow.Lock();
             Retention.Reset();
+            LinkedRetention.Reset();
             StorageMode.Reset();
             Privacy.Clear();
             _showImportDialog = false;
@@ -1494,6 +1496,7 @@ else
         try { await SecretLedger.DisconnectAsync(); } catch { failed = true; }
         try { Workflow.Lock(); } catch { failed = true; }
         Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
         Privacy.Clear();
         try { await Ledger.DisconnectAsync(); } catch { failed = true; }
