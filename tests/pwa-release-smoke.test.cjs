@@ -191,13 +191,16 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   assert.match(add, /!Sessions\.IsUnlocked && !Ledger\.IsConnected/);
 });
 
-test('HD file upload uses encrypted durable queue instead of in-memory checkpoint plan', () => {
+test('HD hybrid file upload uses encrypted durable queue separately from session-only direct plans', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.match(add, /!Sessions\.IsUnlocked \|\| !Retention\.AllowsLocalPersistence/);
   assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
   assert.match(add, /selected\.OpenReadStream\(selected\.Size\)/);
-  assert.doesNotMatch(add, /Checkpoints\.LoadAsync|StellarLedgerUploadPlan|CurrentUploadPlan|_fileBytes/);
+  assert.doesNotMatch(add, /Checkpoints\.LoadAsync|CurrentUploadPlan|_fileBytes/);
+  assert.match(add, /if \(CanSaveOffline\)/);
+  assert.match(add, /new StellarLedgerUploadPlan\(/);
+  assert.match(add, /DirectFileUpload\.PublishNextApprovedAsync\(/);
   assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
 });
@@ -434,8 +437,9 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   assert.match(inspector, /sv-inspector-more/);
   // The obsolete flat-file upload checkpoint was removed; the shared HD
   // streaming queue owns interrupted-file recovery instead.
-  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null;/);
-  assert.doesNotMatch(editor, /_uncertainStage|StellarLedgerUploadPlan/);
+  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _directFilePlan is not null/);
+  assert.doesNotMatch(editor, /_uncertainStage/);
+  assert.match(editor, /_directFileUncertain/);
   assert.match(editor, /OnSaved.InvokeAsync/);
   assert.match(css, /grid-template-columns:245px minmax\(0,1fr\) var\(--sv-record-inspector-width\)/);
   assert.match(css, /\.sv-editor-embedded/);
@@ -863,4 +867,25 @@ test('direct on-chain deletion excludes malformed file envelopes and refreshes a
   assert.match(submit, /await Ledger\.DeleteAsync\(candidate\.Id\)/);
   assert.ok(submit.indexOf('SamePublishedDeleteSnapshot(candidate, current)') <
     submit.indexOf('await Ledger.DeleteAsync(candidate.Id)'), 'preflight must run before deletion');
+});
+
+test('Stellar-only HD file upload uses a separate no-persistence fee-approved file plan', () => {
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  const core = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core',
+    'Services', 'StellarLedgerUploadCoordinator.cs'), 'utf8');
+  assert.match(editor, /@inject StellarLedgerUploadCoordinator DirectFileUpload/);
+  assert.match(editor, /@onclick="PrepareDirectFileAsync"/);
+  assert.match(editor, /!CanSaveOffline && _selectedHdFile is \{ Size: > StellarLedgerFileProtocol\.MaxFileBytes \}/);
+  assert.match(editor, /selected\.OpenReadStream\(StellarLedgerFileProtocol\.MaxFileBytes\)/);
+  assert.match(editor, /new StellarLedgerUploadPlan\(/);
+  assert.match(editor, /CryptographicOperations\.ZeroMemory\(content\)/);
+  assert.match(editor, /DirectFileUpload\.ReviewAsync\(plan\)/);
+  assert.match(editor, /DirectFileUpload\.PublishNextApprovedAsync\(/);
+  assert.match(editor, /fresh\.NetworkFeeXlm <= approvedCost\.NetworkFeeXlm/);
+  assert.match(editor, /_directFileUncertain = true/);
+  assert.match(editor, /StellarLedgerFileProtocol\.DecodeFile\(manifest, remote\)/);
+  assert.match(core, /plan\.Remaining\(finalSnapshot\)/);
+  assert.match(core, /await ledger\.PublishWithIdAsync\(next\.Id, next\.Draft\)/);
+  assert.match(core, /requestApproval\(next\.Draft\)/);
+  assert.doesNotMatch(editor, /localStorage\.setItem|sessionStorage\.setItem/);
 });
