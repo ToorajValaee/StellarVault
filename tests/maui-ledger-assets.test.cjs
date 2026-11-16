@@ -298,7 +298,7 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(workspace, /sv-native-shortcut-grid/);
   assert.match(workspace, /_ledgerRecords\.Count\(x => !VaultPublishedFileClassification\.IsInternalNode\(x\)\) items/);
   assert.match(workspace, /_ledgerRecords\.Count\(x => x\.FolderId == shortcut\.Id && !VaultPublishedFileClassification\.IsInternalNode\(x\)\) items/);
-  assert.match(workspace, /<VaultPublishedItemsView Items="_ledgerRecords"/);
+  assert.match(workspace, /<VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy\.Hd" Items="_ledgerRecords"/);
   const rows = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/VaultPublishedItemsView.razor'), 'utf8');
   assert.match(rows, /<VaultExplorerItemRow Item="item"/);
