@@ -267,7 +267,7 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
-                    <VaultRecordTransferPanel Strategy="@VaultMutationStrategyPolicy.Hd" Records="_ledgerRecords" />
+                    <div class="sv-access-actions"><details class="sv-object-actions"><summary>⋯ Vault menu</summary><div class="sv-object-menu"><VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy.Hd" Records="_ledgerRecords" /></div></details></div>
                     <div class="sv-native-mobile-collections" role="group" aria-label="Browse items">
                         <button type="button" class="@(_nativeCollection == "all" ? "selected" : "")" @onclick='() => _nativeCollection = "all"'>▱ All Items</button>
                         <button type="button" class="@(_nativeCollection == "folders" ? "selected" : "")" @onclick='() => _nativeCollection = "folders"'>▱ Folders</button>
@@ -312,7 +312,7 @@ else
                                 }
                             </select>
                             <div class="sv-native-object-grid">
-                            <VaultPublishedItemsView Items="_ledgerRecords"
+                            <VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy.Hd" Items="_ledgerRecords"
                                                      FolderId="_selectedFolderId"
                                                      Search="_nativeSearch"
                                                      Collection="_nativeCollection"
@@ -327,6 +327,8 @@ else
                     <VaultRecordInspector @key="_selectedRecord.Id"
                                           Embedded="true"
                                           Item="_selectedRecord"
+                                          Strategy="@VaultMutationStrategyPolicy.Hd"
+                                          Records="_ledgerRecords"
                                           FolderPath="@(string.IsNullOrEmpty(_selectedFolderId)
                                               ? "My vault" : NativeFolderPath(_selectedFolderId))"
                                           CanEdit="false"
