@@ -152,10 +152,41 @@ public interface IVerifiedObjectExportProvider
 }
 
 /// <summary>
+/// Read-only planning result for a previously staged mutation. An approval
+/// reference is NOT authorization to sign, spend or submit a transaction.
+/// </summary>
+public sealed record ObjectMutationReview(
+    string OperationId, string ObjectId, ObjectMutationState State,
+    ObjectStorageQuote Quote, string Explanation,
+    string? ReviewReference = null);
+
+/// <summary>
+/// Optional planning capability: the existing provider-specific publisher
+/// retains one-shot signed approval and historical verification responsibilities.
+/// </summary>
+public interface IObjectMutationReview
+{
+    Task<ObjectMutationReview> ReviewAsync(
+        ObjectStoreScope scope, string operationId,
+        CancellationToken ct = default);
+    Task CancelReviewAsync(
+        ObjectStoreScope scope, CancellationToken ct = default);
+}
+
+public interface IObjectMutationReviewProvider
+{
+    Task<ObjectMutationReview> ReviewAsync(
+        ObjectStoreScope scope, string operationId,
+        CancellationToken ct = default);
+    Task CancelReviewAsync(
+        ObjectStoreScope scope, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Strict router: no implicit default chain, network, account, provider or
 /// authorization strategy. A missing provider fails closed.
 /// </summary>
-public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObjectExport
+public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObjectExport, IObjectMutationReview
 {
     private readonly IReadOnlyDictionary<string, IAccountObjectStoreProvider> _providers;
 
@@ -252,6 +283,27 @@ public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObj
             ? verified.ExportVerifiedAsync(scope, objectId, destination, ct)
             : Task.FromException<StoredObject>(
                 new NotSupportedException("Selected storage provider has no verified streaming export."));
+    }
+
+    public Task<ObjectMutationReview> ReviewAsync(
+        ObjectStoreScope scope, string operationId, CancellationToken ct = default)
+    {
+        var provider = Resolve(scope);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+        return provider is IObjectMutationReviewProvider reviewer
+            ? reviewer.ReviewAsync(scope, operationId, ct)
+            : Task.FromException<ObjectMutationReview>(
+                new NotSupportedException("Selected provider has no reviewed publication planning."));
+    }
+
+    public Task CancelReviewAsync(
+        ObjectStoreScope scope, CancellationToken ct = default)
+    {
+        var provider = Resolve(scope);
+        return provider is IObjectMutationReviewProvider reviewer
+            ? reviewer.CancelReviewAsync(scope, ct)
+            : Task.FromException(
+                new NotSupportedException("Selected provider has no reviewed publication planning."));
     }
 
     public Task<ObjectMutationIntent> DeleteAsync(
