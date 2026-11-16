@@ -184,6 +184,26 @@ internal static class StellarObjectEstimateSmoke
               verifiedResult.Descriptor.TypeId == VaultRecordTypeFactory.File,
             "Private verified export did not commit exactly one fully authenticated file.");
 
+        // End-to-end engine -> Stellar adapter -> authenticated tree ->
+        // concrete native/hosted atomic filesystem destination.
+        var outputDirectory = Path.Combine(Path.GetTempPath(),
+            "vaultengine-tree-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
+        try
+        {
+            var outputPath = Path.Combine(outputDirectory, "verified-file.bin");
+            await using (var destination = new AtomicFileObjectDestination(outputPath))
+            {
+                var exported = await ((IVerifiedObjectExport)fileEngine)
+                    .ExportVerifiedAsync(scope, rootRecord.Id, destination);
+                Check(exported.Length == original.Length &&
+                    File.Exists(outputPath) &&
+                    File.ReadAllBytes(outputPath).AsSpan().SequenceEqual(original),
+                    "Engine could not commit an authenticated file to atomic native destination.");
+            }
+        }
+        finally { Directory.Delete(outputDirectory, recursive: true); }
+
         // Corrupted published file content must never escape the private
         // verification stream as an apparently valid plaintext object.
         var damaged = published.First(x =>
