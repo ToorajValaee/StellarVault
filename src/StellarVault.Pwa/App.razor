@@ -91,10 +91,17 @@ else
                 NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
             }
             else return;
-            // Remembered encrypted-device credentials are NOT an active
-            // session and must never hijack a new on-chain-only login. The
-            // normal VaultHome access screen lets the user choose on-chain
-            // only or explicitly reopen encrypted local storage.
+            // A saved encrypted vault is NOT an active session. Only the
+            // explicit tab-scoped hybrid intent from a successful prior login
+            // may resume after a refresh; ending the session removes it.
+            if (!await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasHybridSession",
+                    recent.Account, recent.Network))
+                return;
+            if (!await Workflow.HasLocalVaultAsync(recent.Account) ||
+                !await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasEncryptedSeed",
+                    recent.Account, recent.Network))
+                return;
+            _coldAccount = recent.Account;
         }
         catch (Exception)
         {
@@ -225,6 +232,8 @@ else
         // On a subsequent login the user must choose device storage again.
         Sessions.Lock();
         Privacy.Clear();
+        try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+        catch (JSException) { /* Session keys are locked even if sessionStorage is unavailable. */ }
         _coldAccount = null;
         _resumePassphrase = string.Empty;
         _resumeError = null;
