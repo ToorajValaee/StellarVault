@@ -62,6 +62,11 @@ Exports re-read the connected ledger, require explicit plaintext consent (or
 a separately password-encrypted backup), and reject a selected record that is
 missing or no longer an ordinary record.
 
+The engine's file metadata `GetAsync` now verifies the complete SVTREE3 tree
+and content hash into a discard sink, without allocating the file as plaintext.
+`OpenReadAsync` remains capped at 8 MiB for verified in-memory reads;
+`ExportVerifiedAsync` is the private-destination streaming path for larger files.
+
 **Not yet implemented or release-approved:** whole-tree deletion publication
 with restart/reconciliation proofs; unrestricted large-file use; independent
 live Testnet interruption verification, cross-platform release testing, and
