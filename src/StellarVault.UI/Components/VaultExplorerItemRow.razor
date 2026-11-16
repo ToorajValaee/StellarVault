@@ -31,6 +31,10 @@
                 <button type="button" @onclick="() => OnOpen.InvokeAsync(Item)">
                     @(Item.IsFolder ? "Open folder details" : "View details")
                 </button>
+                @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
+                {
+                    <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+                }
                 @if (!IsFile && CanEdit)
                 {
                     <button type="button" @onclick="() => OnEdit.InvokeAsync(Item)">
@@ -50,6 +54,8 @@
 @code {
     [Parameter, EditorRequired] public LedgerRecordItem Item { get; set; } = default!;
     [Parameter] public bool Selected { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
     [Parameter] public bool CanEdit { get; set; } = true;
     [Parameter] public bool CanDelete { get; set; } = true;
     [Parameter] public EventCallback<LedgerRecordItem> OnOpen { get; set; }
