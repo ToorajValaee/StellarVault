@@ -261,22 +261,32 @@ else
     [JSInvokable]
     public async Task LockForBrowserLifecycle()
     {
+        // A failing linked-key adapter must not skip HD key invalidation.
         Privacy.Clear();
-        await LinkedQueueKeys.LockAsync();
         Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        try { await LinkedQueueKeys.LockAsync(); }
+        finally
+        {
+            try { await SecretLedger.DisconnectAsync(); }
+            finally { await LedgerRecords.DisconnectAsync(); }
+        }
+        // Do not clear the hybrid tab marker on a page refresh: the next app
+        // instance must demand a passphrase before restoring that hybrid tab.
     }
 
     public async ValueTask DisposeAsync()
     {
         Privacy.Changed -= RefreshPrivacy;
-        Privacy.Clear();
-        await LinkedQueueKeys.LockAsync();
-        Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
-        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
-        catch (JSException) { }
-        catch (JSDisconnectedException) { }
-        _callback?.Dispose();
+        try { await LockForBrowserLifecycle(); }
+        finally
+        {
+            try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+            _callback?.Dispose();
+        }
     }
 }
