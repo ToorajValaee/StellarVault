@@ -210,6 +210,11 @@ public sealed class VaultManualSyncCoordinator(
             await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var cost = await EstimateRemoteCostAsync(mutation);
             await RequireConnectedRootAsync(context, ct);
+            if ((mutation.Kind is VaultMutationKind.UpdateRecord or
+                VaultMutationKind.UpdateFolder) &&
+                !VaultCapacityPolicyGuard.AllowsCreate(
+                    mutation.CapacityPolicy, cost.CreatesChildNode))
+                return false;
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
         }
@@ -291,6 +296,9 @@ public sealed class VaultManualSyncCoordinator(
                 context.NetworkId, remote, DateTimeOffset.UtcNow, ct);
             await RequireFreshDeletionCopyInventoryAsync(mutation, context, ct);
             var cost = await EstimateRemoteCostAsync(mutation);
+            if (mutation.Kind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder)
+                VaultCapacityPolicyGuard.RequireCreateAllowed(
+                    mutation.CapacityPolicy, cost.CreatesChildNode);
             if (cost.NetworkFeeXlm > quote.QuotedFeeXlm ||
                 cost.PeakReserveXlm > quote.QuotedPeakReserveXlm)
                 throw new InvalidOperationException("Network costs changed; obtain a new approval.");
