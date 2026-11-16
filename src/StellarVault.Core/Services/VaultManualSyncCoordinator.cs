@@ -1,5 +1,6 @@
 using VaultEngine.Core;
 using System.Text.Json;
+using System.Security.Cryptography;
 namespace StellarVault.Core.Services;
 
 /// <summary>
@@ -73,6 +74,8 @@ public sealed class VaultManualSyncCoordinator(
             if (quote.AccountId != accountId || quote.NetworkId != context.NetworkId) return false;
             await RequireConnectedRootAsync(context, ct);
             var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
+            try
+            {
             var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId);
             if (mutation is null || review.NeedsReconciliation != 0 || review.Conflicts != 0)
                 return false;
@@ -90,6 +93,8 @@ public sealed class VaultManualSyncCoordinator(
                 return false;
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+            }
+            finally { ClearReviewPayloads(review); }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
@@ -116,6 +121,8 @@ public sealed class VaultManualSyncCoordinator(
         await RequireConnectedRootAsync(context, ct);
         // Perform all fallible validation BEFORE recording submission intent.
         var ready = await queue.PrepareReviewAsync(accountId, network, ct);
+        try
+        {
         var mutation = ready.Ready.SingleOrDefault(x => x.Id == quote.MutationId)
             ?? throw new InvalidOperationException("Draft is no longer ready for publishing.");
         VaultSyncApprovalGuard.RequireFresh(quote, mutation, accountId, network,
@@ -176,6 +183,8 @@ public sealed class VaultManualSyncCoordinator(
                 ? "Submission attempted. Independent record-to-transaction verification is required."
                 : "Submission result unknown. Do not retry; reconcile with Stellar before taking any action.");
         }
+        finally { ClearReviewPayloads(ready); }
+        }
         finally { submissionGate.Release(); }
     }
 
@@ -199,6 +208,8 @@ public sealed class VaultManualSyncCoordinator(
                 return false;
             await RequireConnectedRootAsync(context, ct);
             var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
+            try
+            {
             if (review.NeedsReconciliation != 0 || review.Conflicts != 0 ||
                 !review.Ready.Any(x => x.Id == quote.MutationId)) return false;
             var mutation = review.Ready.Single(x => x.Id == quote.MutationId);
@@ -217,6 +228,8 @@ public sealed class VaultManualSyncCoordinator(
                 return false;
             return cost.NetworkFeeXlm <= quote.QuotedFeeXlm &&
                 cost.PeakReserveXlm <= quote.QuotedPeakReserveXlm;
+            }
+            finally { ClearReviewPayloads(review); }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception) { return false; }
@@ -282,6 +295,8 @@ public sealed class VaultManualSyncCoordinator(
         {
             await RequireConnectedRootAsync(context, ct);
             var review = await queue.PrepareReviewAsync(accountId, context.NetworkId, ct);
+            try
+            {
             if (review.NeedsReconciliation != 0 || review.Conflicts != 0)
                 throw new InvalidOperationException("Resolve earlier submissions and conflicts first.");
             var mutation = review.Ready.SingleOrDefault(x => x.Id == quote.MutationId)
@@ -380,8 +395,18 @@ public sealed class VaultManualSyncCoordinator(
                         ? "Update manifest submitted. Inspect the recorded commit hash with authenticated historical verification; do not retry."
                         : "Deletion attempted. Tombstone confirmation is unavailable; do not retry."
                     : "Remote update/delete outcome unknown. The mutation is quarantined; do not retry.");
+            }
+            finally { ClearReviewPayloads(review); }
         }
         finally { submissionGate.Release(); }
+    }
+    private static void ClearReviewPayloads(VaultSyncReview review)
+    {
+        // Ready entries are the decrypted snapshots deliberately returned by
+        // queue review. Keep them alive through their exact authorized quote
+        // or publication attempt, then wipe on success, rejection or timeout.
+        foreach (var entry in review.Ready)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
     }
 }
 
