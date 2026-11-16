@@ -734,6 +734,8 @@ else
             LinkedRetention.Reset();
             StorageMode.Reset();
             Privacy.Clear();
+            ClearPendingSnapshot();
+            ClearSyncReview();
             _showImportDialog = false;
             await ClearHybridResumeIntentAsync();
             return;
@@ -1558,7 +1560,6 @@ else
         ClearSyncReview();
         await ClearHybridResumeIntentAsync();
         try { await Ledger.DisconnectAsync(); } catch { failed = true; }
-        await ClearHybridResumeIntentAsync();
         if (failed)
         {
             _conflictLockError = "Not all sessions could be closed. Restart the application before unlocking another vault.";
