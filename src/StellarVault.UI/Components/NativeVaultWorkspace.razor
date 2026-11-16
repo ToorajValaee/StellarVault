@@ -1083,7 +1083,11 @@ else
                 }
                 content = memory.ToArray();
             }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
+            finally
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(memory.GetBuffer());
+            }
             StorageMode.Select(VaultStorageMode.StellarLedger);
             var title = picked.FileName.Length > 256
                 ? picked.FileName[..256] : picked.FileName;
