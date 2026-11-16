@@ -32,7 +32,9 @@ test('HD SVTREE3 file upload shares encrypted queue and existing verified public
   assert.match(queue, /VaultLinkedTreeFilePolicy\.BlocksDiscard\(current, entries\)/);
   assert.match(editor, /HybridDrafts\.StageTreeFileAsync\(/);
   assert.match(editor, /selected\.OpenReadStream\(selected\.Size\)/);
-  assert.doesNotMatch(editor, /_fileBytes|MaximumLedgerFileLength|StellarLedgerUploadPlan/);
+  assert.doesNotMatch(editor, /_fileBytes|MaximumLedgerFileLength/);
+  assert.match(editor, /@if \(CanSaveOffline\)/);
+  assert.match(editor, /StellarLedgerUploadPlan/);
   assert.match(smoke, /HD file-tree dependency review rejected a historically confirmed prefix/);
   assert.match(runner, /HdStreamingFileTreeSmoke\.RunAsync\(\)/);
 });
