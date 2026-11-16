@@ -484,7 +484,7 @@ test('Network preference contains only non-secret metadata and custom network mu
   assert.match(home, /await DetectCustomAsync\(\)/);
   assert.match(home, /Custom network verified and selected/);
   assert.match(home, /select Detect network to retry/);
-  assert.match(home, /Early access — use test accounts only/);
+  assert.doesNotMatch(home, /Security and release status/);
 });
 
 test('Unlock button stays actionable and explains prerequisites without bypassing validation', () => {
@@ -493,12 +493,13 @@ test('Unlock button stays actionable and explains prerequisites without bypassin
   // The unlock action lives outside the form for stable access-page layout,
   // but still submits that form and remains disabled while access is busy.
   assert.match(home, /type="submit" form="sv-access-form" disabled="@_busy"/);
-  assert.match(home, /aria-describedby="sv-access-readiness"/);
-  assert.match(home, /private string AccessReadiness/);
+  assert.doesNotMatch(home, /sv-access-readiness|private string AccessReadiness/);
+  assert.doesNotMatch(home, /words entered\)/);
   assert.match(home, /if \(EnteredWordCount is not \(12 or 15 or 18 or 21 or 24\)\)/);
   assert.match(home, /if \(_enableLocalStorage && string\.IsNullOrWhiteSpace\(_passphrase\)\)/);
-  assert.match(home, /sv-access-security-notice/);
-  assert.match(css, /\.sv-access-security-notice/);
+  assert.doesNotMatch(home, /sv-access-security-notice/);
+  assert.match(home, /sv-entry-storage-guide/);
+  assert.match(css, /\.sv-entry-storage-guide/);
 });
 
 test('Signed approval and account modal block blurred background without obscuring dialog controls', () => {
@@ -783,4 +784,26 @@ test('ending a hybrid session cannot force passphrase unlock on a later on-chain
   assert.match(vault, /Privacy\.Clear\(\)/);
   assert.match(vault, /StorageMode\.Reset\(\)/);
   assert.match(vault, /@onclick="LockActiveVaultAsync">Lock vault/);
+});
+
+test('access passphrase and help controls are shared by HD and independent S-key', () => {
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const notice = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultStorageSecurityNotice.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const key = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
+  assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<label class="terminal-label" for="sv-passphrase">Vault passphrase<\/label>/);
+  assert.match(home, /LinkedQueueKeys\.HasLocalCredentialsAsync\(\)/);
+  assert.match(home, /LinkedQueueKeys\.UnlockAsync\(_passphrase\)/);
+  assert.match(home, /LinkedQueueKeys\.CreateAsync\(_passphrase\)/);
+  assert.match(home, /_passphrase\.Length < 12/);
+  assert.match(home, /_passphrase = string\.Empty;\s*ClearMnemonic\(\)/);
+  assert.match(home, /class="sv-entry-storage-guide"/);
+  assert.match(home, /About local storage and Sync/);
+  assert.match(home, /aria-expanded="@_storageHelpOpen"/);
+  assert.match(home, /aria-expanded="@_deviceHelpOpen"/);
+  assert.match(home, /class="sv-storage-help-trigger"/);
+  assert.doesNotMatch(home, /Security and release status|sv-access-readiness/);
+  assert.match(notice, /Strategy == VaultMutationStrategyPolicy\.Linked/);
+  assert.match(key, /public Task UnlockAsync\(string localPassphrase/);
+  assert.match(css, /\.sv-storage-help-trigger/);
 });
