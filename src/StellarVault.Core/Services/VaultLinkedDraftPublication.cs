@@ -19,14 +19,14 @@ public sealed class VaultLinkedDraftPublication(
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private sealed record PendingReview(string MutationId, string AccountId,
-        string NetworkScope, long Epoch, byte[] Fingerprint,
+        string NetworkScope, long Epoch, long UnlockEpoch, byte[] Fingerprint,
         VaultSecretLedgerQuote Quote, DateTimeOffset QuotedUtc);
     private PendingReview? _pending;
 
     public sealed record Review(string MutationId, string EntityId, string Title,
         bool IsFolder, VaultSecretLedgerQuote Quote, string Explanation);
 
-    private (string Root, string Scope, long Epoch) RequireScope()
+    private (string Root, string Scope, long Epoch, long UnlockEpoch) RequireScope()
     {
         linkedRetention.DeviceRetention.RequireLocalPersistence();
         linkedRetention.RequireLocalPersistence();
@@ -35,13 +35,16 @@ public sealed class VaultLinkedDraftPublication(
             throw new UnauthorizedAccessException(
                 "Unlock the independent S-key signer and encrypted local drafts.");
         StellarAccountAddress.Validate(root);
-        return (root, networks.CredentialKey(root), ledger.ConnectionEpoch);
+        return (root, networks.CredentialKey(root), ledger.ConnectionEpoch,
+            keys.UnlockEpoch);
     }
 
-    private void RequireSameScope(string account, string scope, long epoch)
+    private void RequireSameScope(string account, string scope, long epoch,
+        long unlockEpoch)
     {
         var current = RequireScope();
-        if (current.Root != account || current.Scope != scope || current.Epoch != epoch)
+        if (current.Root != account || current.Scope != scope ||
+            current.Epoch != epoch || current.UnlockEpoch != unlockEpoch)
             throw new InvalidOperationException("S-key signer, network, or local consent changed.");
     }
 
@@ -213,7 +216,7 @@ public sealed class VaultLinkedDraftPublication(
         try
         {
             await CancelUnsafeAsync();
-            var (root, scope, epoch) = RequireScope();
+            var (root, scope, epoch, unlockEpoch) = RequireScope();
             var all = await LoadAsync(root, scope, ct);
             try
             {
@@ -221,10 +224,10 @@ public sealed class VaultLinkedDraftPublication(
                     ?? throw new KeyNotFoundException("Local encrypted draft not found.");
                 var draft = Decode(item);
                 var remote = await ledger.ReadAsync(ct);
-                RequireSameScope(root, scope, epoch);
+                RequireSameScope(root, scope, epoch, unlockEpoch);
                 CheckRemote(item, draft, all, remote);
                 await RequireRemoteVersionAsync(item, ct);
-                RequireSameScope(root, scope, epoch);
+                RequireSameScope(root, scope, epoch, unlockEpoch);
                 var kind = QuoteKind(item.Kind);
                 var quote = kind switch
                 {
@@ -239,8 +242,8 @@ public sealed class VaultLinkedDraftPublication(
                         quote.QuoteId is not { Length: 32 } ||
                         !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
                         throw new InvalidDataException("Invalid linked record mutation quote.");
-                    RequireSameScope(root, scope, epoch);
-                    _pending = new(item.Id, root, scope, epoch,
+                    RequireSameScope(root, scope, epoch, unlockEpoch);
+                    _pending = new(item.Id, root, scope, epoch, unlockEpoch,
                         Fingerprint(item), quote, DateTimeOffset.UtcNow);
                     return new(item.Id, item.EntityId, draft.Title, draft.IsFolder, quote,
                         "Review the exact XLM fee and reserve. Publishing is a separate explicit step.");
@@ -280,7 +283,8 @@ public sealed class VaultLinkedDraftPublication(
             }
             try
             {
-                RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch,
+                    pending.UnlockEpoch);
                 if (DateTimeOffset.UtcNow - pending.QuotedUtc > TimeSpan.FromMinutes(2))
                     throw new InvalidOperationException("Linked quote expired. Review again.");
 
@@ -299,10 +303,12 @@ public sealed class VaultLinkedDraftPublication(
                     finally { CryptographicOperations.ZeroMemory(currentHash); }
                     var draft = Decode(original);
                     var remote = await ledger.ReadAsync(ct);
-                    RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                    RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch,
+                    pending.UnlockEpoch);
                     CheckRemote(original, draft, all, remote);
                     await RequireRemoteVersionAsync(original, ct);
-                    RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                    RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch,
+                    pending.UnlockEpoch);
                     ct.ThrowIfCancellationRequested();
 
                     // After this successful CAS, ANY transport or read failure is
@@ -323,7 +329,8 @@ public sealed class VaultLinkedDraftPublication(
                             pending.Quote.QuoteId,
                             async signedHash =>
                             {
-                                RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                                RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch,
+                    pending.UnlockEpoch);
                                 if (submission.TransactionHash is not null)
                                     throw new InvalidOperationException("Signed hash already checkpointed.");
                                 var pinned = submission with { TransactionHash = signedHash };
@@ -337,7 +344,8 @@ public sealed class VaultLinkedDraftPublication(
                             throw new InvalidDataException(
                                 "Transport result did not match the durably checkpointed signed hash.");
                         var observed = await ledger.ReadAsync(ct);
-                        RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch);
+                        RequireSameScope(pending.AccountId, pending.NetworkScope, pending.Epoch,
+                    pending.UnlockEpoch);
                         var published = observed.SingleOrDefault(x => x.Id == original.EntityId);
                         if (Deletion(original.Kind)
                             ? published is not null
