@@ -22,13 +22,13 @@ public sealed class VaultHybridDraftWorkspace(
 
     public Task<VaultPendingMutation> CreateAsync(
         LedgerRecordDraft draft, CancellationToken ct = default) =>
-        CreateAsync(draft, capacityPolicy: null, ct);
+        CreateAsync(draft, ObjectCapacityPolicy.SingleAccount, ct);
 
     public async Task<VaultPendingMutation> CreateAsync(
-        LedgerRecordDraft draft, ObjectCapacityPolicy? capacityPolicy,
+        LedgerRecordDraft draft, ObjectCapacityPolicy capacityPolicy,
         CancellationToken ct = default)
     {
-        if (capacityPolicy is { } policy && !Enum.IsDefined(policy))
+        if (!Enum.IsDefined(capacityPolicy))
             throw new ArgumentException("Unsupported storage capacity policy.", nameof(capacityPolicy));
         var context = RequireScope();
         var account = context.Account;
