@@ -49,6 +49,43 @@ internal static class AccountObjectStoreContractSmoke
                     "native", "0.001", null, null, false)));
     }
 
+    private sealed class RevisionedProvider : IAccountObjectStoreProvider,
+        IAccountObjectUpdateProvider
+    {
+        private readonly FakeProvider _inner = new("revisioned");
+        public string ProviderId => _inner.ProviderId;
+        public string? SeenRevision { get; private set; }
+        public Task<ObjectMutationIntent> PrepareUpdateAsync(
+            ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
+            string expectedRevision, ObjectWriteOptions options,
+            CancellationToken ct = default)
+        {
+            SeenRevision = expectedRevision;
+            return Task.FromResult(new ObjectMutationIntent(
+                "staged-update", ObjectMutationState.Prepared,
+                new ObjectStorageQuote(scope.ProviderId, scope.NetworkId,
+                    "native", null, null, null, null), ObjectId: descriptor.ObjectId));
+        }
+        public Task<ObjectStorageQuote> EstimatePutAsync(
+            ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
+            ObjectWriteOptions options, CancellationToken ct = default) =>
+            _inner.EstimatePutAsync(scope, descriptor, source, options, ct);
+        public Task<ObjectMutationIntent> PreparePutAsync(
+            ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
+            ObjectWriteOptions options, CancellationToken ct = default) =>
+            _inner.PreparePutAsync(scope, descriptor, source, options, ct);
+        public Task<StoredObject?> GetAsync(
+            ObjectStoreScope scope, string objectId, CancellationToken ct = default) =>
+            _inner.GetAsync(scope, objectId, ct);
+        public Task<Stream> OpenReadAsync(
+            ObjectStoreScope scope, string objectId, CancellationToken ct = default) =>
+            _inner.OpenReadAsync(scope, objectId, ct);
+        public Task<ObjectMutationIntent> PrepareDeleteAsync(
+            ObjectStoreScope scope, string objectId, string expectedRevision,
+            CancellationToken ct = default) =>
+            _inner.PrepareDeleteAsync(scope, objectId, expectedRevision, ct);
+    }
+
     private sealed class UnsupportedExportDestination : IVerifiedObjectDestination
     {
         public Task<Stream> OpenTemporaryAsync(CancellationToken ct = default) =>
@@ -139,6 +176,41 @@ internal static class AccountObjectStoreContractSmoke
             throw new Exception("Unsupported publication cancellation was permitted.");
         }
         catch (NotSupportedException) { }
+
+        var revisioned = new RevisionedProvider();
+        var updateRouter = (IAccountObjectUpdate)new AccountObjectStoreRouter([revisioned]);
+        var revisionScope = stellarScope with { ProviderId = "revisioned" };
+        using (var updated = new MemoryStream([7, 8, 9]))
+        {
+            var pending = await updateRouter.UpdateAsync(revisionScope, descriptor,
+                updated, "original-version", new ObjectWriteOptions());
+            Check(pending.State == ObjectMutationState.Prepared &&
+                pending.ObjectId == descriptor.ObjectId &&
+                revisioned.SeenRevision == "original-version",
+                "Revision-pinned update was not routed to the requested provider.");
+        }
+        using (var updated = new MemoryStream([7]))
+        {
+            try
+            {
+                await updateRouter.UpdateAsync(revisionScope, descriptor,
+                    updated, "original-version",
+                    new ObjectWriteOptions(ExpectedRevision: "different-version"));
+                throw new Exception("Conflicting update revision was accepted.");
+            }
+            catch (ArgumentException) { }
+        }
+        using (var updated = new MemoryStream([7]))
+        {
+            try
+            {
+                await ((IAccountObjectUpdate)storage).UpdateAsync(
+                    stellarScope, descriptor, updated, "original-version",
+                    new ObjectWriteOptions());
+                throw new Exception("Provider without a revisioned edit path was accepted.");
+            }
+            catch (NotSupportedException) { }
+        }
 
         Console.WriteLine("PASS: chain-neutral account object store contracts and routing");
     }
