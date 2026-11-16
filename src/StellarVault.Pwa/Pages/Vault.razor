@@ -6,6 +6,7 @@
 @using StellarVault.Pwa.Services
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
+@implements IDisposable
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyLedger SecretLedger
 @inject VaultLinkedQueueKeySession LinkedQueueKeys
@@ -939,7 +940,7 @@ else
         try
         {
             await PendingQueue.DiscardPendingAsync(selected.AccountId, selected.NetworkId, selected.Id);
-            _syncReview = null;
+            ClearSyncReview();
             _syncEstimates = [];
             _syncEstimateNote = "Queue changed. Review synchronization readiness again.";
             _selectedPending = null;
@@ -1017,7 +1018,7 @@ else
             byte[] revised = JsonSerializer.SerializeToUtf8Bytes(fields);
             try
             {
-                _syncReview = null;
+                ClearSyncReview();
                 _syncEstimates = [];
                 ClearSyncApproval();
                 _syncEstimateNote = "Local draft changed. Re-run sync review and fee estimation.";
@@ -1130,7 +1131,7 @@ else
         try
         {
             var report = await HybridReview.ReviewAsync(account, estimateFees: true);
-            _syncReview = report.Queue;
+            SetSyncReview(report.Queue);
             _syncEstimates = report.Estimates.Select(x =>
                 new PendingEstimate(x.Title, x.Explanation, x.Quote)).ToList();
             _syncEstimateNote = "Estimates are read-only and expire. Manual synchronization remains disabled.";
@@ -1154,8 +1155,8 @@ else
             foreach (var entry in interrupted.Where(x => x.State == VaultSyncState.Submitting))
                 await PendingQueue.QuarantineInterruptedAsync(account, network, entry.Id);
             _pendingError = null;
-            _syncReview = await PendingQueue.PrepareReviewAsync(account, network);
-            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            SetSyncReview(await PendingQueue.PrepareReviewAsync(account, network));
+            ReplacePendingSnapshot(await PendingQueue.ReviewAllAsync(account, network));
             _syncEstimates = [];
             ClearSyncApproval();
             _approvalStatus = null;
@@ -1229,6 +1230,41 @@ else
             _approvalStatus = "Review acknowledged locally. No transaction was reserved, signed or broadcast.";
     }
 
+    private void ClearSyncReview()
+    {
+        if (_syncReview is { } existing)
+            foreach (var ready in existing.Ready)
+                CryptographicOperations.ZeroMemory(ready.EncryptedPayload);
+        _syncReview = null;
+    }
+
+    private void SetSyncReview(VaultSyncReview review)
+    {
+        ArgumentNullException.ThrowIfNull(review);
+        ClearSyncReview();
+        _syncReview = review;
+    }
+
+    private void ClearPendingSnapshot()
+    {
+        // Selected drafts can also be standalone results of a CAS revision,
+        // not references into the last reviewed queue list.
+        if (_selectedPending is { } selected &&
+            !_pendingItems.Any(item => ReferenceEquals(item, selected)))
+            CryptographicOperations.ZeroMemory(selected.EncryptedPayload);
+        _selectedPending = null;
+        foreach (var entry in _pendingItems)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+        _pendingItems = [];
+    }
+
+    private void ReplacePendingSnapshot(IReadOnlyList<VaultPendingMutation> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ClearPendingSnapshot();
+        _pendingItems = items;
+    }
+
     private VaultSyncReview? _syncReview;
     private async Task PrepareLocalSyncReviewAsync()
     {
@@ -1236,13 +1272,13 @@ else
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
         _pendingError = null;
-        _syncReview = null;
+        ClearSyncReview();
         _syncEstimates = [];
         _syncEstimateNote = null;
         ClearSyncApproval();
         try
         {
-            _syncReview = await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account));
+            SetSyncReview(await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account)));
         }
         catch (Exception ex) { _pendingError = "Sync readiness review failed: " + ex.Message; }
         finally { _pendingLoading = false; }
@@ -1259,12 +1295,12 @@ else
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
         _pendingError = null;
-        _syncReview = null;
+        ClearSyncReview();
         _recoveryInspections = [];
         try
         {
             var network = Networks.CredentialKey(account);
-            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            ReplacePendingSnapshot(await PendingQueue.ReviewAllAsync(account, network));
             _recoveryInspections = await PendingQueue.InspectOutstandingRecoveriesAsync(account, network);
         }
         catch (Exception ex) { _pendingError = "Unable to open encrypted device queue: " + ex.Message; }
@@ -1507,6 +1543,8 @@ else
         LinkedRetention.Reset();
         StorageMode.Reset();
         Privacy.Clear();
+        ClearPendingSnapshot();
+        ClearSyncReview();
         await ClearHybridResumeIntentAsync();
         try { await Ledger.DisconnectAsync(); } catch { failed = true; }
         await ClearHybridResumeIntentAsync();
@@ -1581,6 +1619,8 @@ else
         StorageMode.Reset();
         Privacy.Clear();
         _showImportDialog = false;
+        ClearPendingSnapshot();
+        ClearSyncReview();
         _revealedIds.Clear();
         _selected = null;
         ClearSyncApproval();
@@ -1589,4 +1629,15 @@ else
         await Ledger.DisconnectAsync();
         Nav.NavigateTo("/", replace: true);
     }
+    public void Dispose()
+    {
+        ClearPendingSnapshot();
+        ClearSyncReview();
+        _pendingEditContent = string.Empty;
+        _pendingEditUsername = string.Empty;
+        _pendingEditUrl = string.Empty;
+        _pendingEditNotes = string.Empty;
+        _pendingEditTags = string.Empty;
+    }
+
 }
