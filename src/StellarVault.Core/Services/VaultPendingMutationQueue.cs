@@ -146,18 +146,27 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         var entries = await ScopedEntriesAsync(accountId, networkId, ct);
-        var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
-        return entries.Where(x => x.State == VaultSyncState.Pending &&
-            VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Hd &&
-            // DeleteFile is staged only until a dedicated multi-record
-            // tombstone journal and verifier are implemented.
-            x.Kind is not (VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile) &&
-            x.DependsOn is not null &&
-            x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
-                dependency.State == VaultSyncState.Confirmed) &&
-            (x.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
-             VaultQueuedCreatePolicy.Problems(x, entries).Length == 0))
-            .OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
+        try
+        {
+            var byId = entries.ToDictionary(x => x.Id, StringComparer.Ordinal);
+            var ready = entries.Where(x => x.State == VaultSyncState.Pending &&
+                VaultMutationStrategyPolicy.Resolve(x.OriginStrategyId) == VaultMutationStrategyPolicy.Hd &&
+                // File deletion still requires separate durable tombstone proofs.
+                x.Kind is not (VaultMutationKind.UploadFile or VaultMutationKind.DeleteFile) &&
+                x.DependsOn is not null &&
+                x.DependsOn.All(id => byId.TryGetValue(id, out var dependency) &&
+                    dependency.State == VaultSyncState.Confirmed) &&
+                (x.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
+                 VaultQueuedCreatePolicy.Problems(x, entries).Length == 0))
+                .OrderBy(x => x.CreatedUtc).ThenBy(x => x.Id, StringComparer.Ordinal).ToArray();
+            ClearNonReturnedSnapshots(entries, ready);
+            return ready;
+        }
+        catch
+        {
+            ClearSnapshots(entries);
+            throw;
+        }
     }
 
     /// <summary>Read-only preparation report. It never estimates fees or submits writes.</summary>
@@ -166,7 +175,38 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     {
         retention.RequireLocalPersistence();
         var all = await ScopedEntriesAsync(accountId, networkId, ct);
-        return VaultPendingMutationReviewPolicy.Build(all);
+        try
+        {
+            var review = VaultPendingMutationReviewPolicy.Build(all);
+            ClearNonReturnedSnapshots(all, review.Ready);
+            return review;
+        }
+        catch
+        {
+            ClearSnapshots(all);
+            throw;
+        }
+    }
+
+    private static void ClearSnapshots(IEnumerable<VaultPendingMutation> entries)
+    {
+        foreach (var entry in entries)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+    }
+
+    private static void ClearNonReturnedSnapshots(
+        IReadOnlyList<VaultPendingMutation> entries,
+        IReadOnlyList<VaultPendingMutation> retained)
+    {
+        // Retain only independently owned, caller-visible Ready entries.
+        // The readiness planner returns the original objects, not copies.
+        // Reference identity prevents a duplicate ID from preserving a
+        // different decrypted copy after a malformed queue inspection.
+        var returned = new HashSet<VaultPendingMutation>(
+            retained, ReferenceEqualityComparer.Instance);
+        foreach (var entry in entries)
+            if (!returned.Contains(entry))
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
     }
 
     [Obsolete("Use ReserveApprovedSubmissionAsync with a fresh reviewed quote.")]
