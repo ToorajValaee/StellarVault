@@ -731,12 +731,77 @@ public sealed class StellarAccountObjectStoreProvider(
         await RequireSameScopeAsync(scope, checkpoint, true);
     }
 
-    public Task<ObjectMutationIntent> PrepareDeleteAsync(
+    /// <summary>
+    /// Prepare an ordinary-record or empty-folder deletion in the existing
+    /// encrypted journal. No network submission occurs here. The supplied
+    /// revision must be the one returned by GetAsync, not a UI list snapshot.
+    /// </summary>
+    public async Task<ObjectMutationIntent> PrepareDeleteAsync(
         ObjectStoreScope scope, string objectId, string expectedRevision,
         CancellationToken ct = default)
     {
-        _ = RequireScope(scope, true);
-        throw new NotSupportedException(
-            "Deletion requires an authenticated, revision-pinned remote mutation journal.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedRevision);
+        if (objectId.Length != 16 || !objectId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid Stellar record ID.", nameof(objectId));
+
+        var checkpoint = RequireScope(scope, true);
+        var original = await ReadOrdinaryAsync(scope, objectId, ct)
+            ?? throw new FileNotFoundException("Published record no longer exists.");
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        string mutationId;
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+        {
+            const string prefix = "linked-manifest:";
+            if (!expectedRevision.StartsWith(prefix, StringComparison.Ordinal) ||
+                !VaultLinkedRemoteRevisionPolicy.IsValid(expectedRevision[prefix.Length..]))
+                throw new ArgumentException(
+                    "Linked deletion requires the original canonical remote manifest revision.",
+                    nameof(expectedRevision));
+            if (!linkedKeys.CanPublish || linkedKeys.ActiveRootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException(
+                    "Unlock the matching online linked signer and encrypted queue.");
+            var epoch = linkedKeys.UnlockEpoch;
+            // The linked queue verifies the authoritative revision both before
+            // and after loading the published record and checks child ownership.
+            var staged = await linkedDrafts.StageDeleteAsync(
+                objectId, expectedRevision[prefix.Length..], ct);
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            if (!linkedKeys.CanPublish || linkedKeys.UnlockEpoch != epoch)
+                throw new InvalidOperationException(
+                    "Linked signer or queue unlock changed during deletion staging.");
+            mutationId = staged.MutationId;
+        }
+        else
+        {
+            const string prefix = "hd-sha256:";
+            if (!expectedRevision.StartsWith(prefix, StringComparison.Ordinal) ||
+                expectedRevision.Length != prefix.Length + 64 ||
+                !expectedRevision[prefix.Length..].All(Uri.IsHexDigit))
+                throw new ArgumentException(
+                    "HD deletion requires the original published record fingerprint.",
+                    nameof(expectedRevision));
+            if (hdRemoteMutations is null)
+                throw new NotSupportedException(
+                    "HD remote mutation workspace is not registered.");
+            if (!hdSessions.IsUnlocked || hdSessions.ActiveAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException(
+                    "Unlock the matching HD encrypted queue.");
+            var epoch = hdSessions.Epoch;
+            // The remote journal verifies this expected baseline again in
+            // the very snapshot it stages; deletes never become blind upserts.
+            var staged = await hdRemoteMutations.StageDeleteAsync(
+                objectId, expectedRevision[prefix.Length..], ct);
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            if (!hdSessions.IsUnlocked || hdSessions.Epoch != epoch)
+                throw new InvalidOperationException(
+                    "HD queue unlock changed during deletion staging.");
+            mutationId = staged.Id;
+        }
+        return new ObjectMutationIntent(
+            mutationId, ObjectMutationState.Prepared,
+            new ObjectStorageQuote(ProviderId, scope.NetworkId, "XLM",
+                null, null, null, null),
+            ObjectId: original.Id);
     }
 }
