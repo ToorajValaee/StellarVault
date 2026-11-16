@@ -1079,7 +1079,11 @@
     {
         if (_busy) return;
         Workflow.Lock();
+        Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
+        _enableLocalStorage = false;
+        _workspaceMode = "ledger";
         await LedgerRecords.DisconnectAsync();
         _ledgerItems = null;
         _ledgerRegistryReady = false;
