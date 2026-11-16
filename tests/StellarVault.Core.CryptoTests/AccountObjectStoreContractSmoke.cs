@@ -124,6 +124,22 @@ internal static class AccountObjectStoreContractSmoke
         }
         catch (NotSupportedException) { }
 
+        // The neutral router must never invent an approval path for a provider
+        // that has not registered its existing signing/review workflow.
+        try
+        {
+            await ((IObjectMutationReview)storage).ReviewAsync(
+                stellarScope, "pending-mutation");
+            throw new Exception("Unsupported publication review was permitted.");
+        }
+        catch (NotSupportedException) { }
+        try
+        {
+            await ((IObjectMutationReview)storage).CancelReviewAsync(stellarScope);
+            throw new Exception("Unsupported publication cancellation was permitted.");
+        }
+        catch (NotSupportedException) { }
+
         Console.WriteLine("PASS: chain-neutral account object store contracts and routing");
     }
 
