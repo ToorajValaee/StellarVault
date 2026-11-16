@@ -178,3 +178,30 @@ test('neutral publication reviews reuse the existing HD and Secret Key publisher
   assert.match(publisher, /_pending = new\(item\.Id, root, scope, epoch, unlockEpoch/);
   assert.match(publisher, /pending\.UnlockEpoch/);
 });
+
+test('Edit is a revision-pinned Update routed to existing encrypted mutation journals', () => {
+  const contracts = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const hd = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const linked = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  assert.match(contracts, /interface IAccountObjectUpdate/);
+  assert.match(contracts, /interface IAccountObjectUpdateProvider/);
+  assert.match(contracts, /provider is IAccountObjectUpdateProvider updater/);
+  assert.match(contracts, /options\.ExpectedRevision != expectedRevision/);
+  assert.match(provider, /IAccountObjectUpdateProvider/);
+  assert.match(provider, /await hdRemoteMutations\.StageUpdateAsync\(id, draft, ct\)/);
+  assert.match(provider, /await linkedDrafts\.StageUpdateAsync\(/);
+  assert.match(provider, /VaultHybridRemoteMutationWorkspace\.Fingerprint\(current\)/);
+  assert.match(provider, /VaultLinkedRemoteRevisionPolicy\.IsValid\(published\)/);
+  assert.match(provider, /VaultLinkedRemoteRevisionPolicy\.IsValid\(/);
+  assert.match(provider, /"hd-sha256:"/);
+  assert.match(provider, /"linked-manifest:"/);
+  assert.match(provider, /ObjectMutationState\.Prepared/);
+  assert.match(provider, /Single-account publication capacity policy is not yet enforced/);
+  assert.match(hd, /public async Task<VaultPendingMutation> StageUpdateAsync/);
+  assert.match(linked, /public Task<DraftItem> StageUpdateAsync/);
+  assert.doesNotMatch(provider, /PublishWithPreparedHashAsync\(|PublishDetailedAsync\(|SubmitApprovedAsync\(/);
+  for (const p of ['src/StellarVault.Pwa/Program.cs', 'src/StellarVault.Maui/MauiProgram.cs']) {
+    assert.match(read(p), /AddScoped<IAccountObjectUpdate>/);
+  }
+});
