@@ -87,12 +87,29 @@ public sealed class VaultHybridRemoteMutationWorkspace(
         string recordId, LedgerRecordDraft proposed, CancellationToken ct = default) =>
         await StageAsync(recordId, proposed, delete: false, ct);
 
+    /// <summary>
+    /// Engine/API edit preflight: the caller's ORIGINAL published fingerprint
+    /// must match the record observed by this very staging operation, not a
+    /// separate prior read. Existing UI callers retain their original overload.
+    /// </summary>
+    public Task<VaultPendingMutation> StageUpdateAsync(
+        string recordId, LedgerRecordDraft proposed, string expectedBaselineSha256,
+        CancellationToken ct = default)
+    {
+        if (!ValidDigest(expectedBaselineSha256))
+            throw new ArgumentException("Invalid expected published HD fingerprint.",
+                nameof(expectedBaselineSha256));
+        return StageAsync(recordId, proposed, delete: false, ct,
+            expectedBaselineSha256);
+    }
+
     public async Task<VaultPendingMutation> StageDeleteAsync(
         string recordId, CancellationToken ct = default) =>
         await StageAsync(recordId, null, delete: true, ct);
 
     private async Task<VaultPendingMutation> StageAsync(
-        string recordId, LedgerRecordDraft? proposed, bool delete, CancellationToken ct)
+        string recordId, LedgerRecordDraft? proposed, bool delete, CancellationToken ct,
+        string? expectedBaselineSha256 = null)
     {
         if (!ValidRecordId(recordId)) throw new ArgumentException("Invalid record ID.", nameof(recordId));
         var scope = Capture();
@@ -125,6 +142,10 @@ public sealed class VaultHybridRemoteMutationWorkspace(
             ? original.IsFolder ? VaultMutationKind.DeleteFolder : VaultMutationKind.DeleteRecord
             : original.IsFolder ? VaultMutationKind.UpdateFolder : VaultMutationKind.UpdateRecord;
         var baseline = Fingerprint(original);
+        if (expectedBaselineSha256 is not null &&
+            !string.Equals(baseline, expectedBaselineSha256, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Published record changed since Edit opened. Reload before staging.");
         string[]? manifestOwners = null;
         if (delete)
         {
