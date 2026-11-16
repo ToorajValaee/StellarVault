@@ -79,7 +79,7 @@ else
             <button type="button" class="sv-rail-link sv-inline-help-nav @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</button>
             <div class="sv-pwa-rail-divider"></div>
             @if (_appView == "records" &&
-                 ActiveMode is VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey)
+                 (ActiveMode is VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey))
             {
                 <button type="button" class="sv-rail-link sv-rail-import-action"
                         @onclick="OpenImportDialog">
