@@ -19,10 +19,10 @@ test('first engine provider reuses existing Stellar ledger readers and encrypted
     'Provider creation must never bypass existing manual signing and fee review');
 });
 
-test('Stellar provider fails closed when capacity and file policies are not wired', () => {
+test('Stellar provider validates capacity mode and keeps unsupported mutation paths fail closed', () => {
   const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
   assert.match(provider, /if \(!Enum\.IsDefined\(options\.CapacityPolicy\)\)/);
-  assert.match(provider, /File-tree publication requires per-node single-account capacity enforcement/);
+  assert.match(provider, /options\.CapacityPolicy, ct\)/);
   assert.match(provider, /ObjectId='new'/);
   assert.match(provider, /Large or binary objects require the verified streaming file provider/);
   assert.match(provider, /Revision-pinned updates need the existing remote-mutation journal adapter/);
@@ -200,7 +200,7 @@ test('Edit is a revision-pinned Update routed to existing encrypted mutation jou
   assert.match(provider, /"hd-sha256:"/);
   assert.match(provider, /"linked-manifest:"/);
   assert.match(provider, /ObjectMutationState\.Prepared/);
-  assert.match(provider, /Single-account publication capacity policy is not yet enforced/);
+  assert.match(provider, /Unknown requested account capacity policy/);
   assert.match(provider, /Updates require explicit complete structured fields/);
   assert.match(provider, /fields\?\.Tags\?\.ToArray\(\)/);
   assert.match(provider, /UserName: fields\?\.UserName/);
@@ -229,7 +229,8 @@ test('explicit ordinary capacity policy survives encrypted queue and blocks HD e
   const linkedPublisher = read('src/StellarVault.Core/Services/VaultLinkedDraftPublication.cs');
   const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
   assert.match(contracts, /enum ObjectCapacityPolicy/);
-  assert.match(queue, /ObjectCapacityPolicy\? CapacityPolicy = null/);
+  assert.match(queue, /ObjectCapacityPolicy CapacityPolicy = ObjectCapacityPolicy\.SingleAccount/);
+  assert.match(queue, /JsonRequired/);
   assert.match(hdDraft, /CapacityPolicy = capacityPolicy/);
   assert.match(linkedDraft, /CapacityPolicy = capacityPolicy/);
   assert.match(provider, /hdDrafts\.CreateAsync\(draft, options\.CapacityPolicy, ct\)/);
@@ -237,9 +238,29 @@ test('explicit ordinary capacity policy survives encrypted queue and blocks HD e
   assert.match(review, /VaultCapacityPolicyGuard\.AllowsCreate/);
   assert.match(publisher, /VaultCapacityPolicyGuard\.AllowsCreate/);
   assert.match(publisher, /VaultCapacityPolicyGuard\.RequireCreateAllowed/);
-  assert.match(approval, /writer\.Write\(item\.CapacityPolicy is/);
+  assert.match(approval, /writer\.Write\(\(int\)item\.CapacityPolicy\)/);
   assert.match(linkedPublisher, /Unknown linked mutation capacity policy/);
   assert.match(guard, /policy != ObjectCapacityPolicy\.SingleAccount/);
   assert.match(program, /VaultCapacityPolicySmoke\.RunAsync\(\)/);
   assert.doesNotMatch(provider, /\.PublishWithPreparedHashAsync\(|\.SubmitApprovedAsync\(/);
+});
+
+test('all SVTREE3 nodes and revision-pinned edits carry mandatory policy to reviewed publish paths', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const hdFiles = read('src/StellarVault.Core/Services/VaultHybridDraftWorkspace.cs');
+  const linkedFiles = read('src/StellarVault.Core/Services/VaultLinkedDraftWorkspace.cs');
+  const hdEdits = read('src/StellarVault.Core/Services/VaultHybridRemoteMutationWorkspace.cs');
+  const review = read('src/StellarVault.Core/Services/VaultHybridSyncReviewService.cs');
+  const publisher = read('src/StellarVault.Core/Services/VaultManualSyncCoordinator.cs');
+  assert.match(provider, /StageFileAsync\(scope, descriptor, source, checkpoint,/);
+  assert.match(provider, /source, descriptor\.ParentId, ct, capacityPolicy/);
+  assert.match(hdFiles, /with \{ CapacityPolicy = capacityPolicy \}/);
+  assert.match(linkedFiles, /CapacityPolicy = capacityPolicy/);
+  assert.match(provider, /expectedRevision\["hd-sha256:"\.Length\.\.\],\s*options\.CapacityPolicy, ct/);
+  assert.match(provider, /expectedRevision\["linked-manifest:"\.Length\.\.\],\s*options\.CapacityPolicy, ct/);
+  assert.match(hdEdits, /expectedBaselineSha256, capacityPolicy/);
+  assert.match(hdEdits, /with \{ CapacityPolicy = capacityPolicy \}/);
+  assert.match(linkedFiles, /with \{ OriginStrategyId = VaultMutationStrategyPolicy\.Linked,\s*CapacityPolicy = capacityPolicy \}/);
+  assert.match(review, /mutation\.Kind is VaultMutationKind\.UpdateRecord/);
+  assert.match(publisher, /VaultCapacityPolicyGuard\.RequireCreateAllowed/);
 });
