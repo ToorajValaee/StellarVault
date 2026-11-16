@@ -26,11 +26,11 @@
                     <summary aria-label="Record actions" title="More actions">⋯</summary>
                     <div class="sv-inspector-more-menu">
                         <button type="button" @onclick="() => OnCopy.InvokeAsync(Item.Id)">Copy record ID</button>
-                        @if (CanEdit && !IsFile)
+                        @if (CanEdit && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
                         {
                             <button type="button" @onclick="() => OnEdit.InvokeAsync()">Edit @(Item.IsFolder ? "folder" : "record")</button>
                         }
-                        @if (CanDelete && !IsFile)
+                        @if (CanDelete && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
                         {
                             <button type="button" class="sv-object-delete" @onclick="() => OnDelete.InvokeAsync()">Delete</button>
                         }
@@ -158,12 +158,12 @@
             <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
         }
         <div class="modal-action-row record-actions">
-            @if (CanEdit && !IsFile)
+            @if (CanEdit && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
             {
                 <button type="button" class="pixel-button primary"
                         @onclick="() => OnEdit.InvokeAsync()">Edit @(Item.IsFolder ? "folder" : "record")</button>
             }
-            @if (CanDelete && !IsFile)
+            @if (CanDelete && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
             {
                 <button type="button" class="pixel-button danger"
                         @onclick="() => OnDelete.InvokeAsync()">DELETE</button>
