@@ -99,3 +99,15 @@ test('HD queue readiness discards non-ready plaintext while Sync clears retained
   assert.match(manual, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
   assert.match(manual, /MarkUncertainAsync\(submissionRevision, hash, CancellationToken\.None\)/);
 });
+
+test('hybrid review keeps only returned ready drafts and wipes failed queue snapshots', () => {
+  const scoped = read(path.join(core, 'VaultScopedQueueReview.cs'));
+  const service = read(path.join(core, 'VaultHybridSyncReviewService.cs'));
+  const queue = read(path.join(core, 'VaultPendingMutationQueue.cs'));
+  assert.match(scoped, /catch\s*\{\s*\/\/ No snapshot escaped/);
+  assert.match(scoped, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.match(service, /new HashSet<VaultPendingMutation>\(\s*review\.Ready, ReferenceEqualityComparer\.Instance\)/);
+  assert.match(service, /if \(!retained\.Contains\(item\)\)\s*CryptographicOperations\.ZeroMemory\(item\.EncryptedPayload\)/);
+  assert.match(service, /catch\s*\{\s*\/\/ On error no review is returned/);
+  assert.match(queue, /ClearNonReturnedSnapshots\(all, review\.Ready\)/);
+});
