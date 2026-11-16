@@ -478,8 +478,9 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
     /// have several signed transactions and no single primary hash. These are
     /// investigation hints, NOT receipts or permission to retry/confirm.
     /// </summary>
-    private static VaultRecoveryInspection DescribeRecovery(VaultPendingMutation item)
+    public static VaultRecoveryInspection DescribeRecovery(VaultPendingMutation item)
     {
+        ArgumentNullException.ThrowIfNull(item);
         var unresolved = item.State is VaultSyncState.Submitting or VaultSyncState.Uncertain;
         var hasHash = item.TransactionHash is string hash && IsTransactionHash(hash);
         var checkpoints = new List<VaultRecoveryCheckpoint>();
