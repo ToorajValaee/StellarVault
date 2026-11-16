@@ -130,8 +130,8 @@ test('PWA and native hosts reuse identical inspectors, forms, trees and rows', (
   assert.match(native, /<VaultRecordFields IsFolder=/);
   assert.match(localHd, /<VaultRecordFields IsFolder="_isFolder"/);
   assert.match(localSkey, /<VaultRecordFields IsFolder="_draftIsFolder"/);
-  assert.match(inspector, /CanDelete && !IsFile/);
-  assert.match(inspector, /CanEdit && !IsFile/);
+  assert.match(inspector, /CanDelete && !VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\)/);
+  assert.match(inspector, /CanEdit && !VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\)/);
   assert.match(inspector, /_revealed \? Item.Content : "••••••••••••"/);
   assert.match(inspector, /sv-inspector-tabs/);
   assert.match(native, /NativeContentKey => SecretLedger.IsConnected/);
