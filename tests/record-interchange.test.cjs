@@ -183,7 +183,8 @@ test('PWA imports open from left rail, not record header, for both account strat
   assert.match(pwa, /VaultMutationStrategyPolicy\.Linked : VaultMutationStrategyPolicy\.Hd/);
   assert.match(native, /Mode="import"/);
   assert.match(linked, /@if \(!Embedded\)[\s\S]*?Mode="import"/);
-  assert.match(row, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
+  assert.match(row, /class="sv-row-export-action"/);
+  assert.match(row, /@onclick="\(\) => OnOpen\.InvokeAsync\(Item\)">Export…/);
   assert.match(inspector, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
   assert.match(panel, /if \(Mode == "import"\)/);
   assert.match(panel, /Mode == "export" && SelectedRecordId is not null/);
@@ -212,4 +213,36 @@ test('record transfer uses themed import sections and a real export action dialo
   assert.match(css, /\.sv-transfer-export-trigger/);
   assert.match(css, /\.sv-vault-import-dialog/);
   assert.match(pwa, /sv-rail-import-action/);
+});
+
+test('export consent and backup password enable action without relying on stale record cache', () => {
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  const inspector = read('src/StellarVault.UI/Components/VaultRecordInspector.razor');
+  const row = read('src/StellarVault.UI/Components/VaultExplorerItemRow.razor');
+  const css = read('src/StellarVault.Pwa/wwwroot/css/modern-app.css');
+  assert.match(panel, /private bool CanExport => SelectedRecordId is \{ Length: > 0 \}/);
+  assert.doesNotMatch(panel, /Records\.Count > 0 &&/);
+  assert.match(panel, /@bind="_backupPassword" @bind:event="oninput"/);
+  assert.match(panel, /private bool CanPreviewImport => CanStage \|\|/);
+  assert.match(panel, /private string\? CurrentPreviewScope\(\)/);
+  assert.match(panel, /if \(_busy \|\| !_understood \|\| !CanPreviewImport\) return/);
+  assert.match(panel, /if \(_pendingScope is null \|\| !CanStage \|\|/);
+  assert.match(inspector, /Verify file integrity/);
+  assert.match(row, /sv-row-export-action/);
+  assert.doesNotMatch(row, /VaultRecordTransferPanel Mode="export"/);
+  assert.match(css, /sv-transfer-export-backdrop/);
+  assert.match(css, /sv-record-inspector-backdrop:has\(\.sv-transfer-export-backdrop\)/);
+});
+
+test('access-page storage options stay compact and required content remains reachable', () => {
+  const access = read('src/StellarVault.UI/Components/VaultHome.razor');
+  const css = read('src/StellarVault.Pwa/wwwroot/css/modern-app.css');
+  assert.match(access, /class="sv-storage-optional"/);
+  assert.match(access, /<span>Stellar only<\/span>/);
+  assert.match(access, /<span>Encrypted on this device<\/span>/);
+  assert.match(access, /<span>Enable device unlock<\/span>/);
+  assert.match(access, /sv-device-storage-info/);
+  assert.match(css, /\.sv-entry-storage-outside \.sv-access-storage-choices \{/);
+  assert.match(css, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media \(min-width:1021px\) and \(max-height:780px\)/);
 });
