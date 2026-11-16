@@ -81,35 +81,35 @@
         @if (Platform == "WEB PWA")
         {
             <section class="sv-access-storage-settings sv-entry-storage-outside" aria-label="Optional encrypted device storage">
-                <h2 class="sv-storage-heading">Save encrypted items on this device (optional)</h2>
+                <h2 class="sv-storage-heading">Device storage <span class="sv-storage-optional">(optional)</span></h2>
                 <fieldset class="sv-access-storage-choices" disabled="@_busy">
                     <legend class="sr-only">Device storage preference</legend>
                     <label class="sv-biometric-choice">
                         <input type="radio" name="device-retention" checked="@(!CurrentDeviceStoragePreference)"
                                @onchange="() => SelectDeviceStorageAsync(false)" />
-                        <span>Stellar only — do not enable device storage</span>
+                        <span>Stellar only</span>
                     </label>
                     <label class="sv-biometric-choice">
                         <input type="radio" name="device-retention" checked="@CurrentDeviceStoragePreference"
                                @onchange="() => SelectDeviceStorageAsync(true)" />
-                        <span>Save encrypted items on this device</span>
+                        <span>Encrypted on this device</span>
                     </label>
                 </fieldset>
                 @if (CurrentDeviceStoragePreference)
                 {
                     <label class="sv-biometric-choice sv-storage-device-unlock">
                         <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
-                        <span>Enable device unlock after signing in (optional)</span>
+                        <span>Enable device unlock</span>
                     </label>
-                    <p class="advanced-help">Device unlock protects only the separate encrypted-device passphrase. For S-key vaults, enrollment happens after you create or unlock encrypted drafts; the S-key itself is never stored. Support depends on your browser and device.</p>
+                    <details class="sv-access-learn sv-device-storage-info"><summary>About device unlock</summary><p>Device unlock protects your separate local passphrase. It never stores a Stellar secret key and is available only on supported devices.</p></details>
                 }
                 @if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
                 {
-                    <p class="advanced-help">S-key vaults use their own encrypted storage, local passphrase and consent. After connecting, set up or unlock encrypted drafts in the Secret Key workspace. This selection does not store your S-key or enable automatic synchronization.</p>
+                    <details class="sv-access-learn sv-device-storage-info"><summary>About Secret Key device storage</summary><p>After connecting, unlock encrypted drafts separately. Your S-key is never stored, and synchronization always requires approval.</p></details>
                 }
                 else
                 {
-                    <p class="advanced-help">HD device storage is encrypted using your separate vault passphrase. Choosing Stellar only does not delete previously stored encrypted data.</p>
+                    <details class="sv-access-learn sv-device-storage-info"><summary>About encrypted storage</summary><p>Local data uses a separate encryption passphrase. Selecting Stellar only does not delete saved encrypted data.</p></details>
                 }
             </section>
         }
