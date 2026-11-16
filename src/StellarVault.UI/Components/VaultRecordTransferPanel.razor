@@ -23,7 +23,7 @@
 
         @if (!CanStage)
         {
-            <p class="terminal-alert warning" role="status">Unlock encrypted device storage to import records. On-chain-only mode does not store local drafts.</p>
+            <p class="terminal-alert warning" role="status">Import stages encrypted drafts on your device. Enable “Save encrypted items on this device” at access, then unlock that device vault before importing. On-chain-only mode cannot stage imports.</p>
         }
 
         <div class="sv-transfer-option">
@@ -48,7 +48,7 @@
             <label class="sv-transfer-field" for="sv-import-backup-password">Backup password
                 <input id="sv-import-backup-password" type="password" class="terminal-input"
                        autocomplete="new-password" placeholder="At least 12 characters"
-                       @bind="_backupPassword" disabled="@_busy" />
+                       @bind="_backupPassword" @bind:event="oninput" disabled="@_busy" />
             </label>
             <button type="button" class="pixel-button compact sv-transfer-action"
                     disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
@@ -175,8 +175,11 @@ else if (Mode == "export" && SelectedRecordId is not null)
     private VaultRecordInterchange.Archive? _pending;
     private string? _pendingScope;
 
-    private bool CanExport => Records.Count > 0 && (Strategy == VaultMutationStrategyPolicy.Linked
-        ? LinkedLedger.IsConnected : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
+    // Row and inspector may deliberately pass no cached collection. Export must
+    // rely on a fresh scope-pinned ledger read, never cached Records.Count.
+    private bool CanExport => SelectedRecordId is { Length: > 0 } &&
+        (Strategy == VaultMutationStrategyPolicy.Linked
+            ? LinkedLedger.IsConnected : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
 
     private string? CurrentImportScope()
     {
