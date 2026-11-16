@@ -49,6 +49,16 @@ internal static class AccountObjectStoreContractSmoke
                     "native", "0.001", null, null, false)));
     }
 
+    private sealed class UnsupportedExportDestination : IVerifiedObjectDestination
+    {
+        public Task<Stream> OpenTemporaryAsync(CancellationToken ct = default) =>
+            throw new Exception("Unsupported provider opened a private destination.");
+        public Task CommitAsync(CancellationToken ct = default) =>
+            throw new Exception("Unsupported provider attempted to commit.");
+        public Task AbortAsync(CancellationToken ct = default) =>
+            Task.CompletedTask;
+    }
+
     public static async Task RunAsync()
     {
         var stellar = new FakeProvider("stellar");
@@ -97,6 +107,22 @@ internal static class AccountObjectStoreContractSmoke
             throw new Exception("Duplicate providers were accepted.");
         }
         catch (ArgumentException) { }
+
+        try
+        {
+            await ((IVerifiedObjectExport)storage).ExportVerifiedAsync(
+                stellarScope, "record-1", null!);
+            throw new Exception("Null export destination was accepted.");
+        }
+        catch (ArgumentNullException) { }
+
+        try
+        {
+            await ((IVerifiedObjectExport)storage).ExportVerifiedAsync(
+                stellarScope, "record-1", new UnsupportedExportDestination());
+            throw new Exception("Provider without verified streaming was accepted.");
+        }
+        catch (NotSupportedException) { }
 
         Console.WriteLine("PASS: chain-neutral account object store contracts and routing");
     }
