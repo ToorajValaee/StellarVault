@@ -7,21 +7,19 @@ namespace StellarVault.Core.Services;
 /// review and final publisher. A quote indicating more accounts are needed
 /// must never satisfy an explicit SingleAccount mutation.
 ///
-/// Null is a pre-engine legacy queued mutation, whose existing explicitly
-/// reviewed publication behavior is retained for compatibility.
 /// </summary>
 public static class VaultCapacityPolicyGuard
 {
-    public static bool AllowsCreate(ObjectCapacityPolicy? policy,
+    public static bool AllowsCreate(ObjectCapacityPolicy policy,
         bool requiresCapacityExpansion)
     {
-        if (policy is { } selected && !Enum.IsDefined(selected))
+        if (!Enum.IsDefined(policy))
             throw new InvalidDataException("Unknown durable account capacity policy.");
         return policy != ObjectCapacityPolicy.SingleAccount ||
             !requiresCapacityExpansion;
     }
 
-    public static void RequireCreateAllowed(ObjectCapacityPolicy? policy,
+    public static void RequireCreateAllowed(ObjectCapacityPolicy policy,
         bool requiresCapacityExpansion)
     {
         if (!AllowsCreate(policy, requiresCapacityExpansion))
