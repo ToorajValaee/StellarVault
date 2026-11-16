@@ -172,7 +172,7 @@
                 {
                     <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
                     <input id="sv-passphrase" class="terminal-input" type="password"
-                           autocomplete="new-password" minlength="12"
+                           autocomplete="new-password"
                            @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
                     <VaultStorageSecurityNotice />
                 }
@@ -1024,6 +1024,37 @@
             recoveryStage = "decrypting and validating ledger records";
             var recovered = await SecretLedger.ReadAsync();
             NetworkSelection.Select(_network);
+            // The shared access passphrase unlocks only this strategy's
+            // separate, explicitly consented encrypted device vault. The
+            // S-key signer and network connection never depend on a local
+            // passphrase in Stellar-only mode.
+            if (CurrentDeviceStoragePreference)
+            {
+                if (_passphrase.Length < 12)
+                    throw new InvalidOperationException("Encrypted device vault passphrase is too short.");
+                recoveryStage = "unlocking independent encrypted device drafts";
+                LinkedRetention.RequireLocalPersistence();
+                var localExists = await LinkedQueueKeys.HasLocalCredentialsAsync();
+                if (localExists)
+                    await LinkedQueueKeys.UnlockAsync(_passphrase);
+                else
+                    await LinkedQueueKeys.CreateAsync(_passphrase);
+                if (_requestBiometricEnrollment &&
+                    SecretLedger.RootAccountId is string linkedRoot)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("stellarVaultBiometric.enroll",
+                            "linked-s-key:" + NetworkSelection.CredentialKey(linkedRoot), _passphrase);
+                    }
+                    catch (JSException)
+                    {
+                        // Device unlock is optional and must not abort an
+                        // otherwise authenticated encrypted local session.
+                    }
+                    DeviceUnlockPreference.Reset();
+                }
+            }
             // Match the HD first-run route without pretending that an
             // independent S-key account has a mnemonic-derived registry.
             // Existing nonempty S-key vaults go straight to their workspace.
@@ -1036,6 +1067,8 @@
             // response; only the stage and sanitized exception type.
             Logger.LogWarning("Secret Key unlock failed at {RecoveryStage}: {ErrorType}",
                 recoveryStage, ex.GetType().Name);
+            try { await LinkedQueueKeys.LockAsync(); }
+            catch { /* Do not mask the original failure. */ }
             try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
             catch { /* Do not mask the original failure. */ }
             _message = ExplainSecretKeyRecoveryFailure(recoveryStage, ex);
@@ -1043,6 +1076,7 @@
         finally
         {
             _secretKey = string.Empty;
+            _passphrase = string.Empty;
             _busy = false;
         }
     }
