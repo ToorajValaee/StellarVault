@@ -237,14 +237,17 @@ public sealed class VaultLinkedDraftWorkspace(
                     {
                         // Recover an encrypted commit that succeeded before
                         // AddAsync could acknowledge the mutation ID.
-                        if (!createdIds.Contains(entry.Id) &&
-                            !IsPendingTreeGroupNode(entry, groupId))
+                        var recognized = createdIds.Contains(entry.Id);
+                        var belongsToThisFile = IsPendingTreeGroupNode(entry, groupId);
+                        if (!recognized && !belongsToThisFile)
                             continue;
-                        // A concurrent tab may have moved the journal beyond
-                        // Pending. NEVER delete an attempted transaction.
-                        if (entry.State != VaultSyncState.Pending ||
-                            entry.TransactionHash is not null ||
+                        // An acknowledged ID whose encrypted contents changed
+                        // is no longer this upload's exact draft. Preserve it.
+                        // A concurrent tab may also have moved the journal
+                        // beyond Pending. NEVER delete an attempted transaction.
+                        if (!belongsToThisFile ||
                             entry.SignedFileEntries is { Length: > 0 } ||
+                            entry.SignedDeletionManifests is { Length: > 0 } ||
                             !await store.TryDeleteAsync(entry, CancellationToken.None))
                             cleanupFailed = true;
                     }
