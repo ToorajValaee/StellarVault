@@ -158,7 +158,7 @@
                     <input id="sv-secret-key" class="terminal-input" type="password" autocomplete="off"
                            autocapitalize="characters" spellcheck="false" maxlength="56"
                            @bind="_secretKey" @bind:event="oninput" disabled="@_busy" />
-                    <p class="advanced-help">This is an independent account-chain architecture, not an HD wallet. This independent vault uses linked Stellar accounts and explicit root-key signer authorization. Record and folder transactions require approval; mutations are Testnet-only until security audit.</p>
+                    <p class="advanced-help">Independent linked-account vault. Signing and publication require separate approval; mutations remain Testnet-only until security review.</p>
                 }
                 @if (_credentialMode == VaultCredentialMode.MnemonicHd && _recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
@@ -1054,7 +1054,8 @@
                         await JS.InvokeVoidAsync("stellarVaultBiometric.enroll",
                             "linked-s-key:" + NetworkSelection.CredentialKey(linkedRoot), _passphrase);
                     }
-                    catch (JSException)
+                    catch (Exception ex) when (ex is JSException or
+                        InvalidOperationException or OperationCanceledException)
                     {
                         // Device unlock is optional and must not abort an
                         // otherwise authenticated encrypted local session.
