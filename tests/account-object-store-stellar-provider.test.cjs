@@ -349,6 +349,9 @@ test('recovery inspection exposes every durable signed checkpoint but never conf
   assert.match(queue, /StellarAccountAddress.IsValid\(manifest.SourceAccountId\)/);
   assert.match(queue, /file.LedgerRecordId is not \{ Length: 16 \} id/);
   assert.match(queue, /!IsTransactionHash\(tx\)/);
+  assert.match(queue, /item.TransactionHash is null \|\| hasHash/);
+  assert.match(queue, /item.Kind is VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder/);
+  assert.match(queue, /item.Kind == VaultMutationKind.UploadFile/);
   assert.match(queue, /if \(!valid\)\s*checkpoints.Clear\(\)/);
   assert.match(queue, /new VaultRecoveryInspection\(item.Id, item.State,/);
   assert.match(queue, /return entries.Where\(x => x.State is VaultSyncState.Submitting or VaultSyncState.Uncertain\)/);
