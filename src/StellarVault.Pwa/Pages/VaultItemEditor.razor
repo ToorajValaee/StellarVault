@@ -248,16 +248,25 @@ else
             var root = await Ledger.InspectAccountInfoAsync();
             await using var input = selected.OpenReadStream(StellarLedgerFileProtocol.MaxFileBytes);
             await using var memory = new MemoryStream();
-            await input.CopyToAsync(memory);
-            if (memory.Length != selected.Size || memory.Length > StellarLedgerFileProtocol.MaxFileBytes)
-                throw new InvalidDataException("File length changed during read.");
-            content = memory.ToArray();
-            var plan = new StellarLedgerUploadPlan(_title, selected.Name,
-                _fileContentType, content,
-                string.IsNullOrWhiteSpace(_folder) ? null : _folder);
-            _directFileRoot = root.RootAccountId;
-            _directFileScope = Networks.CredentialKey(root.RootAccountId);
-            _directFilePlan = plan;
+            try
+            {
+                await input.CopyToAsync(memory);
+                if (memory.Length != selected.Size || memory.Length > StellarLedgerFileProtocol.MaxFileBytes)
+                    throw new InvalidDataException("File length changed during read.");
+                content = memory.ToArray();
+                var plan = new StellarLedgerUploadPlan(_title, selected.Name,
+                    _fileContentType, content,
+                    string.IsNullOrWhiteSpace(_folder) ? null : _folder);
+                _directFileRoot = root.RootAccountId;
+                _directFileScope = Networks.CredentialKey(root.RootAccountId);
+                _directFilePlan = plan;
+            }
+            finally
+            {
+                // MemoryStream.Dispose does not wipe its internal plaintext
+                // buffer. Clear it even if parsing or planning failed.
+                CryptographicOperations.ZeroMemory(memory.GetBuffer());
+            }
             _directFileCompleted = 0;
             _directFileUncertain = false;
             _selectedHdFile = null;
