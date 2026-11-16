@@ -122,7 +122,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
                             <label class="sv-transfer-field" for="@_backupPasswordId">Backup password
                                 <input id="@_backupPasswordId" type="password" class="terminal-input"
                                        autocomplete="new-password" placeholder="At least 12 characters"
-                                       @bind="_backupPassword" disabled="@_busy" />
+                                       @bind="_backupPassword" @bind:event="oninput" disabled="@_busy" />
                             </label>
                             <button type="button" class="pixel-button compact sv-transfer-action"
                                     disabled="@(_busy || !CanExport || _backupPassword.Length < 12)"
@@ -500,7 +500,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
         _busy = true;
         _message = null;
         DiscardPending();
-        var initialScope = CurrentImportScope();
+        var initialScope = CurrentPreviewScope();
         byte[]? bytes = null;
         try
         {
@@ -527,7 +527,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
                         new UTF8Encoding(false, true).GetString(bytes));
                 else
                     throw new InvalidDataException("Select a .json or .csv record interchange file.");
-                if (initialScope is null || initialScope != CurrentImportScope())
+                if (initialScope is null || initialScope != CurrentPreviewScope())
                 {
                     DiscardPending();
                     throw new InvalidOperationException("Vault session changed during record import.");
