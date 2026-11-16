@@ -158,7 +158,7 @@ test('both PWA and native HD file forms choose direct ledger or encrypted queue 
   assert.match(web, /PrepareDirectFileAsync/);
   assert.match(native, /@if \(Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked &&/);
   assert.match(native, /PrepareNativeDirectFileAsync/);
-  assert.match(native, /_nativeDirectFileUncertain = true/);
+  assert.match(native, /_nativeDirectFileUncertain = mayHaveSubmitted/);
   assert.match(native, /_nativeDirectFileScope != NetworkSelection\.CredentialKey/);
   assert.match(uploader, /mode\.Require\(VaultStorageMode\.StellarLedger\)/);
   assert.match(uploader, /plan\.Remaining\(finalSnapshot\)/);
