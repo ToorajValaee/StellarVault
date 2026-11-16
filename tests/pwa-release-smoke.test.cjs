@@ -207,7 +207,7 @@ test('HD hybrid file upload uses encrypted durable queue separately from session
 
 test('large HD on-chain staging requires explicit local encrypted retention', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
-  assert.match(add, /!Retention\.AllowsLocalPersistence \|\| !Sessions\.IsUnlocked/);
+  assert.match(add, /!Sessions\.IsUnlocked \|\| !Retention\.AllowsLocalPersistence/);
   assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
   assert.match(add, /No transaction was submitted/);
   assert.match(add, /@onclick="StageHdTreeFileAsync"/);
