@@ -16,6 +16,7 @@
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IVaultNativeFileAccess NativeFiles
 @inject VaultHybridDraftWorkspace HybridDrafts
+@inject StellarLedgerUploadCoordinator DirectFileUpload
 @implements IAsyncDisposable
 
 @if (_foregroundRevoked)
@@ -249,15 +250,39 @@ else
                 {
                                 <section aria-label="Upload Stellar file" class="terminal-panel">
                     <h3>Add file</h3>
-                    <p class="notice">Files are streamed into the encrypted HD Sync queue as independently approved SVTREE3 nodes. No transaction is sent during staging. Each node requires explicit fee approval and historical confirmation; the root publishes last.</p>
-                    @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+                    @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked &&
+                        Sessions.ActiveAccountId == _rootAccountId)
                     {
-                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="StageNativeTreeFileAsync">Choose file and stage securely</button>
+                        <p class="notice">Hybrid upload: stream any file into the encrypted Sync queue, then approve and historically verify its SVTREE3 transactions separately. No transaction is sent during staging.</p>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _nativeDirectFilePlan is not null)" @onclick="StageNativeTreeFileAsync">Choose file and stage securely</button>
                     }
                     else
                     {
-                        <p class="terminal-alert warning" role="status">Unlock encrypted device storage and grant local retention consent before staging a resumable Stellar file.</p>
-                        <button type="button" class="pixel-button compact" @onclick='() => NavigateNative("local")'>Open encrypted device vault</button>
+                        <p class="notice">Stellar-only upload: publish an SVFILE1/SVFILE2 file up to 1 MiB directly without saving encrypted drafts on this device. Every chunk and the final manifest require separate fee approval. Closing during upload loses its in-memory plan and can leave orphan chunks.</p>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !Ledger.IsConnected || _nativeDirectFilePlan is not null)" @onclick="PrepareNativeDirectFileAsync">Choose file to review on Stellar</button>
+                    }
+                    @if (_nativeDirectFilePlan is not null)
+                    {
+                        <p class="sv-native-subtle-status" role="status">Verified @_nativeDirectFileCompleted of @_nativeDirectFilePlan.Entries.Count file records in this session.</p>
+                        @if (_nativeDirectFileUncertain)
+                        {
+                            <p class="terminal-alert warning">The last transaction outcome is uncertain. Do not retry without historical investigation; incomplete chunks may remain on Stellar.</p>
+                        }
+                        else
+                        {
+                            @if (_nativeDirectFileCost is not null)
+                            {
+                                <VaultTransactionCostReview Cost="_nativeDirectFileCost" Network="@_ledgerNetwork" Title="PUBLISH FILE RECORD" />
+                                <label><input type="checkbox" @bind="_nativeDirectFileApproved" disabled="@_ledgerBusy" /> I approve this file transaction and its displayed fee and reserve.</label>
+                                <button type="button" class="pixel-button primary" disabled="@(_ledgerBusy || !_nativeDirectFileApproved)" @onclick="ConfirmNativeDirectFileAsync">Approve and publish this record</button>
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelNativeDirectFileCost">Cancel this approval</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ReviewNextNativeDirectFileAsync">Review next file transaction</button>
+                            }
+                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="StopNativeDirectFile">Stop upload (preserve on-chain chunks)</button>
+                        }
                     }
                     @if (!string.IsNullOrWhiteSpace(_uploadMessage))
                     {
@@ -639,6 +664,11 @@ else
 
     private void NavigateNative(string page)
     {
+        if (_nativeDirectFilePlan is not null && !_nativeDirectFileUncertain)
+        {
+            _uploadMessage = "Stop the current file upload before leaving this screen. Published chunks will remain on Stellar.";
+            return;
+        }
         if (page is not ("stellar" or "local" or "sync" or "settings")) return;
         _nativePage = page;
         NativeNavigation.SetSecondaryDestination(page != "stellar");
@@ -697,7 +727,8 @@ else
 
     private void SetNativeMode(string mode)
     {
-        if (_ledgerBusy || mode is not ("browse" or "record" or "folder" or "file")) return;
+        if (_ledgerBusy || _nativeDirectFilePlan is not null ||
+            mode is not ("browse" or "record" or "folder" or "file")) return;
         if (_nativeMode is "record" or "folder" && mode != _nativeMode && _publishEstimate is not null) CancelPublish();
         if (_nativeMode == "browse" && mode is ("record" or "folder"))
             _publishFolder = _selectedFolderId;
@@ -996,6 +1027,213 @@ else
         }
     }
 
+    // Both hosts reuse the same Core reconciliation-first uploader.
+    // The plan is deliberately volatile; it is not encrypted local retention.
+    private StellarLedgerUploadPlan? _nativeDirectFilePlan;
+    private string? _nativeDirectFileRoot;
+    private string? _nativeDirectFileScope;
+    private string? _nativeDirectFileNextId;
+    private LedgerRecordDraft? _nativeDirectFileNextDraft;
+    private LedgerCostPreview? _nativeDirectFileCost;
+    private int _nativeDirectFileCompleted;
+    private bool _nativeDirectFileApproved;
+    private bool _nativeDirectFileUncertain;
+
+    private void RequireNativeDirectFileScope()
+    {
+        if (!Ledger.IsConnected || _nativeDirectFileRoot is null ||
+            _nativeDirectFileScope != NetworkSelection.CredentialKey(_nativeDirectFileRoot) ||
+            _nativeDirectFileUncertain)
+            throw new InvalidOperationException(
+                "Stellar root or network changed, or this upload needs historical reconciliation.");
+    }
+
+    private async Task PrepareNativeDirectFileAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected || _nativeDirectFilePlan is not null)
+            return;
+        _ledgerBusy = true;
+        byte[]? content = null;
+        _uploadMessage = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null)
+            {
+                _uploadMessage = "File selection canceled. No transaction was sent.";
+                return;
+            }
+            await using var input = picked.Stream;
+            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            var root = await Ledger.InspectAccountInfoAsync();
+            // Enforce the protocol limit incrementally, never buffering an
+            // unbounded native file before determining it is too large.
+            await using var memory = new MemoryStream();
+            var buffer = new byte[16 * 1024];
+            try
+            {
+                while (true)
+                {
+                    var count = await input.ReadAsync(buffer);
+                    if (count == 0) break;
+                    if (memory.Length + count > StellarLedgerFileProtocol.MaxFileBytes)
+                        throw new InvalidDataException(
+                            "Direct Stellar-only files are limited to 1 MiB. Use the separately consented encrypted Sync queue for larger files.");
+                    await memory.WriteAsync(buffer.AsMemory(0, count));
+                }
+                content = memory.ToArray();
+            }
+            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            var title = picked.FileName.Length > 256
+                ? picked.FileName[..256] : picked.FileName;
+            var mime = string.IsNullOrWhiteSpace(picked.ContentType)
+                ? "application/octet-stream" : picked.ContentType;
+            _nativeDirectFilePlan = new StellarLedgerUploadPlan(title,
+                picked.FileName, mime, content,
+                string.IsNullOrEmpty(_selectedFolderId) ? null : _selectedFolderId);
+            _nativeDirectFileRoot = root.RootAccountId;
+            _nativeDirectFileScope = NetworkSelection.CredentialKey(root.RootAccountId);
+            _nativeDirectFileCompleted = 0;
+            _uploadMessage = "Direct file plan prepared in volatile memory. Every record needs separate approval.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFilePlan = null;
+            _uploadMessage = "Direct file preparation failed; no transaction submitted: " + ex.Message;
+        }
+        finally
+        {
+            if (content is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(content);
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+        if (_nativeDirectFilePlan is not null)
+            await ReviewNextNativeDirectFileAsync();
+    }
+
+    private async Task ReviewNextNativeDirectFileAsync()
+    {
+        if (_ledgerBusy || _nativeDirectFileCost is not null ||
+            _nativeDirectFilePlan is not { } plan || _nativeDirectFileUncertain) return;
+        _ledgerBusy = true;
+        try
+        {
+            RequireNativeDirectFileScope();
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if ((await Ledger.InspectAccountInfoAsync()).RootAccountId != _nativeDirectFileRoot)
+                throw new InvalidOperationException("Signing root changed.");
+            var remaining = await DirectFileUpload.ReviewAsync(plan);
+            if (remaining.Count == 0)
+            {
+                var ledgerRecords = await Ledger.ReadAsync();
+                var published = ledgerRecords.Single(x => x.Id == plan.ManifestId);
+                var decoded = StellarLedgerFileProtocol.DecodeFile(published, ledgerRecords);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded);
+                _nativeDirectFilePlan = null;
+                _uploadMessage = "File integrity verified on Stellar. All transactions completed.";
+                _nativeMode = "browse";
+                _ledgerRecords = ledgerRecords;
+                return;
+            }
+            _nativeDirectFileCompleted = plan.Entries.Count - remaining.Count;
+            _nativeDirectFileNextId = remaining[0].Id;
+            _nativeDirectFileNextDraft = remaining[0].Draft;
+            _nativeDirectFileCost = await Ledger.EstimateAsync(remaining[0].Draft);
+            _nativeDirectFileApproved = false;
+            _uploadMessage = "Review transaction " + (_nativeDirectFileCompleted + 1) +
+                " of " + plan.Entries.Count + ". Each record must be approved individually.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFileCost = null;
+            _nativeDirectFileNextId = null;
+            _nativeDirectFileNextDraft = null;
+            _uploadMessage = "File review unavailable; nothing new was submitted: " + ex.Message;
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private void CancelNativeDirectFileCost()
+    {
+        if (_ledgerBusy) return;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileApproved = false;
+    }
+
+    private void StopNativeDirectFile()
+    {
+        if (_ledgerBusy) return;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFilePlan = null;
+        _nativeDirectFileApproved = false;
+        _uploadMessage = "Upload stopped. Published chunks are not deleted or retried automatically.";
+    }
+
+    private static bool SameNativeFileDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
+        x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
+        x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
+        x.Notes == y.Notes && (x.Tags ?? []).SequenceEqual(y.Tags ?? [], StringComparer.Ordinal);
+
+    private async Task ConfirmNativeDirectFileAsync()
+    {
+        if (_ledgerBusy || !_nativeDirectFileApproved ||
+            _nativeDirectFilePlan is not { } plan ||
+            _nativeDirectFileNextId is not { } approvedId ||
+            _nativeDirectFileNextDraft is not { } draft ||
+            _nativeDirectFileCost is not { } cost || _nativeDirectFileUncertain) return;
+        _ledgerBusy = true;
+        CancelNativeDirectFileCost();
+        var committed = false;
+        try
+        {
+            RequireNativeDirectFileScope();
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if ((await Ledger.InspectAccountInfoAsync()).RootAccountId != _nativeDirectFileRoot)
+                throw new InvalidOperationException("Signing root changed.");
+            var remaining = await DirectFileUpload.ReviewAsync(plan);
+            if (remaining.Count == 0 || remaining[0].Id != approvedId ||
+                !SameNativeFileDraft(remaining[0].Draft, draft))
+                throw new InvalidOperationException("File plan changed since approval.");
+            committed = await DirectFileUpload.PublishNextApprovedAsync(plan,
+                async current =>
+                {
+                    if (!SameNativeFileDraft(draft, current)) return false;
+                    var fresh = await Ledger.EstimateAsync(current);
+                    return fresh.NetworkFeeXlm <= cost.NetworkFeeXlm &&
+                        fresh.PeakReserveXlm <= cost.PeakReserveXlm &&
+                        fresh.CreatesChildNode == cost.CreatesChildNode;
+                });
+            if (!committed)
+                throw new InvalidOperationException("File plan changed; do not retry a submission.");
+            _nativeDirectFileCompleted++;
+            _uploadMessage = "Published and verified " + _nativeDirectFileCompleted +
+                " of " + plan.Entries.Count + " file records. Review the next transaction.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFileUncertain = true;
+            _uploadMessage = "Transaction outcome uncertain (" + ex.GetType().Name +
+                "). Investigate current and historical ledger state. Do not retry.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+        if (committed && !_nativeDirectFileUncertain)
+            await ReviewNextNativeDirectFileAsync();
+    }
+
     private string? _uploadMessage;
 
     private async Task StageNativeTreeFileAsync()
@@ -1226,6 +1464,12 @@ else
         _selectedFolderId = string.Empty;
         ResetSelection();
         CancelPublish();
+        _nativeDirectFilePlan = null;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFileApproved = false;
+        _nativeDirectFileUncertain = false;
         _publishTitle = string.Empty;
         _publishContent = string.Empty;
         _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
