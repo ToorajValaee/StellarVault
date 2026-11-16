@@ -300,9 +300,9 @@ public sealed class StellarAccountObjectStoreProvider(
         if (options.ExpectedRevision is not null &&
             options.ExpectedRevision != expectedRevision)
             throw new ArgumentException("Conflicting update revision.", nameof(options));
-        if (options.CapacityPolicy != ObjectCapacityPolicy.ExpandWithExplicitApproval)
-            throw new NotSupportedException(
-                "Single-account publication capacity policy is not yet enforced.");
+        if (!Enum.IsDefined(options.CapacityPolicy))
+            throw new ArgumentException(
+                "Unknown requested account capacity policy.", nameof(options));
         if (descriptor.ObjectId is not { Length: 16 } id ||
             !id.All(Uri.IsHexDigit))
             throw new ArgumentException("Update requires the existing 16-hex record ID.");
@@ -342,7 +342,8 @@ public sealed class StellarAccountObjectStoreProvider(
                         "Unlock the matching linked signer and encrypted draft queue.");
                 var epoch = linkedKeys.UnlockEpoch;
                 var staged = await linkedDrafts.StageUpdateAsync(
-                    id, draft, expectedRevision["linked-manifest:".Length..], ct);
+                    id, draft, expectedRevision["linked-manifest:".Length..],
+                    options.CapacityPolicy, ct);
                 await RequireSameScopeAsync(scope, checkpoint, true);
                 if (!linkedKeys.CanPublish || linkedKeys.UnlockEpoch != epoch)
                     throw new InvalidOperationException("Linked unlock changed during update staging.");
@@ -371,7 +372,8 @@ public sealed class StellarAccountObjectStoreProvider(
                         "Published record changed since Edit opened. Reload before saving.");
                 await RequireSameScopeAsync(scope, checkpoint, true);
                 var staged = await hdRemoteMutations.StageUpdateAsync(
-                    id, draft, expectedRevision["hd-sha256:".Length..], ct);
+                    id, draft, expectedRevision["hd-sha256:".Length..],
+                    options.CapacityPolicy, ct);
                 await RequireSameScopeAsync(scope, checkpoint, true);
                 if (!hdSessions.IsUnlocked || hdSessions.Epoch != epoch)
                     throw new InvalidOperationException("HD unlock changed during update staging.");
