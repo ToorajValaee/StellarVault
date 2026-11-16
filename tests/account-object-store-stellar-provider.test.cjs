@@ -58,6 +58,9 @@ test('PWA and native host register the same engine-facing interface and provider
     assert.match(content, /AddScoped<StellarAccountObjectStoreProvider>\(\)/);
     assert.match(content, /AddScoped<IAccountObjectStoreProvider>/);
     assert.match(content, /AddScoped<IAccountObjectStore>/);
+    assert.match(content, /AddScoped<IObjectMutationReview>/);
+    assert.match(content, /AddScoped<IVerifiedObjectExport>/);
+    assert.match(content, /GetRequiredService<IAccountObjectStore>\(\)/);
     assert.match(content, /new AccountObjectStoreRouter/);
   }
 });
