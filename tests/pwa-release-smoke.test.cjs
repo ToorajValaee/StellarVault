@@ -812,3 +812,18 @@ test('access passphrase and help controls are shared by HD and independent S-key
   assert.match(key, /public Task UnlockAsync\(string localPassphrase/);
   assert.match(css, /\.sv-storage-help-trigger/);
 });
+
+test('PWA disposes decrypted pending entries and Sync reviews on lock and navigation', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.match(vault, /@implements IDisposable/);
+  assert.match(vault, /private void ClearPendingSnapshot\(\)/);
+  assert.match(vault, /private void ClearSyncReview\(\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(selected\.EncryptedPayload\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(ready\.EncryptedPayload\)/);
+  assert.match(vault, /ReplacePendingSnapshot\(await PendingQueue\.ReviewAllAsync\(/);
+  assert.match(vault, /SetSyncReview\(await PendingQueue\.PrepareReviewAsync\(/);
+  assert.match(vault, /public void Dispose\(\)\s*\{\s*ClearPendingSnapshot\(\);\s*ClearSyncReview\(\);/);
+  const lock = vault.slice(vault.indexOf('private async Task LockAsync()'));
+  assert.match(lock, /ClearPendingSnapshot\(\);\s*ClearSyncReview\(\);/);
+});
