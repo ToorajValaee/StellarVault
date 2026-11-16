@@ -23,7 +23,7 @@
 
         @if (!CanStage)
         {
-            <p class="terminal-alert warning" role="status">Import stages encrypted drafts on your device. Enable “Save encrypted items on this device” at access, then unlock that device vault before importing. On-chain-only mode cannot stage imports.</p>
+            <p class="terminal-alert warning" role="status">You can preview a file in this session, but saving imported drafts requires encrypted device storage. To stage records, sign in with “Encrypted on this device” and unlock its local vault.</p>
         }
 
         <div class="sv-transfer-option">
@@ -37,7 +37,7 @@
                 I understand plaintext imports must be handled securely and will be staged as local encrypted drafts.
             </label>
             <button type="button" class="pixel-button compact sv-transfer-action"
-                    disabled="@(_busy || !_understood || !CanStage)"
+                    disabled="@(_busy || !_understood || !CanPreviewImport)"
                     @onclick="PickImportAsync">Choose JSON / CSV file</button>
         </div>
         <div class="sv-transfer-option">
@@ -51,7 +51,7 @@
                        @bind="_backupPassword" @bind:event="oninput" disabled="@_busy" />
             </label>
             <button type="button" class="pixel-button compact sv-transfer-action"
-                    disabled="@(_busy || !CanStage || _backupPassword.Length < 12)"
+                    disabled="@(_busy || !CanPreviewImport || _backupPassword.Length < 12)"
                     @onclick="PickEncryptedAsync">Restore encrypted backup</button>
             <p class="advanced-help">Backups include ordinary records and folders, not binary files, transaction journals or signing credentials.</p>
         </div>
@@ -59,7 +59,7 @@
         {
             <div class="sv-transfer-preview" role="status">
                 <strong>@_pending.Records.Length items validated</strong>
-                <p>These become new local encrypted drafts. Import is not atomic; an interrupted import may leave some drafts pending.</p>
+                <p>These can become new local encrypted drafts after device-storage consent. Import is not atomic; an interrupted import may leave some drafts pending.</p>
                 <div class="sv-transfer-actions">
                     <button type="button" class="pixel-button primary"
                             disabled="@(_busy || !CanStage || !_understood)"
@@ -200,6 +200,31 @@ else if (Mode == "export" && SelectedRecordId is not null)
             HdSession.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    // File selection and validation may be performed explicitly in volatile
+    // memory in an on-chain-only session. Persisting the result still requires
+    // separately consented, unlocked encrypted local storage.
+    private bool CanPreviewImport => CanStage ||
+        (Strategy == VaultMutationStrategyPolicy.Linked
+            ? LinkedLedger.IsConnected && LinkedLedger.RootAccountId is not null
+            : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
+
+    private string? CurrentPreviewScope()
+    {
+        var local = CurrentImportScope();
+        if (local is not null) return local;
+        if (Strategy == VaultMutationStrategyPolicy.Linked &&
+            LinkedLedger.IsConnected && LinkedLedger.RootAccountId is string linkedRoot)
+            return string.Join("|", Strategy, "volatile", linkedRoot,
+                Networks.CredentialKey(linkedRoot),
+                LinkedLedger.ConnectionEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        if (Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected)
+            return string.Join("|", Strategy, "volatile",
+                HdSession.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Networks.SelectedPreset);
+        return null;
+    }
+
     private void DiscardPending()
     {
         _pending = null;
@@ -210,7 +235,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
     {
         // Never carry an authenticated plaintext preview across a different
         // signer, account, selected network or unlock/session epoch.
-        if (_pendingScope is not null && _pendingScope != CurrentImportScope())
+        if (_pendingScope is not null && _pendingScope != CurrentPreviewScope())
             DiscardPending();
     }
 
@@ -372,11 +397,11 @@ else if (Mode == "export" && SelectedRecordId is not null)
 
     private async Task PickEncryptedAsync()
     {
-        if (_busy || !CanStage || _backupPassword.Length < 12) return;
+        if (_busy || !CanPreviewImport || _backupPassword.Length < 12) return;
         _busy = true;
         DiscardPending();
         _message = null;
-        var initialScope = CurrentImportScope();
+        var initialScope = CurrentPreviewScope();
         byte[]? ciphertext = null;
         try
         {
@@ -406,7 +431,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
             }
             var imported = await VaultEncryptedRecordBackup.DecryptAsync(
                 ciphertext, _backupPassword);
-            if (initialScope is null || initialScope != CurrentImportScope())
+            if (initialScope is null || initialScope != CurrentPreviewScope())
                 throw new InvalidOperationException("Vault session changed during backup restore.");
             _pending = imported;
             _pendingScope = initialScope;
@@ -471,7 +496,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
 
     private async Task PickImportAsync()
     {
-        if (_busy || !_understood || !CanStage) return;
+        if (_busy || !_understood || !CanPreviewImport) return;
         _busy = true;
         _message = null;
         DiscardPending();
@@ -533,7 +558,7 @@ else if (Mode == "export" && SelectedRecordId is not null)
     private async Task ConfirmImportAsync()
     {
         if (_busy || !_understood || !CanStage || _pending is null) return;
-        if (_pendingScope is null || _pendingScope != CurrentImportScope())
+        if (_pendingScope is null || !CanStage || _pendingScope != CurrentImportScope())
         {
             DiscardPending();
             _message = "Import preview expired after a vault session or network change.";
