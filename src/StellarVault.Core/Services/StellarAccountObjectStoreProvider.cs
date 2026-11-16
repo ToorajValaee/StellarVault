@@ -437,12 +437,49 @@ public sealed class StellarAccountObjectStoreProvider(
             return ValueTask.CompletedTask;
         }
 
+        private void RequireCapacity(long additional)
+        {
+            if (additional < 0 || additional > MaxVerifiedInMemoryFileBytes - Length)
+                throw new NotSupportedException(
+                    "File exceeds the verified in-memory read limit; use the private-destination streaming downloader.");
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            RequireCapacity(count);
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            RequireCapacity(buffer.Length);
+            base.Write(buffer);
+        }
+
+        public override void WriteByte(byte value)
+        {
+            RequireCapacity(1);
+            base.WriteByte(value);
+        }
+
+        public override void SetLength(long value)
+        {
+            if (value > MaxVerifiedInMemoryFileBytes)
+                throw new NotSupportedException("Verified file exceeds the in-memory read limit.");
+            base.SetLength(value);
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count,
+            CancellationToken cancellationToken)
+        {
+            RequireCapacity(count);
+            return base.WriteAsync(buffer, offset, count, cancellationToken);
+        }
+
         public override ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            if (buffer.Length > MaxVerifiedInMemoryFileBytes - Length)
-                throw new NotSupportedException(
-                    "File exceeds the verified in-memory read limit; use the private-destination streaming downloader.");
+            RequireCapacity(buffer.Length);
             return base.WriteAsync(buffer, cancellationToken);
         }
     }
