@@ -21,7 +21,7 @@ public sealed class StellarAccountObjectStoreProvider(
     VaultSessionManager hdSessions,
     VaultLinkedQueueKeySession linkedKeys,
     VaultNetworkSelection networks,
-    IVaultRecordTypeFactory recordTypes) : IAccountObjectStoreProvider
+    IVaultRecordTypeFactory recordTypes) : IAccountObjectStoreProvider, IVerifiedObjectExportProvider
 {
     public string ProviderId => "stellar";
     private const int MaxOrdinaryContentBytes = 64 * 1024;
@@ -373,6 +373,75 @@ public sealed class StellarAccountObjectStoreProvider(
         catch
         {
             await buffer.DisposeAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Large-file path: write into a caller-owned PRIVATE destination and
+    /// commit only after every SVTREE3 node, the root content hash, and the
+    /// active account/network scope have been verified. On any error, abort
+    /// the temporary destination; never publish a partially verified file.
+    /// </summary>
+    public async Task<StoredObject> ExportVerifiedAsync(
+        ObjectStoreScope scope, string objectId,
+        IVerifiedObjectDestination destination, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectId);
+        if (objectId.Length != 16 || !objectId.All(Uri.IsHexDigit))
+            throw new ArgumentException("Invalid Stellar file root ID.", nameof(objectId));
+        var checkpoint = RequireScope(scope, true);
+        // The existing strategy-specific transport returns an authenticated
+        // ledger snapshot; avoid mixing children from different read epochs.
+        IReadOnlyList<LedgerRecordItem> records;
+        if (scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked)
+            records = await linkedLedger.ReadAsync(ct);
+        else
+        {
+            var before = await hdLedger.InspectAccountInfoAsync();
+            if (before.RootAccountId != scope.StoreId)
+                throw new UnauthorizedAccessException("HD file root belongs to another account.");
+            records = await hdLedger.ReadAsync();
+        }
+        await RequireSameScopeAsync(scope, checkpoint, true);
+        var roots = records.Where(x => x.Id == objectId).ToArray();
+        if (roots.Length != 1 || !VaultLinkedTreeFilePolicy.IsRootRecord(roots[0]))
+            throw new InvalidDataException("Verified export requires one published SVTREE3 root.");
+
+        // Open only once the root has passed the initial structural check.
+        // The destination contract itself guarantees that opening a staging
+        // stream does not expose it as a completed downloadable object.
+        var opened = false;
+        try
+        {
+            opened = true;
+            VaultStreamingFileTree.Root manifest;
+            await using (var temporary = await destination.OpenTemporaryAsync(ct))
+            {
+                if (!temporary.CanWrite)
+                    throw new InvalidOperationException(
+                        "Verified export destination must provide a writable private staging stream.");
+                manifest = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    objectId, records, temporary, ct);
+                await temporary.FlushAsync(ct);
+            }
+            await RequireSameScopeAsync(scope, checkpoint, true);
+            ct.ThrowIfCancellationRequested();
+            await destination.CommitAsync(ct);
+            return new StoredObject(
+                new ObjectDescriptor(objectId, VaultRecordTypeFactory.File,
+                    manifest.FileName, manifest.ContentType),
+                "content-sha256:" + manifest.Sha256Hex,
+                manifest.Length, manifest.Sha256Hex);
+        }
+        catch
+        {
+            if (opened)
+            {
+                try { await destination.AbortAsync(CancellationToken.None); }
+                catch { /* Preserve the original verification/commit error. */ }
+            }
             throw;
         }
     }
