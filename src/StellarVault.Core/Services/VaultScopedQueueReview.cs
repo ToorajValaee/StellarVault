@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 namespace StellarVault.Core.Services;
 
 /// <summary>
@@ -36,19 +37,30 @@ public sealed class VaultScopedQueueReview(
         // Read the authenticated queue exactly once. Readiness and folder
         // dependency decisions must describe the same immutable snapshot.
         var all = await queue.ReviewAllAsync(accountId, scope, ct);
-        var review = VaultPendingMutationReviewPolicy.Build(all);
+        try
+        {
+            var review = VaultPendingMutationReviewPolicy.Build(all);
 
-        ct.ThrowIfCancellationRequested();
-        retention.RequireLocalPersistence();
-        if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId ||
-            sessions.Epoch != epoch || networks.Network != selectedNetwork ||
-            networks.CustomPassphrase != selectedPassphrase ||
-            networks.CustomHorizonUrl != selectedEndpoint ||
-            networks.CredentialKey(accountId) != scope)
-            throw new InvalidOperationException(
-                "Device vault session, storage consent or network changed during queue review.");
+            ct.ThrowIfCancellationRequested();
+            retention.RequireLocalPersistence();
+            if (!sessions.IsUnlocked || sessions.ActiveAccountId != accountId ||
+                sessions.Epoch != epoch || networks.Network != selectedNetwork ||
+                networks.CustomPassphrase != selectedPassphrase ||
+                networks.CustomHorizonUrl != selectedEndpoint ||
+                networks.CredentialKey(accountId) != scope)
+                throw new InvalidOperationException(
+                    "Device vault session, storage consent or network changed during queue review.");
 
-        return new(accountId, scope, epoch, review, all,
-            VaultHybridFolderSyncPlan.Build(all, review));
+            return new(accountId, scope, epoch, review, all,
+                VaultHybridFolderSyncPlan.Build(all, review));
+        }
+        catch
+        {
+            // No snapshot escaped to the caller. Release all decrypted
+            // review copies, including failed folder graph inspections.
+            foreach (var entry in all)
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+            throw;
+        }
     }
 }
