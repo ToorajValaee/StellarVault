@@ -163,6 +163,14 @@ public sealed class VaultHybridDraftWorkspace(
                     "Interrupted HD file staging left encrypted orphan drafts. Reopen and resolve the group; no transaction was sent.");
             throw;
         }
+        finally
+        {
+            // ReviewAllAsync returns decrypted queue payload copies. Streaming
+            // a file can take minutes; never retain those copies after staging
+            // succeeds, fails, or rolls back.
+            foreach (var entry in local)
+                CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+        }
     }
 
     public async Task<VaultPendingMutation> ReviseAsync(
