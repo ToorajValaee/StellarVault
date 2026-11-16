@@ -194,10 +194,18 @@ else if (Mode == "export" && SelectedRecordId is not null)
 
     // A one-item archive is self-contained. Its original parent folder may
     // not be included, so detach the export copy (never mutate ledger data).
-    private IEnumerable<LedgerRecordItem> SelectRecords(IEnumerable<LedgerRecordItem> snapshot) =>
-        Mode == "export" && SelectedRecordId is not null
-            ? snapshot.Where(x => x.Id == SelectedRecordId).Select(x => x with { FolderId = null })
-            : snapshot;
+    // Never produce an apparently successful empty backup when the selected
+    // item disappeared or became an internal file protocol node.
+    private IEnumerable<LedgerRecordItem> SelectRecords(IEnumerable<LedgerRecordItem> snapshot)
+    {
+        if (Mode != "export" || SelectedRecordId is null)
+            return snapshot;
+        var selected = snapshot.Where(x => x.Id == SelectedRecordId).ToArray();
+        if (selected.Length != 1 || !VaultRecordInterchange.IsOrdinary(selected[0]))
+            throw new InvalidOperationException(
+                "Selected ordinary record is unavailable in the current verified ledger snapshot.");
+        return [selected[0] with { FolderId = null }];
+    }
 
     private async Task RequireSameExportScopeAsync(string expected)
     {
