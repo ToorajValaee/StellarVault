@@ -201,11 +201,13 @@ test('Edit is a revision-pinned Update routed to existing encrypted mutation jou
   assert.match(provider, /"linked-manifest:"/);
   assert.match(provider, /ObjectMutationState\.Prepared/);
   assert.match(provider, /Single-account publication capacity policy is not yet enforced/);
-  assert.match(provider, /Structured Stellar record fields require the full typed-record update contract/);
-  assert.match(provider, /!string\.IsNullOrEmpty\(currentRecord\.UserName\)/);
-  assert.match(provider, /!string\.IsNullOrEmpty\(currentRecord\.Url\)/);
-  assert.match(provider, /!string\.IsNullOrEmpty\(currentRecord\.Notes\)/);
-  assert.match(provider, /currentRecord\.Tags is \{ Length: > 0 \}/);
+  assert.match(provider, /Updates require explicit complete structured fields/);
+  assert.match(provider, /fields\?\.Tags\?\.ToArray\(\)/);
+  assert.match(provider, /UserName: fields\?\.UserName/);
+  assert.match(provider, /Url: fields\?\.Url/);
+  assert.match(provider, /Notes: fields\?\.Notes/);
+  assert.match(provider, /new ObjectRecordFields\(record\.UserName, record\.Url/);
+  assert.match(contracts, /public sealed record ObjectRecordFields/);
   assert.match(hd, /public async Task<VaultPendingMutation> StageUpdateAsync/);
   assert.match(linked, /public Task<DraftItem> StageUpdateAsync/);
   assert.doesNotMatch(provider, /PublishWithPreparedHashAsync\(|PublishDetailedAsync\(|SubmitApprovedAsync\(/);
