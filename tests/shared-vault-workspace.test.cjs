@@ -101,7 +101,10 @@ test('shared UI retains independent S-key offline drafts and immutable file safe
   assert.match(linked, /Open verified file downloads/);
   assert.match(policy, /StellarLedgerFileProtocol\.ChunkPrefix/);
   assert.match(policy, /VaultLinkedTreeFilePolicy.IsRootRecord/);
-  assert.match(vault, /_linkedWorkspace\?\.LockFromShellAsync\(\)/);
+  assert.match(vault, /await _linkedWorkspace\.LockFromShellAsync\(\)/);
+  assert.match(vault, /Workflow\.Lock\(\)/);
+  assert.match(vault, /LinkedRetention\.Reset\(\)/);
+  assert.match(vault, /await ClearHybridResumeIntentAsync\(\)/);
   assert.match(linked, /await LinkedQueueKeys\.LockAsync\(\)/);
   assert.match(native, /<VaultSecretKeyWorkspace Embedded="true"/);
   assert.match(native, /OnViewChange="NavigateLinkedNative"/);
