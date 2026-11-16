@@ -97,7 +97,7 @@ test('shared UI retains independent S-key offline drafts and immutable file safe
   assert.match(vault, /Recover independent encrypted S-key drafts offline/);
   assert.match(vault, /<VaultLinkedLocalQueuePanel \/>/);
   assert.match(linked, /!IsTreePart\(x\)/);
-  assert.match(linked, /VaultPublishedFileClassification.IsFile\(_selected\)/);
+  assert.match(linked, /VaultPublishedFileClassification.IsManagedFileProtocolRecord\(_selected\)/);
   assert.match(linked, /Open verified file downloads/);
   assert.match(policy, /StellarLedgerFileProtocol\.ChunkPrefix/);
   assert.match(policy, /VaultLinkedTreeFilePolicy.IsRootRecord/);
