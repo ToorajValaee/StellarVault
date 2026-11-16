@@ -72,6 +72,13 @@ register the same capability. Recovery inspection can surface **all signed
 checkpoint hashes** for a multi-owner HD deletion or multipart file upload;
 every checkpoint still requires independent historical verification.
 
+Interrupted HD and Secret Key file staging now attempts to discover and
+discard an unacknowledged **unsent** encrypted tree node by its unique group
+tag. If any node is no longer safely Pending or a compare-and-swap cleanup
+fails, the local queue remains blocked for manual review; no automated ledger
+retry is attempted. Pre-launch legacy 32-character draft ID migration has
+been removed from the PWA and queue API.
+
 The engine's file metadata `GetAsync` now verifies the complete SVTREE3 tree
 and content hash into a discard sink, without allocating the file as plaintext.
 `OpenReadAsync` remains capped at 8 MiB for verified in-memory reads;
