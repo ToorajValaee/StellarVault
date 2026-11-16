@@ -16,10 +16,10 @@
 {
 <details class="terminal-panel" aria-label="Import vault records">
     <summary>Import records / restore backup</summary>
-    <p class="advanced-help">Transfers credentials, notes and folders, not encrypted binary files.
-        JSON preserves folder hierarchy; CSV supports flat records. These interchange files
-        are <strong>plaintext</strong>, not encrypted vault backups. Save only to a trusted destination
-        and securely delete the file when finished.</p>
+    <p class="advanced-help">Imports credentials, notes and folders, not encrypted binary files.
+        JSON preserves folder hierarchy; CSV supports flat records. Interchange files
+        are <strong>plaintext</strong>, not encrypted vault backups. Import only from a trusted source
+        and securely delete plaintext source files when finished.</p>
     @if (!CanStage)
     {
         <p role="status">To import, explicitly enable and unlock this account's encrypted
@@ -192,9 +192,11 @@ else if (Mode == "export" && SelectedRecordId is not null)
             string.Join("|", requestedStrategy, before.RootAccountId, hdScope));
     }
 
+    // A one-item archive is self-contained. Its original parent folder may
+    // not be included, so detach the export copy (never mutate ledger data).
     private IEnumerable<LedgerRecordItem> SelectRecords(IEnumerable<LedgerRecordItem> snapshot) =>
         Mode == "export" && SelectedRecordId is not null
-            ? snapshot.Where(x => x.Id == SelectedRecordId)
+            ? snapshot.Where(x => x.Id == SelectedRecordId).Select(x => x with { FolderId = null })
             : snapshot;
 
     private async Task RequireSameExportScopeAsync(string expected)
