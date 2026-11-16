@@ -116,3 +116,21 @@ test('neutral Get/OpenRead verifies SVTREE3 before exposing any bytes', () => {
   assert.match(smoke, /Engine returned a corrupted file as verified plaintext/);
   assert.doesNotMatch(provider, /\.PublishDetailedAsync\(|\.SubmitApprovedAsync\(/);
 });
+
+test('neutral verified export streams into private destination and only commits after full hash and scope checks', () => {
+  const contract = read('src/StellarVault.Core/Abstractions/AccountObjectStore.cs');
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const smoke = read('tests/StellarVault.Core.CryptoTests/StellarObjectEstimateSmoke.cs');
+  assert.match(contract, /interface IVerifiedObjectDestination/);
+  assert.match(contract, /interface IVerifiedObjectExport/);
+  assert.match(contract, /interface IVerifiedObjectExportProvider/);
+  assert.match(contract, /provider is IVerifiedObjectExportProvider verified/);
+  assert.match(provider, /IAccountObjectStoreProvider, IVerifiedObjectExportProvider/);
+  assert.match(provider, /await destination\.OpenTemporaryAsync\(ct\)/);
+  assert.match(provider, /await VaultLinkedTreeFilePolicy\.ReadAsync\(\s*objectId, records, temporary, ct\)/);
+  assert.match(provider, /await temporary\.FlushAsync\(ct\)/);
+  assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\);\s*ct\.ThrowIfCancellationRequested\(\);\s*await destination\.CommitAsync\(ct\)/);
+  assert.match(provider, /await destination\.AbortAsync\(CancellationToken\.None\)/);
+  assert.match(smoke, /verifiedDestination\.Commits == 1/);
+  assert.match(smoke, /rejectedDestination\.Aborts == 1/);
+});
