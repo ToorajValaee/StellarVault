@@ -191,3 +191,25 @@ test('PWA imports open from left rail, not record header, for both account strat
   assert.match(panel, /selected\[0\] with \{ FolderId = null \}/);
   assert.match(panel, /await RequireSameExportScopeAsync\(exportScope\)/);
 });
+
+test('record transfer uses themed import sections and a real export action dialog', () => {
+  const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
+  const inspector = read('src/StellarVault.UI/Components/VaultRecordInspector.razor');
+  const css = read('src/StellarVault.Pwa/wwwroot/css/modern-app.css');
+  const pwa = read('src/StellarVault.Pwa/Pages/Vault.razor');
+  assert.match(panel, /class="sv-transfer-content sv-transfer-import"/);
+  assert.match(panel, /class="sv-transfer-option"/);
+  assert.match(panel, /class="pixel-button compact sv-transfer-export-trigger"/);
+  assert.match(panel, /aria-haspopup="dialog" aria-expanded="@_showExportDialog"/);
+  assert.match(panel, /class="modal-backdrop sv-transfer-export-backdrop"/);
+  assert.match(panel, /role="dialog"\s+aria-modal="true" aria-label="Export record"/);
+  assert.match(panel, /@onclick="CloseExportDialog"/);
+  assert.match(panel, /@onclick="ExportJsonAsync"/);
+  assert.match(panel, /@onclick="ExportEncryptedAsync"/);
+  assert.doesNotMatch(inspector, /<summary>Export this item<\/summary>/);
+  assert.equal((inspector.match(/<VaultRecordTransferPanel Mode="export"/g) || []).length, 1);
+  assert.match(css, /\.sv-transfer-option-heading/);
+  assert.match(css, /\.sv-transfer-export-trigger/);
+  assert.match(css, /\.sv-vault-import-dialog/);
+  assert.match(pwa, /sv-rail-import-action/);
+});
