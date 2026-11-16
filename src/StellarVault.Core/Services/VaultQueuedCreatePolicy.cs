@@ -138,7 +138,8 @@ public static class VaultQueuedCreatePolicy
         // Individual parent/root nodes are eligible only after their children
         // have been historically confirmed by the existing HD journal.
         if (VaultHdTreeFilePolicy.IsTreeDraft(draft) &&
-            (item.OriginStrategyId is null or VaultMutationStrategyPolicy.Hd))
+            VaultMutationStrategyPolicy.Resolve(item.OriginStrategyId) ==
+             VaultMutationStrategyPolicy.Hd)
         {
             var treeProblems = VaultHdTreeFilePolicy.Problems(item, all, draft);
             if (treeProblems.Length == 0)
