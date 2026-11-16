@@ -1198,6 +1198,7 @@ else
         _ledgerBusy = true;
         CancelNativeDirectFileCost();
         var committed = false;
+        var mayHaveSubmitted = false;
         try
         {
             RequireNativeDirectFileScope();
@@ -1213,21 +1214,29 @@ else
                 {
                     if (!SameNativeFileDraft(draft, current)) return false;
                     var fresh = await Ledger.EstimateAsync(current);
-                    return fresh.NetworkFeeXlm <= cost.NetworkFeeXlm &&
+                    var eligible = fresh.NetworkFeeXlm <= cost.NetworkFeeXlm &&
                         fresh.PeakReserveXlm <= cost.PeakReserveXlm &&
                         fresh.CreatesChildNode == cost.CreatesChildNode;
+                    if (eligible) mayHaveSubmitted = true;
+                    return eligible;
                 });
             if (!committed)
-                throw new InvalidOperationException("File plan changed; do not retry a submission.");
+            {
+                _uploadMessage = "File or costs changed before authorization. Review the transaction again.";
+                return;
+            }
             _nativeDirectFileCompleted++;
             _uploadMessage = "Published and verified " + _nativeDirectFileCompleted +
                 " of " + plan.Entries.Count + " file records. Review the next transaction.";
         }
         catch (Exception ex)
         {
-            _nativeDirectFileUncertain = true;
-            _uploadMessage = "Transaction outcome uncertain (" + ex.GetType().Name +
-                "). Investigate current and historical ledger state. Do not retry.";
+            _nativeDirectFileUncertain = mayHaveSubmitted;
+            _uploadMessage = mayHaveSubmitted
+                ? "Transaction outcome uncertain (" + ex.GetType().Name +
+                    "). Investigate current and historical ledger state. Do not retry."
+                : "File review failed before signing (" + ex.GetType().Name +
+                    "). Review the transaction costs again; nothing was submitted.";
         }
         finally
         {
