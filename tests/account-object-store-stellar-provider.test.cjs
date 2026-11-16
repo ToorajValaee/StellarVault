@@ -134,3 +134,20 @@ test('neutral verified export streams into private destination and only commits 
   assert.match(smoke, /verifiedDestination\.Commits == 1/);
   assert.match(smoke, /rejectedDestination\.Aborts == 1/);
 });
+
+test('trusted filesystem verified export destination is atomic, one-use and cleans up failures', () => {
+  const destination = read('src/StellarVault.Core/Abstractions/AtomicFileObjectDestination.cs');
+  const smoke = read('tests/StellarVault.Core.CryptoTests/AtomicFileObjectDestinationSmoke.cs');
+  const program = read('tests/StellarVault.Core.CryptoTests/Program.cs');
+  assert.match(destination, /: IVerifiedObjectDestination, IAsyncDisposable/);
+  assert.match(destination, /FileMode\.CreateNew/);
+  assert.match(destination, /FileShare\.None/);
+  assert.match(destination, /Path\.IsPathFullyQualified\(finalPath\)/);
+  assert.match(destination, /File\.Move\(_temporaryPath, _finalPath, overwrite: false\)/);
+  assert.match(destination, /File\.Delete\(_temporaryPath\)/);
+  assert.match(destination, /if \(_committed\) return Task\.CompletedTask/);
+  assert.match(smoke, /Unverified plaintext became publicly visible/);
+  assert.match(smoke, /A race replaced the existing final file/);
+  assert.match(smoke, /Disposing an uncommitted destination did not clean up/);
+  assert.match(program, /AtomicFileObjectDestinationSmoke\.RunAsync\(\)/);
+});
