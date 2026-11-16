@@ -379,3 +379,13 @@ test('interrupted HD and linked file staging cleans up unacknowledged encrypted 
   assert.match(linked, /!await store\.TryDeleteAsync\(entry, CancellationToken\.None\)/);
   assert.match(linked, /finally \{ ClearEntries\(entries\); \}/);
 });
+
+test('prelaunch HD records have no legacy local ID migration or silent version upgrades', () => {
+  const queue = read('src/StellarVault.Core/Services/VaultPendingMutationQueue.cs');
+  const pwa = read('src/StellarVault.Pwa/Pages/Vault.razor');
+  const origin = read('src/StellarVault.Core/Services/VaultMutationStrategyPolicy.cs');
+  assert.doesNotMatch(queue, /MigrateLegacyCreateIdAsync/);
+  assert.doesNotMatch(pwa, /MigrateSelectedLegacyIdAsync|MIGRATE LEGACY LOCAL ID/);
+  assert.match(origin, /Encrypted mutation requires an explicit recognized account strategy/);
+  assert.match(queue, /VaultMutationStrategyPolicy\.Validate\(entry\.OriginStrategyId\)/);
+});
