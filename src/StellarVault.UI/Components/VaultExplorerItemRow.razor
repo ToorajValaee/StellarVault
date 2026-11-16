@@ -36,13 +36,13 @@
                     <button type="button" class="sv-row-export-action"
                             @onclick="() => OnOpen.InvokeAsync(Item)">Export…</button>
                 }
-                @if (!IsFile && CanEdit)
+                @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item) && CanEdit)
                 {
                     <button type="button" @onclick="() => OnEdit.InvokeAsync(Item)">
                         @(Item.IsFolder ? "Rename / move" : "Edit record")
                     </button>
                 }
-                @if (!IsFile && CanDelete)
+                @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item) && CanDelete)
                 {
                     <button type="button" class="sv-object-delete"
                             @onclick="() => OnDelete.InvokeAsync(Item)">Delete</button>
