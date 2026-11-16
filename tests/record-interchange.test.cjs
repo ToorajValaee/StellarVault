@@ -12,9 +12,9 @@ test('record import/export is accessible in PWA and both native/shared account m
   const native = read('src/StellarVault.UI/Components/NativeVaultWorkspace.razor');
   const linked = read('src/StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
-  assert.match(pwa, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\\.Hd"/);
-  assert.match(native, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\\.Hd"/);
-  assert.match(linked, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\\.Linked"/);
+  assert.match(pwa, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Hd"/);
+  assert.match(native, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Hd"/);
+  assert.match(linked, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Linked"/);
   assert.match(panel, /VaultRecordInterchange\.ImportJson/);
   assert.match(panel, /VaultRecordInterchange\.ImportCsv/);
   assert.match(panel, /VaultRecordInterchange\.ExportJson/);
@@ -178,8 +178,8 @@ test('import is menu-only, while export is selected-item scoped in both PWA and 
   }
   assert.match(row, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
   assert.match(inspector, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
-  assert.match(pwa, /Strategy="@VaultMutationStrategyPolicy\\.Hd"\s+Records="@Records\.Concat\(Folders\)\.ToArray\(\)"/);
-  assert.match(linked, /Strategy="@VaultMutationStrategyPolicy\\.Linked"\s+Records="_items"/);
+  assert.match(pwa, /Strategy="@VaultMutationStrategyPolicy\.Hd"\s+Records="@Records\.Concat\(Folders\)\.ToArray\(\)"/);
+  assert.match(linked, /Strategy="@VaultMutationStrategyPolicy\.Linked"\s+Records="_items"/);
   assert.match(panel, /if \(Mode == "import"\)/);
   assert.match(panel, /Mode == "export" && SelectedRecordId is not null/);
   assert.match(panel, /selected\.Length != 1 \|\| !VaultRecordInterchange\.IsOrdinary/);
