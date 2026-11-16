@@ -45,6 +45,37 @@ Relevant non-network protocol regression tests:
 node --test tests/secret-key-chain.test.cjs tests/secret-key-ledger.test.cjs
 ```
 
+## Account-backed object engine (current branch)
+
+The chain-neutral `VaultEngine.Core` contracts define scoped Get, authenticated
+OpenRead, staged Put/Update/Delete, verified streamed exports, cost estimates and
+explicit mutation reviews. `StellarAccountObjectStoreProvider` is the first
+provider; HD/mnemonic and independent Secret Key accounts use their existing
+distinct signers and encrypted journals. **Preparing a mutation never publishes
+it.** Deletes for ordinary records and empty folders are pinned to the exact
+revision returned by engine Get, then revalidated inside the underlying
+journal. File trees are intentionally excluded from ordinary Delete.
+
+The browser HD and shared/native/linked explorers expose import from the vault
+menu and per-record export from each record's context menu and details pane.
+Exports re-read the connected ledger, require explicit plaintext consent (or
+a separately password-encrypted backup), and reject a selected record that is
+missing or no longer an ordinary record.
+
+**Not yet implemented or release-approved:** whole-tree deletion publication
+with restart/reconciliation proofs; unrestricted large-file use; independent
+live Testnet interruption verification, cross-platform release testing, and
+third-party cryptographic/security audit. These are blockers, not compatibility
+features. EVM is a future provider and must not be emulated through Stellar
+account identifiers or Stellar fee assumptions.
+
+For the focused static regression suite:
+```bash
+node --test tests/account-object-store-stellar-provider.test.cjs tests/record-interchange.test.cjs
+```
+Follow it with full `dotnet build`, Core crypto tests, PWA publish and the
+manual `PWA-RELEASE-GATE.md` checklist before any release decision.
+
 ## Security and release readiness
 
 **Not yet production-ready.** Complete .NET 10 builds, platform testing, live Stellar Testnet recovery and independent security review before entering secrets protecting real funds. Current-state ledger recovery and mocked transaction receipts alone are not production proof. Do not use this preview with valuable secrets.
