@@ -114,3 +114,22 @@ test('hybrid review keeps only returned ready drafts and wipes failed queue snap
   assert.match(service, /catch\s*\{\s*\/\/ On error no review is returned/);
   assert.match(queue, /ClearNonReturnedSnapshots\(all, review\.Ready\)/);
 });
+
+test('SVTREE3 deletion review pins the complete authenticated graph without enabling publishing', () => {
+  const review = read(path.join(core, 'VaultVerifiedTreeDeletionReview.cs'));
+  const hdFiles = read(path.join(core, 'VaultHybridFileDeletionWorkspace.cs'));
+  const smoke = read(path.join(root, 'tests', 'StellarVault.Core.CryptoTests',
+    'HdStreamingFileTreeSmoke.cs'));
+  assert.match(review, /VaultLinkedTreeFilePolicy\.InspectVerifiedAsync\(/);
+  assert.match(review, /VaultHybridRemoteMutationWorkspace\.Fingerprint\(item\)/);
+  assert.match(review, /InventoryFingerprint\(rootId, verified\.GroupTag/);
+  assert.match(review, /File group contains unreferenced records/);
+  assert.match(review, /Do not delete, retry or assume success/);
+  assert.match(hdFiles, /public async Task<VaultVerifiedTreeDeletionReview\.Plan> ReviewTreeAsync\(/);
+  assert.match(hdFiles, /public async Task<VaultVerifiedTreeDeletionReview\.Inspection> InspectTreeAsync\(/);
+  assert.match(hdFiles, /VaultVerifiedTreeDeletionReview\.BuildAsync\(\s*item\.Id, remote, ct\)/);
+  assert.match(hdFiles, /VaultHybridFilePolicy\.RequireEnabled\(\)/);
+  assert.match(smoke, /Orphan file group node was accepted for whole-file deletion/);
+  assert.match(smoke, /Missing file node was mistaken for a historically confirmed deletion/);
+  assert.match(smoke, /Tampered deletion plan was accepted/);
+});
