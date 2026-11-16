@@ -74,3 +74,17 @@ Neither API bypasses the existing reviewed publication or historical proof pipel
 This is **not** a generic browser download implementation and must not be pointed at a web/static serving directory, a shared untrusted directory, or a location with unreviewed filesystem/symlink permissions. Rename is atomic only for suitable local filesystems, not a guarantee of crash-durable writes or secure SSD erasure. Enforce destination-directory privacy and user consent outside Core. There is no automatic host-level destination registration; a native/hosted caller must supply a trusted, authorized target path explicitly.
 
 The Core smoke harness now exercises temporary invisibility, commit, abort, disposal, existing-target rejection, and concurrent-target creation. The tests are committed but require an actual .NET execution run.
+
+## Neutral publication review (no second publisher)
+
+The engine now exposes the **optional** `IObjectMutationReview` contract through `AccountObjectStoreRouter` when a provider implements `IObjectMutationReviewProvider`:
+
+- `ReviewAsync(scope, operationId)` obtains a fresh fee/reserve preview for a **previously staged** mutation.
+- `CancelReviewAsync(scope)` cancels a live linked-S-key quote. HD reviews are read-only and require no quote cancellation.
+- The resulting `ObjectMutationReview` contains an operation ID, object ID, `AwaitingApproval` state, native-asset quote and an opaque review reference. **It is not a signing authorization or transaction receipt.**
+
+The Stellar provider reuses the existing `VaultHybridSyncReviewService.ReviewAsync` for HD and `VaultLinkedDraftPublication.PrepareAsync` for the independent S-key strategy. Linked quotes still use the existing single-use `SubmitAsync`, exact fee checks, durable submitting checkpoint and historical reconciliation; **the neutral interface deliberately does not expose an alternate submit method.** The HD review only returns a quote if that exact draft is still ready, the encrypted queue is conflict-free and the current account/network is unchanged.
+
+The linked publisher's own `PendingReview` scope now includes `VaultLinkedQueueKeySession.UnlockEpoch`. A lock followed by re-unlock of the same account invalidates its old reviewed quote even if the Stellar connection epoch is unchanged. The neutral adapter also checks the local epoch after awaits and cancels stale quotes.
+
+**Capacity-policy limitation:** this work has not yet persisted `SingleAccount`/expansion intent in the encrypted mutation journal, nor made the publisher enforce it. Until those rules are wired, single-account `PutAsync` stays blocked and account expansion remains a separately reviewed operation. SaaS approval endpoints and UI migration are still pending.
