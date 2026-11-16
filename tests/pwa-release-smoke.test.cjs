@@ -882,7 +882,7 @@ test('Stellar-only HD file upload uses a separate no-persistence fee-approved fi
   assert.match(editor, /DirectFileUpload\.ReviewAsync\(plan\)/);
   assert.match(editor, /DirectFileUpload\.PublishNextApprovedAsync\(/);
   assert.match(editor, /fresh\.NetworkFeeXlm <= approvedCost\.NetworkFeeXlm/);
-  assert.match(editor, /_directFileUncertain = true/);
+  assert.match(editor, /_directFileUncertain = mayHaveSubmitted/);
   assert.match(editor, /StellarLedgerFileProtocol\.DecodeFile\(manifest, remote\)/);
   assert.match(core, /plan\.Remaining\(finalSnapshot\)/);
   assert.match(core, /await ledger\.PublishWithIdAsync\(next\.Id, next\.Draft\)/);
