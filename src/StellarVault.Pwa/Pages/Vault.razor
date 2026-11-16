@@ -510,6 +510,7 @@ else
                               CanDelete="@(!IsLedgerFile(_selected))"
                               CanSaveVerifiedFile="@(_verifiedTreeDownload is not null)"
                               FileStatus="_fileDownloadStatus"
+                              FileActionLabel="@(VaultLinkedTreeFilePolicy.IsRootRecord(_selected) ? "Verify file integrity" : "Verify and download file")"
                               OnCopy="CopyValueAsync"
                               OnClose="CloseRecord"
                               OnEdit="EditSelectedPublishedRecord"
@@ -1291,7 +1292,7 @@ else
     {
         if (_selected is null || !IsLedgerFile(_selected)) return;
         _verifiedTreeDownload = null;
-        _fileDownloadStatus = "VERIFYING ENCRYPTED FILE FROM STELLAR...";
+        _fileDownloadStatus = "Checking file chunks and cryptographic integrity on Stellar… No download has started.";
         try
         {
             var all = await Ledger.ReadAsync();
@@ -1304,7 +1305,7 @@ else
                     current.Id, all, Stream.Null);
                 _verifiedTreeDownload = new VerifiedTreeDownload(
                     current.Id, verified.FileName, all);
-                _fileDownloadStatus = "File integrity verified. Choose SAVE VERIFIED FILE to select a destination.";
+                _fileDownloadStatus = "Integrity verified. Click Save verified file to choose where to download the decrypted copy.";
             }
             else
             {
@@ -1313,7 +1314,7 @@ else
                 {
                     await JS.InvokeVoidAsync("stellarVaultV2Download.save",
                         LedgerFileProtocol.FileName(current), bytes);
-                    _fileDownloadStatus = "Legacy file verified and downloaded.";
+                    _fileDownloadStatus = "File verified and downloaded. Keep the decrypted copy in a secure location.";
                 }
                 finally { CryptographicOperations.ZeroMemory(bytes); }
             }
