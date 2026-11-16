@@ -94,6 +94,27 @@ public interface IAccountObjectStore
 }
 
 /// <summary>
+/// Explicit optimistic-concurrency update, distinct from create. The provider
+/// must verify ExpectedRevision against its own authoritative remote format
+/// before queuing any mutation. An update never implies a published receipt.
+/// </summary>
+public interface IAccountObjectUpdate
+{
+    Task<ObjectMutationIntent> UpdateAsync(
+        ObjectStoreScope scope, ObjectDescriptor descriptor,
+        Stream source, string expectedRevision,
+        ObjectWriteOptions options, CancellationToken ct = default);
+}
+
+public interface IAccountObjectUpdateProvider
+{
+    Task<ObjectMutationIntent> PrepareUpdateAsync(
+        ObjectStoreScope scope, ObjectDescriptor descriptor,
+        Stream source, string expectedRevision,
+        ObjectWriteOptions options, CancellationToken ct = default);
+}
+
+/// <summary>
 /// A chain-specific adapter implements this interface in the engine's
 /// composition layer. It maps record/file layouts and capacity policy into
 /// that chain's signing, ledger verification and receipt semantics.
@@ -186,7 +207,7 @@ public interface IObjectMutationReviewProvider
 /// Strict router: no implicit default chain, network, account, provider or
 /// authorization strategy. A missing provider fails closed.
 /// </summary>
-public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObjectExport, IObjectMutationReview
+public sealed class AccountObjectStoreRouter : IAccountObjectStore, IAccountObjectUpdate, IVerifiedObjectExport, IObjectMutationReview
 {
     private readonly IReadOnlyDictionary<string, IAccountObjectStoreProvider> _providers;
 
@@ -254,6 +275,26 @@ public sealed class AccountObjectStoreRouter : IAccountObjectStore, IVerifiedObj
         ValidateSource(source);
         ArgumentNullException.ThrowIfNull(options);
         return provider.PreparePutAsync(scope, descriptor, source, options, ct);
+    }
+
+    public Task<ObjectMutationIntent> UpdateAsync(
+        ObjectStoreScope scope, ObjectDescriptor descriptor,
+        Stream source, string expectedRevision,
+        ObjectWriteOptions options, CancellationToken ct = default)
+    {
+        var provider = Resolve(scope);
+        ValidateDescriptor(descriptor);
+        ValidateSource(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(expectedRevision);
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.ExpectedRevision is not null &&
+            options.ExpectedRevision != expectedRevision)
+            throw new ArgumentException(
+                "Conflicting optimistic concurrency revisions.", nameof(options));
+        return provider is IAccountObjectUpdateProvider updater
+            ? updater.PrepareUpdateAsync(scope, descriptor, source, expectedRevision, options, ct)
+            : Task.FromException<ObjectMutationIntent>(
+                new NotSupportedException("Selected provider does not support revision-pinned updates."));
     }
 
     public Task<StoredObject?> GetAsync(
