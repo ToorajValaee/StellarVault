@@ -62,6 +62,16 @@ Exports re-read the connected ledger, require explicit plaintext consent (or
 a separately password-encrypted backup), and reject a selected record that is
 missing or no longer an ordinary record.
 
+For SVTREE3 file trees, authenticated reads now enforce the same file-group tag
+on every node rather than trusting checksums alone. A chain-neutral,
+read-only `IVerifiedObjectNodeInventory` can report a fully verified
+root-first node inventory after streaming verification without materializing
+plaintext in memory. It is a **snapshot for planning only**, not permission
+to delete, a current-state lock, or a signed transaction receipt. PWA/MAUI
+register the same capability. Recovery inspection can surface **all signed
+checkpoint hashes** for a multi-owner HD deletion or multipart file upload;
+every checkpoint still requires independent historical verification.
+
 The engine's file metadata `GetAsync` now verifies the complete SVTREE3 tree
 and content hash into a discard sink, without allocating the file as plaintext.
 `OpenReadAsync` remains capped at 8 MiB for verified in-memory reads;
