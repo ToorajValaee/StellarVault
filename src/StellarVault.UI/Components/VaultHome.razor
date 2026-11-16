@@ -1017,6 +1017,10 @@
             // independent encrypted record backend. No on-chain writes here.
             recoveryStage = "inspecting account signers and linked chain";
             _secretChainInspection = await SecretChain.InspectAsync(_secretKey, horizon, passphrase);
+            // A new independent S-key session must never inherit the tab's
+            // mnemonic-hybrid resume flow.
+            if (Platform == "WEB PWA")
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession");
             recoveryStage = "opening encrypted Secret Key ledger";
             await SecretLedger.ConnectAsync(_secretKey, horizon, passphrase);
             recoveryStage = "decrypting and validating ledger records";
