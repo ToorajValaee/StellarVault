@@ -12,7 +12,8 @@ test('record import/export is accessible in PWA and both native/shared account m
   const native = read('src/StellarVault.UI/Components/NativeVaultWorkspace.razor');
   const linked = read('src/StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
-  assert.match(pwa, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Hd"/);
+  assert.match(pwa, /<VaultRecordTransferPanel @key="ActiveMode" Mode="import"/);
+  assert.match(pwa, /VaultMutationStrategyPolicy\.Linked : VaultMutationStrategyPolicy\.Hd/);
   assert.match(native, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Hd"/);
   assert.match(linked, /<VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy\.Linked"/);
   assert.match(panel, /VaultRecordInterchange\.ImportJson/);
@@ -163,23 +164,27 @@ test('record exports select browser destination before any asynchronous ledger r
   assert.match(panel, /await browserDestination\.SaveAsync\(stream\)/);
 });
 
-test('import is menu-only, while export is selected-item scoped in both PWA and shared views', () => {
+test('PWA imports open from left rail, not record header, for both account strategies', () => {
   const pwa = read('src/StellarVault.Pwa/Pages/Vault.razor');
   const native = read('src/StellarVault.UI/Components/NativeVaultWorkspace.razor');
   const linked = read('src/StellarVault.UI/Components/VaultSecretKeyWorkspace.razor');
   const row = read('src/StellarVault.UI/Components/VaultExplorerItemRow.razor');
   const inspector = read('src/StellarVault.UI/Components/VaultRecordInspector.razor');
   const panel = read('src/StellarVault.UI/Components/VaultRecordTransferPanel.razor');
-  assert.match(pwa, /sv-vault-import-menu/);
-  for (const host of [pwa, native, linked]) {
-    assert.match(host, /Mode="import"/);
-    assert.match(host, /Vault menu/);
-    assert.match(host, /Records=/);
-  }
+  const railStart = pwa.indexOf('<nav class="sv-pwa-rail"');
+  const railEnd = pwa.indexOf('</nav>',railStart);
+  const importAction = pwa.indexOf('sv-rail-import-action');
+  assert.ok(railStart >= 0 && importAction > railStart && importAction < railEnd,
+    'Import must be a left-navigation action, not a main vault header action');
+  assert.doesNotMatch(pwa, /sv-vault-import-menu/);
+  assert.match(pwa, /@onclick="OpenImportDialog"/);
+  assert.match(pwa, /role="dialog" aria-modal="true" aria-label="Import records"/);
+  assert.match(pwa, /Mode="import"/);
+  assert.match(pwa, /VaultMutationStrategyPolicy\.Linked : VaultMutationStrategyPolicy\.Hd/);
+  assert.match(native, /Mode="import"/);
+  assert.match(linked, /@if \(!Embedded\)[\s\S]*?Mode="import"/);
   assert.match(row, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
   assert.match(inspector, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
-  assert.match(pwa, /Strategy="@VaultMutationStrategyPolicy\.Hd"\s+Records="@Records\.Concat\(Folders\)\.ToArray\(\)"/);
-  assert.match(linked, /Strategy="@VaultMutationStrategyPolicy\.Linked"\s+Records="_items"/);
   assert.match(panel, /if \(Mode == "import"\)/);
   assert.match(panel, /Mode == "export" && SelectedRecordId is not null/);
   assert.match(panel, /selected\.Length != 1 \|\| !VaultRecordInterchange\.IsOrdinary/);
