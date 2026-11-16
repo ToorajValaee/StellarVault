@@ -174,7 +174,7 @@
                     <input id="sv-passphrase" class="terminal-input" type="password"
                            autocomplete="new-password"
                            @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
-                    <VaultStorageSecurityNotice />
+                    <VaultStorageSecurityNotice Strategy="@(_credentialMode == VaultCredentialMode.StellarSecretKeyChain ? VaultMutationStrategyPolicy.Linked : VaultMutationStrategyPolicy.Hd)" />
                 }
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
@@ -593,7 +593,11 @@
         if (_credentialMode == VaultCredentialMode.MnemonicHd)
         {
             _enableLocalStorage = enabled;
-            if (!enabled) DeviceUnlockPreference.Reset();
+            if (!enabled)
+            {
+                _passphrase = string.Empty;
+                DeviceUnlockPreference.Reset();
+            }
             return;
         }
         if (enabled)
@@ -604,6 +608,7 @@
         {
             await LinkedQueueKeys.LockAsync();
             LinkedRetention.Reset();
+            _passphrase = string.Empty;
             DeviceUnlockPreference.Reset();
         }
     }
@@ -617,6 +622,9 @@
         _credentialMode = mode;
         _secretKey = string.Empty;
         _secretChainInspection = null;
+        // Never carry the HD local passphrase into an independent S-key
+        // account session (or vice versa) when changing credential strategies.
+        _passphrase = string.Empty;
         ClearMnemonic();
         _message = null;
     }
