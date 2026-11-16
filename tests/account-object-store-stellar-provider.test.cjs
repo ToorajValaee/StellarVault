@@ -389,3 +389,14 @@ test('prelaunch HD records have no legacy local ID migration or silent version u
   assert.match(origin, /Encrypted mutation requires an explicit recognized account strategy/);
   assert.match(queue, /VaultMutationStrategyPolicy\.Validate\(entry\.OriginStrategyId\)/);
 });
+
+test('PWA crash-recovery UI displays every signed checkpoint without calling a submit path', () => {
+  const pwa = read('src/StellarVault.Pwa/Pages/Vault.razor');
+  assert.match(pwa, /recovery\.CheckpointJournalValid/);
+  assert.match(pwa, /recovery\.Checkpoints/);
+  assert.match(pwa, /checkpoint\.TargetId/);
+  assert.match(pwa, /checkpoint\.TransactionHash/);
+  assert.match(pwa, /NOT VERIFIED/);
+  assert.match(pwa, /Do not retry, confirm or discard this submission/);
+  assert.doesNotMatch(pwa, /MigrateSelectedLegacyIdAsync/);
+});
