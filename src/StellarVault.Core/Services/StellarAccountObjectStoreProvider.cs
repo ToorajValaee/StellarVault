@@ -218,7 +218,7 @@ public sealed class StellarAccountObjectStoreProvider(
     /// </summary>
     private async Task<ObjectMutationIntent> StageFileAsync(
         ObjectStoreScope scope, ObjectDescriptor descriptor, Stream source,
-        ScopeCheckpoint checkpoint, CancellationToken ct)
+        ScopeCheckpoint checkpoint, ObjectCapacityPolicy capacityPolicy, CancellationToken ct)
     {
         if (descriptor.ContentType is not { Length: > 0 })
             throw new ArgumentException("File media type is required.", nameof(descriptor));
@@ -233,10 +233,10 @@ public sealed class StellarAccountObjectStoreProvider(
         var result = scope.AccountStrategyId == VaultMutationStrategyPolicy.Linked
             ? await linkedDrafts.StageTreeFileAsync(
                 descriptor.Name, descriptor.Name, descriptor.ContentType,
-                source, descriptor.ParentId, ct)
+                source, descriptor.ParentId, ct, capacityPolicy)
             : await hdDrafts.StageTreeFileAsync(
                 descriptor.Name, descriptor.Name, descriptor.ContentType,
-                source, descriptor.ParentId, ct);
+                source, descriptor.ParentId, ct, capacityPolicy);
         await RequireSameScopeAsync(scope, checkpoint, false);
         return new ObjectMutationIntent(
             "staged-tree:" + result.RootId,
@@ -257,12 +257,8 @@ public sealed class StellarAccountObjectStoreProvider(
                 nameof(descriptor));
         var checkpoint = RequireScope(scope, false);
         if (descriptor.TypeId == VaultRecordTypeFactory.File)
-        {
-            if (options.CapacityPolicy == ObjectCapacityPolicy.SingleAccount)
-                throw new NotSupportedException(
-                    "File-tree publication requires per-node single-account capacity enforcement.");
-            return await StageFileAsync(scope, descriptor, source, checkpoint, ct);
-        }
+            return await StageFileAsync(scope, descriptor, source, checkpoint,
+                options.CapacityPolicy, ct);
         byte[] bytes = await ReadBoundedAsync(source, ct);
         try
         {
