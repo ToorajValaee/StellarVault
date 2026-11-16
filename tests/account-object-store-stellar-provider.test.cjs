@@ -295,3 +295,21 @@ test('neutral Delete requires original remote revision and stages only in existi
   assert.match(linked, /currentRevision != expectedRevision/);
   assert.doesNotMatch(provider, /PublishWithPreparedHashAsync\(|PublishDetailedAsync\(|SubmitApprovedAsync\(/);
 });
+
+test('file metadata Get verifies a complete tree without storing plaintext in the 8 MiB read buffer', () => {
+  const provider = read('src/StellarVault.Core/Services/StellarAccountObjectStoreProvider.cs');
+  const source = read('src/StellarVault.Core/Services/VaultStreamingFileTree.cs');
+  assert.match(provider, /private async Task<VaultStreamingFileTree.Root\?> ReadVerifiedTreeMetadataAsync\(/);
+  assert.match(provider, /VaultLinkedTreeFilePolicy.ReadAsync\(\s*objectId, records, Stream.Null, ct\)/);
+  assert.match(provider, /await RequireSameScopeAsync\(scope, checkpoint, true\);\s*ct.ThrowIfCancellationRequested\(\);\s*return manifest;/);
+  assert.match(provider, /var file = await ReadVerifiedTreeMetadataAsync\(scope, objectId, ct\)/);
+  assert.match(provider, /if \(file is not null\) return file.Value.Bytes/);
+  assert.match(provider, /private const int MaxVerifiedInMemoryFileBytes = 8 \* 1024 \* 1024/);
+  assert.match(provider, /public override void Write\(ReadOnlySpan<byte> buffer\)/);
+  assert.match(provider, /public override void WriteByte\(byte value\)/);
+  assert.match(provider, /public override void SetLength\(long value\)/);
+  assert.match(provider, /public override Task WriteAsync\(byte\[\] buffer, int offset, int count,/);
+  assert.match(provider, /public override ValueTask WriteAsync\(/);
+  assert.match(source, /IncrementalHash.CreateHash\(HashAlgorithmName.SHA256\)/);
+  assert.match(source, /temporaryDestination.WriteAsync\(leaf.Data, ct\)/);
+});
