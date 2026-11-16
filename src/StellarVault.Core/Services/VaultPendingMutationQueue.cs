@@ -1088,35 +1088,6 @@ public sealed class VaultPendingMutationQueue(IVaultPendingMutationStore store,
         return candidate;
     }
 
-    /// <summary>Explicitly migrate a legacy 32-character draft entity ID.
-    /// Never silently truncate: dependent drafts must first be handled separately.</summary>
-    public async Task<VaultPendingMutation> MigrateLegacyCreateIdAsync(
-        string accountId, string networkId, string mutationId, string newRecordId,
-        CancellationToken ct = default)
-    {
-        retention.RequireLocalPersistence();
-        if (newRecordId.Length != 16 || !newRecordId.All(Uri.IsHexDigit))
-            throw new ArgumentException("A new 16-character hexadecimal record ID is required.", nameof(newRecordId));
-        var entries = await ScopedEntriesAsync(accountId, networkId, ct);
-        var previous = entries.SingleOrDefault(x => x.Id == mutationId)
-            ?? throw new KeyNotFoundException("Local draft not found.");
-        if (previous.State != VaultSyncState.Pending || previous.TransactionHash is not null ||
-            previous.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder) ||
-            previous.EntityId.Length != 32 || !Guid.TryParseExact(previous.EntityId, "N", out _))
-            throw new InvalidOperationException("Only untouched legacy create drafts can be migrated.");
-        if (entries.Any(x => x.Id != mutationId &&
-            (x.EntityId == previous.EntityId ||
-             x.DependsOn.Contains(mutationId, StringComparer.Ordinal) ||
-             System.Text.Encoding.UTF8.GetString(x.EncryptedPayload).Contains(previous.EntityId, StringComparison.Ordinal))))
-            throw new InvalidOperationException("Dependent drafts exist. Migrate references before changing this ID.");
-        if (entries.Any(x => x.EntityId == newRecordId))
-            throw new InvalidOperationException("The target record ID already exists in the local queue.");
-        var revised = previous with { EntityId = newRecordId };
-        if (!await store.TryReplaceAsync(previous, revised, ct))
-            throw new InvalidOperationException("Draft changed concurrently. Refresh and try again.");
-        return revised;
-    }
-
     /// <summary>Discard only an unsubmitted draft, and only when no other active
     /// mutation depends on its identifier. Deletion is never a ledger operation.</summary>
     public async Task DiscardPendingAsync(string accountId, string networkId,
