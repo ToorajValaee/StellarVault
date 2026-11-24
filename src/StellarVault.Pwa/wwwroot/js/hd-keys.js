@@ -19,7 +19,7 @@ window.stellarVaultHd = (() => {
     const positions = new Map(wordlist.map((word, index) => [word, index]));
     const indices = words.map(word => {
       const index = positions.get(word);
-      if (index === undefined) throw new Error('Unknown BIP-39 English word: ' + word);
+      if (index === undefined) throw new Error('Recovery phrase contains an unknown BIP-39 English word');
       return index;
     });
     const bitLength = indices.length * 11;

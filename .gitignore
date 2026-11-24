@@ -6,6 +6,7 @@
 *.cache
 artifacts/
 TestResults/
+**/node_modules/
 .DS_Store
 
 deploy/.env

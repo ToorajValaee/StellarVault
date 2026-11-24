@@ -142,7 +142,11 @@ api.MapGet("/networks/{network}/transactions/{hash}", async (
 {
     try
     {
-        var finding = await inspect.InspectAsync(new TransactionObservationScope("stellar", network), hash, context.RequestAborted);
+        // HttpClient.Timeout with ResponseHeadersRead ends at the headers.
+        // Bound the entire identity + receipt workflow, including streamed bodies.
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        budget.CancelAfter(TimeSpan.FromSeconds(10));
+        var finding = await inspect.InspectAsync(new TransactionObservationScope("stellar", network), hash, budget.Token);
         if (finding is null)
             return Results.Problem(statusCode: 404, title: "No usable successful receipt",
                 detail: "Receipt may be absent, unsuccessful or invalid. This does not authorize retry.");

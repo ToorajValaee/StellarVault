@@ -12,7 +12,9 @@ pwsh -File scripts/verify-release.ps1
 pwsh -File scripts/verify-release.ps1 -Android
 ```
 
-This exercises the complete Node regression suite, signer syntax, Core/UI/PWA Release builds, and the Core native cryptography/linked queue smoke checks. It does **not** send Testnet transactions, prove actual Stellar XDR validation, or replace real-device testing or an independent security audit. The production decision is defined in [production-release-gate.md](production-release-gate.md). **Production remains blocked** until that evidence is completed. The last reported green tests were on an earlier commit; rerun after any source changes.
+This exercises the complete Node suite (including real bundled-SDK signing/XDR checks), vendored SDK integrity and npm advisories, NuGet advisories, standalone engine tests, provider/API/UI/PWA Release builds, authenticated API HTTP smoke on Windows, PWA publish/asset integrity, and the cryptography/journal harness. It does **not** submit Testnet transactions or replace browser/device recovery tests or independent security review. The production decision is defined in [production-release-gate.md](production-release-gate.md). Rerun after source changes; dirty-worktree results do not attest an immutable commit.
+
+Optional browser verification and deployment instructions are in [DEPLOYMENT.md](../DEPLOYMENT.md). The browser check needs Playwright (`npm ci --ignore-scripts`) and installed Edge by default; set `PWA_BROWSER_CHANNEL` for another installed supported Chromium channel. It checks the published site, not the Blazor development server.
 
 ## Run on demand
 
@@ -29,7 +31,10 @@ This workflow does **not** deploy, sign transactions, make Testnet writes, run M
 ```bash
 node --check src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js
 node --test tests/secret-key-ledger.test.cjs
-dotnet build src/StellarVault.Core/StellarVault.Core.csproj -c Release
+dotnet build src/VaultEngine.Core/VaultEngine.Core.csproj -c Release
+dotnet build src/VaultEngine.Stellar/VaultEngine.Stellar.csproj -c Release
+dotnet build src/VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj -c Release
+dotnet build src/StellarVault.Api/StellarVault.Api.csproj -c Release
 dotnet build src/StellarVault.UI/StellarVault.UI.csproj -c Release
 dotnet build src/StellarVault.Pwa/StellarVault.Pwa.csproj -c Release
 dotnet run --project tests/StellarVault.Core.CryptoTests/StellarVault.Core.CryptoTests.csproj -c Release

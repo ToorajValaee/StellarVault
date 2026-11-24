@@ -430,7 +430,7 @@ window.stellarVaultSecretLedger = (() => {
             amount:toXlm(s.net.reserve)
           }));
         builder.addOperation(s.sdk.Operation.manageData({
-          source:q.tailId,name:'sv:next:v1',value:text.encode(q.childId)
+          source:q.tailId,name:'sv:next:v1',value:s.pair.rawPublicKey().constructor.from(text.encode(q.childId))
         }));
       } else {
         const latest=current.locations.get(q.recordId);
@@ -454,7 +454,10 @@ window.stellarVaultSecretLedger = (() => {
         }
         for(const k of q.priorKeys) writes.push({name:k,value:null});
         for(const w of writes)
-          builder.addOperation(s.sdk.Operation.manageData({source:q.node,name:w.name,value:w.value}));
+          // Browser SDK's Buffer is a different class from Uint8Array (and
+          // Node's Buffer). Use its own public-key buffer constructor.
+          builder.addOperation(s.sdk.Operation.manageData({source:q.node,name:w.name,
+            value:w.value===null?null:s.pair.rawPublicKey().constructor.from(w.value)}));
       }
       const tx=builder.setTimeout(60).build();
       tx.sign(s.pair);

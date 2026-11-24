@@ -3,10 +3,10 @@ $repo = Split-Path $PSScriptRoot -Parent
 $apiRoot = Join-Path $repo 'src/StellarVault.Api'
 $dll = Join-Path $apiRoot 'bin/Release/net10.0/StellarVault.Api.dll'
 if (-not (Test-Path -LiteralPath $dll)) { throw 'Build the API Release configuration first.' }
-function Assert-Status([string]$Url, [int]$Expected, [hashtable]$Headers = @{}, [switch]$Plain) {
+function Assert-Status([string]$Url, [int]$Expected, [hashtable]$Headers = @{}, [switch]$Plain, [string]$Method = 'GET') {
     if (-not $Plain -and -not $Headers.ContainsKey('X-Forwarded-Proto')) { $Headers['X-Forwarded-Proto'] = 'https' }
     try {
-        $response = Invoke-WebRequest $Url -Headers $Headers -UseBasicParsing
+        $response = Invoke-WebRequest $Url -Headers $Headers -Method $Method -UseBasicParsing -TimeoutSec 10
         if ($response.StatusCode -ne $Expected) { throw "Expected HTTP $Expected." }
     } catch {
         if ($null -eq $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne $Expected) { throw }
@@ -27,6 +27,10 @@ $variables = @{
     'ApiAccess__Tenants__0__Id' = 'http-smoke'
     'ApiAccess__Tenants__0__KeySha256__0' = $keyDigest
     'ApiAccess__Tenants__0__Networks__0' = 'testnet'
+    'ApiLimits__GlobalRequestsPerMinute' = '120'
+    'ApiLimits__TenantRequestsPerMinute' = '20'
+    'ApiLimits__GlobalConcurrency' = '8'
+    'ApiLimits__TenantConcurrency' = '2'
 }
 $previous = @{}
 $server = $null
@@ -63,7 +67,23 @@ try {
     Assert-Status "http://127.0.0.1:15080/v1/networks/unknown/transactions/$hash" 404 $headers
     Assert-Status 'http://127.0.0.1:15080/v1/networks/testnet/transactions/invalid' 400 $headers
     Assert-Status 'http://127.0.0.1:15080/v1/networks/testnet/transactions/invalid' 401
-    Write-Host 'PASS: HTTP auth, invalid keys, tenant-isolated discovery/receipt routes, readiness and malformed hashes.'
+    Assert-Status 'http://127.0.0.1:15080/v1/capabilities' 405 $headers -Method POST
+    $limited = $false
+    for ($attempt = 0; $attempt -lt 25; $attempt++) {
+        try {
+            Invoke-WebRequest 'http://127.0.0.1:15080/v1/capabilities' -Headers $headers -UseBasicParsing -TimeoutSec 10 | Out-Null
+        } catch {
+            if ($null -ne $_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 429) {
+                if ([int]$_.Exception.Response.Headers['Retry-After'] -lt 1) { throw 'Rate rejection has no usable Retry-After.' }
+                $limited = $true
+                break
+            }
+            throw
+        }
+    }
+    if (-not $limited) { throw 'Tenant HTTP request budget was not enforced.' }
+    Assert-Status 'http://127.0.0.1:15080/health/ready' 200
+    Write-Host 'PASS: HTTP auth, tenant isolation, HTTPS/security headers, read-only methods, request budgets and readiness under throttling.'
 } finally {
     if ($null -ne $server) {
         if (-not $server.HasExited) { Stop-Process -Id $server.Id }

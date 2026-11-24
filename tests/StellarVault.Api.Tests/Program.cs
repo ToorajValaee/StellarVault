@@ -56,6 +56,20 @@ var engine = new TransactionObservationRouter([new StellarTransactionObservation
 var observed = await engine.InspectAsync(new("stellar", profile.Id), hash);
 Check(observed?.TransactionId == hash && observed.BlockNumber == 123 &&
     observed.NetworkIdentity.Length == 64, "API infrastructure did not execute through the shared engine");
+// Headers can arrive promptly while a body stalls forever. Cancellation must
+// reach both streamed responses, not just HttpClient's header timeout.
+foreach (var stallRoot in new[] { true, false })
+{
+    handler.StallRoot = stallRoot;
+    handler.StallReceipt = !stallRoot;
+    using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+    try
+    {
+        await useCase.ExecuteAsync(profile.Id, hash, deadline.Token).WaitAsync(TimeSpan.FromSeconds(3));
+        throw new Exception("Stalled Horizon body ignored the inspection deadline");
+    }
+    catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
+}
 Console.WriteLine("PASS: custom network discovery, configuration guards, network identity, bounded receipts, redirects and cancellation.");
 
 sealed class FakeHorizon(string passphrase, string hash) : HttpMessageHandler
@@ -64,6 +78,8 @@ sealed class FakeHorizon(string passphrase, string hash) : HttpMessageHandler
     public int ReceiptRequests { get; private set; }
     public bool Oversized { get; set; }
     public bool Redirect { get; set; }
+    public bool StallRoot { get; set; }
+    public bool StallReceipt { get; set; }
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -75,9 +91,29 @@ sealed class FakeHorizon(string passphrase, string hash) : HttpMessageHandler
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
             RequestMessage = Redirect ? new HttpRequestMessage(HttpMethod.Get, "https://different.example/") : request,
-            Content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(json)))
+            Content = new StreamContent(isRoot ? StallRoot ? new StalledBody() : new MemoryStream(Encoding.UTF8.GetBytes(json))
+                : StallReceipt ? new StalledBody() : new MemoryStream(Encoding.UTF8.GetBytes(json)))
         };
         response.Content.Headers.ContentType = new("application/json");
         return Task.FromResult(response);
     }
+}
+
+sealed class StalledBody : Stream
+{
+    public override bool CanRead => true;
+    public override bool CanSeek => false;
+    public override bool CanWrite => false;
+    public override long Length => throw new NotSupportedException();
+    public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+    {
+        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        return 0;
+    }
+    public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override void Flush() => throw new NotSupportedException();
+    public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+    public override void SetLength(long value) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

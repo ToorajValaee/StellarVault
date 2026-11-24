@@ -94,6 +94,7 @@ function harness(passphrase=TEST) {
   }
   function pair(id) {
     return { publicKey:()=>id,
+      rawPublicKey:()=>Buffer.alloc(32),
       rawSecretKey:()=>new Uint8Array(32).fill(7) };
   }
   const sdk={
@@ -113,7 +114,11 @@ function harness(passphrase=TEST) {
       createAccount:x=>({type:'createAccount',...x}),
       setOptions:x=>({type:'setOptions',...x}),
       payment:x=>({type:'payment',...x}),
-      manageData:x=>({type:'manageData',...x})
+      manageData:x=>{
+        assert.ok(x.value===null || typeof x.value==='string' || Buffer.isBuffer(x.value),
+          'Real Stellar SDK requires its own Buffer, a string, or null');
+        return {type:'manageData',...x};
+      }
     }
   };
   const sandbox={

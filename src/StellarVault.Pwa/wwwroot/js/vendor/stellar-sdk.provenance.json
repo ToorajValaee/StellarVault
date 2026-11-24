@@ -1,0 +1,10 @@
+{
+  "package": "@stellar/stellar-sdk",
+  "version": "16.4.1",
+  "upstream": "https://github.com/stellar/js-stellar-sdk/releases/tag/v16.4.1",
+  "artifact": "https://registry.npmjs.org/@stellar/stellar-sdk/-/stellar-sdk-16.4.1.tgz",
+  "file": "dist/stellar-sdk.min.js",
+  "normalizedSha256": "df9897bbdb14256e946409fe301faedde8057333b3b67c7c335f837590ce1395",
+  "normalization": "CRLF to LF only",
+  "license": "Apache-2.0; bundled third-party notices in stellar-sdk.LICENSE"
+}
