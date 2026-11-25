@@ -31,6 +31,13 @@ dependency audit and published PWA integrity checks. See ignored evidence log
 `artifacts/release-review/final-worktree-verification-2026-11-25.log`.
 This worktree result does not attest a final immutable release image.
 
+The complete runner also passed from a clean detached checkout of
+`09180255d502127fdd46e9afafef1bfe9fbce3ca` (`dirty: False`), recorded in
+`artifacts/release-review/clean-final-verification.log`. Desktop 1440px and
+mobile-width 390px Edge checks passed startup, worker control, overflow,
+persistence opt-in, masked credentials, strategy-switch clearing and offline
+reload on the final published PWA. Mobile-width emulation is not device testing.
+
 ## Live results
 
 Both strategies completed browser create, fresh-session recovery, update and
