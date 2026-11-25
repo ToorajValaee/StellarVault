@@ -1,6 +1,6 @@
 # StellarVault documentation
 
-StellarVault is a fresh .NET 10 encrypted, Stellar-account-centered database with PWA and MAUI hosts.
+StellarVault is a .NET 10 encrypted vault with PWA and MAUI consumers of the independent VaultEngine libraries, plus an authenticated read-only HTTP diagnostics API.
 
 ## Current architecture
 - [Vault v2 format](architecture/vault-v2-format.md)
@@ -8,6 +8,6 @@ StellarVault is a fresh .NET 10 encrypted, Stellar-account-centered database wit
 - [Chunked encrypted records](architecture/chunked-records.md)
 - [Vault key management](architecture/vault-key-management.md)
 
-The code under `src/` is authoritative. Previous HD-account registry / v1 compatibility plans are not part of the current product. The project is not yet production-ready: wallet proof integration and application builds still need validation.
+The code under `src/` is authoritative. HD mnemonic and imported S-key strategies remain independent. See the [engine boundary](architecture/account-object-engine.md), [API contract](API.md), [deployment runbook](DEPLOYMENT.md), and [production release gate](verification/production-release-gate.md).
 
-Work only on `feature/maui-shared-app`, without automatic merge or deployment.
+Current launch preparation is on `architecture/pluggable-vault-records-and-chains`. Production merge/deployment is conditional on release evidence; local build success does not establish security or recoverability.

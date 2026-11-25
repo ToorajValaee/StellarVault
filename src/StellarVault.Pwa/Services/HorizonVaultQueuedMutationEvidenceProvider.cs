@@ -1,5 +1,5 @@
 using System.Text.Json;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 using StellarVaultPwa.Core;
 
 namespace StellarVault.Pwa.Services;

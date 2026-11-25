@@ -1387,3 +1387,127 @@ html[data-theme="dark"] .sv-native-shell :is(
  .sv-hybrid-panel select,.sv-hybrid-panel .terminal-input) {
   background:#243c40!important;color:#e9f5f0!important;border-color:#486568!important;
 }
+
+/* Identical shared records, folder tree and editor treatment for HD and
+   independently linked S-key sessions on Android/native. Only each strategy's
+   data and transaction authorization are different. */
+.sv-native-shell .sv-secret-workspace.sv-workspace-surface {
+  margin:0;max-width:100%;min-width:0;padding:0;
+}
+.sv-native-shell .sv-linked-explorer-layout {
+  display:flex;flex-direction:column;gap:12px;min-width:0;
+}
+.sv-native-shell .sv-linked-explorer-layout > .sv-explorer-tree {
+  min-height:0;max-height:200px;overflow-y:auto;
+}
+.sv-native-shell .sv-linked-explorer-layout > .sv-secret-browser {
+  display:flex;flex-direction:column;gap:9px;min-width:0;
+}
+.sv-native-shell .sv-secret-browser.sv-view-grid {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.sv-native-shell .sv-linked-explorer-layout .sv-object-row {
+  min-width:0;width:100%;
+}
+.sv-native-shell .sv-linked-explorer-layout .sv-record-inspector,
+.sv-native-shell .sv-linked-explorer-layout .sv-secret-details,
+.sv-native-shell .sv-linked-explorer-layout .sv-secret-editor {
+  margin:0;max-width:100%;min-width:0;
+}
+.sv-native-shell .sv-shared-record-fields .terminal-input,
+.sv-native-shell .sv-shared-record-fields select {
+  width:100%;min-width:0;
+}
+.sv-native-shell .sv-linked-drafts-workspace[hidden],
+.sv-native-shell .sv-linked-sync-workspace[hidden],
+.sv-native-shell .sv-linked-queue-view[hidden] {
+  display:none!important;
+}
+
+.sv-native-shell .sv-record-inspector-inline {
+  position:relative!important;inset:auto!important;
+  display:block!important;width:100%!important;height:auto!important;
+  padding:0!important;background:transparent!important;min-width:0;
+}
+.sv-native-shell .sv-record-inspector-inline-surface {
+  position:relative!important;width:100%!important;max-width:100%!important;
+  height:auto!important;max-height:none!important;
+  margin:0!important;padding:16px!important;min-width:0;
+  background:var(--sv-work-panel,#fff)!important;
+  border:1px solid var(--sv-work-line,#dce8e5)!important;
+  border-radius:14px!important;overflow-wrap:anywhere;
+}
+.sv-native-shell .sv-record-inspector-inline-surface .sv-inspector-tabs {
+  display:flex;gap:8px;margin:12px 0;
+}
+
+/* Native HD and S-key now share the same VaultExplorerTree and
+   VaultExplorerItemRow markup, rather than separate folder/record widgets. */
+.sv-native-shell .sv-native-explorer > .sv-explorer-tree {
+  display:flex;flex-direction:column;gap:4px;min-width:0;
+  width:100%;max-height:260px;overflow-y:auto;
+  border:1px solid var(--sv-work-line,#dce8e5);
+  background:var(--sv-work-panel,#fff);
+  border-radius:12px;padding:9px;
+}
+.sv-native-shell .sv-native-explorer .sv-tree-node {
+  min-width:0;padding-left:calc(var(--sv-tree-depth,0) * 12px);
+}
+.sv-native-shell .sv-native-explorer .sv-tree-item {
+  display:flex;gap:8px;align-items:center;min-width:0;width:100%;
+  padding:9px 8px;border:0;border-radius:8px;text-align:left;
+  background:transparent;color:inherit;
+}
+.sv-native-shell .sv-native-explorer .sv-tree-item.selected {
+  background:rgba(8,125,86,.11);font-weight:700;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row {
+  display:flex;gap:8px;align-items:center;min-width:0;width:100%;
+  padding:6px;border:1px solid var(--sv-work-line,#dce8e5);
+  background:var(--sv-work-panel,#fff);border-radius:12px;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row > .record-card {
+  flex:1;min-width:0;border:0!important;background:transparent!important;
+  box-shadow:none!important;text-align:left;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row > .sv-object-actions {
+  flex:0 0 auto;
+}
+.sv-native-shell .sv-native-object-grid > .sv-object-row .sv-object-type,
+.sv-native-shell .sv-native-object-grid > .sv-object-row .sv-object-storage {
+  display:none;
+}
+
+/* Platform conventions: desktop workspace, mobile touch destinations. */
+.native-windows { font-family:'Segoe UI Variable','Segoe UI',sans-serif; }
+.native-ios,.native-maccatalyst { font-family:-apple-system,BlinkMacSystemFont,sans-serif; }
+.native-android { font-family:Roboto,'Noto Sans',sans-serif; }
+.sv-native-shell .sv-native-folder-shortcuts { margin:8px 0; }
+.sv-native-shell .sv-native-folder-shortcuts > summary { cursor:pointer;padding:10px 0;font-weight:600; }
+.sv-native-shell .sv-native-content { padding-top:16px; }
+.sv-native-shell .sv-native-page-heading h1 { margin:0 0 12px;font-size:1.5rem; }
+.sv-native-shell :is(button,input,select,textarea):focus-visible { outline:2px solid var(--sv-work-accent,#087d56);outline-offset:2px; }
+@media (min-width:900px) {
+ .native-windows { grid-template-columns:200px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto; }
+ .native-windows .sv-native-content { max-width:none;padding:16px 24px; }
+ .native-windows .sv-native-topbar { min-height:48px;padding:8px 20px; }
+ .native-windows .sv-native-nav button { min-height:38px;padding:8px 12px;border-radius:5px; }
+ .native-windows .sv-native-explorer,.native-windows .sv-linked-explorer-layout { display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start;gap:16px; }
+ .native-windows :is(.sv-native-explorer,.sv-linked-explorer-layout) > .sv-explorer-tree { max-height:calc(100dvh - 240px);position:sticky;top:0; }
+ .native-windows .sv-native-folder-select { display:none; }
+ .native-windows .sv-native-object-grid > .sv-object-row { border-radius:5px;min-height:40px; }
+}
+/* iPhone uses bottom tabs even in landscape; iPad can retain the existing rail. */
+@media (max-width:899px) {
+ .native-ios { grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto; }
+ .native-ios .sv-native-topbar { grid-column:1;grid-row:1;padding-top:max(8px,env(safe-area-inset-top)); }
+ .native-ios .sv-native-nav { grid-column:1;grid-row:4;flex-direction:row;padding-top:6px; }
+ .native-ios .sv-native-nav button { flex:1;flex-direction:column;justify-content:center;padding:6px;gap:3px;min-height:48px; }
+ .native-ios .sv-native-scroll { grid-column:1;grid-row:2; }
+ .native-ios .sv-native-commandbar { grid-column:1;grid-row:3; }
+ .native-ios .sv-native-footer { display:none; }
+ .native-android .sv-native-nav button { min-height:56px;border-radius:20px; }
+ .native-ios .sv-native-nav button { border-radius:10px; }
+ .sv-native-shell .sv-native-content { padding:12px 16px 20px; }
+ .sv-native-shell :is(.pixel-button,.sv-native-command) { min-height:44px; }
+}

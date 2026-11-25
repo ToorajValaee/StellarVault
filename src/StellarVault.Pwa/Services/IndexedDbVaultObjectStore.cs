@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.JSInterop;
-using StellarVault.Core.Abstractions;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Abstractions;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Pwa.Services;
 

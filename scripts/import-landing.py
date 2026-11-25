@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Import the original SVAULT landing ZIP into website/ without altering binary assets.
+"""Import the original SVAULT landing ZIP into src/StellarVault.Landing/ without altering binary assets.
 
 Usage:
     python3 scripts/import-landing.py "/path/to/svault-website-docker (1).zip"
     python3 scripts/import-landing.py "/path/to/svault-landing-repo-package.zip"
 
-Run from the repository root on feature/maui-shared-app.
+Run from the repository root on the current development branch.
 """
 from pathlib import Path, PurePosixPath
 import argparse
@@ -14,7 +14,7 @@ import json
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "website"
+TARGET = ROOT / "src" / "StellarVault.Landing"
 PREFIXES = ("svault-website/", "website/")
 REQUIRED = {
     "index.html", "privacy.html", "terms.html", "Dockerfile",
@@ -25,9 +25,12 @@ REQUIRED = {
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
+    parser.add_argument("--replace", action="store_true", help="Replace maintained source with archive originals")
     args = parser.parse_args()
     if not args.archive.is_file():
         parser.error(f"Archive not found: {args.archive}")
+    if TARGET.exists() and not args.replace:
+        parser.error("Landing maintained in source; --replace required to overwrite it")
     manifest = {}
     with zipfile.ZipFile(args.archive) as archive:
         candidates = {}
@@ -54,7 +57,8 @@ def main():
             if ((info.external_attr >> 16) & 0o170000) == 0o120000:
                 raise ValueError(f"Symlink not allowed: {relative}")
             data = archive.read(info)
-            output = TARGET.joinpath(*PurePosixPath(relative).parts)
+            destination = TARGET if relative in {"Dockerfile", "nginx.conf", "docker-compose.yml", ".dockerignore", "README.md"} else TARGET / "wwwroot"
+            output = destination.joinpath(*PurePosixPath(relative).parts)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(data)
             manifest[relative] = hashlib.sha256(data).hexdigest()
@@ -62,7 +66,7 @@ def main():
         json.dumps({"source": args.archive.name, "sha256": manifest}, indent=2) + "\n",
         encoding="utf-8")
     print(f"Imported {len(manifest)} original files into {TARGET}")
-    print("Review changes, verify website, and commit to feature/maui-shared-app.")
+    print("Review changes, verify website, and commit to the current development branch.")
     print("Never import into main directly.")
 
 if __name__ == "__main__":

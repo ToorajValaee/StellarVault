@@ -1,9 +1,11 @@
+using VaultEngine.Stellar.Horizon;
+using VaultEngine.Core;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using StellarVault.Pwa;
 using StellarVault.Pwa.Services;
-using StellarVault.Core.Services;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Services;
+using VaultEngine.Stellar.Abstractions;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -33,13 +35,42 @@ builder.Services.AddScoped<IVaultPreparedDeletionLedger>(
     sp => sp.GetRequiredService<BrowserStellarLedgerRecords>());
 builder.Services.AddScoped<VaultStorageModeGate>();
 builder.Services.AddScoped<VaultDeviceRetentionGate>();
+builder.Services.AddScoped<VaultDeviceUnlockPreference>();
+builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore, IndexedDbVaultLinkedPassphraseCredentialStore>();
+builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
+builder.Services.AddScoped<VaultLinkedQueueKeySession>();
+builder.Services.AddScoped<IVaultLinkedDraftStore, IndexedDbVaultLinkedQueueSnapshotStore>();
+builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp => sp.GetRequiredService<IVaultLinkedDraftStore>());
+builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
+        builder.Services.AddScoped<VaultLinkedDraftPublication>();
+        builder.Services.AddScoped<VaultLinkedExpansionJournal>();
+        builder.Services.AddScoped<VaultLinkedDraftRecoveryReview>();
+        builder.Services.AddScoped<VaultLinkedVerifiedReconciliation>();
 builder.Services.AddScoped<IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore>();
 builder.Services.AddScoped<IVaultLedgerEvidenceProvider, HorizonVaultQueuedMutationEvidenceProvider>();
 builder.Services.AddScoped<IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier>();
 builder.Services.AddScoped<VaultPendingMutationQueue>();
 builder.Services.AddScoped<VaultManualSyncCoordinator>();
 builder.Services.AddScoped<VaultHybridSyncReviewService>();
+builder.Services.AddScoped<VaultScopedQueueReview>();
+builder.Services.AddScoped<VaultLinkedQueueInspection>();
 builder.Services.AddScoped<VaultHybridDraftWorkspace>();
+builder.Services.AddScoped<StellarAccountObjectStoreProvider>();
+builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.GetRequiredService<StellarAccountObjectStoreProvider>());
+builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
+builder.Services.AddScoped<IAccountObjectUpdate>(services =>
+    (IAccountObjectUpdate)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IObjectMutationReconciliation>(services =>
+    (IObjectMutationReconciliation)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IObjectMutationExecution>(services =>
+    (IObjectMutationExecution)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IObjectMutationReview>(services =>
+    (IObjectMutationReview)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IVerifiedObjectExport>(services =>
+    (IVerifiedObjectExport)services.GetRequiredService<IAccountObjectStore>());
+builder.Services.AddScoped<IVerifiedObjectNodeInventory>(services =>
+    (IVerifiedObjectNodeInventory)services.GetRequiredService<IAccountObjectStore>());
 builder.Services.AddScoped<VaultHybridFileWorkspace>();
 builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
 builder.Services.AddTransient<IVaultNativeFileAccess, BrowserVaultNativeFileAccess>();
@@ -60,6 +91,17 @@ builder.Services.AddScoped<HorizonVaultNetworkInspector>();
 builder.Services.AddScoped<HorizonVaultPublicationDiagnostic>();
 builder.Services.AddScoped<VaultQueuedCreateHistoricalReview>();
 builder.Services.AddScoped<VaultUnrecordedSubmissionDiagnostic>();
+builder.Services.AddScoped<VaultConnectedStellarAccountInventory>();
+builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarHdAccountStrategy>();
+builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarLinkedAccountStrategy>();
+builder.Services.AddScoped<VaultAccountStrategyFactory>();
+builder.Services.AddScoped<VaultLinkedAccountExpansion>();
+builder.Services.AddScoped<VaultStellarDraftClassification>();
+builder.Services.AddScoped<VaultLinkedRecordWritePlanner>();
+builder.Services.AddScoped<HorizonVaultLinkedRecordOperationInspector>();
+builder.Services.AddScoped<HorizonVaultLinkedExpansionOperationInspector>();
+builder.Services.AddScoped<IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence>();
+builder.Services.AddScoped<VaultLinkedRecoveryInspector>();
 builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
 builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
 builder.Services.AddScoped<IStellarUploadCheckpointStore, BrowserStellarUploadCheckpointStore>();
@@ -69,6 +111,7 @@ builder.Services.AddScoped<VaultPassphraseLifecycle>();
 builder.Services.AddScoped<IVaultChunkStore, IndexedDbVaultObjectStore>();
 builder.Services.AddScoped<IVaultRecordIndex, IndexedDbVaultRecordIndex>();
 builder.Services.AddScoped<VaultSessionWorkflow>();
+builder.Services.AddSingleton<IVaultRecordTypeFactory, VaultRecordTypeFactory>();
 builder.Services.AddScoped<VaultRecordWorkspace>();
 builder.Services.AddScoped<VaultBinaryWorkspace>();
 

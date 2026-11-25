@@ -2,7 +2,9 @@
   "solution": {
     "path": "StellarVault.sln",
     "projects": [
-      "src\\StellarVault.Core\\StellarVault.Core.csproj",
+      "src\\VaultEngine.Core\\VaultEngine.Core.csproj",
+      "src\\VaultEngine.Stellar\\VaultEngine.Stellar.csproj",
+      "src\\VaultEngine.Stellar.Horizon\\VaultEngine.Stellar.Horizon.csproj",
       "src\\StellarVault.UI\\StellarVault.UI.csproj",
       "src\\StellarVault.Pwa\\StellarVault.Pwa.csproj"
     ]

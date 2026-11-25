@@ -1,0 +1,202 @@
+@* Shared record inspector for HD and independent S-key strategies.
+   Only public display and explicit UI callbacks live here. Each host controls
+   quote, encryption, signer, verification and safe deletion authorization. *@
+<div class="@(Embedded ? "sv-record-inspector-inline" : "modal-backdrop sv-record-inspector-backdrop")"
+     @onclick="() => OnClose.InvokeAsync()">
+    <section class="record-modal terminal-panel @(Embedded ? "sv-record-inspector-inline-surface" : "sv-record-inspector")"
+             role="region" aria-labelledby="@_titleId"
+             @onclick:stopPropagation="true">
+        @if (!Embedded)
+        {
+            <div class="sv-inspector-resize-handle" role="separator"
+                 aria-label="Resize record preview" aria-orientation="vertical"
+                 tabindex="0" title="Drag to adjust preview width"></div>
+        }
+        <header class="modal-header sv-inspector-heading">
+            <div class="sv-inspector-title">
+                <span class="sv-inspector-record-icon" aria-hidden="true">@(IsFile ? "▤" : Item.IsFolder ? "📁" : "▦")</span>
+                <div>
+                    <div class="panel-kicker">@(IsFile ? "File details" : Item.IsFolder ? "Folder details" : "Record details")</div>
+                    <h2 id="@_titleId">@Item.Title</h2>
+                    <p class="sv-inspector-subtitle">@FolderPath</p>
+                </div>
+            </div>
+            <div class="sv-inspector-tools">
+                <details class="sv-inspector-more">
+                    <summary aria-label="Record actions" title="More actions">⋯</summary>
+                    <div class="sv-inspector-more-menu">
+                        <button type="button" @onclick="() => OnCopy.InvokeAsync(Item.Id)">Copy record ID</button>
+                        @if (CanEdit && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
+                        {
+                            <button type="button" @onclick="() => OnEdit.InvokeAsync()">Edit @(Item.IsFolder ? "folder" : "record")</button>
+                        }
+                        @if (CanDelete && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
+                        {
+                            <button type="button" class="sv-object-delete" @onclick="() => OnDelete.InvokeAsync()">Delete</button>
+                        }
+                    </div>
+                </details>
+                <button type="button" class="icon-button close-button" aria-label="Close record"
+                        @onclick="() => OnClose.InvokeAsync()">×</button>
+            </div>
+        </header>
+        <nav class="sv-inspector-tabs" aria-label="Record preview tabs">
+            <button type="button" class="@(_tab == "details" ? "selected" : "")"
+                    aria-pressed="@(_tab == "details")" @onclick='() => _tab = "details"'>▤ Details</button>
+            <button type="button" class="@(_tab == "activity" ? "selected" : "")"
+                    aria-pressed="@(_tab == "activity")" @onclick='() => _tab = "activity"'>◷ Activity</button>
+        </nav>
+        @if (_tab == "activity")
+        {
+            <div class="sv-record-activity">
+                <h3>Record information</h3>
+                <dl>
+                    <dt>Storage</dt><dd>Stellar ledger</dd>
+                    <dt>Type</dt><dd>@(IsFile ? "Encrypted file" : Item.IsFolder ? "Folder" : "Secure record")</dd>
+                    <dt>Folder</dt><dd>@FolderPath</dd>
+                    <dt>Record ID</dt><dd class="sv-activity-id">@Item.Id</dd>
+                </dl>
+                <p>Historical activity is not available from the current record reader. No activity timestamps are inferred.</p>
+            </div>
+        }
+        else
+        {
+            <div class="sv-inspector-section-label">Details</div>
+            @if (IsFile)
+            {
+                <div class="data-field">
+                    <span class="field-label">ENCRYPTED LEDGER FILE</span>
+                    <p>The file is stored as encrypted ledger records. Verify its integrity before saving or opening a decrypted copy.</p>
+                    @if (OnVerifyFile.HasDelegate)
+                    {
+                        <button type="button" class="pixel-button primary"
+                                @onclick="() => OnVerifyFile.InvokeAsync()">@FileActionLabel</button>
+                    }
+                    @if (CanSaveVerifiedFile && OnSaveVerifiedFile.HasDelegate)
+                    {
+                        <button type="button" class="pixel-button primary"
+                                @onclick="() => OnSaveVerifiedFile.InvokeAsync()">Save verified file…</button>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(FileStatus))
+                    {
+                        <p role="status" class="advanced-help sv-file-verification-status">@FileStatus</p>
+                    }
+                </div>
+            }
+            else if (Item.IsFolder)
+            {
+                <div class="data-field">
+                    <span class="field-label">Folder</span>
+                    <p>Organize encrypted records and files under this folder.</p>
+                    @if (OnOpenFolder.HasDelegate)
+                    {
+                        <button type="button" class="pixel-button primary"
+                                @onclick="() => OnOpenFolder.InvokeAsync()">Open folder</button>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="data-field">
+                    <span class="field-label">Username</span>
+                    <div class="field-value-row">
+                        <code>@(Item.UserName ?? "—")</code>
+                        <button type="button" class="mini-button"
+                                @onclick="() => OnCopy.InvokeAsync(Item.UserName)">COPY</button>
+                    </div>
+                </div>
+                <div class="data-field secret-field">
+                    <span class="field-label">Password / secret</span>
+                    <div class="field-value-row">
+                        <code class="secret-value">@(_revealed ? Item.Content : "••••••••••••")</code>
+                        <div class="inline-actions">
+                            <button type="button" class="mini-button"
+                                    @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button>
+                            <button type="button" class="mini-button"
+                                    @onclick="() => OnCopy.InvokeAsync(Item.Content)">COPY</button>
+                        </div>
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Item.Url))
+                {
+                    <div class="data-field">
+                        <span class="field-label">Website</span>
+                        <div class="field-value-row">
+                            <code>@Item.Url</code>
+                            <div class="inline-actions">
+                                @if (SafeWebUrl(Item.Url) is string safe)
+                                {
+                                    <a class="mini-button" href="@safe" target="_blank"
+                                       rel="noopener noreferrer" aria-label="Open website">Open</a>
+                                }
+                                <button type="button" class="mini-button"
+                                        @onclick="() => OnCopy.InvokeAsync(Item.Url)">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Item.Notes))
+                {
+                    <div class="data-field">
+                        <span class="field-label">Notes</span>
+                        <p class="record-notes" style="white-space:pre-wrap">@Item.Notes</p>
+                    </div>
+                }
+                @if (Item.Tags is { Length: > 0 })
+                {
+                    <div class="tag-row detail-tags">
+                        @foreach (var tag in Item.Tags)
+                        {
+                            <span class="pixel-tag">#@tag</span>
+                        }
+                    </div>
+                }
+            }
+        }
+        @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
+        {
+            <VaultRecordTransferPanel Mode="export" Strategy="@Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+        }
+        <div class="modal-action-row record-actions">
+            @if (CanEdit && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
+            {
+                <button type="button" class="pixel-button primary"
+                        @onclick="() => OnEdit.InvokeAsync()">Edit @(Item.IsFolder ? "folder" : "record")</button>
+            }
+            @if (CanDelete && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))
+            {
+                <button type="button" class="pixel-button danger"
+                        @onclick="() => OnDelete.InvokeAsync()">DELETE</button>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    // Exactly one active workspace strategy/record inspector exists per host.
+    // Retain the established ID to preserve inspector sizing and theme rules.
+    private const string _titleId = "sv-record-title";
+    private string _tab = "details";
+    private bool _revealed;
+    [Parameter, EditorRequired] public LedgerRecordItem Item { get; set; } = default!;
+    [Parameter] public bool Embedded { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
+    [Parameter] public string FolderPath { get; set; } = "My vault";
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public bool CanDelete { get; set; } = true;
+    [Parameter] public bool CanSaveVerifiedFile { get; set; }
+    [Parameter] public string? FileStatus { get; set; }
+    [Parameter] public string FileActionLabel { get; set; } = "Verify file integrity";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+    [Parameter] public EventCallback OnDelete { get; set; }
+    [Parameter] public EventCallback OnOpenFolder { get; set; }
+    [Parameter] public EventCallback OnVerifyFile { get; set; }
+    [Parameter] public EventCallback OnSaveVerifiedFile { get; set; }
+    [Parameter] public EventCallback<string?> OnCopy { get; set; }
+    private bool IsFile => VaultPublishedFileClassification.IsFile(Item);
+    private static string? SafeWebUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
+        parsed.Scheme is "https" or "http" ? parsed.AbsoluteUri : null;
+}

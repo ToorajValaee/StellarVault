@@ -1,5 +1,5 @@
 @using Microsoft.JSInterop
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject VaultNetworkSelection NetworkSelection
 
@@ -38,6 +38,7 @@ else
         </div>
     </header>
     <main class="sv-adaptive-main" id="main-content">
+        <VaultTransactionRecoveryPanel />
         @ChildContent
     </main>
 </div>

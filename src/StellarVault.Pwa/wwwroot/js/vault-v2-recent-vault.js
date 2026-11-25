@@ -38,6 +38,25 @@ window.stellarVaultRecentVault = (() => {
     localStorage.setItem(key, JSON.stringify({ version: 3, account, network, horizonUrl: url,
       networkPassphrase: network === 'custom' ? networkPassphrase : null }));
   }
+  // Tab-scoped access intent, NOT a credential and NOT local-storage consent.
+  // A saved encrypted vault by itself must never force a passphrase screen
+  // when the user ends a session and later chooses on-chain-only access.
+  const activeHybridTabKey = 'stellar-vault-v2-active-hybrid-tab';
+  function markHybridSession(account, network) {
+    if (!valid(account) || !['testnet', 'public', 'custom'].includes(network))
+      throw new Error('Invalid active hybrid session scope');
+    sessionStorage.setItem(activeHybridTabKey, JSON.stringify({ account, network }));
+  }
+  function hasHybridSession(account, network) {
+    try {
+      const entry = JSON.parse(sessionStorage.getItem(activeHybridTabKey));
+      return valid(account) && entry?.account === account && entry?.network === network;
+    } catch { return false; }
+  }
+  function clearHybridSession() {
+    try { sessionStorage.removeItem(activeHybridTabKey); }
+    catch { /* In-memory sessions remain independently lockable. */ }
+  }
   // Optional opt-in encrypted signing recovery. Never persist plaintext mnemonic.
   // PBKDF2-SHA256 is supported by WebCrypto across browser hosts; parameters
   // are versioned for future migration to a memory-hard platform KDF.
@@ -89,5 +108,6 @@ window.stellarVaultRecentVault = (() => {
   }
   function clearEncryptedSeed() { localStorage.removeItem(seedKey); }
   function clear() { localStorage.removeItem(key); }
-  return Object.freeze({ load, save, clear, saveEncryptedSeed, hasEncryptedSeed, unlockEncryptedSeed, clearEncryptedSeed });
+  return Object.freeze({ load, save, clear, saveEncryptedSeed, hasEncryptedSeed, unlockEncryptedSeed, clearEncryptedSeed,
+    markHybridSession, hasHybridSession, clearHybridSession });
 })();

@@ -1,4 +1,4 @@
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject VaultHybridSyncReviewService HybridReview
 @inject VaultManualSyncCoordinator ManualSync
 @inject VaultNetworkSelection Networks
@@ -276,8 +276,8 @@
                     <p>Account: <code>@_selectedQuote.AccountId</code></p>
                     <p>Network: <code>@Networks.Network</code></p>
                     <p>Record mutation: <code>@_selectedQuote.MutationId</code></p>
-                    <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm XLM</strong></p>
-                    <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm XLM</strong></p>
+                    <p>Maximum fee: <strong>@_selectedQuote.QuotedFeeXlm native asset</strong></p>
+                    <p>Estimated peak reserve: <strong>@_selectedQuote.QuotedPeakReserveXlm native asset</strong></p>
                     <p>Draft fingerprint: <code>@(_selectedQuote.DraftSha256[..12])</code></p>
                     @if (_selectedKind is VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder or
                         VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)
@@ -291,7 +291,7 @@
                         </p>
                     }
                     <p class="terminal-alert warning" role="alert">
-                        Submitting may spend real XLM. This action writes the local draft
+                        Submitting may spend the network's native asset. This action writes the local draft
                         to Stellar. Even if a transaction hash is returned, the queue will
                         remain Uncertain until independently verified reconciliation.
                         Update historical confirmation now requires the exact manifest-commit
@@ -306,7 +306,7 @@
                     </label>
                     @if (Networks.Network == "public")
                     {
-                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend real XLM and is not reversible.</p>
+                        <p class="terminal-alert warning" role="alert">MAINNET: This operation may spend the network's native asset and is not reversible.</p>
                         <label class="sv-biometric-choice">
                             <input type="checkbox" @bind="_mainnetApproved" disabled="@_busy" />
                             I understand this transaction will be submitted to STELLAR PUBLIC MAINNET.
@@ -408,6 +408,7 @@
         _ => "Draft requires attention: " + code
     };
 
+    [Parameter] public EventCallback QueueChanged { get; set; }
     private VaultHybridSyncReviewService.Report? _report;
     private string? _error;
     private bool _busy;
@@ -586,7 +587,7 @@
         {
             _error = "Historical verification was unavailable or queue state changed. The original submission may have reached Stellar; do not retry.";
         }
-        finally { _busy = false; }
+        finally { _busy = false; await QueueChanged.InvokeAsync(); }
     }
 
     private async Task SelectQuoteAsync(VaultHybridSyncReviewService.Item item)
@@ -673,7 +674,7 @@
             // label as a failed transaction or offer a retry shortcut.
             _error = "Submission could not be completed or verified. The mutation may already have reached Stellar. Inspect the durable queue and ledger; DO NOT RETRY.";
         }
-        finally { _busy = false; }
+        finally { _busy = false; await QueueChanged.InvokeAsync(); }
     }
 
 

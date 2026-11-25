@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.JSInterop;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Abstractions;
 
 namespace StellarVault.Pwa.Services;
 

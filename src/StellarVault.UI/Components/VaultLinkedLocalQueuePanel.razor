@@ -1,0 +1,1299 @@
+@using VaultEngine.Stellar.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using System.IO.Pipelines
+@inject IVaultNativeFileAccess NativeFiles
+@inject IStellarSecretKeyLedger Ledger
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject VaultLinkedQueueKeySession QueueKeys
+@inject VaultNetworkSelection Networks
+@inject VaultDeviceUnlockPreference DeviceUnlockPreference
+@inject VaultLinkedQueueInspection QueueInspection
+@inject VaultLinkedDraftWorkspace DraftWorkspace
+@inject VaultLinkedDraftPublication Publisher
+@inject VaultLinkedAccountExpansion LinkedExpansion
+@inject VaultLinkedExpansionJournal ExpansionJournal
+@inject VaultLinkedDraftRecoveryReview RecoveryReview
+@inject VaultLinkedVerifiedReconciliation VerifiedReconciliation
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<section class="sv-secret-review" aria-label="Encrypted local queue for independent Secret Key vault">
+    <h3>@(View == "sync" ? "Synchronization & transaction review" : "Encrypted device drafts")</h3>
+    <p>Optional local encrypted storage for this independent Stellar S-key vault.
+       This device uses a separate local passphrase, separate encryption key and separate
+       storage namespace from mnemonic-based vaults. Saving a draft is local-only;
+       publishing later requires a separate connected signer and fee approval.</p>
+    <label class="sv-secret-approval">
+        <input type="checkbox" checked="@LinkedRetention.AllowsLocalPersistence"
+               disabled="@_busy" @onchange="ChangeConsentAsync" />
+        I consent to encrypted local storage on this device. Locking or turning off consent does not delete previously saved encrypted data.
+    </label>
+    @if (LinkedRetention.AllowsLocalPersistence && LinkedRetention.DeviceRetention.AllowsLocalPersistence)
+    {
+        @if (!Ledger.IsConnected && !QueueKeys.IsUnlocked)
+        {
+            <label>Stellar root public address (G…)
+                <input maxlength="56" autocomplete="off" spellcheck="false"
+                       @bind="_offlineRoot" @bind:event="oninput" disabled="@_busy" />
+            </label>
+            <p>The account address and selected network locate an existing encrypted
+               device vault. The separate local passphrase decrypts it; the S-key
+               is not required for local-only records. First-time setup requires
+               connecting the S-key while online.</p>
+        }
+        @if (_exists is null)
+        {
+            <button type="button" class="pixel-button compact"
+                    disabled="@(_busy || (!Ledger.IsConnected && _offlineRoot.Length != 56))"
+                    @onclick="DiscoverAsync">Check local encrypted storage</button>
+        }
+        else if (!QueueKeys.IsUnlocked)
+        {
+            <label>Separate local passphrase
+                <input type="password" autocomplete="new-password" minlength="12"
+                       spellcheck="false" @bind="_passphrase" @bind:event="oninput"
+                       disabled="@_busy" />
+            </label>
+            <div class="sv-secret-workspace-actions">
+                @if (_exists == true)
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || _passphrase.Length < 12)"
+                            @onclick="UnlockAsync">Unlock encrypted local drafts</button>
+                    @if (_deviceUnlockAvailable)
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@_busy" @onclick="UnlockWithDeviceAsync">
+                            Unlock encrypted drafts with device
+                        </button>
+                    }
+                }
+                else if (Ledger.IsConnected)
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || _passphrase.Length < 12)"
+                            @onclick="CreateAsync">Create encrypted device storage</button>
+                }
+                else
+                {
+                    <p>Encrypted credentials were not found for this public account
+                       and network. Connect with the S-key to enroll local storage.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <p role="status">@(QueueKeys.IsOfflineOnly
+                ? "Local-only queue unlocked. No Stellar signing or live remote verification is available."
+                : "The independent local encryption key is unlocked in memory.")</p>
+            <div class="sv-secret-workspace-actions">
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="InspectAsync">Inspect encrypted draft queue</button>
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="LoadDraftsAsync">Refresh local drafts</button>
+                @if (ShowSync)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ReviewManualSyncAsync">Review manual sync order</button>
+                }
+                <button type="button" class="pixel-button compact" disabled="@_busy"
+                        @onclick="LockAsync">Lock local drafts</button>
+            </div>
+            <div hidden="@(!ShowSync)" class="sv-linked-sync-workspace">
+            @if (_manualSyncPlan is not null)
+            {
+                <section class="sv-secret-review" aria-label="Manual linked draft synchronization order">
+                    <h3>Manual sync review</h3>
+                    <p><strong>Pending:</strong> @_manualSyncPlan.PendingCount
+                       · <strong>Unresolved:</strong> @_manualSyncPlan.UnresolvedCount</p>
+                    <p>Each draft requires a separate Stellar quote and fee approval.
+                       No automatic publication, retry, or submission is performed here.</p>
+                    @foreach (var draft in _manualSyncPlan.Items)
+                    {
+                        <p @key="draft.MutationId">
+                            <strong>@draft.Title</strong> · @draft.State
+                            @if (draft.Blockers.Length > 0)
+                            {
+                                <span> — @string.Join(", ", draft.Blockers)</span>
+                            }
+                            else
+                            {
+                                <span> — Ready for an individual review</span>
+                            }
+                        </p>
+                    }
+                    @if (_manualSyncPlan.CanReviewNext &&
+                         _manualSyncPlan.NextReadyMutationId is { } nextId)
+                    {
+                        <button type="button" class="pixel-button compact"
+                                disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
+                                @onclick="() => ReviewDraftAsync(nextId)">Review next ready draft</button>
+                    }
+                </section>
+            }
+            @if (_expandQuote is not null)
+            {
+                <section class="sv-secret-review" aria-label="Review additional linked Stellar storage account">
+                    <h3>Review additional storage account</h3>
+                    <p>A new linked Stellar account is needed before the next record can be saved.
+                       The root signer will authorize it; its master key is disabled by the linked ledger protocol.</p>
+                    <p><strong>New account:</strong> <code>@_expandQuote.TargetAccountId</code></p>
+                    <p><strong>Network fee:</strong> @_expandQuote.NetworkFeeXlm XLM</p>
+                    <p><strong>Peak reserve:</strong> @_expandQuote.PeakReserveXlm XLM</p>
+                    <p><strong>Funding top-up:</strong> @_expandQuote.FundingTopUpXlm XLM</p>
+                    <p><strong>Operations:</strong> @_expandQuote.Operations</p>
+                    <label class="sv-secret-approval">
+                        <input type="checkbox" @bind="_approveExpand" disabled="@_busy" />
+                        I approve creation of this specific linked account and its fees and reserve.
+                    </label>
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !_approveExpand || !QueueKeys.CanPublish)"
+                            @onclick="SubmitExpansionAsync">Create reviewed storage account</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="CancelExpansionAsync">Cancel account review</button>
+                </section>
+            }
+            @if (_expandQuote is null && QueueKeys.CanPublish)
+            {
+                <button type="button" class="pixel-button compact"
+                        disabled="@(_busy || _review is not null)"
+                        @onclick="ReviewExpansionAsync">Review additional account capacity</button>
+            }
+            @if (_review is not null)
+            {
+                <section class="sv-secret-review" aria-label="Review encrypted local draft publication">
+                    <h3>Review local draft publication</h3>
+                    <p><strong>Record:</strong> @_review.Title (@(_review.IsFolder ? "Folder" : "Record"))</p>
+                    <p><strong>Target:</strong> <code>@_review.Quote.TargetAccountId</code></p>
+                    <p><strong>Network fee:</strong> @_review.Quote.NetworkFeeXlm XLM</p>
+                    <p><strong>Peak reserve:</strong> @_review.Quote.PeakReserveXlm XLM</p>
+                    <p><strong>Funding top-up:</strong> @_review.Quote.FundingTopUpXlm XLM</p>
+                    <p><strong>Operations:</strong> @_review.Quote.Operations</p>
+                    <label class="sv-secret-approval">
+                        <input type="checkbox" @bind="_approvePublish" disabled="@_busy" />
+                        I approve this specific Stellar transaction, fee and account reserve.
+                    </label>
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !_approvePublish)"
+                            @onclick="PublishReviewedDraftAsync">Sign and submit reviewed draft</button>
+                    <button type="button" class="pixel-button compact"
+                            disabled="@_busy" @onclick="CancelPublicationReviewAsync">Cancel review</button>
+                </section>
+            }
+            @if (QueueKeys.CanPublish)
+            {
+                <section class="sv-secret-review" aria-label="Published S-key records available for local edits">
+                    <h3>Stage changes to published records</h3>
+                    <p>Load a current Stellar snapshot, then stage a revision-pinned update or delete.
+                       Nothing is signed or transmitted until the later individual fee approval.
+                       A changed remote manifest blocks stale publication.</p>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="LoadPublishedRecordsAsync">Load published records</button>
+                    @foreach (var record in _publishedRecords)
+                    {
+                        <div class="sv-secret-workspace-actions" @key="record.Id">
+                            <span><strong>@record.Title</strong> — @((StellarLedgerFileProtocol.IsFile(record) ||
+                                 VaultLinkedTreeFilePolicy.IsRootRecord(record)) ? "Encrypted file" : record.IsFolder ? "Folder" : "Record")</span>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || _review is not null || StellarLedgerFileProtocol.IsFile(record) ||
+                                        VaultLinkedTreeFilePolicy.IsRootRecord(record))"
+                                    @onclick="() => EditPublishedRecordAsync(record.Id)">Stage update</button>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@(_busy || _review is not null ||
+                                        record.Content.StartsWith(StellarLedgerFileProtocol.ManifestPrefix,
+                                            StringComparison.Ordinal) ||
+                                        record.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                                            StringComparison.Ordinal))"
+                                    title="Multipart deletion needs a separately verified manifest-and-parts removal workflow"
+                                    @onclick="() => SelectPublishedDeletionAsync(record.Id)">Stage delete…</button>
+                            @if (StellarLedgerFileProtocol.IsFile(record) ||
+                                 VaultLinkedTreeFilePolicy.IsRootRecord(record))
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@_busy"
+                                        @onclick="() => DownloadLinkedSmallFileAsync(record.Id)">Download decrypted file</button>
+                            }
+                        </div>
+                    }
+                    @if (_verifiedTreeExport is not null)
+                    {
+                        <div class="sv-secret-workspace-actions">
+                            <span>File verified: @_verifiedTreeExport.FileName. Choose a destination to save its authenticated bytes.</span>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@_busy" @onclick="SaveVerifiedTreeExportAsync">Save verified file…</button>
+                            <button type="button" class="pixel-button compact"
+                                    disabled="@_busy" @onclick="() => _verifiedTreeExport = null">Cancel export</button>
+                        </div>
+                    }
+                    @if (_deletePublishedId is not null)
+                    {
+                        <p role="alert">Stage local deletion for the selected published
+                           @(_deletePublishedTitle)? This does not delete anything from Stellar yet,
+                           but later publication will require a separate transaction approval.</p>
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="ConfirmStagePublishedDeletionAsync">Confirm local delete draft</button>
+                        <button type="button" class="pixel-button compact" disabled="@_busy"
+                                @onclick="CancelPublishedDeletion">Cancel</button>
+                    }
+                </section>
+            }
+            </div>
+            <div hidden="@(!ShowDrafts)" class="sv-linked-drafts-workspace">
+            <section class="sv-secret-review" aria-label="Encrypted S-key files">
+                <h3>Encrypted files</h3>
+                <p>SVTREE3 streams files as bounded ledger records without a fixed
+                   total-byte cap. Staging never sends transactions. Each node
+                   requires an individual fee approval and signed-history confirmation;
+                   parents and the root can publish only after their children.
+                   Large files may require substantial fees, reserves and time.</p>
+                <InputFile OnChange="SelectLinkedSmallFile" disabled="@_busy" />
+                @if (_smallFile is not null)
+                {
+                    <p>Selected: @_smallFile.Name (@_smallFile.Size bytes)</p>
+                    <button type="button" class="pixel-button compact"
+                            disabled="@_busy"
+                            @onclick="StageLinkedSmallFileAsync">Stage encrypted file draft</button>
+                }
+            </section>
+            <section class="sv-secret-editor" aria-label="Save independent encrypted local draft">
+                <h3>@(_editingRemoteId is not null ? "Stage update to published record" :
+                    _editingMutationId is null ? "Save to encrypted device storage" : "Edit unpublished encrypted draft")</h3>
+                <p>Local-only. This draft will not be uploaded, signed or submitted to Stellar.</p>
+                @if (QueueKeys.IsOfflineOnly)
+                {
+                    <p role="status">Offline mode lists only locally staged folders.
+                       Published folder contents cannot be fetched or verified until reconnecting.
+                       Publishing remains disabled.</p>
+                }
+                <label class="sv-secret-approval">
+                    <input type="checkbox" @bind="_draftIsFolder"
+                           disabled="@(_busy || _editingMutationId is not null || _editingRemoteId is not null)" />
+                    New folder instead of record
+                </label>
+                <VaultRecordFields IsFolder="_draftIsFolder"
+                                   Disabled="_busy"
+                                   MultilineSecret="true"
+                                   ExcludedId="@(_drafts.FirstOrDefault(x => x.MutationId == _editingMutationId)?.EntityId)"
+                                   AdditionalFolders="@LinkedFolderOptions"
+                                   @bind-Title="_draftTitle"
+                                   @bind-FolderId="_draftFolderId"
+                                   @bind-Username="_draftUsername"
+                                   @bind-Url="_draftUrl"
+                                   @bind-Secret="_draftContent"
+                                   @bind-Notes="_draftNotes"
+                                   @bind-Tags="_draftTags"
+                                   @bind-ShowSecret="_draftShowSecret" />
+                <button type="button" class="pixel-button primary"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_draftTitle) || (!_draftIsFolder && string.IsNullOrEmpty(_draftContent)))"
+                        @onclick="StageDraftAsync">@(_editingRemoteId is not null ? "Stage revision-pinned update" :
+                            _editingMutationId is null ? "Save encrypted local draft" : "Save encrypted changes")</button>
+                @if (_editingMutationId is not null || _editingRemoteId is not null)
+                {
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ClearDraftEditor">Cancel editing</button>
+                }
+            </section>
+            @if (_drafts.Count > 0)
+            {
+                <section class="sv-secret-review" aria-label="Pending encrypted local records and folders">
+                    <h3>Encrypted queue — drafts and transaction history (@_drafts.Count)</h3>
+                    @foreach (var draft in _drafts)
+                    {
+                        <div class="sv-secret-workspace-actions" @key="draft.MutationId">
+                            <span><strong>@draft.Title</strong> — @(draft.IsFile ? "Encrypted file" : draft.IsFolder ? "Folder" : "Record")
+                                · @draft.Kind · @draft.State
+                                @if (draft.IsJournal)
+                                {
+                                    <em>Capacity transaction journal — do not retry an unresolved entry</em>
+                                }
+                                else if (draft.IsCorrupt) { <em>Unreadable draft</em> }
+                            </span>
+                            @if (draft.IsJournal && draft.State == VaultSyncState.Pending)
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || !QueueKeys.CanPublish)"
+                                        @onclick="() => DiscardUnreservedExpansionAsync(draft.MutationId)">
+                                    Discard never-submitted reservation
+                                </button>
+                            }
+                            @if (draft.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
+                            {
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || !Ledger.IsConnected)"
+                                        @onclick="() => InspectUnresolvedAsync(draft.MutationId)">Assess unresolved (read-only)</button>
+                            }
+                            @if (draft.State == VaultSyncState.Pending &&
+                                 !draft.IsCorrupt && !draft.IsJournal)
+                            {
+                                @if (!draft.IsFile &&
+                                     (draft.Kind is not (VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder)))
+                                {
+                                    <button type="button" class="pixel-button compact"
+                                            disabled="@(_busy || _review is not null)"
+                                            @onclick="() => EditDraftAsync(draft.MutationId)">Edit local draft</button>
+                                }
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || _review is not null || !QueueKeys.CanPublish)"
+                                        @onclick="() => ReviewDraftAsync(draft.MutationId)">Review publish</button>
+                                <button type="button" class="pixel-button compact" disabled="@_busy"
+                                        @onclick="() => DiscardDraftAsync(draft.MutationId)">Discard local draft</button>
+                            }
+                        </div>
+                    }
+                </section>
+            }
+            </div>
+        }
+        <div hidden="@(!ShowSync)" class="sv-linked-sync-workspace">
+        @if (_recoveryFinding is not null && QueueKeys.IsUnlocked)
+        {
+            <section class="sv-secret-review" aria-label="Uncertain local draft recovery assessment">
+                <h3>Read-only recovery assessment</h3>
+                <p><strong>Record:</strong> @_recoveryFinding.EntityId</p>
+                <p><strong>Durable queue state:</strong> @_recoveryFinding.DurableState</p>
+                @if (_recoveryFinding.TransactionHash is { } txHash)
+                {
+                    <p><strong>Signed transaction hash (public recovery handle, not proof):</strong>
+                        <code style="overflow-wrap:anywhere">@txHash</code></p>
+                }
+                <p><strong>Current expected mutation result (advisory):</strong> @(_recoveryFinding.CurrentRecordMatches is true ? "Observed" :
+                    _recoveryFinding.CurrentRecordMatches is false ? "Not observed" : "Unknown")</p>
+                <p><strong>Advisory receipt:</strong> @(_recoveryFinding.HistoricalReceiptObserved ? "Observed (insufficient for release)" : "Not established")</p>
+                <p><strong>Historical record operation check:</strong>
+                    @(_recoveryFinding.HistoricalRecordOperationsMatch ? "skh/skc manifest and chunks match (not signer or decryption proof)" : "Not established")
+                </p>
+                @if (_recoveryFinding.HistoricalStorageAccount is { } account)
+                {
+                    <p><strong>Historical storage account:</strong> <code style="overflow-wrap:anywhere">@account</code></p>
+                }
+                <p><strong>Historical linked expansion operations:</strong>
+                    @(_recoveryFinding.HistoricalExpansionOperationsMatch ? "Child account, root signer and parent pointer observed (not full authorization proof)" : "Not established")
+                </p>
+                @if (_recoveryFinding.HistoricalParentAccount is { } parentAccount)
+                {
+                    <p><strong>Historical parent account:</strong> <code style="overflow-wrap:anywhere">@parentAccount</code></p>
+                }
+                <p role="alert">@_recoveryFinding.Explanation</p>
+                <p>No queue state was changed. Independent operation-level verification is required before any release or retry.</p>
+                <p>Historical proof finalization is available for record creates, updates and deletes only.
+                   It requires the currently connected S-key to verify the exact signed XDR,
+                   root signature and decrypted historical ciphertext. If any check fails,
+                   the encrypted journal stays quarantined.</p>
+                @if (_recoveryFinding.TransactionHash is not null &&
+                     (_recoveryFinding.DurableState is VaultSyncState.Uncertain or VaultSyncState.Submitting))
+                {
+                    <button type="button" class="pixel-button compact"
+                            disabled="@(_busy || !QueueKeys.CanPublish)"
+                            @onclick="() => ConfirmVerifiedMutationAsync(_recoveryFinding.MutationId)">
+                        Verify signed history and finalize journal
+                    </button>
+                }
+            </section>
+        }
+        @if (_report is not null && QueueKeys.IsUnlocked)
+        {
+            <p><strong>Queued drafts:</strong> @_report.Pending</p>
+            <p><strong>Uncertain/submitting:</strong> @_report.UncertainOrSubmitting</p>
+            <p><strong>Conflicts:</strong> @_report.Conflicts</p>
+            <p><strong>Folder mutations:</strong> @_report.FolderEntries</p>
+            <p>Manual create/update/delete publication requires individual fee review and a live linked S-key signer.
+               Remote-version checks prevent stale writes. Automatic synchronization and full historical signer/record verification remain unavailable.</p>
+        }
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <p class="sv-secret-status" role="status">@_message</p>
+    }
+</section>
+
+@code {
+    [Parameter] public string View { get; set; } = "all";
+    private bool ShowDrafts => View is "all" or "drafts";
+    private bool ShowSync => View is "all" or "sync";
+    private bool _busy;
+    private bool? _exists;
+    private string _passphrase = string.Empty;
+    private string _offlineRoot = string.Empty;
+    private string? _message;
+    private VaultLinkedQueueInspection.Report? _report;
+    private IReadOnlyList<VaultLinkedDraftWorkspace.DraftItem> _drafts = [];
+    private VaultLinkedManualSyncPlan.Review? _manualSyncPlan;
+
+    private async Task ReviewManualSyncAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _manualSyncPlan = null;
+        try
+        {
+            _manualSyncPlan = await DraftWorkspace.ReviewManualSyncAsync();
+            _message = "Read-only manual sync ordering complete. Every transaction requires its own fresh fee approval.";
+        }
+        catch
+        {
+            _message = "Manual sync ordering failed. Refresh the encrypted queue and connected signer.";
+        }
+        finally { _busy = false; }
+    }
+
+    private VaultLinkedDraftPublication.Review? _review;
+    private bool _approvePublish;
+    private VaultSecretLedgerQuote? _expandQuote;
+    private bool _approveExpand;
+
+    private async Task ReviewExpansionAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish || _expandQuote is not null ||
+            _review is not null) return;
+        _busy = true;
+        try
+        {
+            _expandQuote = await ExpansionJournal.PrepareAsync();
+            _approveExpand = false;
+            _manualSyncPlan = null;
+            _message = "Review a separate linked-account transaction. Draft publication will require its own quote afterward.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Account expansion review unavailable: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SubmitExpansionAsync()
+    {
+        if (_busy || !_approveExpand || _expandQuote is null ||
+            !QueueKeys.CanPublish) return;
+        var quote = _expandQuote;
+        _expandQuote = null;
+        _approveExpand = false;
+        _busy = true;
+        try
+        {
+            var hash = await ExpansionJournal.SubmitApprovedAsync(quote, true);
+            _manualSyncPlan = null;
+            _message = "Additional storage account observed after transaction " + hash +
+                ". Its encrypted journal remains UNCERTAIN until historical signer and operation evidence is verified. Do not retry or publish dependent drafts.";
+        }
+        catch (VaultLinkedExpansionPreflightException)
+        {
+            _message = "Expansion was rejected before this transaction was sent. Refresh and review again; other unresolved transactions still require reconciliation.";
+        }
+        catch
+        {
+            _message = "Expansion outcome may be uncertain. Do not repeat the account creation or any queued publication until ledger history is reconciled.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardUnreservedExpansionAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            await ExpansionJournal.DiscardNeverSubmittedIntentAsync(id);
+            _manualSyncPlan = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _message = "The never-reserved local expansion intent was discarded. No transaction was submitted by that journal.";
+        }
+        catch
+        {
+            _message = "Expansion journal was not discarded. Refresh its state; never discard uncertain or submitting transactions.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelExpansionAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await LinkedExpansion.AbandonUnsubmittedAsync();
+            _expandQuote = null;
+            _approveExpand = false;
+            _message = "Unsubmitted account expansion review canceled.";
+        }
+        finally { _busy = false; }
+    }
+
+
+    private VaultLinkedDraftRecoveryReview.Finding? _recoveryFinding;
+
+    private async Task ConfirmVerifiedMutationAsync(string mutationId)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            var journal = _drafts.SingleOrDefault(x => x.MutationId == mutationId)
+                ?? throw new InvalidOperationException("Refresh the encrypted journal before reconciling.");
+            var result = journal.Kind == VaultMutationKind.ExtendLinkedChain
+                ? await VerifiedReconciliation.ConfirmVerifiedExpansionAsync(mutationId)
+                : await VerifiedReconciliation.ConfirmVerifiedRecordAsync(mutationId);
+            _recoveryFinding = null;
+            _manualSyncPlan = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = result.Explanation;
+        }
+        catch (Exception ex)
+        {
+            _message = "Historical transaction verification did not release the encrypted queue. Do not retry the transaction: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task InspectUnresolvedAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _recoveryFinding = null;
+        try
+        {
+            _recoveryFinding = await RecoveryReview.InspectAsync(id);
+            _message = "Recovery assessment is read-only. An unresolved draft cannot be retried or marked confirmed.";
+        }
+        catch
+        {
+            _message = "Uncertain draft could not be inspected. Keep it quarantined and do not retry.";
+        }
+        finally { _busy = false; }
+    }
+
+
+    private async Task ReviewDraftAsync(string id)
+    {
+        if (_busy || _review is not null || !QueueKeys.CanPublish) return;
+        _manualSyncPlan = null;
+        _busy = true;
+        try
+        {
+            _review = await Publisher.PrepareAsync(id);
+            _approvePublish = false;
+            _message = "Review the fresh account, fee and reserve before approving. No transaction has been sent.";
+        }
+        catch (Exception ex) { _message = "Draft publication review unavailable: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task PublishReviewedDraftAsync()
+    {
+        if (_busy || !_approvePublish || _review is null) return;
+        var approved = _review;
+        _review = null;
+        _approvePublish = false;
+        _busy = true;
+        try
+        {
+            _manualSyncPlan = null;
+            var hash = await Publisher.SubmitAsync(approved.Quote, true);
+            _message = "Transaction submitted; " +
+                (approved.Quote.Kind == "delete" ? "current record absence" : "matching current record") +
+                " observed. Queue remains UNCERTAIN for transaction: " + hash +
+                ". Current state is not historical transaction proof. Do not retry until independently reconciled.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _message += " Screen refresh failed; do not repeat this submission."; }
+        }
+        catch (Exception ex)
+        {
+            // Any failure after the durable reservation may represent an
+            // accepted transaction. Do not offer retry without new review
+            // and verified reconciliation of the queue state.
+            _message = "Publication cannot be confirmed. Do not retry an uncertain draft: " +
+                ex.Message;
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _drafts = []; _report = null; }
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelPublicationReviewAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await Publisher.CancelAsync();
+            _review = null;
+            _approvePublish = false;
+            _message = "Unsubmitted publication quote canceled.";
+        }
+        finally { _busy = false; }
+    }
+
+    private bool _draftIsFolder;
+    private bool _draftShowSecret;
+    private IReadOnlyDictionary<string, string> LinkedFolderOptions =>
+        _availableFolders.GroupBy(x => x.EntityId, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key,
+                x => x.First().Title +
+                    (x.First().Local ? " (local draft)" : " (on Stellar)"),
+                StringComparer.Ordinal);
+    private string _draftTitle = string.Empty;
+    private string _draftContent = string.Empty;
+    private string _draftUsername = string.Empty;
+    private string _draftUrl = string.Empty;
+    private string _draftNotes = string.Empty;
+    private string _draftTags = string.Empty;
+    private string _draftFolderId = string.Empty;
+    private string? _editingMutationId;
+    private string? _editingPayloadSha256;
+    private IBrowserFile? _smallFile;
+
+    private void SelectLinkedSmallFile(InputFileChangeEventArgs args)
+    {
+        _smallFile = args.File;
+        _message = "Streaming file selected. No transaction occurs until individually approved. Each file tree node needs signed-history confirmation; large files require substantial time and fees.";
+    }
+
+    private async Task StageLinkedSmallFileAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked || _smallFile is null) return;
+        _busy = true;
+        try
+        {
+            await using var input = _smallFile.OpenReadStream(_smallFile.Size);
+            var title = _smallFile.Name.Length > 256
+                ? _smallFile.Name[..256] : _smallFile.Name;
+            var mime = string.IsNullOrWhiteSpace(_smallFile.ContentType)
+                ? "application/octet-stream" : _smallFile.ContentType;
+            var staged = await DraftWorkspace.StageTreeFileAsync(
+                title, _smallFile.Name, mime, input);
+            _smallFile = null;
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _manualSyncPlan = null;
+            _message = "Encrypted file tree staged as " + staged.NodeCount +
+                " independent ledger records. Approve and reconcile each node; root " +
+                staged.RootId + " publishes last. No transaction was submitted.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Tree file staging failed; inspect encrypted queue before retrying: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DownloadLinkedSmallFileAsync(string recordId)
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        _verifiedTreeExport = null;
+        byte[]? decoded = null;
+        try
+        {
+            var records = await Ledger.ReadAsync();
+            var file = records.Single(x => x.Id == recordId);
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(file))
+            {
+                // First action: verify the entire immutable ledger snapshot
+                // WITHOUT writing unverified bytes to a user-visible file.
+                // The second explicit click opens the browser's native file
+                // picker within its required transient user activation.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    recordId, records, Stream.Null);
+                var activeRoot = QueueKeys.ActiveRootAccountId ??
+                    throw new InvalidOperationException("Linked signer disconnected.");
+                _verifiedTreeExport = new(recordId, verified.FileName, records,
+                    activeRoot, Networks.CredentialKey(activeRoot),
+                    Ledger.ConnectionEpoch);
+                _message = "Encrypted file verified. Select Save verified file to choose an export destination.";
+            }
+            else
+            {
+                if (!StellarLedgerFileProtocol.IsFile(file))
+                    throw new InvalidDataException("Selected record is not an authenticated file.");
+                decoded = StellarLedgerFileProtocol.DecodeFile(file, records);
+                if (decoded.Length is < 1 or > VaultLinkedMultipartFilePolicy.MaxBytes)
+                    throw new InvalidDataException("Legacy file exceeds its original format bound.");
+                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                    StellarLedgerFileProtocol.FileName(file), decoded);
+                _message = "Verified legacy S-key file downloaded.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _message = "Unable to verify and download the selected S-key file: " + ex.Message;
+        }
+        finally
+        {
+            if (decoded is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded);
+            _busy = false;
+        }
+    }
+
+    private sealed record VerifiedTreeExport(string RootId, string FileName,
+        IReadOnlyList<LedgerRecordItem> Records, string AccountId,
+        string NetworkScope, long Epoch);
+
+    private VerifiedTreeExport? _verifiedTreeExport;
+
+    private async Task SaveVerifiedTreeExportAsync()
+    {
+        if (_busy || _verifiedTreeExport is not { } prepared) return;
+        _verifiedTreeExport = null; // One-shot, even on an aborted picker.
+        if (!QueueKeys.CanPublish || QueueKeys.ActiveRootAccountId != prepared.AccountId ||
+            !Ledger.IsConnected || Ledger.RootAccountId != prepared.AccountId ||
+            Ledger.ConnectionEpoch != prepared.Epoch ||
+            Networks.CredentialKey(prepared.AccountId) != prepared.NetworkScope)
+        {
+            _message = "Vault signer or network changed. Verify this file again before exporting.";
+            return;
+        }
+        _busy = true;
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 256 * 1024,
+            resumeWriterThreshold: 128 * 1024));
+        using var cancellation = new CancellationTokenSource();
+        var producer = Task.Run(async () =>
+        {
+            await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+            try
+            {
+                await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, prepared.Records, writer, cancellation.Token);
+                await writer.FlushAsync(cancellation.Token);
+                await pipe.Writer.CompleteAsync();
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex);
+                throw;
+            }
+        });
+        try
+        {
+            await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+            if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                throw new IOException("The file export was cancelled or failed.");
+            await producer;
+            _message = "Verified file saved using bounded-memory streaming.";
+        }
+        catch (Exception ex)
+        {
+            cancellation.Cancel();
+            try { await producer; } catch { /* Preserve the export failure. */ }
+            _message = "Verified file export failed or was cancelled: " + ex.Message;
+        }
+        finally
+        {
+            await pipe.Reader.CompleteAsync();
+            _busy = false;
+        }
+    }
+
+    private IReadOnlyList<LedgerRecordItem> _publishedRecords = [];
+    private string? _editingRemoteId;
+    private string? _editingRemoteRevision;
+    private string? _deletePublishedId;
+    private string? _deletePublishedRevision;
+    private string? _deletePublishedTitle;
+
+    private async Task LoadPublishedRecordsAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish) return;
+        _busy = true;
+        try
+        {
+            _verifiedTreeExport = null;
+            var records = await Ledger.ReadAsync();
+            _publishedRecords = records
+                .Where(x => !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix,
+                    StringComparison.Ordinal) &&
+                    (!x.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                        StringComparison.Ordinal) ||
+                     VaultLinkedTreeFilePolicy.IsRootRecord(x)))
+                .OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+                .Take(200).ToArray();
+            _message = "Published S-key records loaded. Select an explicit local change.";
+        }
+        catch (Exception ex)
+        {
+            _publishedRecords = [];
+            _message = "Published records could not be loaded: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task<(LedgerRecordItem Record, string Revision)> ReadStablePublishedAsync(
+        string id, IStellarSecretKeyRecordRevisionReader reader)
+    {
+        var before = await reader.ReadRecordRevisionAsync(id)
+            ?? throw new InvalidOperationException("Published record has no valid manifest revision.");
+        var remote = await Ledger.ReadAsync();
+        var record = remote.Single(x => x.Id == id);
+        var after = await reader.ReadRecordRevisionAsync(id);
+        if (before != after)
+            throw new InvalidOperationException(
+                "The record changed while opening its contents. Reload before editing or deleting.");
+        return (record, before);
+    }
+
+    private async Task EditPublishedRecordAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish || _review is not null ||
+            Ledger is not IStellarSecretKeyRecordRevisionReader reader) return;
+        _busy = true;
+        try
+        {
+            var (record, revision) = await ReadStablePublishedAsync(id, reader);
+            ClearDraftEditor();
+            _deletePublishedId = null;
+            _editingRemoteId = id;
+            _editingRemoteRevision = revision;
+            _draftTitle = record.Title;
+            _draftContent = record.Content;
+            _draftIsFolder = record.IsFolder;
+            _draftFolderId = record.FolderId ?? string.Empty;
+            _draftUsername = record.UserName ?? string.Empty;
+            _draftUrl = record.Url ?? string.Empty;
+            _draftNotes = record.Notes ?? string.Empty;
+            _draftTags = string.Join(", ", record.Tags ?? []);
+            _message = "Editing published record locally. Its original manifest revision must remain unchanged.";
+        }
+        catch (Exception ex)
+        {
+            ClearDraftEditor();
+            _message = "Published record cannot be opened for staging: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SelectPublishedDeletionAsync(string id)
+    {
+        if (_busy || !QueueKeys.CanPublish ||
+            Ledger is not IStellarSecretKeyRecordRevisionReader reader) return;
+        _busy = true;
+        try
+        {
+            var (record, revision) = await ReadStablePublishedAsync(id, reader);
+            _deletePublishedId = id;
+            _deletePublishedTitle = record.Title;
+            _deletePublishedRevision = revision;
+            _message = "Review and confirm local delete staging; no Stellar transaction is sent.";
+        }
+        catch (Exception ex)
+        {
+            CancelPublishedDeletion();
+            _message = "Cannot prepare the local deletion: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private void CancelPublishedDeletion()
+    {
+        _deletePublishedId = _deletePublishedRevision = _deletePublishedTitle = null;
+    }
+
+    private async Task ConfirmStagePublishedDeletionAsync()
+    {
+        if (_busy || !QueueKeys.CanPublish || _deletePublishedId is null ||
+            _deletePublishedRevision is null) return;
+        _busy = true;
+        try
+        {
+            await DraftWorkspace.StageDeleteAsync(_deletePublishedId, _deletePublishedRevision);
+            CancelPublishedDeletion();
+            _manualSyncPlan = null;
+            _publishedRecords = [];
+            _drafts = await DraftWorkspace.ListAsync();
+            _report = await QueueInspection.InspectAsync();
+            _message = "Revision-pinned local deletion staged. No Stellar transaction was sent.";
+        }
+        catch (Exception ex)
+        {
+            _message = "Deletion staging could not be verified. Refresh before retrying: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+
+    private async Task EditDraftAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked || _review is not null) return;
+        _busy = true;
+        try
+        {
+            // Explicit edit action decrypts only this draft into the local UI.
+            // The secret input remains masked and no remote write occurs.
+            var detail = await DraftWorkspace.OpenDraftAsync(id);
+            ClearDraftEditor();
+            _editingMutationId = detail.MutationId;
+            _editingPayloadSha256 = detail.PayloadSha256;
+            _draftTitle = detail.Draft.Title;
+            _draftContent = detail.Draft.Content;
+            _draftFolderId = detail.Draft.FolderId ?? string.Empty;
+            _draftIsFolder = detail.Draft.IsFolder;
+            _draftUsername = detail.Draft.UserName ?? string.Empty;
+            _draftUrl = detail.Draft.Url ?? string.Empty;
+            _draftNotes = detail.Draft.Notes ?? string.Empty;
+            _draftTags = string.Join(", ", detail.Draft.Tags ?? []);
+            _message = "Local draft opened for editing. Changes remain encrypted on this device until separately published.";
+        }
+        catch
+        {
+            ClearDraftEditor();
+            _message = "Cannot open the unpublished draft. Refresh the encrypted queue.";
+        }
+        finally { _busy = false; }
+    }
+
+    private sealed record FolderOption(string EntityId, string Title, bool Local);
+    private IReadOnlyList<FolderOption> _availableFolders = [];
+
+    private async Task RefreshFolderOptionsAsync()
+    {
+        if (!QueueKeys.IsUnlocked) { _availableFolders = []; return; }
+        IReadOnlyList<LedgerRecordItem> published = QueueKeys.IsOfflineOnly
+            ? []
+            : await Ledger.ReadAsync();
+        var remoteFolders = published.Where(x => x.IsFolder)
+            .Select(x => new FolderOption(x.Id, x.Title, false));
+        var localFolders = _drafts.Where(x => x.IsFolder &&
+                x.Kind == VaultMutationKind.CreateFolder &&
+                (x.State is VaultSyncState.Pending or VaultSyncState.Confirmed) &&
+                !x.IsCorrupt)
+            .Select(x => new FolderOption(x.EntityId, x.Title, true));
+        _availableFolders = remoteFolders.Concat(localFolders)
+            .GroupBy(x => x.EntityId, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .OrderBy(x => x.Title, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void ClearDraftEditor()
+    {
+        _draftContent = _draftUsername = _draftUrl = _draftNotes = _draftTags = string.Empty;
+        _draftTitle = _draftFolderId = string.Empty;
+        _draftIsFolder = false;
+        _draftShowSecret = false;
+        _editingMutationId = null;
+        _editingPayloadSha256 = null;
+        _editingRemoteId = null;
+        _editingRemoteRevision = null;
+    }
+
+    private async Task LoadDraftsAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
+        }
+        catch
+        {
+            _drafts = [];
+            _message = "The encrypted drafts could not be read. Check the local queue and connected signer.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task StageDraftAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked ||
+            string.IsNullOrWhiteSpace(_draftTitle) ||
+            (!_draftIsFolder && string.IsNullOrEmpty(_draftContent))) return;
+        _busy = true;
+        try
+        {
+            var draft = new LedgerRecordDraft(
+                _draftTitle.Trim(),
+                _draftIsFolder && _editingRemoteId is null && _editingMutationId is null
+                    ? "folder" : _draftContent,
+                string.IsNullOrWhiteSpace(_draftFolderId) ? null : _draftFolderId.Trim(),
+                _draftTags.Split(',', StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                _draftIsFolder, _draftUsername, _draftUrl, _draftNotes);
+            _manualSyncPlan = null;
+            if (_editingRemoteId is { } remoteId &&
+                _editingRemoteRevision is { } remoteRevision)
+            {
+                await DraftWorkspace.StageUpdateAsync(remoteId, draft, remoteRevision);
+            }
+            else if (_editingMutationId is { } editingId &&
+                     _editingPayloadSha256 is { } revision)
+            {
+                await DraftWorkspace.ReviseAsync(editingId, draft, revision);
+            }
+            else
+            {
+                await DraftWorkspace.CreateAsync(draft);
+            }
+            if (_editingRemoteId is not null) _publishedRecords = [];
+            ClearDraftEditor();
+            _message = "Encrypted local draft saved. No transaction was submitted.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch { _message += " Screen refresh failed; inspect existing drafts before saving again."; }
+        }
+        catch (Exception ex)
+        {
+            _message = "Local draft save could not be verified; it may already exist. Refresh before repeating: " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DiscardDraftAsync(string id)
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        try
+        {
+            _manualSyncPlan = null;
+            await DraftWorkspace.DiscardAsync(id);
+            _message = "Unpublished local draft discarded.";
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+                _report = await QueueInspection.InspectAsync();
+            }
+            catch
+            {
+                _drafts = [];
+                _message += " Screen refresh failed; inspect existing drafts before another change.";
+            }
+        }
+        catch (Exception ex) { _message = "Draft removal outcome could not be verified. Refresh first: " + ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task ChangeConsentAsync(ChangeEventArgs args)
+    {
+        if (_busy) return;
+        await Publisher.CancelAsync();
+        _review = null;
+        _approvePublish = false;
+        _report = null;
+        _recoveryFinding = null;
+        _drafts = [];
+        _availableFolders = [];
+        _publishedRecords = [];
+        _smallFile = null;
+        CancelPublishedDeletion();
+        ClearDraftEditor();
+        _exists = null;
+        _passphrase = string.Empty;
+        _offlineRoot = string.Empty;
+        var consented = args.Value is true ||
+            args.Value is string value && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+        if (!consented)
+        {
+            await QueueKeys.LockAsync();
+            LinkedRetention.Reset();
+                        _message = "Independent device retention disabled for this session. Previously encrypted data was not erased.";
+            return;
+        }
+        LinkedRetention.GrantExplicitConsent();
+        await DiscoverAsync();
+    }
+
+    private async Task DiscoverAsync()
+    {
+        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence) return;
+        _busy = true;
+        _message = null;
+        try
+        {
+            _exists = Ledger.IsConnected
+                ? await QueueKeys.HasLocalCredentialsAsync()
+                : await QueueKeys.HasLocalCredentialsOfflineAsync(_offlineRoot.Trim());
+            _message = _exists == true
+                ? "Encrypted device credentials found. Unlock with the separate local passphrase."
+                : "No local credentials found for this S-key account and network.";
+            _deviceUnlockAvailable = false;
+            if (_exists == true && DeviceUnlockKey() is { } deviceKey)
+            {
+                try
+                {
+                    _deviceUnlockAvailable = await JS.InvokeAsync<bool>(
+                        "stellarVaultBiometric.has", deviceKey);
+                }
+                catch { /* Passkey APIs may be unavailable in the native WebView. */ }
+            }
+        }
+        catch
+        {
+            _exists = null;
+            _message = "Local encrypted credentials could not be verified for this public account and selected network.";
+        }
+        finally { _busy = false; }
+    }
+
+    private bool _deviceUnlockAvailable;
+
+    private string? DeviceUnlockKey()
+    {
+        var root = Ledger.IsConnected ? Ledger.RootAccountId : _offlineRoot.Trim();
+        // Do not reuse a mnemonic/HD passkey even if its public root address
+        // matches an imported S-key vault on the same network.
+        if (root is not { } validRoot || !StellarAccountAddress.IsValid(validRoot))
+            return null;
+        return "linked-s-key:" + Networks.CredentialKey(validRoot);
+    }
+
+    private async Task UnlockWithDeviceAsync()
+    {
+        if (_busy || !_deviceUnlockAvailable || _exists != true) return;
+        var key = DeviceUnlockKey();
+        if (key is null) return;
+        try
+        {
+            _passphrase = await JS.InvokeAsync<string>(
+                "stellarVaultBiometric.unlock", key);
+            await ActivateAsync(create: false);
+        }
+        catch
+        {
+            _message = "Device unlock is unavailable or was canceled. Use your separate local passphrase.";
+        }
+        finally { _passphrase = string.Empty; }
+    }
+
+    private Task CreateAsync() => ActivateAsync(create: true);
+    private Task UnlockAsync() => ActivateAsync(create: false);
+
+    private async Task ActivateAsync(bool create)
+    {
+        if (_busy || !LinkedRetention.DeviceRetention.AllowsLocalPersistence || !LinkedRetention.AllowsLocalPersistence || _passphrase.Length < 12)
+            return;
+        _busy = true;
+        _report = null;
+        try
+        {
+            if (create)
+            {
+                if (!Ledger.IsConnected)
+                    throw new InvalidOperationException("New S-key device enrollment requires the connected signer.");
+                await QueueKeys.CreateAsync(_passphrase);
+            }
+            else if (Ledger.IsConnected)
+                await QueueKeys.UnlockAsync(_passphrase);
+            else
+                await QueueKeys.UnlockOfflineAsync(_offlineRoot.Trim(), _passphrase);
+            _exists = true;
+            _message = QueueKeys.IsOfflineOnly
+                ? "Local encrypted drafts unlocked without Horizon. No transaction can be submitted in this mode."
+                : "Independent encrypted device storage unlocked. Publication requires a separate fee review.";
+            if (DeviceUnlockPreference.Requested)
+            {
+                DeviceUnlockPreference.Reset();
+                if (DeviceUnlockKey() is { } key)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync(
+                            "stellarVaultBiometric.enroll", key, _passphrase);
+                        _deviceUnlockAvailable = true;
+                        _message += " Device unlock enrolled for this encrypted queue. The S-key was not saved.";
+                    }
+                    catch
+                    {
+                        _message += " Device unlock could not be enrolled on this device. Continue using your local passphrase.";
+                    }
+                }
+            }
+            try
+            {
+                _drafts = await DraftWorkspace.ListAsync();
+                await RefreshFolderOptionsAsync();
+            }
+            catch
+            {
+                _drafts = [];
+                _availableFolders = [];
+                _message += " Draft list refresh failed; the local key remains unlocked. Inspect drafts before making another change.";
+            }
+        }
+        catch
+        {
+            _message = "Device encryption setup or unlock failed. Verify the local passphrase, network and signer session.";
+        }
+        finally
+        {
+            _passphrase = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private async Task InspectAsync()
+    {
+        if (_busy || !QueueKeys.IsUnlocked) return;
+        _busy = true;
+        _report = null;
+        try
+        {
+            _report = await QueueInspection.InspectAsync();
+            _drafts = await DraftWorkspace.ListAsync();
+            await RefreshFolderOptionsAsync();
+            _message = "Read-only inspection completed. No transactions were broadcast.";
+        }
+        catch
+        {
+            _message = "Cannot inspect the encrypted local queue. Check local consent, public account, selected network and key unlock.";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LockAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await Publisher.CancelAsync();
+            _review = null;
+            _approvePublish = false;
+            await QueueKeys.LockAsync();
+            _report = null;
+            _drafts = [];
+            _availableFolders = [];
+            _publishedRecords = [];
+            _verifiedTreeExport = null;
+            _smallFile = null;
+        CancelPublishedDeletion();
+            ClearDraftEditor();
+            _passphrase = string.Empty;
+            _message = "Independent local encryption key cleared from memory.";
+        }
+        finally { _busy = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _passphrase = string.Empty;
+        _report = null;
+        _recoveryFinding = null;
+        _drafts = [];
+        _availableFolders = [];
+        _publishedRecords = [];
+        _verifiedTreeExport = null;
+        _smallFile = null;
+        CancelPublishedDeletion();
+        ClearDraftEditor();
+        await Publisher.CancelAsync();
+        await LinkedExpansion.AbandonUnsubmittedAsync();
+        await QueueKeys.LockAsync();
+        LinkedRetention.Reset();
+            }
+}

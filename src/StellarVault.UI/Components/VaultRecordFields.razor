@@ -1,0 +1,121 @@
+@* One reusable editor for both account strategies. No encryption, key
+   derivation, quote or ledger mutation occurs in this component. *@
+<section class="sv-shared-record-fields" aria-label="Vault record details">
+    <div class="form-section-title">Details</div>
+    <label class="terminal-label" for="@(_prefix + "-title")">TITLE *</label>
+    <input class="terminal-input" id="@(_prefix + "-title")" type="text"
+           maxlength="256" autocomplete="off" spellcheck="false"
+           disabled="@Disabled" value="@Title" @oninput="e => TitleChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+
+    <label class="terminal-label" for="@(_prefix + "-folder")">FOLDER</label>
+    <select class="terminal-input" id="@(_prefix + "-folder")" disabled="@Disabled" value="@FolderId"
+            @onchange="e => FolderIdChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)">
+        <option value="">Unfiled</option>
+        @if (!string.IsNullOrEmpty(FolderId) &&
+             !Folders.Any(x => x.Id == FolderId) &&
+             !AdditionalFolders.ContainsKey(FolderId))
+        {
+            <option value="@FolderId">Unverified parent · @FolderId</option>
+        }
+        @foreach (var folder in Folders.Where(x => x.IsFolder && x.Id != ExcludedId)
+                     .OrderBy(x => FolderLabel(x.Id), StringComparer.OrdinalIgnoreCase))
+        {
+            <option value="@folder.Id">@FolderLabel(folder.Id)</option>
+        }
+        @foreach (var choice in AdditionalFolders.OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase))
+        {
+            @if (choice.Key != ExcludedId && !Folders.Any(x => x.Id == choice.Key))
+            {
+                <option value="@choice.Key">@choice.Value</option>
+            }
+        }
+    </select>
+    <p class="advanced-help">Move to any nested folder, or choose Unfiled for the vault root.</p>
+
+    @if (!IsFolder)
+    {
+        <label class="terminal-label" for="@(_prefix + "-username")">USERNAME / IDENTIFIER</label>
+        <input class="terminal-input" id="@(_prefix + "-username")"
+               autocomplete="off" spellcheck="false" disabled="@Disabled" value="@Username"
+               @oninput="e => UsernameChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+
+        <label class="terminal-label" for="@(_prefix + "-url")">URL</label>
+        <input class="terminal-input" id="@(_prefix + "-url")" type="url"
+               autocomplete="off" disabled="@Disabled" value="@Url"
+               @oninput="e => UrlChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+
+        <div class="form-section-title"><span>02</span> SECRET PAYLOAD</div>
+        <label class="terminal-label" for="@(_prefix + "-secret")">SECRET / PASSWORD *</label>
+        @if (MultilineSecret && ShowSecret)
+        {
+            <textarea class="terminal-input terminal-textarea" id="@(_prefix + "-secret")"
+                      rows="5" spellcheck="false" disabled="@Disabled"
+                      @oninput="e => SecretChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)">@Secret</textarea>
+        }
+        else
+        {
+            <input class="terminal-input" id="@(_prefix + "-secret")"
+                   type="@(ShowSecret ? "text" : "password")"
+                   autocomplete="new-password" spellcheck="false" disabled="@Disabled"
+                   value="@Secret"
+                   @oninput="e => SecretChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+        }
+        <button type="button" class="pixel-button compact" disabled="@Disabled"
+                @onclick="() => ShowSecretChanged.InvokeAsync(!ShowSecret)">
+            @(ShowSecret ? "HIDE" : "SHOW")
+        </button>
+
+        <label class="terminal-label" for="@(_prefix + "-notes")">NOTES</label>
+        <textarea class="terminal-input terminal-textarea" id="@(_prefix + "-notes")"
+                  rows="4" disabled="@Disabled" @oninput="e => NotesChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)">@Notes</textarea>
+
+        <label class="terminal-label" for="@(_prefix + "-tags")">TAGS // COMMA SEPARATED</label>
+        <input class="terminal-input" id="@(_prefix + "-tags")" value="@Tags"
+               autocomplete="off" spellcheck="false" disabled="@Disabled" placeholder="work, infrastructure, private"
+               @oninput="e => TagsChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
+    }
+</section>
+
+@code {
+    private readonly string _prefix = "sv-record-" + Guid.NewGuid().ToString("N")[..10];
+    [Parameter] public bool IsFolder { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool MultilineSecret { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string> AdditionalFolders { get; set; } =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+    [Parameter] public string? ExcludedId { get; set; }
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Folders { get; set; } = [];
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> TitleChanged { get; set; }
+    [Parameter] public string FolderId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> FolderIdChanged { get; set; }
+    [Parameter] public string Username { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> UsernameChanged { get; set; }
+    [Parameter] public string Url { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> UrlChanged { get; set; }
+    [Parameter] public string Secret { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> SecretChanged { get; set; }
+    [Parameter] public string Notes { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> NotesChanged { get; set; }
+    [Parameter] public string Tags { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> TagsChanged { get; set; }
+    [Parameter] public bool ShowSecret { get; set; }
+    [Parameter] public EventCallback<bool> ShowSecretChanged { get; set; }
+
+    private string FolderLabel(string id)
+    {
+        var labels = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var current = id;
+        while (seen.Add(current) && labels.Count < 32)
+        {
+            var item = Folders.FirstOrDefault(x => x.IsFolder &&
+                string.Equals(x.Id, current, StringComparison.Ordinal));
+            if (item is null) break;
+            labels.Insert(0, item.Title);
+            if (string.IsNullOrWhiteSpace(item.FolderId)) break;
+            current = item.FolderId;
+        }
+        return labels.Count == 0 ? id : string.Join(" / ", labels);
+    }
+}

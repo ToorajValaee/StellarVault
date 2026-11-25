@@ -6,4 +6,9 @@
 *.cache
 artifacts/
 TestResults/
+**/node_modules/
 .DS_Store
+
+deploy/.env
+deploy/*settings.local.json
+deploy/secrets/

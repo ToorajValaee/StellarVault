@@ -48,6 +48,8 @@
     // This list is local, packaged with the APK; no remote code is fetched.
     const nativeLedgerScripts = [
       "js/vendor/stellar-sdk.min.js",
+      "js/vault-v2-indexeddb.js",
+      "js/vault-transaction-recovery.js",
       "js/vault-secret-chain.js",
       "js/vault-secret-ledger.js",
       "js/bip39-english.js",
@@ -158,5 +160,6 @@
     })();
   </script>
   <script src="_framework/blazor.webview.js" autostart="false" onerror="window.stellarVaultShowStartupFailure && window.stellarVaultShowStartupFailure('BlazorWebView bootstrap script is missing from the packaged Android app.')"></script>
+  <script src="native-interactions.js"></script>
 </body>
 </html>

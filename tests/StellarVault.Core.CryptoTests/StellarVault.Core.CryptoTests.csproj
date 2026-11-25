@@ -6,6 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/StellarVault.Core/StellarVault.Core.csproj" />
+    <ProjectReference Include="../../src/VaultEngine.Core/VaultEngine.Core.csproj" />
+    <ProjectReference Include="../../src/VaultEngine.Stellar/VaultEngine.Stellar.csproj" />
+    <!-- Compile the pure HTTP historical evidence reader directly so the
+         native .NET console suite verifies it without a browser-WASM host. -->
+    <Compile Include="../../src/StellarVault.Pwa/Services/HorizonVaultLinkedRecordOperationInspector.cs"
+             Link="LinkedRecordOperationInspector.cs" />
+    <Compile Include="../../src/StellarVault.Pwa/Services/HorizonVaultLinkedExpansionOperationInspector.cs"
+             Link="LinkedExpansionOperationInspector.cs" />
   </ItemGroup>
 </Project>

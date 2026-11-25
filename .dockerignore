@@ -1,0 +1,16 @@
+.git
+.vscode
+.vs
+**/bin
+**/obj
+artifacts
+TestResults
+**/node_modules
+**/.env
+**/.env.*
+**/*.user
+**/*.pfx
+**/*.key
+**/*.pem
+deploy/*settings.local.json
+deploy/secrets

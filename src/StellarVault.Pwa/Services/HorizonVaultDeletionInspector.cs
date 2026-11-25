@@ -1,6 +1,7 @@
+using VaultEngine.Stellar.Horizon;
 using System.Net;
 using System.Text.Json;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Pwa.Services;
 

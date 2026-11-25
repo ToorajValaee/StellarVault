@@ -1,4 +1,4 @@
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject VaultHybridFileWorkspace Files
 @inject VaultHybridFileDeletionWorkspace FileDeletions
 @inject IVaultNativeFileAccess NativeFiles
@@ -153,8 +153,8 @@
                         <p role="status">
                             @(fileQuote.IsManifest ? "FINAL FILE MANIFEST" : "FILE PART") ·
                             <code>@fileQuote.LedgerRecordId</code> ·
-                            Fee ceiling: @fileQuote.FeeXlm XLM ·
-                            Peak reserve ceiling: @fileQuote.PeakReserveXlm XLM
+                            Fee ceiling: @fileQuote.FeeXlm native asset ·
+                            Peak reserve ceiling: @fileQuote.PeakReserveXlm native asset
                         </p>
                         <label class="terminal-label">
                             <input type="checkbox" @bind="_fileExplicitApproval" disabled="@_busy" />
@@ -178,8 +178,8 @@
                         @if (_previews.TryGetValue(item.MutationId, out var preview))
                         {
                             <p role="status">Next transaction record: <code>@preview.NextLedgerRecordId</code> ·
-                                Estimated fee: @preview.Cost.NetworkFeeXlm XLM ·
-                                Estimated peak reserve: @preview.Cost.PeakReserveXlm XLM</p>
+                                Estimated fee: @preview.Cost.NetworkFeeXlm native asset ·
+                                Estimated peak reserve: @preview.Cost.PeakReserveXlm native asset</p>
                             <p class="terminal-alert warning" role="status">@preview.Explanation</p>
                         }
                     }

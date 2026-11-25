@@ -1,8 +1,11 @@
+using StellarVault.UI.Services;
+using VaultEngine.Stellar.Horizon;
+using VaultEngine.Core;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Maui;
 using CommunityToolkit.Maui.Storage;
-using StellarVault.Core.Services;
-using StellarVault.Core.Abstractions;
+using VaultEngine.Stellar.Services;
+using VaultEngine.Stellar.Abstractions;
 using StellarVault.Pwa.Services;
 
 namespace StellarVault.Maui;
@@ -46,9 +49,31 @@ public static class MauiProgram
         // All queue payloads and metadata are encrypted with the unlocked
         // device vault key; no native plaintext queue files are written.
         builder.Services.AddScoped<VaultDeviceRetentionGate>();
+        builder.Services.AddScoped<VaultDeviceUnlockPreference>();
+        builder.Services.AddScoped<VaultLinkedLocalRetentionGate>();
+        builder.Services.AddScoped<IVaultQueueKeySession, VaultLocalQueueKeySession>();
+        builder.Services.AddScoped<IVaultLinkedPassphraseCredentialStore>(sp =>
+            new FileSystemVaultLinkedPassphraseCredentialStore(
+                Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-credentials"),
+                sp.GetRequiredService<VaultNetworkSelection>(),
+                sp.GetRequiredService<VaultLinkedLocalRetentionGate>()));
+        builder.Services.AddScoped<VaultLinkedQueueKeySession>();
+        builder.Services.AddScoped<IVaultLinkedDraftStore>(sp =>
+            new FileSystemVaultLinkedQueueSnapshotStore(
+                sp.GetRequiredService<VaultLinkedQueueKeySession>(),
+                sp.GetRequiredService<VaultLinkedLocalRetentionGate>(),
+                Path.Combine(FileSystem.AppDataDirectory, "vault-secret-chain-pending-queue"),
+                sp.GetRequiredService<VaultNetworkSelection>()));
+        builder.Services.AddScoped<IVaultLinkedQueueSnapshotStore>(sp =>
+            sp.GetRequiredService<IVaultLinkedDraftStore>());
+        builder.Services.AddScoped<VaultLinkedDraftWorkspace>();
+        builder.Services.AddScoped<VaultLinkedDraftPublication>();
+        builder.Services.AddScoped<VaultLinkedExpansionJournal>();
+        builder.Services.AddScoped<VaultLinkedDraftRecoveryReview>();
+        builder.Services.AddScoped<VaultLinkedVerifiedReconciliation>();
         builder.Services.AddScoped<IVaultPendingMutationStore>(services =>
             new FileSystemVaultPendingMutationStore(
-                services.GetRequiredService<VaultSessionManager>(),
+                services.GetRequiredService<IVaultQueueKeySession>(),
                 services.GetRequiredService<VaultDeviceRetentionGate>(),
                 Path.Combine(FileSystem.AppDataDirectory, "vault-pending-queue")));
         // Historical evidence adapter shares the PWA implementation; only
@@ -73,10 +98,38 @@ public static class MauiProgram
         builder.Services.AddScoped<VaultPendingMutationQueue>();
         builder.Services.AddScoped<VaultManualSyncCoordinator>();
         builder.Services.AddScoped<VaultHybridSyncReviewService>();
+        builder.Services.AddScoped<VaultScopedQueueReview>();
+        builder.Services.AddScoped<VaultLinkedQueueInspection>();
         builder.Services.AddScoped<VaultHybridDraftWorkspace>();
+        builder.Services.AddScoped<StellarAccountObjectStoreProvider>();
+        builder.Services.AddScoped<IAccountObjectStoreProvider>(services => services.GetRequiredService<StellarAccountObjectStoreProvider>());
+        builder.Services.AddScoped<IAccountObjectStore>(services => new AccountObjectStoreRouter(services.GetServices<IAccountObjectStoreProvider>()));
+        builder.Services.AddScoped<IAccountObjectUpdate>(services =>
+            (IAccountObjectUpdate)services.GetRequiredService<IAccountObjectStore>());
+        builder.Services.AddScoped<IObjectMutationReconciliation>(services =>
+            (IObjectMutationReconciliation)services.GetRequiredService<IAccountObjectStore>());
+        builder.Services.AddScoped<IObjectMutationExecution>(services =>
+            (IObjectMutationExecution)services.GetRequiredService<IAccountObjectStore>());
+        builder.Services.AddScoped<IObjectMutationReview>(services =>
+            (IObjectMutationReview)services.GetRequiredService<IAccountObjectStore>());
+        builder.Services.AddScoped<IVerifiedObjectExport>(services =>
+            (IVerifiedObjectExport)services.GetRequiredService<IAccountObjectStore>());
+        builder.Services.AddScoped<IVerifiedObjectNodeInventory>(services =>
+            (IVerifiedObjectNodeInventory)services.GetRequiredService<IAccountObjectStore>());
         builder.Services.AddScoped<VaultHybridFileWorkspace>();
         builder.Services.AddScoped<VaultHybridFileDeletionWorkspace>();
         builder.Services.AddScoped<VaultHybridRemoteMutationWorkspace>();
+        builder.Services.AddScoped<VaultConnectedStellarAccountInventory>();
+        builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarHdAccountStrategy>();
+        builder.Services.AddScoped<IVaultAccountProvisioningStrategy, StellarLinkedAccountStrategy>();
+        builder.Services.AddScoped<VaultAccountStrategyFactory>();
+        builder.Services.AddScoped<VaultLinkedAccountExpansion>();
+                builder.Services.AddScoped<VaultStellarDraftClassification>();
+builder.Services.AddScoped<VaultLinkedRecordWritePlanner>();
+                builder.Services.AddScoped<HorizonVaultLinkedRecordOperationInspector>();
+                builder.Services.AddScoped<HorizonVaultLinkedExpansionOperationInspector>();
+                builder.Services.AddScoped<IVaultLinkedReceiptEvidence, HorizonVaultLinkedReceiptEvidence>();
+builder.Services.AddScoped<VaultLinkedRecoveryInspector>();
         builder.Services.AddScoped<VaultLedgerRecordWorkspace>();
         builder.Services.AddScoped<StellarLedgerUploadCoordinator>();
         // Upload checkpoints hold stable IDs and fingerprints, never file payloads.
@@ -100,6 +153,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IVaultRecordIndex>(_ =>
             new FileSystemVaultRecordIndex(Path.Combine(FileSystem.AppDataDirectory, "vault-index")));
         builder.Services.AddSingleton<VaultSessionWorkflow>();
+        builder.Services.AddSingleton<IVaultRecordTypeFactory, VaultRecordTypeFactory>();
         builder.Services.AddSingleton<VaultRecordWorkspace>();
         builder.Services.AddSingleton<VaultBinaryWorkspace>();
 #if DEBUG

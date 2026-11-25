@@ -1,0 +1,19 @@
+# Historical local-only smoke configuration, not the production edge.
+{
+    admin off
+    skip_install_trust
+}
+
+app.svault.ir {
+    tls internal
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy pwa:8080
+}
+
+api.svault.ir {
+    tls internal
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy api:8080 {
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

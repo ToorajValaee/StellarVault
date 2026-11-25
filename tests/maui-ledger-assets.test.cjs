@@ -214,10 +214,11 @@ test('native explorer has mobile object tiles, desktop folder tree and back navi
   const native = fs.readFileSync(path.join(root,
     'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
   const styles = fs.readFileSync(path.join(maui, 'wwwroot/modern-native.css'), 'utf8');
-  assert.match(native, /sv-native-folder-tree/);
+  assert.match(native, /<VaultExplorerTree Folders=/);
   assert.match(native, /sv-native-object-grid/);
-  assert.match(native, /sv-native-detail-screen/);
-  assert.match(native, /Back to folder/);
+  assert.match(native, /<VaultRecordInspector @key="_selectedRecord.Id"/);
+  assert.match(native, /aria-label="Back to vault root"/);
+  assert.match(native, /OpenNativeFolder\(""\)/);
   assert.match(styles, /\.sv-native-folder-tree/);
   assert.match(styles, /\.sv-native-object-card/);
 });
@@ -295,9 +296,17 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(workspace, /sv-native-mobile-search/);
   assert.match(workspace, /sv-native-folder-shortcuts/);
   assert.match(workspace, /sv-native-shortcut-grid/);
-  assert.match(workspace, /sv-native-object-row/);
-  assert.match(workspace, /sv-native-detail-screen/);
-  assert.match(workspace, /sv-native-sheet-tabs/);
+  assert.match(workspace, /_ledgerRecords\.Count\(x => !VaultPublishedFileClassification\.IsInternalNode\(x\)\) items/);
+  assert.match(workspace, /_ledgerRecords\.Count\(x => x\.FolderId == shortcut\.Id && !VaultPublishedFileClassification\.IsInternalNode\(x\)\) items/);
+  assert.match(workspace, /<VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy\.Hd" Items="_ledgerRecords"/);
+  const rows = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/VaultPublishedItemsView.razor'), 'utf8');
+  assert.match(rows, /<VaultExplorerItemRow Item="item"/);
+  assert.match(workspace, /<VaultRecordInspector @key="_selectedRecord.Id"/);
+  const inspector = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/VaultRecordInspector.razor'), 'utf8');
+  assert.match(workspace, /<VaultRecordInspector @key="_selectedRecord.Id"/);
+  assert.match(inspector, /sv-inspector-tabs/);
   assert.match(workspace, /sv-native-mobile-fab/);
   assert.match(workspace, /sv-native-commandbar-quiet/);
   assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)!important/);
@@ -305,4 +314,61 @@ test('Native phone uses the approved compact vault layout and keeps critical act
   assert.match(css, /max-height:60dvh/);
   assert.match(css, /safe-area-inset-bottom/);
   assert.doesNotMatch(workspace, /Online · Synced/);
+});
+
+
+test('native HD hybrid file upload reuses streamed SVTREE3 beside the bounded direct path', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const staging = fs.readFileSync(path.join(root,
+    'src/VaultEngine.Stellar/Services/VaultHybridDraftWorkspace.cs'), 'utf8');
+  assert.match(native, /@inject VaultHybridDraftWorkspace HybridDrafts/);
+  assert.match(native, /@onclick="StageNativeTreeFileAsync"/);
+  assert.match(native, /Retention\.AllowsLocalPersistence && Sessions\.IsUnlocked/);
+  assert.match(native, /Sessions\.ActiveAccountId, _rootAccountId/);
+  assert.match(native, /await using var input = picked\.Stream/);
+  assert.match(native, /await HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(staging, /VaultStreamingFileTree\.WriteContentAddressedAsync\(/);
+  assert.match(native, /@inject StellarLedgerUploadCoordinator DirectFileUpload\b/);
+  assert.doesNotMatch(native, /ChooseUploadFileAsync|PublishUploadStageAsync/);
+});
+
+test('native HD publishing commits exact approved metadata and never just title/content', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  const begin = native.indexOf('private async Task ConfirmPublishAsync()');
+  const end = native.indexOf('private string? _uploadMessage;', begin);
+  const action = native.slice(begin, end);
+  assert.ok(begin >= 0 && end > begin);
+  assert.match(action, /var draft = CurrentPublishDraft\(\)/);
+  assert.match(action, /_publishFingerprint != CurrentPublishFingerprint\(\)/);
+  assert.match(action, /Ledger\.EstimateAsync\(draft\)/);
+  assert.match(action, /Ledger\.PublishDetailedAsync\(draft\)/);
+  assert.doesNotMatch(action, /new LedgerRecordDraft\(_publishTitle\.Trim\(\), _publishContent\)/);
+});
+
+test('native HD file inspector authenticates SVTREE3 and exports through a bounded pipe', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(native, /VaultPublishedFileClassification\.IsFile\(selected\)/);
+  assert.match(native, /VaultLinkedTreeFilePolicy\.ReadAsync\(\s*current\.Id, fresh, Stream\.Null\)/);
+  assert.match(native, /currentRoot\.Sha256Hex, prepared\.Sha256Hex/);
+  assert.match(native, /new Pipe\(new PipeOptions\(/);
+  assert.match(native, /VaultLinkedTreeFilePolicy\.ReadAsync\(\s*prepared\.RootId, current, writer, cancel\.Token\)/);
+  assert.match(native, /await NativeFiles\.SaveAsync\(prepared\.FileName, reader\)/);
+  assert.match(native, /CryptographicOperations\.ZeroMemory\(plaintext\)/);
+});
+
+
+test('native vault session strategy is explicit and both active modes fail closed', () => {
+  const native = fs.readFileSync(path.join(root,
+    'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
+  assert.match(native, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(native, /ActiveMode == VaultWorkspaceMode\.ConflictingSessions/);
+  assert.match(native, /@onclick="LockConflictingNativeSessionsAsync"/);
+  assert.match(native, /await LinkedQueueKeys\.LockAsync\(\)/);
+  assert.match(native, /Workflow\.Lock\(\)/);
+  assert.match(native, /await SecretLedger\.DisconnectAsync\(\)/);
+  assert.match(native, /await Ledger\.DisconnectAsync\(\)/);
+  assert.match(native, /_foregroundRevoked = true/);
 });

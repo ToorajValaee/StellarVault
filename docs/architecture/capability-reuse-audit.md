@@ -1,0 +1,119 @@
+# StellarVault capability reuse audit — 2026-11-14
+
+This document corrects the ambiguity in earlier "remaining work" reports. **Already implemented**, **integrated in both application hosts**, **enabled for mnemonic/HD workflow**, **enabled for independent S-key workflow**, and **production verified** are separate claims. Do not report all of these as "missing" when only strategy-specific wiring is absent.
+
+| Capability | Existing implementation | HD / hybrid use | Independent S-key use | Actual gap |
+|---|---|---|---|---|
+| Encrypted local pending-mutation storage | `IVaultPendingMutationStore`, `IndexedDbVaultPendingMutationStore`, `FileSystemVaultPendingMutationStore`, `VaultPendingMutationQueue` | Present, behind device-retention consent and unlocked local vault key | Not plugged in | Rebind an **independent authenticated S-key-derived storage-key lifecycle** before any S-key journal. Reuse queue CAS/store/consent mechanics; never silently use HD key. |
+| Manual sync, approved fee review, uncertain-state queue transitions | `VaultManualSyncCoordinator`, `VaultHybridSyncReviewService`, `VaultSyncApprovalGuard` | Implemented on HD transport | Linked ledger uses its own quoted submit, no durable queue orchestration | Extract account-neutral approval/queue state policies, adapt ledger quote/verification, preserve distinct signer and account-allocation strategies. |
+| Folder dependency ordering | `VaultHybridFolderSyncPlan`, `VaultQueuedCreatePolicy` | Existing shared Core planner with HD publication | Record/folder wire fields supported; offline linked folder publishing not wired | Reuse folder graph and validation, adapt destination transport and record identity. Do not build another folder dependency engine. |
+| Hybrid file staging and encrypted queue | `VaultHybridFileWorkspace`, `VaultHybridFileDeletionWorkspace`, `VaultHybridFilePolicy` | Staging/recovery implementation exists; *publication currently disabled by product policy in some flows* | Not wired | Reuse bounded streaming, metadata, encrypted queue and checkpoint/recovery. New S-key binary protocol/adapter must be reviewed; do not claim hybrid files production-ready. |
+| On-chain file protocol and chunking | `StellarLedgerFileProtocol`, `StellarLedgerUploadCoordinator`, checkpoint stores | HD file path exists | No linked-key file operation bridge | Reuse chunk planning/file records where wire format permits; adapt S-key signing and proof. |
+| Historical receipt and registry inspection | `HorizonVaultTransactionInspector`, `HorizonVaultHistoricalRegistryInspector`, `HorizonVaultNetworkInspector`, `HorizonVaultLinkedReceiptEvidence` | Existing HD evidence pipeline | Receipt/network subset now reused for read-only S-key diagnosis | Verify **exact S-key operations, child signer policy and encrypted record generation**. HD registry HMAC cannot be reused as proof of linked-key history without adapting protocol. |
+| Runtime submission uncertainty protection | `VaultPendingMutationQueue` durable CAS transitions on HD, `vault-secret-ledger.js` S-key runtime guard | Durable encrypted queue on opted-in HD/hybrid flows | Same-runtime root/network quarantine now implemented | Cross-tab/device arbitration and explicit consent-backed encrypted linked-key durable journal. No unapproved local storage. |
+| Shared record-type classification | `VaultRecordTypeFactory`, `VaultStellarDraftClassification` | HD record workspace uses it | Linked write planner uses it | Extend explicit type metadata and file transport, **not** duplicate record factories. |
+| Account strategy and inventory | `VaultAccountStrategyFactory`, `StellarHdAccountStrategy`, `StellarLinkedAccountStrategy` | Connected HD inspection | Connected linked inspection; auto capacity planning on create | Genuine verified child enumeration and reuse of existing strategy-specific publication approvals. HD derived children and independent linked S-key children remain separate. |
+| PWA/native UI and core sharing | Shared `StellarVault.UI`, Core services, MAUI linked PWA adapters | Large shared stack | Shared linked UI and JS ledger | Validate parity and remaining S-key file/hybrid UI flows; avoid rebuilding components. |
+
+## Immediate refactor rule
+
+1. **Inventory the existing implementation first**, including any product-policy-disabled feature and its tests.
+2. If the mechanism is already in Core, extract its **account-neutral mechanics** and keep protocol-specific signing, key derivation, receipt proofs and network rules behind adapters.
+3. Never route independent imported S-key mode through the mnemonic-derived HD session, HD registry HMAC, or an unrelated local vault key.
+4. Never silently enable disabled hybrid file publication, resume an uncertain transaction, store an unencrypted journal, or change Mainnet write policy.
+5. Label status precisely: *implemented*, *registered*, *end-to-end wired*, *policy enabled*, *tested*, *audited* and *production ready* are different.
+
+## Refactor performed with this audit
+
+The existing `IVaultRecordTypeFactory` now feeds one `VaultStellarDraftClassification` in Core, reused by the HD `VaultLedgerRecordWorkspace` and linked `VaultLinkedRecordWritePlanner`. Both hosts register the same class. No new storage format, signer behavior, account strategy, fee policy or on-chain mutation is introduced by this change.
+
+## Validation and priorities
+
+This audit is based on inspected code paths, **not executed test results**. Legacy queue, sync and binary code may have restrictions, TODOs or defects despite being present. Do not assert they are complete merely because service classes exist.
+
+Next: reuse the existing approved-sync review and evidence primitives while adding an independent credential scope for linked S-key mode; then binary/file parity and end-to-end tests. EVM remains final priority.
+
+## 2026-11-14 integration increment — shared approval scope, not a new queue
+
+Extracted `VaultApprovalScopeGuard.RequireFresh` to validate account address, exact scoped network identity and quote lifetime without knowing mnemonic, imported secret, encryption key, transaction quote format or transport. The existing HD `VaultSyncApprovalGuard.RequireFresh` now reuses it while retaining its original encrypted-queue draft fingerprint and pending/CAS checks. S-key `VaultLinkedAccountExpansion` now uses the same scope+age guard for its single-use reviewed expansion quote, in addition to exact quote equality, strategy selection, signer transport and current chain count/tail preflight. S-key quote remains capped at two minutes; transport already has its own quote expiry.
+
+**Not integrated yet:** the encrypted HD hybrid queue cannot simply be registered against an independent S-key vault because its key provider and session manager belong to a separate local vault; similarly, the HD `VaultManualSyncCoordinator` accepts `IStellarLedgerRecords` not the linked-key quote transport. The next actual integration is to decouple those interfaces around the existing CAS/queue/recovery state machinery, establish a separate authenticated S-key local encryption key, and reuse existing policy, before enabling linked offline sync. This is not missing foundational queue technology.
+
+## 2026-11-14 — existing encrypted queue and folder planning reused
+
+- New `VaultScopedQueueReview` wraps the already implemented `VaultPendingMutationQueue.PrepareReviewAsync`, `ReviewAllAsync` and `VaultHybridFolderSyncPlan.Build`. It reuses the existing consent-gated encrypted store, checks the *separately unlocked* local vault account, binds the selected network scope and session epoch, and rejects a changed session/network/consent after reading. It does not sign, reserve or submit.
+- Existing HD `VaultHybridSyncReviewService` now reads from this common snapshot; its HD remote inventory preflight, quote calculation, approval and transaction code are unchanged.
+- New `VaultLinkedQueueInspection` is an **S-key read-only** adapter registered in both PWA and MAUI. It requires a connected matching independent S-key root *and* a separately unlocked consented local vault namespace and checks linked account inventory before/after. It reports counts only and always sets `CanPublish=false`, since the queue could contain HD-format drafts and does not yet carry authenticated strategy/credential provenance. It is not yet exposed as a linked UI sync action.
+- The existing encrypted at-rest queue **has not been migrated or re-keyed** to S-key mode. No linked S-key hybrid writes or automated submission were enabled. The remaining integration is authenticated strategy-specific queue provenance, S-key-local key lifecycle/consent, a reviewed linked publication adapter and historical operation proof; not a second queue or folder graph.
+- Static regression assertions added, unexecuted. No build/Testnet verification.
+
+## 2026-11-15 — origin-discriminated shared encrypted queue
+
+Existing `VaultPendingMutation` entries now accept optional trailing `OriginStrategyId`. Historical entries without this field continue to deserialize as legacy HD, never S-key. `VaultMutationStrategyPolicy` recognizes only `stellar-hd-v2` (including null legacy) and `stellar-secret-key-chain`; unknown origin values fail closed. The origin is included in the existing encrypted queue CAS equality on both PWA IndexedDB and MAUI filesystem implementations; an update cannot change it. The HD `VaultSyncApprovalGuard` includes the resolved origin in its approval digest and refuses independent S-key entries, and the HD hybrid review rejects mixed-origin queues. Read-only `VaultLinkedQueueInspection` separates legacy HD from tagged linked counts and always reports `CanPublish=false`.
+
+**Important:** An origin string inside an authenticated encrypted queue is a *format discriminator*, not cryptographic proof of S-key ownership. Existing queue construction still accepts only HD-origin entries because the unlocked local key lifecycle is HD/device-specific. No linked-origin enqueuing, writing, synchronization, quote publishing, automatic migration or new local persistence has been enabled. The eventual S-key adapter must first establish consent-bound independent encryption keys and signer identity. Any historical HD entry with null origin remains in its original HD format.
+
+Test source covers policy, immutable CAS, HD exclusion, and distinct read-only inspection; not executed in this turn. Do not reimplement encrypted stores or add a second queue. EVM remains last priority.
+
+## 2026-11-15 queue security and encryption-key seam
+- Fixed a missed strategy-origin comparison in `VaultPendingMutationQueue.SameDurableRevision`: the authenticated origin field is now part of its revision comparison, as it already was in both encrypted store CAS comparers. The existing HD-bound mutation transitions reject linked-origin entries via `RequireScope`; read-only `ScopedEntriesAsync` still permits observing mixed queues, with origin validated. `ReviewReadyAsync` excludes linked-origin intents; `PrepareReviewAsync` reports them blocked instead of ready. No linked-origin draft may enter HD approval or confirmation.
+- Extracted `IVaultQueueKeySession` and `VaultLocalQueueKeySession` from direct `VaultSessionManager` use in the existing **PWA IndexedDB and MAUI filesystem encrypted stores**. Both now request transient encryption keys through one account/network-scoped interface. The current implementation *still uses the same unlocked local vault key* via `VaultSessionManager.ExecuteAsync`, with temporary key copy zeroization and explicit device-storage consent preserved by the stores. Host DI registrations updated; no queue format or ciphertext namespace migration was done.
+- This is a credential-key lifecycle abstraction, **not a new independent S-key encryption provider**. Before S-key local persistence can be enabled, implement an independently authorized/derived S-key queue key session, segregated key and storage namespace, owner/network authenticated binding and recovery tests. Never directly wire `VaultLocalQueueKeySession` to imported S-key drafts. Tests added but not run.
+
+## 2026-11-15: single-snapshot review reuse
+`VaultPendingMutationReviewPolicy.Build` now extracts existing queue readiness from `VaultPendingMutationQueue.PrepareReviewAsync`, keeping the exact HD dependency/file-policy checks. `VaultScopedQueueReview` reads authenticated queue entries once and feeds that same list into both readiness and `VaultHybridFolderSyncPlan.Build`. This eliminates mismatched read-only review snapshots after concurrent local changes without adding a second queue engine or enabling independent S-key publication. The S-key queue remains read-only and `CanPublish=false` until an authenticated independent key lifecycle and protocol adapter exist.
+
+
+## 2026-11-15 — Independent S-key local queue key and isolated snapshot store
+
+- Implemented `VaultLinkedQueueKeySession` as a **separate explicitly unlocked in-memory queue key lifecycle**, without calling `VaultSessionManager` or using a mnemonic key. The S-key ledger must be connected; a live linked-chain account inspection must match the root, the selected network passphrase must match the connected network, and explicit `VaultDeviceRetentionGate` consent is required. Key creation/unlock uses the existing Argon2id `VaultPassphraseLifecycle`, random wrapped AES-256 key and temporary-memory zeroization. A separate user-provided local passphrase is required; imported S-key material is not passed to the local KDF. The shared service exposes Create/Unlock/Lock, safe wrapped-credential presence inspection and read-only queue-key access.
+- Added strategy-isolated wrapped credential stores: `IndexedDbVaultLinkedPassphraseCredentialStore` uses the existing IndexedDB credential CAS under `secret-chain:queue-key:v1:` plus exact account/network scope; `FileSystemVaultLinkedPassphraseCredentialStore` reuses existing native atomic credential files beneath a separate hashed account/network directory. Neither aliases the HD credential store; both require explicit local-storage consent.
+- Added `VaultLinkedQueueStorageScope`, `IVaultLinkedQueueSnapshotStore`, and PWA/native snapshot adapters that reuse **the existing encrypted queue store implementations** with the independent key session, prefixed `secret-chain:queue:v1:` scope, and native dedicated queue directory. Any untagged/HD-origin item in this isolated store fails closed.
+- Refactored `VaultLinkedQueueInspection` away from `VaultScopedQueueReview` and the HD `VaultSessionManager`. It now verifies the connected S-key ledger state before/after loading the strategy-only encrypted list. The report remains read-only, `LegacyHdEntries=0` and `CanPublish=false`: nothing may be submitted or migrated from this path.
+- PWA and MAUI register the new credential/key/snapshot services. PWA privacy lock, full lock, browser lifecycle and disposal plus MAUI foreground loss, device lock, signer disconnect and shared linked-workspace lock now clear the in-memory queue key.
+- Added a branch-specific GitHub Actions workflow to build Core/UI/PWA and run existing Node S-key and Core crypto suites. GitHub reports failures in recent runs, but its connector returned no job logs/steps/artifacts. A later workflow commit captures validation stdout as artifact for debugging. **No CI success or production readiness has been established**.
+- **Still unimplemented:** safe UI enrollment for the S-key local passphrase, stage/review/publish adapter reusing the existing durable queue, protocol-aware signed transaction verifier and restart-safe reconciliation across devices. Do not infer end-to-end S-key offline sync from these encryption and read-only adapters. EVM remains last priority.
+
+### Linked queue signer-liveness enforcement
+The independently wrapped S-key local queue key cannot be used merely because the C# ledger bridge still reports a cached connection. Every encrypted queue key operation now performs a live linked ledger chain read before and after its callback, requiring unchanged root, chain length and tail, plus exact network/consent binding. This intentionally refuses local access while the network is unavailable; offline S-key unlock requires an independently verified local authorization mechanism that is not implemented. Do not claim offline parity.
+
+
+## 2026-11-15: User opt-in and disabled GitHub CI
+
+`VaultLinkedLocalQueuePanel` is an explicit opt-in, shared PWA/MAUI control for creating/unlocking the already implemented S-key-local Argon2id-wrapped queue key and inspecting the isolated encrypted queue. Separate `VaultLinkedLocalRetentionGate` prevents prior HD-device consent from being treated as permission for imported S-key encrypted persistence. `ConnectionEpoch` prevents same-account reconnects from retaining a previous local key unlock. No queued S-key publishing is authorized, and disabling consent does not delete previously saved encrypted data. GitHub Actions YAML workflows were deleted on feature and default branches at user request; perform Node/.NET builds and tests from local checkout instead.
+
+
+## 2026-11-15 linked local record/folder queue and manual publication milestone
+
+The isolated S-key `IVaultLinkedDraftStore` now extends the EXISTING encrypted IndexedDB/native filesystem queue implementations with consent-bound atomic draft addition, deletion and state CAS, not a second data store. `VaultLinkedDraftWorkspace` reuses `VaultPendingMutation.Create`, `VaultQueuedCreatePolicy.ParentCandidates`, and linked-root/network-scoped key sessions to stage/list/discard creates and preserve folder dependencies. The shared panel supports full record fields, folders and a friendly parent picker.
+
+`VaultLinkedDraftPublication` adds a narrowly scoped manual create-only bridge to existing `IStellarSecretKeyLedger` quotes and submit: fresh explicit approval, complete queue-revision digest, local+remote duplicate/dependency checks, durable CAS reservation before broadcast, connected-state observation and fail-closed uncertainty. Successful writes can move to Confirmed after JS verified submission and read-back of complete decrypted record fields. It is NOT independent historical proof of exact operations; backend remains Testnet-only and cannot claim production security approval.
+
+This integration is **not a true offline mode**: key access still requires a live connected S-key signer and Horizon account inspection. The pending queue is encrypted at rest and survives lock/reopen with explicit consent, but updates/deletes, true offline authorization, file chunks, automatic queue sync, capacity expansion for queued creates, restart-safe historical reconciliation and operation-level proof remain missing. Local native fake-ledger smoke test and Node source regressions added, not executed. GitHub CI remains disabled at user request.
+
+
+### Correction: S-key consent does not change HD retention (2026-11-15)
+
+Earlier code and descriptions implied S-key local consent could select the shared `VaultDeviceRetentionGate`. This has been corrected. The S-key-specific `VaultLinkedLocalRetentionGate` now owns an **independent** `VaultDeviceRetentionGate` passed to the existing encrypted store adapters for linked data only. Linked queue key, credential, inspection, staging, publishing and UI services require this gate; the global HD gate is not toggled by imported S-key consent, and no HD queue gets permission to persist from an S-key opt-in. This reuses the original encryption stores without sharing their consent policy.
+
+
+## 2026-11-15: S-key offline local drafts using existing wrapped queue key
+
+The independent S-key key lifecycle now supports `UnlockOfflineAsync` of **previously enrolled** wrapped local queue credentials with public root account/network scope and separate local passphrase. Offline-only `IVaultQueueKeySession.ExecuteAsync` performs no live signer/Horizon access and permits only the existing AES-GCM encrypted queue stores and folder draft planner. The shared PWA/native panel is available when the S-key is disconnected. Unknown remote folders can be staged unverified but *must* pass online parent/inventory checks before review. `VaultLinkedDraftPublication` explicitly requires `CanPublish`, which is false for any offline-only unlock even if the signer later reconnects. This separation allows true offline local encrypted record/folder drafting without conflating local key possession with Stellar signing authority.
+
+`VaultLinkedDraftRecoveryReview` now provides durable Submitting/Uncertain queue diagnostic comparison against current decrypted record fields and optional existing advisory receipt evidence. It deliberately has no quarantine-release transition: current record state and a Horizon receipt without exact operation linkage cannot prove which signed operations created the encrypted record. The original HD queue, key and device consent remain isolated. No GitHub CI workflows are configured.
+
+
+### 2026-11-15: S-key unpublished draft revision reuses queue CAS
+
+`VaultLinkedMutationTransitionPolicy` unifies the PWA and MAUI isolated S-key encrypted-queue adapters' single allowable draft edit and publish-state transitions. A pending create can update its serialized record/folder content and parent-dependency edge together without changing immutable mutation/account/network/record identity; the existing store's compare-and-swap enforces concurrency. `VaultLinkedDraftWorkspace.OpenDraftAsync` and `ReviseAsync` supply explicit masked UI editing and optimistic payload fingerprints, reject stale browser revisions and local folder parent cycles, and never permit submitted/uncertain draft changes. Offline remote-parent references remain unverified until the separately approved online preflight. No duplicate engine, no HD key/consent mixing, and no GitHub Actions workflows.
+
+
+### Ordered linked local synchronization review (2026-11-15)
+
+Read-only `VaultLinkedManualSyncPlan.Build` and `VaultLinkedDraftWorkspace.ReviewManualSyncAsync` now show pending linked encrypted draft ordering and blockers using exactly one existing queue snapshot and the established `VaultQueuedCreatePolicy.Problems` dependency validation. Any Submitting/Uncertain/Conflict entry blocks future suggestions, as does missing a fresh connected online signer-backed queue unlock. The shared PWA/native panel offers only **Review next ready draft**, not automatic submission; a fresh explicit fee/reserve approval is required per item. No second queue or signer was built. No .NET build/test run or historical operation proof was completed.
+
+
+### 2026-11-15: durable consented linked expansion intent reuses original queue CAS
+
+`VaultLinkedExpansionJournal` wraps the original `VaultLinkedAccountExpansion` review and transport. It appends a LINKED-ONLY `ExtendLinkedChain` queue kind, reserves a deterministic per-root/network/current-tail encrypted CAS journal ID across concurrent tabs, marks Submitting before calling `SubmitApprovedAsync`, and leaves Uncertain/Submitting if anything after reservation cannot be confirmed. A Pending pre-reservation journal also blocks manual sync; only that never-submitted state can be explicitly deleted via original CAS with an authorized connected S-key queue session. The shared panel offers a separate fee-approved capacity quote and does NOT auto-submit the record afterward. `VaultLinkedManualSyncPlan` and the existing create publisher block on incomplete expansion journals. The older direct workspace expansion and network-operation historical verification remain separate release blockers.

@@ -4,6 +4,10 @@
 window.stellarVaultSecretLedger = (() => {
   'use strict';
   const sessions = new Map();
+  // Public-only process-lifetime tombstones survive lock/reopen in this JS realm.
+  // They are deliberately NOT durable and never store a seed, quote, or payload.
+  const unresolvedByVault = new Map();
+  const vaultScope = (root, passphrase) => root+'|'+passphrase;
   const text = new TextEncoder(), decoder = new TextDecoder('utf-8', { fatal:true });
   const HDR='skh:', CHUNK='skc:', MAX_OPS=90, MAX_CHAIN=64;
   const MAINNET='Public Global Stellar Network ; September 2015';
@@ -51,10 +55,10 @@ window.stellarVaultSecretLedger = (() => {
     const high=Number(account.thresholds?.high_threshold);
     const low=Number(account.thresholds?.low_threshold);
     if(!Number.isInteger(weight)||!Number.isInteger(medium)||!Number.isInteger(high)||
-       !Number.isInteger(low)||weight<1||low<1||medium<1||high<1||
+       !Number.isInteger(low)||weight<1||low<0||medium<0||high<0||
        weight<low||weight<medium||weight<high)
       fail('Linked account lacks valid root signing authority.');
-    return true;
+    return low>=1 && medium>=1 && high>=1;
   }
   function next(account,sdk) {
     const data=account.data_attr||{};
@@ -73,7 +77,11 @@ window.stellarVaultSecretLedger = (() => {
       if(seen.has(id))fail('Cycle detected in linked-account vault.');
       seen.add(id);
       const account=await s.server.loadAccount(id);
-      signer(account,s.root);
+      const mutationSafe=signer(account,s.root);
+      // A fresh Stellar root can have zero thresholds. Read its encrypted
+      // vault safely, but never quote or sign a mutation under zero thresholds.
+      if(i>0 && !mutationSafe)
+        fail('Child account has unsafe zero signing thresholds.');
       if(i>0 && (account.signers||[]).some(x =>
           x.key!==s.root && Number(x.weight||0)>0))
         fail('Child account has another active signer; single-secret chain is not exclusively controlled by the root.');
@@ -96,7 +104,9 @@ window.stellarVaultSecretLedger = (() => {
     const net=await verifiedNetwork(horizon,passphrase);
     const pair=sdk.Keypair.fromSecret(secret),root=pair.publicKey();
     const server=new sdk.Horizon.Server(net.origin,{allowHttp:net.origin.startsWith('http:')});
-    const seed=pair.rawSecretKey().slice();
+    // SDK returns a Buffer view of its live signing seed. Buffer.slice() aliases
+    // that memory: wiping it would corrupt the signer. Copy before deriving.
+    const seed=new Uint8Array(pair.rawSecretKey());
     let key;
     try {
       const ikm=await crypto.subtle.importKey('raw',seed,'HKDF',false,['deriveKey']);
@@ -105,8 +115,13 @@ window.stellarVaultSecretLedger = (() => {
         name:'HKDF',hash:'SHA-256',salt,info:text.encode('vault-records|skh/skc|v1')
       },ikm,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
     } finally {seed.fill(0);}
-    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),inFlight:false};
+    const prior=unresolvedByVault.get(vaultScope(root,passphrase))||null;
+    const state={sdk,root,pair,server,passphrase,key,net,quotes:new Map(),
+       verifiedHistories:new Set(),inFlight:false,
+      needsReconciliation:!!prior,uncertain:prior?{...prior}:null};
     await chain(state);
+    await window.stellarVaultTransactionRecovery.attach('sk:' + id, 'skey', root,
+      passphrase, net.origin, pair, server);
     sessions.set(id,state);
     return {RootAccountId:root};
   }
@@ -118,6 +133,7 @@ window.stellarVaultSecretLedger = (() => {
     s.quotes.clear();
   }
   function close(id) {
+    window.stellarVaultTransactionRecovery?.detach('sk:' + id);
     const s=sessions.get(id);
     if(s) {
       clearQuotes(s);
@@ -231,29 +247,53 @@ window.stellarVaultSecretLedger = (() => {
   function validateDraft(draft) {
     if(!draft||typeof draft.Title!=='string'||draft.Title.trim().length<1||
        draft.Title.length>256||typeof draft.Content!=='string'||
-       (!draft.IsFolder&&!draft.Content)||!Array.isArray(draft.Tags)||
-       draft.Tags.length>24||draft.Tags.some(t=>typeof t!=='string'||t.length>64)||
+       (!draft.IsFolder&&!draft.Content)||
+       !Array.isArray(draft.Tags||[])||
+       (draft.Tags||[]).length>24||
+       (draft.Tags||[]).some(t=>typeof t!=='string'||t.length>64)||
        (draft.FolderId&&!validId(draft.FolderId)))
       fail('Invalid record or folder fields.');
+  }
+  function requireAcyclicPublishedParent(records,recordId,parentId) {
+    if(!parentId)return;
+    const byId=new Map(records.map(record=>[record.Id,record]));
+    const seen=new Set([recordId]);
+    let cursor=parentId;
+    while(cursor) {
+      if(seen.has(cursor))fail('Folder move creates a parent cycle.');
+      seen.add(cursor);
+      const parent=byId.get(cursor);
+      if(!parent||!parent.IsFolder)
+        fail('Updated record parent must be a published folder.');
+      cursor=parent.FolderId;
+    }
   }
   function chosenNode(s,view,old) {
     if(old)return old.account;
     return view.nodes.at(-1);
   }
   async function plan(id,kind,recordId,draft) {
+    await window.stellarVaultTransactionRecovery.assertWritable('sk:' + id);
     const s=session(id);
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     if(s.inFlight)fail('A ledger operation is already in progress.');
+    if(s.needsReconciliation || unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+      fail('A previous submission is unresolved for this vault; reconcile ledger history before another write.');
     if(!['create','update','delete','expand'].includes(kind))fail('Invalid ledger operation.');
     if(kind!=='expand'&&!validId(recordId))fail('Record identifier is invalid.');
     if(kind==='create'||kind==='update')validateDraft(draft);
     // Re-fetch network identity, fees and base reserve for each new approval.
     s.net=await verifiedNetwork(s.net.origin,s.passphrase);
     const v=await inventory(s),old=v.locations.get(recordId);
+    if(v.nodes.some(node => !signer(node,s.root)))
+      fail('Vault writes are blocked: one or more linked accounts have zero signing thresholds. Set positive low, medium and high thresholds in a trusted Stellar wallet first. Reading remains available.');
     if(kind==='create'&&old)fail('Record already exists.');
     if((kind==='update'||kind==='delete')&&!old)fail('Published record was not found.');
-    if(draft?.FolderId && !v.records.some(x=>x.Id===draft.FolderId&&x.IsFolder))
-      fail('Parent folder is not present.');
+    if((kind==='update'||kind==='create') && draft) {
+      if(kind==='update' && old && !!draft.IsFolder!==!!v.records.find(x=>x.Id===recordId)?.IsFolder)
+        fail('An existing record cannot change its folder type.');
+      requireAcyclicPublishedParent(v.records,recordId,draft.FolderId);
+    }
     if(kind==='delete' && v.records.some(x=>x.FolderId===recordId))
       fail('Delete nested records or folders first.');
     if(kind==='expand')return quoteExpansion(s,v,id);
@@ -270,9 +310,29 @@ window.stellarVaultSecretLedger = (() => {
     // Newly staged keys consume reserve before old keys are removed;
     // require peak headroom even if the net change is negative.
     const additional=BigInt(newUnits)*s.net.reserve;
-    if(Number(node.subentry_count||0)+newUnits>1000) {
+    // A record must fit in a single atomic transaction even on an empty account.
+    // Never allocate an account for an oversized write that cannot succeed there.
+    const minimumOps=writeOps+(kind==='create'&&node.account_id!==s.root?1:0);
+    if(minimumOps>MAX_OPS) {
       cipher?.fill(0);
-      fail('The target account would exceed Stellar subentry limits. Extend the vault chain before saving.');
+      fail('Record exceeds atomic transaction limit; allocating another account cannot fix it.');
+    }
+    // A tail account needs one free ManageData entry for the future sv:next:v1 link.
+    // For new records, reserve that slot rather than filling the last entry.
+    const isTail=node.account_id===v.nodes.at(-1).account_id;
+    // A tail must retain capacity for the next signed sv:next:v1 pointer even
+    // after an update. Existing non-tail nodes already have their pointer.
+    // Deletion cannot consume entries, so its peak capacity is unchanged.
+    const reservedCeiling=kind==='delete'||!isTail ? 1000 : 999;
+    if(Number(node.subentry_count||0)+newUnits>reservedCeiling) {
+      cipher?.fill(0);
+      if(kind!=='create')
+        fail('Original record account has insufficient subentry capacity; updating it requires a separate migration protocol.');
+      if(newUnits>997)
+        fail('Record needs too many Stellar data entries to fit on a fresh account.');
+      if(Number(node.subentry_count||0)>=1000)
+        fail('Tail account has no free entry for a chain link. Manual recovery is required; a new account cannot be safely attached.');
+      fail('SV_ACCOUNT_CAPACITY_REQUIRED: Current account cannot hold this record; account capacity must be reviewed before saving.');
     }
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
     const bal=decimalStroops(native?.balance);
@@ -295,7 +355,7 @@ window.stellarVaultSecretLedger = (() => {
     if((node.account_id===s.root && ownerFree<additional) ||
        spend<fees+topUp+(node.account_id===s.root?additional:0n)) {
       cipher?.fill(0);
-      fail('Insufficient root XLM for account reserve top-up and network fees.');
+      fail('Insufficient native-asset balance for account reserve top-up and network fees.');
     }
     const fingerprint=old?.rawHeader||null;
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
@@ -312,8 +372,9 @@ window.stellarVaultSecretLedger = (() => {
     if(v.nodes.length>=MAX_CHAIN)fail('Chain already reached the supported limit.');
     const tail=v.nodes.at(-1),tailId=tail.account_id;
     if(next(tail,s.sdk))fail('Tail was modified; refresh first.');
+    if(Number(tail.subentry_count||0)>=1000)
+      fail('Tail account has no free entry for a chain link. Manual recovery is required; another account cannot be safely attached.');
     if(Object.hasOwn(tail.data_attr||{},'sv:next:v1'))fail('Tail link is occupied.');
-    const child=s.sdk.Keypair.random(),childId=child.publicKey();
     const childFunding=3n*s.net.reserve,pointerReserve=s.net.reserve;
     const opCount=tailId===s.root?3:4,fees=BigInt(opCount)*s.net.fee;
     const root=v.nodes[0],native=root.balances?.find(x=>x.asset_type==='native');
@@ -323,6 +384,8 @@ window.stellarVaultSecretLedger = (() => {
       decimalStroops(native?.selling_liabilities||'0');
     const required=childFunding+pointerReserve+fees;
     if(rootFree<required)fail('Root account cannot afford the child reserve, link and network fees.');
+    // Generate the temporary child signing key only after capacity/funding checks.
+    const child=s.sdk.Keypair.random(),childId=child.publicKey();
     const quoteId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
     clearQuotes(s);s.quotes.set(quoteId,{kind:'expand',child,childId,tailId,created:Date.now(),
       opCount,fee:fees,reserve:childFunding+pointerReserve,required,
@@ -332,10 +395,12 @@ window.stellarVaultSecretLedger = (() => {
       NetReserveChangeXlm:toXlm(childFunding+pointerReserve),
       CreatesChildNode:true,TargetAccountId:childId,FundingTopUpXlm:"0.0000000"};
   }
-  async function submit(id,quoteId) {
+  async function submit(id,quoteId,checkpoint=null) {
     const s=session(id),q=s.quotes.get(quoteId);
     if(!q)fail('No matching reviewed quote. Estimate again.');
     if(s.inFlight)fail('Another ledger submission is in progress.');
+    if(s.needsReconciliation || unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+      fail('An earlier submission for this vault requires reconciliation before another transaction.');
     s.quotes.delete(quoteId);
     if(Date.now()-q.created>120000) {
       if(q.cipher)q.cipher.fill(0);
@@ -371,7 +436,7 @@ window.stellarVaultSecretLedger = (() => {
             amount:toXlm(s.net.reserve)
           }));
         builder.addOperation(s.sdk.Operation.manageData({
-          source:q.tailId,name:'sv:next:v1',value:text.encode(q.childId)
+          source:q.tailId,name:'sv:next:v1',value:s.pair.rawPublicKey().constructor.from(text.encode(q.childId))
         }));
       } else {
         const latest=current.locations.get(q.recordId);
@@ -395,16 +460,57 @@ window.stellarVaultSecretLedger = (() => {
         }
         for(const k of q.priorKeys) writes.push({name:k,value:null});
         for(const w of writes)
-          builder.addOperation(s.sdk.Operation.manageData({source:q.node,name:w.name,value:w.value}));
+          // Browser SDK's Buffer is a different class from Uint8Array (and
+          // Node's Buffer). Use its own public-key buffer constructor.
+          builder.addOperation(s.sdk.Operation.manageData({source:q.node,name:w.name,
+            value:w.value===null?null:s.pair.rawPublicKey().constructor.from(w.value)}));
       }
       const tx=builder.setTimeout(60).build();
       tx.sign(s.pair);
       if(q.kind==='expand')tx.sign(q.child);
       let result;
+      // Recheck immediately before transmission: a different already-approved
+      // session may have submitted while this one was fetching network state.
+      if(unresolvedByVault.has(vaultScope(s.root,s.passphrase)))
+        fail('Another submission for this vault is unresolved; do not transmit a second transaction.');
+      // Record the network-bound signed hash BEFORE broadcasting. A timeout may
+      // follow a successful submission; keep this public identity for recovery.
+      // This is not proof of inclusion and NEVER authorizes an automatic retry.
+      const rawHash=tx.hash();
+      if(!rawHash||rawHash.length!==32)fail('Signed transaction hash unavailable; no broadcast attempted.');
+      const signedBy=address=>tx.signatures?.some(signature=>{
+        try{return s.sdk.Keypair.fromPublicKey(address).verify(rawHash,new Uint8Array(signature.signature()));}
+        catch{return false;}
+      });
+      if(!signedBy(s.root)||(q.kind==='expand'&&!signedBy(q.childId)))
+        fail('Local transaction signature verification failed; no broadcast attempted.');
+      const signedHash=Array.from(rawHash,b=>b.toString(16).padStart(2,'0')).join('');
+      // Journal-backed callers MUST durably CAS-checkpoint this exact hash
+      // before the first byte is broadcast. If the callback rejects, do not
+      // transmit; leave the caller's Submitting journal in quarantine.
+      if(checkpoint) {
+        if(typeof checkpoint.invokeMethodAsync!=='function')
+          fail('Durable signed-hash callback is invalid; no transaction was sent.');
+        await checkpoint.invokeMethodAsync('CheckpointSignedHash',signedHash);
+      }
+      if(sessions.get(id)!==s)
+        fail('Signing session was revoked before broadcast; keep the journal quarantined.');
+      // From this point any network failure may mean the transaction was accepted.
+      // Keep this session quarantined until the connected outcome is verified.
+      s.needsReconciliation=true;
+      // Public-only, session-lifetime diagnostic. No record plaintext, keys, or ciphertext.
+      s.uncertain={Kind:q.kind,RootAccountId:s.root,
+        TargetAccountId:q.kind==='expand'?q.childId:q.node,
+        RecordId:q.kind==='expand'?null:q.recordId,
+        TransactionHash:signedHash,NetworkPassphrase:s.passphrase,
+        HorizonUrl:s.net.origin};
+      unresolvedByVault.set(vaultScope(s.root,s.passphrase),{...s.uncertain});
       try {result=await s.server.submitTransaction(tx);}
       catch {fail('Transaction outcome is uncertain. Reconcile the ledger before any retry.');}
       if(!result?.hash || result.successful===false)
         fail('No confirmed Stellar transaction hash. Reconcile before retry.');
+      if(!/^[0-9a-f]{64}$/i.test(result.hash) || result.hash.toLowerCase()!==signedHash)
+        fail('Horizon returned a different transaction hash. Keep the signed hash quarantined and investigate.');
       // An accepted response must still be checked against the new ledger state.
       // If Horizon is temporarily behind, report as uncertain rather than resubmitting.
       try {
@@ -420,12 +526,249 @@ window.stellarVaultSecretLedger = (() => {
       }catch{
         fail('Transaction accepted ('+result.hash+') but state verification is pending. Do not retry blindly.');
       }
+      s.needsReconciliation=false;
+      s.uncertain=null;
+      unresolvedByVault.delete(vaultScope(s.root,s.passphrase));
       return result.hash;
     }finally {
       if(q.cipher)q.cipher.fill(0);
       if(q.child){try{q.child.rawSecretKey().fill(0);}catch{}}
       s.inFlight=false;
     }
+  }
+  async function recordRevision(id,recordId) {
+    if(!validId(recordId))fail('Invalid linked record identifier.');
+    const s=session(id);
+    if(s.inFlight)fail('A linked transaction is in progress.');
+    const current=await inventory(s);
+    const record=current.locations.get(recordId);
+    return record?.rawHeader||null;
+  }
+  // Independent read-only history check. The queue stores the signed hash
+  // before broadcasting. Re-fetch its envelope, verify its network-bound hash
+  // AND root signature, then decrypt the exact historical operation ciphertext.
+  // No quote, signer state, network transaction or queue entry is changed here.
+  async function verifyHistoricalRecord(id,txHash,kind,recordId,draft,previousHeader) {
+    const s=session(id);
+    if(!/^[0-9a-f]{64}$/.test(txHash)||!validId(recordId)||
+       !['create','update','delete'].includes(kind))
+      fail('Invalid historical linked record verification scope.');
+    if((kind==='create'&&previousHeader!==null) ||
+       (kind!=='create'&&(typeof previousHeader!=='string'||!previousHeader)))
+      fail('Historical mutation original manifest was not bound to the queue.');
+    if(kind!=='delete')validateDraft(draft);
+    // Re-establish the selected network before accepting the historical receipt.
+    const verified=await verifiedNetwork(s.net.origin,s.passphrase);
+    if(verified.origin!==s.net.origin)fail('Selected Horizon endpoint changed.');
+    const endpoint=s.net.origin+'/transactions/'+txHash;
+    const response=await fetch(endpoint,{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok||new URL(response.url||endpoint).origin!==s.net.origin)
+      fail('Historical transaction receipt was unavailable or redirected.');
+    const receipt=await response.json();
+    if(receipt?.successful!==true||receipt?.hash?.toLowerCase()!==txHash||
+       receipt?.source_account!==s.root||
+       typeof receipt?.envelope_xdr!=='string'||receipt.envelope_xdr.length>65536)
+      fail('Historical receipt does not bind a successful root transaction.');
+    const tx=s.sdk.TransactionBuilder.fromXDR(receipt.envelope_xdr,s.passphrase);
+    const rawHash=tx.hash();
+    if(rawHash?.length!==32 ||
+       Array.from(rawHash,x=>x.toString(16).padStart(2,'0')).join('')!==txHash ||
+       tx.source!==s.root || !Array.isArray(tx.operations) ||
+       tx.operations.length<1||tx.operations.length>MAX_OPS)
+      fail('Historical signed envelope does not bind expected transaction.');
+    const rootKey=s.sdk.Keypair.fromPublicKey(s.root);
+    if(!Array.isArray(tx.signatures)||!tx.signatures.some(sig=>{
+      try{return rootKey.verify(rawHash,new Uint8Array(sig.signature()));}
+      catch{return false;}
+    }))fail('Signed historical envelope lacks a valid root signature.');
+
+    const nodes=await chain(s),nodeIds=new Set(nodes.map(n=>n.account_id));
+    let owner=null,headerRaw=null,headerAt=-1,headerRemoved=false;
+    const chunks=new Map(),removed=new Set();
+    let newGen=null,oldGen=null,oldCount=0,topUpSeen=false;
+    if(previousHeader!==null) {
+      const old=parseManifest(bytes(previousHeader));
+      oldGen=old.gen;oldCount=old.count;
+    }
+    for(let index=0;index<tx.operations.length;index++){
+      const op=tx.operations[index],source=op.source||tx.source;
+      if(op.type==='payment'){
+        if(topUpSeen||index!==0||source!==s.root||!op.destination||
+           !nodeIds.has(op.destination)||op.destination===s.root||
+           op.asset?.getCode?.()!=='XLM'||!(Number(op.amount)>0))
+          fail('Historical reserve payment does not match linked record account.');
+        owner=op.destination;topUpSeen=true;
+        continue;
+      }
+      if(op.type!=='manageData')fail('Unexpected historical operation in record mutation.');
+      const name=op.name;
+      if(typeof name!=='string'||
+         (name!=='skh:'+recordId&&!name.startsWith('skc:'+recordId+':')))
+        fail('Historical transaction modifies unrelated data.');
+      if(!nodeIds.has(source)||(owner!==null&&source!==owner))
+        fail('Historical record operation source is outside the linked chain.');
+      owner=source;
+      const value=op.value;
+      if(name==='skh:'+recordId){
+        if(headerAt!==-1)fail('Duplicate historical record manifest operation.');
+        headerAt=index;
+        if(value==null)headerRemoved=true;
+        else {
+          if(kind==='delete')fail('Delete transaction wrote a record manifest.');
+          headerRaw=new Uint8Array(value);
+          const m=parseManifest(headerRaw);
+          newGen=m.gen;
+        }
+      } else if(value==null){
+        if(headerAt===-1)fail('Historical chunk removal preceded the record manifest.');
+        if(!name.startsWith('skc:'+recordId+':'))fail('Unexpected historical deletion key.');
+        if(removed.has(name))fail('Duplicate historical chunk deletion.');
+        removed.add(name);
+      } else {
+        if(headerAt!==-1||kind==='delete')fail('Historical ciphertext chunk followed its manifest.');
+        if(chunks.has(name))fail('Duplicate historical encrypted record chunk.');
+        const chunk=new Uint8Array(value);
+        if(chunk.length<1||chunk.length>64)fail('Invalid historical ciphertext chunk length.');
+        chunks.set(name,chunk);
+      }
+    }
+    if(!owner||headerAt===-1||
+       (kind==='delete'?!headerRemoved:!headerRaw) ||
+       (kind==='create'&&removed.size!==0))
+      fail('Incomplete historical linked record transaction.');
+    if(kind==='update'||kind==='delete') {
+      if(removed.size!==oldCount)fail('Incomplete historical previous-generation removal.');
+      for(let i=0;i<oldCount;i++)
+        if(!removed.has(recordKey(recordId,i,oldGen)))
+          fail('Historical previous ciphertext removal key was missing.');
+    }
+    if(kind==='delete'){
+      const complete=chunks.size===0;
+      for(const part of chunks.values())part.fill(0);
+      if(complete)s.verifiedHistories.add(txHash);
+      return complete; // Signed transaction removed exact original skh/skc keys.
+    }
+    const manifest=parseManifest(headerRaw);
+    if(chunks.size!==manifest.count||
+       (kind==='update'&&manifest.gen===oldGen))
+      fail('Incomplete historical ciphertext manifest or reused generation.');
+    const cipher=new Uint8Array(manifest.size);
+    try {
+      for(let i=0;i<manifest.count;i++){
+        const name=recordKey(recordId,i,manifest.gen),part=chunks.get(name);
+        if(!part||part.length!==Math.min(64,manifest.size-i*64))
+          fail('Historical ciphertext chunk was missing or malformed.');
+        cipher.set(part,i*64);
+      }
+      if(!equal(await hash(cipher),manifest.digest))
+        fail('Historical ciphertext digest does not match the signed manifest.');
+      const plain=await unseal(s,recordId,manifest.gen,cipher);
+      const normalized={
+        Id:recordId,Title:draft.Title,Content:draft.Content,
+        FolderId:draft.FolderId||null,Tags:draft.Tags||[],IsFolder:!!draft.IsFolder,
+        UserName:draft.UserName||'',Url:draft.Url||'',Notes:draft.Notes||''
+      };
+      const matched=JSON.stringify(plain)===JSON.stringify(normalized);
+      if(matched)s.verifiedHistories.add(txHash);
+      return matched;
+    } finally {
+      cipher.fill(0);
+      for(const part of chunks.values())part.fill(0);
+      if(headerRaw)headerRaw.fill(0);
+    }
+  }
+
+  // Independently inspect a linked-account expansion: root AND newly created
+  // child must sign the SAME successful envelope, which must create exactly
+  // the child, disable its master key, install root signer and point from the
+  // immediately preceding linked tail. Never submits a network operation.
+  async function verifyHistoricalExpansion(id,txHash,childId) {
+    const s=session(id);
+    if(!/^[0-9a-f]{64}$/.test(txHash) ||
+       !s.sdk.StrKey.isValidEd25519PublicKey(childId)||childId===s.root)
+      fail('Invalid linked expansion history scope.');
+    const verified=await verifiedNetwork(s.net.origin,s.passphrase);
+    if(verified.origin!==s.net.origin)fail('Selected network origin changed.');
+    const endpoint=s.net.origin+'/transactions/'+txHash;
+    const response=await fetch(endpoint,{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok||new URL(response.url||endpoint).origin!==s.net.origin)
+      fail('Historical linked expansion receipt is not trustworthy.');
+    const receipt=await response.json();
+    if(receipt?.successful!==true||receipt?.hash?.toLowerCase()!==txHash||
+       receipt?.source_account!==s.root||
+       typeof receipt.envelope_xdr!=='string'||receipt.envelope_xdr.length>65536)
+      fail('Historical expansion receipt is not a successful root transaction.');
+    const tx=s.sdk.TransactionBuilder.fromXDR(receipt.envelope_xdr,s.passphrase);
+    const rawHash=tx.hash();
+    if(rawHash?.length!==32||tx.source!==s.root||
+       Array.from(rawHash,x=>x.toString(16).padStart(2,'0')).join('')!==txHash||
+       !Array.isArray(tx.operations)||![3,4].includes(tx.operations.length))
+      fail('Historical expansion envelope hash or operation count mismatches.');
+    const hasSignature=key=>tx.signatures?.some(signature=>{
+      try{return s.sdk.Keypair.fromPublicKey(key)
+        .verify(rawHash,new Uint8Array(signature.signature()));}
+      catch{return false;}
+    });
+    if(!hasSignature(s.root)||!hasSignature(childId))
+      fail('Historical linked expansion requires root and child signatures.');
+    const nodes=await chain(s);
+    const childIndex=nodes.findIndex(account=>account.account_id===childId);
+    if(childIndex<1||childIndex!==nodes.length-1)
+      fail('Verified linked child must be the current chain tail.');
+    const previousTail=nodes[childIndex-1].account_id;
+    const ops=tx.operations,creation=ops[0],options=ops[1],pointer=ops.at(-1);
+    if(creation.type!=='createAccount'||(creation.source||tx.source)!==s.root||
+       creation.destination!==childId||!(Number(creation.startingBalance)>0))
+      fail('Historical expansion did not create the expected funded child.');
+    if(options.type!=='setOptions'||(options.source||tx.source)!==childId||
+       options.masterWeight!==0||options.lowThreshold!==1||
+       options.medThreshold!==1||options.highThreshold!==1||
+       options.signer?.ed25519PublicKey!==s.root||options.signer?.weight!==1)
+      fail('Historical child signer and thresholds do not match the linked protocol.');
+    if(ops.length===4){
+      const payment=ops[2];
+      if(previousTail===s.root||payment.type!=='payment'||
+         (payment.source||tx.source)!==s.root||
+         payment.destination!==previousTail||
+         payment.asset?.getCode?.()!=='XLM'||!(Number(payment.amount)>0))
+        fail('Historical tail reserve payment does not match the parent.');
+    }else if(previousTail!==s.root) {
+      fail('An existing child tail requires an atomic reserve payment.');
+    }
+    if(pointer.type!=='manageData'||(pointer.source||tx.source)!==previousTail||
+       pointer.name!=='sv:next:v1'||pointer.value==null||
+       decoder.decode(new Uint8Array(pointer.value))!==childId)
+      fail('Historical linked parent pointer does not target the child.');
+    s.verifiedHistories.add(txHash);
+    return true;
+  }
+
+  // Called only AFTER durable encrypted CAS committed a full historical proof.
+  // Never clear an unrelated uncertain transaction or a different vault.
+  function releaseVerifiedHistory(id,transactionHash) {
+    const s=session(id),scope=vaultScope(s.root,s.passphrase);
+    if(!/^[0-9a-f]{64}$/.test(transactionHash) ||
+       !s.verifiedHistories.has(transactionHash))
+      fail('The current signer has not verified this signed historical transaction.');
+    const marker=unresolvedByVault.get(scope)||s.uncertain;
+    if(marker && marker.TransactionHash!==transactionHash)
+      fail('A different uncertain transaction remains in this signer session.');
+    if(marker){
+      unresolvedByVault.delete(scope);
+      s.uncertain=null;
+      s.needsReconciliation=false;
+    }
+    s.verifiedHistories.delete(transactionHash);
+    return true;
+  }
+  function inspectUncertain(id) {
+    const s=session(id);
+    // Return a defensive public-only copy. Presence does NOT prove that the
+    // transaction reached the network, nor that its contents were confirmed.
+    // A second already-open session must see a sibling's unresolved attempt,
+    // not merely its own initially clean per-session snapshot.
+    const finding=unresolvedByVault.get(vaultScope(s.root,s.passphrase))||s.uncertain;
+    return finding ? {...finding} : null;
   }
   function cancelQuote(id,quoteId) {
     const s=session(id),q=s.quotes.get(quoteId);
@@ -445,5 +788,5 @@ window.stellarVaultSecretLedger = (() => {
     });
   if(typeof window.addEventListener==='function')
     window.addEventListener('pagehide',revokeAll);
-  return Object.freeze({open,close,read,info,plan,submit,cancelQuote,revokeAll});
+  return Object.freeze({open,close,read,info,plan,submit,recordRevision,verifyHistoricalRecord,verifyHistoricalExpansion,releaseVerifiedHistory,inspectUncertain,cancelQuote,revokeAll});
 })();

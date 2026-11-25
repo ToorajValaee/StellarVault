@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using Microsoft.JSInterop;
 using StellarVaultPwa.Core;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVaultPwa.Services;
 
@@ -41,6 +41,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
         _rootAccountId ?? throw new InvalidOperationException("The Stellar session is not open.");
 
     public VaultNetworkSettings Settings => _settings;
+
+    public ValueTask RequireRecoveryWritesAsync() => _js.InvokeVoidAsync(
+        "stellarVaultTransactionRecovery.assertWritable", "hd:" + _sessionId);
 
     public async Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
         int additionalSponsoredUnits = 0,

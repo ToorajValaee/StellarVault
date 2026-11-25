@@ -1,0 +1,13 @@
+{
+  "name": "stellarvault-verification",
+  "private": true,
+  "description": "Pinned browser verification and vendored signer provenance; not a second application build.",
+  "scripts": {
+    "verify:vendor": "node scripts/verify-vendor.cjs",
+    "verify:browser": "node scripts/verify-pwa-browser.cjs"
+  },
+  "devDependencies": {
+    "@stellar/stellar-sdk": "16.4.1",
+    "playwright": "1.65.1"
+  }
+}

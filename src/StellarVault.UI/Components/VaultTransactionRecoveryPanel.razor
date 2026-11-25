@@ -1,0 +1,89 @@
+@using VaultEngine.Stellar.Services
+@using Microsoft.JSInterop
+@inject IStellarLedgerRecords Hd
+@inject IStellarSecretKeyLedger Linked
+@inject IJSRuntime JS
+
+@if (Hd.IsConnected != Linked.IsConnected)
+{
+    <section class="terminal-panel" aria-label="Transaction recovery journal">
+        <details>
+            <summary>Transaction recovery · @(_status?.PendingHash is not null ? "recovery required" : _status?.Consent == true ? "writes allowed" : "read-only")</summary>
+            <p>Before a write, retain encrypted signed-transaction recovery metadata on this device.
+                Your mnemonic, S-key and plaintext records are never saved in this journal.
+                Consent lasts until you lock this session. Removing browser data loses recovery metadata;
+                never retry an uncertain submission after clearing storage.</p>
+            @if (_status is not null)
+            {
+                <p>Account: @_status.RootAccountId</p>
+                <label><input type="checkbox" checked="@_status.Consent" disabled="@_busy"
+                              @onchange="ChangeConsentAsync" /> Allow encrypted transaction-recovery metadata for this session</label>
+                @if (_status.PendingHash is not null)
+                {
+                    <p role="alert">Unresolved signed transaction: @_status.PendingHash. Writes remain blocked.</p>
+                    <button type="button" class="pixel-button" disabled="@_busy" @onclick="VerifyAsync">Inspect recorded transaction — no retry</button>
+                }
+            }
+            <button type="button" class="pixel-button compact" disabled="@_busy" @onclick="RefreshAsync">Refresh recovery state</button>
+            @if (_message is not null) { <p role="status">@_message</p> }
+        </details>
+    </section>
+}
+
+@code {
+    private RecoveryStatus? _status;
+    private bool _busy;
+    private string? _message;
+    private string? _loadedStrategy;
+    private string? Strategy => Hd.IsConnected != Linked.IsConnected ? (Hd.IsConnected ? "hd" : "skey") : null;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Strategy is not null && _loadedStrategy != Strategy)
+        {
+            _loadedStrategy = Strategy;
+            await RefreshAsync();
+            StateHasChanged();
+        }
+        if (Strategy is null) { _status = null; _loadedStrategy = null; }
+    }
+    private async Task RefreshAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (Strategy is not { } strategy) { _status = null; return; }
+            _status = await JS.InvokeAsync<RecoveryStatus>("stellarVaultTransactionRecovery.inspectSession", strategy);
+            _message = null;
+        }
+        catch { _status = null; _message = "Recovery state is unavailable or cannot be authenticated. Writes remain blocked; do not clear browser data to bypass recovery."; }
+        finally { _busy = false; }
+    }
+    private async Task ChangeConsentAsync(ChangeEventArgs args)
+    {
+        if (_busy || _status is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("stellarVaultTransactionRecovery.sessionConsent", _status.Token, args.Value is true);
+            await RefreshAsync();
+        }
+        catch { _message = "Consent could not be changed. Refresh recovery state before writing."; }
+    }
+    private async Task VerifyAsync()
+    {
+        if (_busy || _status is null) return;
+        _busy = true;
+        try
+        {
+            var observation = await JS.InvokeAsync<ReceiptObservation>("stellarVaultTransactionRecovery.verifySession", _status.Token);
+            await RefreshAsync();
+            _message = (observation.Successful
+                ? "The trusted endpoint reports the exact signed transaction as successful. "
+                : "The trusted endpoint reports the exact signed transaction as failed; it did not publish the intended change. ") +
+                "Its transport checkpoint was released. This does not confirm any queued mutation or clear separate signer/queue quarantines. A new write needs a fresh review and approval.";
+        }
+        catch { _message = "The exact signed transaction could not be verified. Recovery remains quarantined; no transaction was submitted or retried."; }
+        finally { _busy = false; }
+    }
+    private sealed record RecoveryStatus(string Token, string RootAccountId, bool Consent, string? PendingHash);
+    private sealed record ReceiptObservation(int Ledger, bool Successful);
+}

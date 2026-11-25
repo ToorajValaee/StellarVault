@@ -1,8 +1,9 @@
-using StellarVault.Core.Services;
+using StellarVault.UI.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Maui;
 
-public partial class App : Application
+public partial class App : Microsoft.Maui.Controls.Application
 {
     private readonly VaultSessionManager _sessions;
     private readonly VaultNativeForegroundLifecycle _lifecycle;

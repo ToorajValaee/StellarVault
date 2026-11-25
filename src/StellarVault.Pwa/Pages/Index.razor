@@ -1,21 +1,31 @@
 @page "/"
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject VaultSessionManager Sessions
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyLedger SecretLedger
 @inject NavigationManager Navigation
 
-@if (!(Sessions.IsUnlocked || Ledger.IsConnected || SecretLedger.IsConnected))
+@if (ActiveMode == VaultWorkspaceMode.Locked)
 {
     <VaultHome Platform="WEB PWA" />
 }
+else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel centered-message" role="alert">
+        <h2>Conflicting vault sessions</h2>
+        <p>Both independent account strategies appear unlocked. No transaction was submitted.</p>
+        <a class="pixel-button primary" href="/vault">Review and lock both sessions</a>
+    </section>
+}
 
 @code {
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
+
     protected override void OnParametersSet()
     {
-        if (SecretLedger.IsConnected)
-            Navigation.NavigateTo("/secret-vault", replace: true);
-        else if (Sessions.IsUnlocked || Ledger.IsConnected)
+        if (ActiveMode is VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey)
             Navigation.NavigateTo("/vault", replace: true);
     }
 }

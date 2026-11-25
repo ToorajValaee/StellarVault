@@ -1,9 +1,12 @@
 @using Microsoft.AspNetCore.Components.Routing
 @using StellarVault.UI.Components
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject IStellarLedgerRecords LedgerRecords
+@inject IStellarSecretKeyLedger SecretLedger
+@inject VaultLinkedLocalRetentionGate LinkedRetention
 @inject VaultNetworkSelection NetworkSelection
 @inject VaultSessionWorkflow Workflow
 @inject VaultStorageModeGate StorageMode
@@ -88,12 +91,17 @@ else
                 NetworkSelection.CustomHorizonUrl = recent.HorizonUrl;
             }
             else return;
-            if (!await Workflow.HasLocalVaultAsync(recent.Account)) return;
-            // A fresh page load no longer auto-opens the passphrase-only
-            // privacy screen. Require the normal mnemonic + vault passphrase
-            // for a complete Stellar signing session after browser restart.
-            if (await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasEncryptedSeed", recent.Account, recent.Network))
-                _coldAccount = recent.Account;
+            // A saved encrypted vault is NOT an active session. Only the
+            // explicit tab-scoped hybrid intent from a successful prior login
+            // may resume after a refresh; ending the session removes it.
+            if (!await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasHybridSession",
+                    recent.Account, recent.Network))
+                return;
+            if (!await Workflow.HasLocalVaultAsync(recent.Account) ||
+                !await JS.InvokeAsync<bool>("stellarVaultRecentVault.hasEncryptedSeed",
+                    recent.Account, recent.Network))
+                return;
+            _coldAccount = recent.Account;
         }
         catch (Exception)
         {
@@ -182,6 +190,9 @@ else
     {
         if (Privacy.IsSuspended)
         {
+            // A privacy suspension is an explicit lock for independent S-key
+            // local queue key material as well as existing HD/local keys.
+            await LinkedQueueKeys.LockAsync();
             try { _biometricEnrolled = Privacy.SuspendedAccountId is { } accountId &&
                 await JS.InvokeAsync<bool>("stellarVaultBiometric.has", NetworkSelection.CredentialKey(accountId)); }
             catch (JSException) { _biometricEnrolled = false; }
@@ -217,11 +228,23 @@ else
     }
     private async Task FullLockAsync()
     {
+        // End the active session, not the persisted encrypted user backup.
+        // On a subsequent login the user must choose device storage again.
         Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
         Privacy.Clear();
+        try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+        catch (JSException) { /* Session keys are locked even if sessionStorage is unavailable. */ }
         _coldAccount = null;
+        _resumePassphrase = string.Empty;
+        _resumeError = null;
         _biometricEnrolled = false;
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        await LinkedQueueKeys.LockAsync();
+        await SecretLedger.DisconnectAsync();
+        await LedgerRecords.DisconnectAsync();
+        Navigation.NavigateTo("/", replace: true);
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -238,20 +261,32 @@ else
     [JSInvokable]
     public async Task LockForBrowserLifecycle()
     {
+        // A failing linked-key adapter must not skip HD key invalidation.
         Privacy.Clear();
         Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        try { await LinkedQueueKeys.LockAsync(); }
+        finally
+        {
+            try { await SecretLedger.DisconnectAsync(); }
+            finally { await LedgerRecords.DisconnectAsync(); }
+        }
+        // Do not clear the hybrid tab marker on a page refresh: the next app
+        // instance must demand a passphrase before restoring that hybrid tab.
     }
 
     public async ValueTask DisposeAsync()
     {
         Privacy.Changed -= RefreshPrivacy;
-        Privacy.Clear();
-        Sessions.Lock();
-        await LedgerRecords.DisconnectAsync();
-        try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
-        catch (JSException) { }
-        catch (JSDisconnectedException) { }
-        _callback?.Dispose();
+        try { await LockForBrowserLifecycle(); }
+        finally
+        {
+            try { await JS.InvokeVoidAsync("stellarVaultV2Lifecycle.detach"); }
+            catch (JSException) { }
+            catch (JSDisconnectedException) { }
+            _callback?.Dispose();
+        }
     }
 }

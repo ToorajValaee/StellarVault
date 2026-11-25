@@ -1,0 +1,597 @@
+@using System.Security.Cryptography
+@using System.Text
+@using VaultEngine.Stellar.Services
+@inject IVaultNativeFileAccess NativeFiles
+@inject VaultHybridDraftWorkspace HdDrafts
+@inject VaultLinkedDraftWorkspace LinkedDrafts
+@inject VaultSessionManager HdSession
+@inject VaultDeviceRetentionGate HdRetention
+@inject VaultLinkedQueueKeySession LinkedKeys
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject IStellarLedgerRecords HdLedger
+@inject IStellarSecretKeyLedger LinkedLedger
+@inject VaultNetworkSelection Networks
+
+@if (Mode == "import")
+{
+    <div class="sv-transfer-content sv-transfer-import" aria-label="Import vault records">
+        <div class="sv-transfer-intro">
+            <span class="panel-kicker">RECORD TRANSFER</span>
+            <h3>Import records</h3>
+            <p>Restore credentials, notes and folders to encrypted local drafts. Nothing is sent to Stellar until separately approved.</p>
+        </div>
+
+        @if (!CanStage)
+        {
+            <p class="terminal-alert warning" role="status">You can preview a file in this session, but saving imported drafts requires encrypted device storage. To stage records, sign in with “Encrypted on this device” and unlock its local vault.</p>
+        }
+
+        <div class="sv-transfer-option">
+            <div class="sv-transfer-option-heading">
+                <span class="sv-transfer-option-icon" aria-hidden="true">▤</span>
+                <div><strong>JSON or CSV</strong><small>Plaintext records · JSON supports folders</small></div>
+            </div>
+            <p class="advanced-help">Plaintext files may contain secrets. Only use a trusted file and delete the source securely when finished.</p>
+            <label class="sv-secret-approval">
+                <input type="checkbox" @bind="_understood" disabled="@_busy" />
+                I understand plaintext imports must be handled securely and will be staged as local encrypted drafts.
+            </label>
+            <button type="button" class="pixel-button compact sv-transfer-action"
+                    disabled="@(_busy || !_understood || !CanPreviewImport)"
+                    @onclick="PickImportAsync">Choose JSON / CSV file</button>
+        </div>
+        <div class="sv-transfer-option">
+            <div class="sv-transfer-option-heading">
+                <span class="sv-transfer-option-icon" aria-hidden="true">▣</span>
+                <div><strong>Encrypted backup</strong><small>.svrb · Argon2id protected</small></div>
+            </div>
+            <label class="sv-transfer-field" for="sv-import-backup-password">Backup password
+                <input id="sv-import-backup-password" type="password" class="terminal-input"
+                       autocomplete="new-password" placeholder="At least 12 characters"
+                       @bind="_backupPassword" @bind:event="oninput" disabled="@_busy" />
+            </label>
+            <button type="button" class="pixel-button compact sv-transfer-action"
+                    disabled="@(_busy || !CanPreviewImport || _backupPassword.Length < 12)"
+                    @onclick="PickEncryptedAsync">Restore encrypted backup</button>
+            <p class="advanced-help">Backups include ordinary records and folders, not binary files, transaction journals or signing credentials.</p>
+        </div>
+        @if (_pending is not null)
+        {
+            <div class="sv-transfer-preview" role="status">
+                <strong>@_pending.Records.Length items validated</strong>
+                <p>These can become new local encrypted drafts after device-storage consent. Import is not atomic; an interrupted import may leave some drafts pending.</p>
+                <div class="sv-transfer-actions">
+                    <button type="button" class="pixel-button primary"
+                            disabled="@(_busy || !CanStage || !_understood)"
+                            @onclick="ConfirmImportAsync">Stage encrypted drafts</button>
+                    <button type="button" class="pixel-button compact" disabled="@_busy"
+                            @onclick="ClearImport">Cancel</button>
+                </div>
+            </div>
+        }
+        @if (_busy) { <p role="status">Processing record transfer…</p> }
+        @if (_message is not null) { <p class="sv-transfer-message" role="status">@_message</p> }
+    </div>
+}
+else if (Mode == "export" && SelectedRecordId is not null)
+{
+    <div class="sv-transfer-export-entry" aria-label="Export selected record">
+        <button type="button" class="pixel-button compact sv-transfer-export-trigger"
+                aria-haspopup="dialog" aria-expanded="@_showExportDialog"
+                @onclick="OpenExportDialog">
+            <span aria-hidden="true">⇧</span> Export
+        </button>
+        @if (_showExportDialog)
+        {
+            <div class="modal-backdrop sv-transfer-export-backdrop" @onclick="CloseExportDialog">
+                <section class="record-modal terminal-panel sv-transfer-export-modal" role="dialog"
+                         aria-modal="true" aria-label="Export record" @onclick:stopPropagation="true">
+                    <header class="modal-header">
+                        <div><span class="panel-kicker">RECORD TRANSFER</span><h2>Export record</h2></div>
+                        <button type="button" class="icon-button close-button" aria-label="Close export"
+                                @onclick="CloseExportDialog">×</button>
+                    </header>
+                    <div class="sv-transfer-content">
+                        <p class="advanced-help">Choose a format for this item. Export creates a local file; it does not broadcast a Stellar transaction.</p>
+                        <div class="sv-transfer-option">
+                            <div class="sv-transfer-option-heading">
+                                <span class="sv-transfer-option-icon" aria-hidden="true">▤</span>
+                                <div><strong>Plaintext export</strong><small>JSON or CSV · contains unencrypted secrets</small></div>
+                            </div>
+                            <label class="sv-secret-approval">
+                                <input type="checkbox" @bind="_understood" disabled="@_busy" />
+                                I understand the exported JSON/CSV contains plaintext secrets.
+                            </label>
+                            <div class="sv-transfer-actions">
+                                <button type="button" class="pixel-button compact"
+                                        disabled="@(_busy || !_understood || !CanExport)"
+                                        @onclick="ExportJsonAsync">Export JSON</button>
+                                @if (SelectedIsFlatRecord)
+                                {
+                                    <button type="button" class="pixel-button compact"
+                                            disabled="@(_busy || !_understood || !CanExport)"
+                                            @onclick="ExportCsvAsync">Export CSV</button>
+                                }
+                            </div>
+                        </div>
+                        <div class="sv-transfer-option">
+                            <div class="sv-transfer-option-heading">
+                                <span class="sv-transfer-option-icon" aria-hidden="true">▣</span>
+                                <div><strong>Encrypted backup</strong><small>.svrb · password protected</small></div>
+                            </div>
+                            <label class="sv-transfer-field" for="@_backupPasswordId">Backup password
+                                <input id="@_backupPasswordId" type="password" class="terminal-input"
+                                       autocomplete="new-password" placeholder="At least 12 characters"
+                                       @bind="_backupPassword" @bind:event="oninput" disabled="@_busy" />
+                            </label>
+                            <button type="button" class="pixel-button compact sv-transfer-action"
+                                    disabled="@(_busy || !CanExport || _backupPassword.Length < 12)"
+                                    @onclick="ExportEncryptedAsync">Save encrypted backup</button>
+                        </div>
+                        @if (_busy) { <p role="status">Preparing verified record export…</p> }
+                        @if (_message is not null) { <p class="sv-transfer-message" role="status">@_message</p> }
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Microsoft.AspNetCore.Components.Parameter]
+    public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+
+    [Microsoft.AspNetCore.Components.Parameter]
+    public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
+
+    [Microsoft.AspNetCore.Components.Parameter] public string Mode { get; set; } = "import";
+    [Microsoft.AspNetCore.Components.Parameter] public string? SelectedRecordId { get; set; }
+    private bool SelectedIsFlatRecord => Records.Any(x => x.Id == SelectedRecordId && !x.IsFolder && string.IsNullOrEmpty(x.FolderId) && VaultRecordInterchange.IsOrdinary(x));
+
+    private bool _showExportDialog;
+    private readonly string _backupPasswordId = "sv-export-pass-" + Guid.NewGuid().ToString("N");
+
+    private void OpenExportDialog()
+    {
+        _message = null;
+        _understood = false;
+        _backupPassword = string.Empty;
+        _showExportDialog = true;
+    }
+
+    private void CloseExportDialog()
+    {
+        if (_busy) return;
+        _showExportDialog = false;
+        _backupPassword = string.Empty;
+        _understood = false;
+        _message = null;
+    }
+
+    private bool _busy;
+    private bool _understood;
+    private string _backupPassword = string.Empty;
+    private string? _message;
+    private VaultRecordInterchange.Archive? _pending;
+    private string? _pendingScope;
+
+    // Row and inspector may deliberately pass no cached collection. Export must
+    // rely on a fresh scope-pinned ledger read, never cached Records.Count.
+    private bool CanExport => SelectedRecordId is { Length: > 0 } &&
+        (Strategy == VaultMutationStrategyPolicy.Linked
+            ? LinkedLedger.IsConnected : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
+
+    private string? CurrentImportScope()
+    {
+        if (!CanStage) return null;
+        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        {
+            var root = LinkedKeys.ActiveRootAccountId;
+            if (root is null) return null;
+            return string.Join("|", Strategy, root, Networks.CredentialKey(root),
+                LinkedKeys.IsOfflineOnly ? "offline" : "connected",
+                LinkedLedger.ConnectionEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture),
+                LinkedKeys.UnlockEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        }
+        if (HdSession.ActiveAccountId is not string account) return null;
+        return string.Join("|", Strategy, account, Networks.CredentialKey(account),
+            HdSession.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    // File selection and validation may be performed explicitly in volatile
+    // memory in an on-chain-only session. Persisting the result still requires
+    // separately consented, unlocked encrypted local storage.
+    private bool CanPreviewImport => CanStage ||
+        (Strategy == VaultMutationStrategyPolicy.Linked
+            ? LinkedLedger.IsConnected && LinkedLedger.RootAccountId is not null
+            : Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected);
+
+    private string? CurrentPreviewScope()
+    {
+        var local = CurrentImportScope();
+        if (local is not null) return local;
+        if (Strategy == VaultMutationStrategyPolicy.Linked &&
+            LinkedLedger.IsConnected && LinkedLedger.RootAccountId is string linkedRoot)
+            return string.Join("|", Strategy, "volatile", linkedRoot,
+                Networks.CredentialKey(linkedRoot),
+                LinkedLedger.ConnectionEpoch.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        if (Strategy == VaultMutationStrategyPolicy.Hd && HdLedger.IsConnected)
+            return string.Join("|", Strategy, "volatile",
+                HdSession.Epoch.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Networks.SelectedPreset);
+        return null;
+    }
+
+    private void DiscardPending()
+    {
+        _pending = null;
+        _pendingScope = null;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Never carry an authenticated plaintext preview across a different
+        // signer, account, selected network or unlock/session epoch.
+        if (_pendingScope is not null && _pendingScope != CurrentPreviewScope())
+            DiscardPending();
+    }
+
+    private bool CanStage => Strategy == VaultMutationStrategyPolicy.Linked
+        ? LinkedKeys.IsUnlocked && LinkedRetention.AllowsLocalPersistence
+        : Strategy == VaultMutationStrategyPolicy.Hd &&
+          HdSession.IsUnlocked && HdRetention.AllowsLocalPersistence;
+
+    private void ClearImport()
+    {
+        DiscardPending();
+        _message = "Import canceled. No drafts were staged.";
+    }
+
+    // The parent view can keep its previous published-record list while an
+    // account switch or network refresh is still in progress. Never export
+    // credentials from that cached list. Read a new authoritative snapshot
+    // and pin its exact connected ledger identity before any host file save.
+    private async Task<(VaultRecordInterchange.Archive Archive, string Scope)>
+        LoadExportSnapshotAsync()
+    {
+        if (!CanExport)
+            throw new InvalidOperationException("Connect the vault before exporting records.");
+        var requestedStrategy = Strategy;
+        if (requestedStrategy == VaultMutationStrategyPolicy.Linked)
+        {
+            if (LinkedLedger.RootAccountId is not string root || !LinkedLedger.IsConnected)
+                throw new InvalidOperationException("Linked vault signer is disconnected.");
+            var epoch = LinkedLedger.ConnectionEpoch;
+            var scope = Networks.CredentialKey(root);
+            var snapshot = await LinkedLedger.ReadAsync();
+            if (Strategy != requestedStrategy || !LinkedLedger.IsConnected ||
+                LinkedLedger.RootAccountId != root ||
+                LinkedLedger.ConnectionEpoch != epoch ||
+                Networks.CredentialKey(root) != scope)
+                throw new InvalidOperationException(
+                    "Linked account or network changed while reading the export.");
+            return (VaultRecordInterchange.FromPublished(SelectRecords(snapshot)),
+                string.Join("|", requestedStrategy, root, scope,
+                    epoch.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (requestedStrategy != VaultMutationStrategyPolicy.Hd || !HdLedger.IsConnected)
+            throw new InvalidOperationException("HD vault is disconnected.");
+        var before = await HdLedger.InspectAccountInfoAsync();
+        var hdScope = Networks.CredentialKey(before.RootAccountId);
+        var hdSnapshot = await HdLedger.ReadAsync();
+        var after = await HdLedger.InspectAccountInfoAsync();
+        if (Strategy != requestedStrategy || !HdLedger.IsConnected ||
+            before.RootAccountId != after.RootAccountId ||
+            Networks.CredentialKey(before.RootAccountId) != hdScope)
+            throw new InvalidOperationException(
+                "HD account or network changed while reading the export.");
+        return (VaultRecordInterchange.FromPublished(SelectRecords(hdSnapshot)),
+            string.Join("|", requestedStrategy, before.RootAccountId, hdScope));
+    }
+
+    // A one-item archive is self-contained. Its original parent folder may
+    // not be included, so detach the export copy (never mutate ledger data).
+    // Never produce an apparently successful empty backup when the selected
+    // item disappeared or became an internal file protocol node.
+    private IEnumerable<LedgerRecordItem> SelectRecords(IEnumerable<LedgerRecordItem> snapshot)
+    {
+        if (Mode != "export" || SelectedRecordId is null)
+            return snapshot;
+        var selected = snapshot.Where(x => x.Id == SelectedRecordId).ToArray();
+        if (selected.Length != 1 || !VaultRecordInterchange.IsOrdinary(selected[0]))
+            throw new InvalidOperationException(
+                "Selected ordinary record is unavailable in the current verified ledger snapshot.");
+        return [selected[0] with { FolderId = null }];
+    }
+
+    private async Task RequireSameExportScopeAsync(string expected)
+    {
+        if (!CanExport)
+            throw new InvalidOperationException("Vault disconnected before export.");
+        if (Strategy == VaultMutationStrategyPolicy.Linked)
+        {
+            var root = LinkedLedger.RootAccountId;
+            if (root is null ||
+                string.Join("|", Strategy, root, Networks.CredentialKey(root),
+                    LinkedLedger.ConnectionEpoch.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)) != expected)
+                throw new InvalidOperationException(
+                    "Linked account or network switched before export.");
+        }
+        else if (Strategy == VaultMutationStrategyPolicy.Hd)
+        {
+            var info = await HdLedger.InspectAccountInfoAsync();
+            if (string.Join("|", Strategy, info.RootAccountId,
+                    Networks.CredentialKey(info.RootAccountId)) != expected)
+                throw new InvalidOperationException(
+                    "HD account or network switched before export.");
+        }
+        else
+            throw new InvalidOperationException("Unsupported export strategy.");
+    }
+
+    // The PWA must call showSaveFilePicker from the original click stack.
+    // The returned destination is not writable until the fresh ledger check
+    // and optional backup encryption have completed. Other hosts keep their
+    // native SaveAsync picker behavior.
+    private Task<IVaultPendingFileSave?> SelectBrowserDestinationAsync(string name) =>
+        NativeFiles is IVaultDeferredFileSaveAccess deferred
+            ? deferred.SelectSaveDestinationAsync(name)
+            : Task.FromResult<IVaultPendingFileSave?>(null);
+
+    private async Task<bool> SavePreparedAsync(
+        string name, byte[] payload, IVaultPendingFileSave? browserDestination)
+    {
+        using var stream = new MemoryStream(payload, writable: false);
+        if (browserDestination is not null)
+        {
+            await browserDestination.SaveAsync(stream);
+            return true;
+        }
+        return await NativeFiles.SaveAsync(name, stream);
+    }
+
+    private async Task ExportEncryptedAsync()
+    {
+        if (_busy || !CanExport || _backupPassword.Length < 12) return;
+        _busy = true;
+        _message = null;
+        byte[]? ciphertext = null;
+        IVaultPendingFileSave? browserDestination = null;
+        try
+        {
+            // Select a destination before the first ledger/KDF await so the
+            // browser picker retains the triggering user activation.
+            browserDestination = await SelectBrowserDestinationAsync(
+                "stellar-vault-records.svrb");
+            var (archive, exportScope) = await LoadExportSnapshotAsync();
+            ciphertext = await VaultEncryptedRecordBackup.EncryptAsync(
+                archive, _backupPassword);
+            await RequireSameExportScopeAsync(exportScope);
+            bool saved = await SavePreparedAsync(
+                "stellar-vault-records.svrb", ciphertext, browserDestination);
+            _message = saved
+                ? "Encrypted record backup saved. Store its password separately."
+                : "Backup export canceled. No Stellar transaction sent.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   InvalidOperationException or IOException or
+                                   OperationCanceledException or
+                                   Microsoft.JSInterop.JSException or
+                                   System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Encrypted backup export failed: " + ex.Message;
+        }
+        finally
+        {
+            if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
+            _backupPassword = string.Empty;
+            _busy = false;
+            if (browserDestination is not null)
+                await browserDestination.DisposeAsync();
+        }
+    }
+
+    private async Task PickEncryptedAsync()
+    {
+        if (_busy || !CanPreviewImport || _backupPassword.Length < 12) return;
+        _busy = true;
+        DiscardPending();
+        _message = null;
+        var initialScope = CurrentPreviewScope();
+        byte[]? ciphertext = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null) { _message = "Backup selection canceled."; return; }
+            await using var input = picked.Stream;
+            if (!picked.FileName.EndsWith(".svrb", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Select an encrypted .svrb record backup.");
+            using var output = new MemoryStream();
+            var buffer = new byte[16 * 1024];
+            try
+            {
+                int read;
+                while ((read = await input.ReadAsync(buffer)) != 0)
+                {
+                    if (output.Length + read > VaultEncryptedRecordBackup.MaximumBackupBytes)
+                        throw new InvalidDataException("Encrypted record backup exceeds the size limit.");
+                    output.Write(buffer, 0, read);
+                }
+                ciphertext = output.ToArray();
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(buffer);
+                if (output.TryGetBuffer(out var segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
+            var imported = await VaultEncryptedRecordBackup.DecryptAsync(
+                ciphertext, _backupPassword);
+            if (initialScope is null || initialScope != CurrentPreviewScope())
+                throw new InvalidOperationException("Vault session changed during backup restore.");
+            _pending = imported;
+            _pendingScope = initialScope;
+            _message = "Encrypted backup verified. Review the record count before local staging.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   InvalidOperationException or IOException or
+                                   OperationCanceledException or
+                                   System.Security.Cryptography.CryptographicException)
+        {
+            _message = "Backup restore rejected: wrong password, corrupt data, or unsupported backup.";
+        }
+        finally
+        {
+            if (ciphertext is not null) CryptographicOperations.ZeroMemory(ciphertext);
+            _backupPassword = string.Empty;
+            _busy = false;
+        }
+    }
+
+    private Task ExportJsonAsync() => ExportAsync(csv: false);
+    private Task ExportCsvAsync() => ExportAsync(csv: true);
+
+    private async Task ExportAsync(bool csv)
+    {
+        if (_busy || !_understood || !CanExport) return;
+        _busy = true;
+        _message = null;
+        byte[]? bytes = null;
+        IVaultPendingFileSave? browserDestination = null;
+        var filename = csv ? "stellar-vault-records.csv" : "stellar-vault-records.json";
+        try
+        {
+            browserDestination = await SelectBrowserDestinationAsync(filename);
+            var (archive, exportScope) = await LoadExportSnapshotAsync();
+            if (archive.Records.Length == 0)
+                throw new InvalidOperationException("No ordinary records or folders to export.");
+            bytes = csv
+                ? VaultRecordInterchange.ExportCsv(archive)
+                : VaultRecordInterchange.ExportJson(archive);
+            await RequireSameExportScopeAsync(exportScope);
+            var saved = await SavePreparedAsync(filename, bytes, browserDestination);
+            _message = saved
+                ? "Plaintext record interchange saved. Protect and remove the file after use."
+                : "Export canceled. No network operation occurred.";
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   NotSupportedException or InvalidOperationException or
+                                   IOException or OperationCanceledException or
+                                   Microsoft.JSInterop.JSException)
+        {
+            _message = "Record export blocked or canceled: " + ex.Message;
+        }
+        finally
+        {
+            if (bytes is not null) CryptographicOperations.ZeroMemory(bytes);
+            if (browserDestination is not null)
+                await browserDestination.DisposeAsync();
+            _busy = false;
+        }
+    }
+
+    private async Task PickImportAsync()
+    {
+        if (_busy || !_understood || !CanPreviewImport) return;
+        _busy = true;
+        _message = null;
+        DiscardPending();
+        var initialScope = CurrentPreviewScope();
+        byte[]? bytes = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null) { _message = "File selection canceled."; return; }
+            await using var input = picked.Stream;
+            using var output = new MemoryStream();
+            var buffer = new byte[16 * 1024];
+            try
+            {
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer);
+                    if (read == 0) break;
+                    if (output.Length + read > VaultRecordInterchange.MaximumBytes)
+                        throw new InvalidDataException("Record interchange exceeds 1 MiB.");
+                    output.Write(buffer, 0, read);
+                }
+                bytes = output.ToArray();
+                if (picked.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    _pending = VaultRecordInterchange.ImportJson(bytes);
+                else if (picked.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                    _pending = VaultRecordInterchange.ImportCsv(
+                        new UTF8Encoding(false, true).GetString(bytes));
+                else
+                    throw new InvalidDataException("Select a .json or .csv record interchange file.");
+                if (initialScope is null || initialScope != CurrentPreviewScope())
+                {
+                    DiscardPending();
+                    throw new InvalidOperationException("Vault session changed during record import.");
+                }
+                _pendingScope = initialScope;
+                _message = "Format and folder references validated. Review the count before staging.";
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(buffer);
+                if (output.TryGetBuffer(out var segment) && segment.Array is not null)
+                    CryptographicOperations.ZeroMemory(segment.Array);
+            }
+        }
+        catch (Exception ex) when (ex is InvalidDataException or ArgumentException or
+                                   InvalidOperationException or System.Text.DecoderFallbackException or
+                                   IOException or OperationCanceledException)
+        {
+            _message = "Record import rejected: " + ex.Message;
+        }
+        finally
+        {
+            if (bytes is not null) CryptographicOperations.ZeroMemory(bytes);
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmImportAsync()
+    {
+        if (_busy || !_understood || !CanStage || _pending is null) return;
+        if (_pendingScope is null || !CanStage || _pendingScope != CurrentImportScope())
+        {
+            DiscardPending();
+            _message = "Import preview expired after a vault session or network change.";
+            return;
+        }
+        _busy = true;
+        _message = null;
+        var archive = _pending;
+        var approvedScope = _pendingScope;
+        DiscardPending();
+        var staged = 0;
+        try
+        {
+            staged = await VaultRecordInterchange.StageAsync(archive,
+                async (draft, ct) =>
+                {
+                    if (approvedScope != CurrentImportScope())
+                        throw new InvalidOperationException("Unlocked account, network or session changed.");
+                    var id = Strategy == VaultMutationStrategyPolicy.Linked
+                        ? (await LinkedDrafts.CreateAsync(draft, ct)).EntityId
+                        : (await HdDrafts.CreateAsync(draft, ct)).EntityId;
+                    if (approvedScope != CurrentImportScope())
+                        throw new InvalidOperationException("Unlocked account, network or session changed.");
+                    return id;
+                });
+            _message = staged + " encrypted local record/folder drafts staged. No Stellar transaction sent. Review manual synchronization separately.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or
+                                   InvalidDataException or UnauthorizedAccessException or
+                                   IOException or OperationCanceledException)
+        {
+            _message = "Import interrupted; some encrypted drafts may have been staged. Refresh drafts before retrying to avoid duplicates. " + ex.Message;
+        }
+        finally { _busy = false; }
+    }
+}

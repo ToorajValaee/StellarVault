@@ -1,14 +1,22 @@
 @page "/vault"
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @using System.Text.Json
 @using System.Security.Cryptography
+@using System.IO.Pipelines
 @using StellarVault.Pwa.Services
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.Components.Web
+@implements IDisposable
 @inject IStellarLedgerRecords Ledger
+@inject IStellarSecretKeyLedger SecretLedger
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
+@inject IVaultNativeFileAccess NativeFiles
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
 @inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject VaultStorageModeGate StorageMode
+@inject StellarVault.Pwa.Services.VaultPrivacyGate Privacy
 @inject VaultPendingMutationQueue PendingQueue
 @inject VaultManualSyncCoordinator ManualSync
 @inject VaultHybridSyncReviewService HybridReview
@@ -17,11 +25,32 @@
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="YOUR VAULT">
-@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
+@if (ActiveMode == VaultWorkspaceMode.Locked)
 {
-    <section class="terminal-panel centered-message"><h1>Vault locked</h1><a class="pixel-button primary" href="/">Unlock vault</a></section>
+    <section class="terminal-panel centered-message">
+        <h1>Vault locked</h1>
+        <a class="pixel-button primary" href="/">Unlock vault</a>
+        <details class="sv-access-learn" style="margin-top:1.25rem;text-align:left">
+            <summary>Recover independent encrypted S-key drafts offline</summary>
+            <p>Device-only encrypted drafts can be unlocked with their independent local passphrase without reconnecting a Stellar signer. This does not enable publication.</p>
+            <VaultLinkedLocalQueuePanel />
+        </details>
+    </section>
 }
-else if (Ledger.IsConnected && _registryReady == false)
+else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel centered-message" role="alert">
+        <h1>Conflicting vault sessions</h1>
+        <p>Independent mnemonic and Secret Key vault sessions are both active. Lock both sessions before reopening a vault. No transaction was sent.</p>
+        <button type="button" class="pixel-button primary" @onclick="LockConflictingSessionsAsync">Lock both vault sessions</button>
+        @if (_conflictLockError is not null)
+        {
+            <p class="terminal-alert warning" role="alert">@_conflictLockError</p>
+        }
+    </section>
+}
+else if (ActiveMode == VaultWorkspaceMode.MnemonicHd &&
+         Ledger.IsConnected && _registryReady == false)
 {
     <section class="terminal-panel centered-message">
         <h1>Finish setup</h1>
@@ -36,7 +65,8 @@ else
             <div class="sv-pwa-rail-heading"><span class="sv-pwa-rail-mark sv-rail-shield" aria-hidden="true"><svg viewBox="0 0 32 36" width="27" height="30" fill="none"><path d="M16 2 29 7v11c0 8-6.2 13.5-13 16C9.2 31.5 3 26 3 18V7L16 2Z" fill="currentColor"/><path d="m16 9 2.7 6.3L25 18l-6.3 2.7L16 27l-2.7-6.3L7 18l6.3-2.7L16 9Z" fill="#084839"/></svg></span><span><strong>StellarVault</strong></span></div>
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)"
                     @onclick='() => SelectAppView("records")'><span class="sv-nav-vault-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1"/></svg></span> Vault</button>
-            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey ||
+                 (Retention.AllowsLocalPersistence && Sessions.IsUnlocked))
             {
                 <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
                         @onclick='() => SelectAppView("drafts")'><span aria-hidden="true">▧</span> Drafts</button>
@@ -48,12 +78,24 @@ else
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span> Settings</button>
             <button type="button" class="sv-rail-link sv-inline-help-nav @(_appView == "help" ? "selected" : "")" aria-current="@(_appView == "help" ? "page" : null)" @onclick='() => SelectAppView("help")'><span class="sv-rail-icon" aria-hidden="true">ⓘ</span> Documentation &amp; Help</button>
             <div class="sv-pwa-rail-divider"></div>
+            @if (_appView == "records" &&
+                 (ActiveMode is VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey))
+            {
+                <button type="button" class="sv-rail-link sv-rail-import-action"
+                        @onclick="OpenImportDialog">
+                    <span class="sv-rail-icon" aria-hidden="true">⇩</span> Import records
+                </button>
+            }
             <div class="sv-sidebar-network">
                 <span class="sv-sidebar-network-label">Stellar network</span>
-                @if (Ledger.IsConnected)
+                @if (Ledger.IsConnected || SecretLedger.IsConnected)
                 {
                     <div class="sv-sidebar-connected"><span aria-hidden="true">●</span> Connected</div>
-                    <p>Your vault is connected to the selected Stellar network.</p>
+                    <p>@(ActiveMode == VaultWorkspaceMode.StellarSecretKey
+                        ? "Independent Secret Key account chain · " +
+                          (Networks.SelectedPreset == "public" ? "Mainnet" :
+                           Networks.SelectedPreset == "custom" ? "Custom network" : "Testnet")
+                        : "Your vault is connected to the selected Stellar network.")</p>
                 }
                 else
                 {
@@ -65,10 +107,26 @@ else
                 <a href="https://github.com/ToorajValaee/StellarVault" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">⌘</span> View source on GitHub <span aria-hidden="true">↗</span></a>
 
             </div>
-            <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected ? "Stellar connected" : "Not connected")</div>
+            <div class="sv-pwa-rail-foot"><span class="sv-pwa-led @(Ledger.IsConnected || SecretLedger.IsConnected ? "connected" : "")"></span>@(Ledger.IsConnected || SecretLedger.IsConnected ? "Stellar connected" : "Not connected")</div>
             <div class="sv-rail-attribution">Powered by <a href="https://badje.ir/" target="_blank" rel="noopener noreferrer">badje.ir</a></div>
         </nav>
-        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="_appView">
+        @if (_showImportDialog)
+        {
+            <div class="modal-backdrop" @onclick="CloseImportDialog">
+                <section class="record-modal terminal-panel sv-vault-import-dialog"
+                         role="dialog" aria-modal="true" aria-label="Import records"
+                         @onclick:stopPropagation="true">
+                    <header class="modal-header">
+                        <h2>Import into encrypted local drafts</h2>
+                        <button type="button" class="icon-button close-button" aria-label="Close import"
+                                @onclick="CloseImportDialog">×</button>
+                    </header>
+                    <VaultRecordTransferPanel @key="ActiveMode" Mode="import"
+                        Strategy="@(ActiveMode == VaultWorkspaceMode.StellarSecretKey ? VaultMutationStrategyPolicy.Linked : VaultMutationStrategyPolicy.Hd)" />
+                </section>
+            </div>
+        }
+        <main class="sv-pwa-stage" id="sv-pwa-workspace" tabindex="-1" @key="WorkspaceRenderKey">
         <section class="vault-page sv-pwa-vault-page">
             <header class="sv-pwa-screen-header">
                 <div>
@@ -79,19 +137,34 @@ else
                 <div class="sv-pwa-screen-tools">
                     @if (_appView == "records")
                     {
-                        <button class="pixel-button primary sv-create-record" type="button" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span> New record</button>
-                        <button class="pixel-button sv-create-folder" type="button" @onclick='() => OpenEditor("folder")'><span aria-hidden="true">＋</span> New folder</button>
+                        <button class="pixel-button primary sv-create-record" type="button" @onclick="CreateRecordForActiveVault"><span aria-hidden="true">＋</span> New record</button>
+                        <button class="pixel-button sv-create-folder" type="button" @onclick="CreateFolderForActiveVault"><span aria-hidden="true">＋</span> New folder</button>
+                        <button class="pixel-button sv-create-file" type="button" @onclick="CreateFileForActiveVault"><span aria-hidden="true">＋</span> Add file</button>
                     }
-                    @if (!Ledger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
-                    <button class="pixel-button compact" type="button" disabled="@(_infoLoading || !Ledger.IsConnected)" aria-label="Account information" @onclick="OpenAccountInfoAsync">ⓘ Account</button>
-                    @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshAsync" disabled="@(_busy || !Ledger.IsConnected)">↻ Refresh</button> }
-                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock</button>
+                    @if (!Ledger.IsConnected && !SecretLedger.IsConnected) { <button class="pixel-button compact" type="button" @onclick="ReconnectAsync">CONNECT STELLAR</button> }
+                    <button class="pixel-button compact" type="button" disabled="@(_infoLoading || (!Ledger.IsConnected && !SecretLedger.IsConnected))" aria-label="Account information" @onclick="OpenActiveAccountInfoAsync">ⓘ Account</button>
+                    @if (_appView == "records") { <button class="pixel-button compact" type="button" @onclick="RefreshActiveVaultAsync" disabled="@(_busy || (!Ledger.IsConnected && !SecretLedger.IsConnected))">↻ Refresh</button> }
+                    <button class="pixel-button compact" type="button" @onclick="LockActiveVaultAsync">Lock</button>
                 </div>
             </header>
-            @if (_appView == "records" && Ledger.IsConnected)
+            @if (_appView == "records" && ActiveMode == VaultWorkspaceMode.MnemonicHd && Ledger.IsConnected)
             {
                 <div class="sv-vault-overview" aria-label="Vault contents"><span>@Records.Count secure records</span><span aria-hidden="true">·</span><span>@Folders.Count folders</span><span aria-hidden="true">·</span><span>@(Ledger.IsConnected ? "Stellar connected" : "Local session")</span></div>
+
             }
+        @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+        {
+            @* Keep the S-key ledger/queue panel mounted across tabs; only its
+               strategy-specific content changes, never the application shell. *@
+            <div hidden="@(_appView == "help")" class="sv-linked-unified-workspace">
+                <VaultSecretKeyWorkspace Embedded="true"
+                                         View="@(_appView == "help" ? "records" : _appView)"
+                                         OnViewChange="SelectAppView"
+                                         @ref="_linkedWorkspace" />
+            </div>
+        }
+        else
+        {
         @if (_appView == "help")
         {
             <VaultHelpContent />
@@ -118,7 +191,7 @@ else
                         <p>@(Retention.AllowsLocalPersistence ? "Device storage allowed" : "Stellar-only session")</p></div>
                     </div>
                     <p class="advanced-help">Offline data stays on this device until you explicitly approve synchronization. Keep your own backup.</p>
-                    <button class="pixel-button compact" type="button" @onclick="LockAsync">Lock vault</button>
+                    <button class="pixel-button compact" type="button" @onclick="LockActiveVaultAsync">Lock vault</button>
                 </div>
             </section>
         }
@@ -148,8 +221,9 @@ else
                 <p class="advanced-help">Nothing syncs without your approval. Changes that might have been submitted remain pending until verified.</p>
                 <button type="button" class="pixel-button compact" @onclick="LoadPendingAsync" disabled="@_pendingLoading">↻ Refresh</button>
                 <button type="button" class="pixel-button compact" @onclick="PrepareLocalSyncReviewAsync" disabled="@_pendingLoading">Review changes</button>
-                <VaultHybridSyncReview />
+                <VaultHybridSyncReview QueueChanged="RefreshHybridWorkspaceAsync" />
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
+                @if (!string.IsNullOrWhiteSpace(_syncEstimateNote)) { <p class="advanced-help" role="status">@_syncEstimateNote</p> }
                 @if (_pendingItems.Count > 0)
                 {
                     <p role="status">PENDING: @_pendingItems.Count(x => x.State == VaultSyncState.Pending) · UNCERTAIN: @_pendingItems.Count(x => x.State is VaultSyncState.Uncertain or VaultSyncState.Submitting) · CONFLICTS: @_pendingItems.Count(x => x.State == VaultSyncState.Conflict)</p>
@@ -163,16 +237,28 @@ else
                             <strong>RECOVERY INSPECTION — READ ONLY</strong>
                             @foreach (var recovery in _recoveryInspections)
                             {
-                                <p role="status">
-                                    MUTATION: @recovery.MutationId · STATE: @recovery.State
-                                    · HASH: @(recovery.TransactionHash ?? "NOT RECORDED")
-                                    · @recovery.Guidance
-                                </p>
+                                <div class="sv-recovery-checkpoint-group" role="status">
+                                    <p>
+                                        MUTATION: @recovery.MutationId · STATE: @recovery.State
+                                        · PRIMARY HASH: @(recovery.TransactionHash ?? "NOT RECORDED")
+                                        · @recovery.Guidance
+                                    </p>
+                                    @if (!recovery.CheckpointJournalValid)
+                                    {
+                                        <p role="alert">The signed checkpoint journal is malformed. Do not retry, confirm or discard this submission.</p>
+                                    }
+                                    @foreach (var checkpoint in recovery.Checkpoints)
+                                    {
+                                        <p>Signed @checkpoint.Kind · TARGET: <code>@checkpoint.TargetId</code>
+                                            · TRANSACTION HASH: <code>@checkpoint.TransactionHash</code>
+                                            · NOT VERIFIED</p>
+                                    }
+                                </div>
                             }
                         </section>
                     }
                     <div class="record-list">
-                        @foreach (var change in _pendingItems.OrderBy(x => x.CreatedUtc))
+                        @foreach (var change in _pendingItems.Where(x => !IsHdTreePart(x)).OrderBy(x => x.CreatedUtc))
                         {
                             <button type="button" class="record-card" @onclick="() => OpenPending(change)">
                                 <span class="record-card-body"><strong>@PendingTitle(change)</strong><small>@change.Kind · LOCAL @change.State · @change.CreatedUtc.ToLocalTime().ToString("g")</small><small>@(change.State is VaultSyncState.Submitting or VaultSyncState.Uncertain ? "Submission may have reached Stellar — do not retry" : change.State == VaultSyncState.Confirmed ? "Independently confirmed" : "On this device only · Not submitted to Stellar")</small></span><span class="record-chevron">›</span>
@@ -237,32 +323,12 @@ else
         }
         <div class="sv-mobile-collection-content sv-mobile-collection-@_mobileCollection">
         <div class="sv-explorer-layout">
-        <aside class="sv-explorer-tree terminal-panel" aria-label="Folder explorer">
-            <div class="sv-explorer-tree-title">My Vault <span class="sv-explorer-tree-count">@Folders.Count folders</span></div>
-            <button type="button" class="sv-tree-item @(_folder is null ? "selected" : "")"
-                    aria-current="@(_folder is null ? "location" : null)"
-                    @onclick='() => _folder = null'><span aria-hidden="true">▣</span> My vault</button>
-            @foreach (var folder in Folders.OrderBy(f => FolderPath(f.Id), StringComparer.OrdinalIgnoreCase))
-            {
-                @if (IsTreeFolderVisible(folder))
-                {
-                    <div class="sv-tree-node" style="--sv-tree-depth:@FolderDepth(folder.Id)">
-                        @if (HasTreeChildren(folder.Id))
-                        {
-                            <button class="sv-tree-expander" type="button" aria-label="@($"Toggle {folder.Title} children")"
-                                    aria-expanded="@(!_collapsedFolders.Contains(folder.Id))" @onclick="() => ToggleTreeFolder(folder.Id)">
-                                <span aria-hidden="true">@(_collapsedFolders.Contains(folder.Id) ? "▸" : "▾")</span>
-                            </button>
-                        }
-                        else { <span class="sv-tree-expander-placeholder" aria-hidden="true"></span> }
-                        <button type="button" class="sv-tree-item @(_folder == folder.Id ? "selected" : "")"
-                                aria-current="@(_folder == folder.Id ? "location" : null)" @onclick="() => OpenFolder(folder.Id)">
-                            <span class="sv-tree-folder-icon" aria-hidden="true">📁</span>
-                            <span class="sv-tree-label">@folder.Title</span>
-                        </button>
-                    </div>
-                }
-            }
+        <VaultExplorerTree Folders="@Folders"
+                           SelectedFolderId="@_folder"
+                           CollapsedFolderIds="_collapsedFolders"
+                           OnFolderSelected="SelectFolderFromTree"
+                           OnToggleFolder="ToggleTreeFolder">
+            <AdditionalFolders>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
                 @foreach (var draft in PendingLocalFolders)
@@ -274,7 +340,8 @@ else
                     </button>
                 }
             }
-        </aside>
+            </AdditionalFolders>
+        </VaultExplorerTree>
         <div class="sv-explorer-main @(_explorerLayout == "grid" ? "sv-view-grid" : "sv-view-list")" data-explorer-layout="@_explorerLayout">
         <section class="terminal-panel sv-explorer-folder-panel">
             <nav class="sv-explorer-breadcrumbs" aria-label="Folder path">
@@ -317,34 +384,41 @@ else
                     <button class="pixel-button compact sv-folder-open" @onclick="() => OpenFolder(item.Id)"><span aria-hidden="true">📁</span><span>@item.Title</span></button>
                     <span class="sv-object-type">Folder</span><span class="sv-object-storage">Stellar</span>
                     <details class="sv-object-actions"><summary aria-label="@($"Actions for folder {item.Title}")" title="More actions">⋯</summary>
-                        <div class="sv-object-menu"><button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
-                        <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
-                        <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button></div>
+                        <div class="sv-object-menu">
+                            <button type="button" @onclick="() => OpenFolder(item.Id)">Open folder</button>
+                            <button type="button" @onclick='() => OpenEditor("folder", item.Id)'>Rename / move</button>
+                            @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(item))
+                            {
+                                <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
+                            }
+                        </div>
                     </details>
                 </div>
             }
-                @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
+            {
+                @foreach (var draft in PendingLocalFolders.Where(x => PendingFolderId(x) == _folder))
                 {
-                    @foreach (var draft in PendingLocalFolders.Where(x => PendingFolderId(x) == _folder))
-                    {
-                        <div class="sv-folder-tile">
-                            <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)"><span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span></button>
-                            <span class="sv-object-type">Folder</span><span class="sv-object-storage">Local</span>
+                    <div class="sv-folder-tile">
+                        <button class="pixel-button compact sv-folder-open" type="button" @onclick="() => OpenFolder(draft.EntityId)">
+                            <span aria-hidden="true">📁</span><span>@PendingTitle(draft) · Local</span>
+                        </button>
+                        <span class="sv-object-type">Folder</span><span class="sv-object-storage">Local</span>
                         <details class="sv-object-actions"><summary aria-label="@($"Actions for {PendingTitle(draft)}")" title="More actions">⋯</summary>
-                                <div class="sv-object-menu">
-                                    <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
-                                    <button type="button" @onclick="() => OpenPending(draft)">Edit local draft</button>
-                                </div>
-                            </details>
-                        </div>
-                    }
+                            <div class="sv-object-menu">
+                                <button type="button" @onclick="() => OpenFolder(draft.EntityId)">Open folder</button>
+                                <button type="button" @onclick="() => OpenPending(draft)">Edit local draft</button>
+                            </div>
+                        </details>
+                    </div>
                 }
+            }
             </div>
             @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked)
             {
                 @foreach (var draft in _pendingItems.Where(x => x.State == VaultSyncState.Pending &&
                     x.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.UploadFile &&
-                    PendingFolderId(x) == _folder))
+                    PendingFolderId(x) == _folder && !IsHdTreePart(x)))
                 {
                     <div class="sv-object-row">
                         <button type="button" class="record-card sv-modern-record" @onclick="() => OpenPending(draft)">
@@ -367,25 +441,15 @@ else
             {
                 @foreach (var item in Filtered)
                 {
-                    <div class="sv-object-row @(_selected?.Id == item.Id ? "is-selected" : "")">
-                        <button class="record-card sv-modern-record" type="button" @onclick="() => OpenRecord(item)"
-                                aria-label="@($"View {item.Title}")" aria-current="@(_selected?.Id == item.Id ? "true" : null)">
-                            <span class="sv-modern-record-icon" aria-hidden="true">@(IsLedgerFile(item) ? "▤" : "▦")</span>
-                            <span class="record-card-body"><strong>@item.Title</strong><small>@(IsLedgerFile(item) ? "Encrypted file" : "Secure record")</small>
-                            @if (item.Tags is { Length: > 0 }) { <span class="tag-row">@foreach (var tag in item.Tags.Take(3)) { <span class="pixel-tag">#@tag</span> }</span> }
-                            </span>
-                        </button>
-                        <span class="sv-object-type">@(IsLedgerFile(item) ? "File" : "Record")</span>
-                        <span class="sv-object-storage">Stellar</span>
-                        <details class="sv-object-actions">
-                            <summary aria-label="@($"Actions for {item.Title}")" title="More actions">⋯</summary>
-                            <div class="sv-object-menu">
-                                <button type="button" @onclick="() => OpenRecord(item)">View details</button>
-                                @if (!IsLedgerFile(item)) { <button type="button" @onclick='() => OpenEditor("record", item.Id)'>Edit record</button> }
-                                <button type="button" class="sv-object-delete" @onclick="() => SelectDelete(item)">Delete</button>
-                            </div>
-                        </details>
-                    </div>
+                    <VaultExplorerItemRow Item="item"
+                                          Strategy="@VaultMutationStrategyPolicy.Hd"
+                                          Records="@Records.Concat(Folders).ToArray()"
+                                          Selected="@(_selected?.Id == item.Id)"
+                                          CanEdit="@(!IsLedgerFile(item))"
+                                          CanDelete="@(!IsLedgerFile(item))"
+                                          OnOpen="OpenRecord"
+                                          OnEdit="EditPublishedRecordFromRow"
+                                          OnDelete="SelectDelete" />
                 }
             }
         </section>
@@ -394,21 +458,29 @@ else
         </div>
         </div>
         }
+        }
+        @if (ActiveMode == VaultWorkspaceMode.StellarSecretKey && _appView == "help")
+        {
+            <VaultHelpContent />
+        }
         </section>
         </main>
         <nav class="sv-pwa-mobile-tabs" aria-label="Mobile vault navigation">
             <button type="button" class="@(_appView == "records" ? "selected" : "")" aria-current="@(_appView == "records" ? "page" : null)" @onclick='() => SelectAppView("records")'><span aria-hidden="true">⌂</span>Home</button>
             <button type="button" class="@(_appView == "drafts" ? "selected" : "")" aria-current="@(_appView == "drafts" ? "page" : null)"
-                    @onclick='() => SelectAppView(Retention.AllowsLocalPersistence && Sessions.IsUnlocked ? "drafts" : "records")'><span aria-hidden="true">♙</span>Vault</button>
+                    @onclick='() => SelectAppView(ActiveMode == VaultWorkspaceMode.StellarSecretKey || (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) ? "drafts" : "records")'><span aria-hidden="true">♙</span>Vault</button>
             <button type="button" class="@(_appView == "sync" ? "selected" : "")" aria-current="@(_appView == "sync" ? "page" : null)"
                     @onclick='() => SelectAppView("sync")'><span aria-hidden="true">⟳</span>Sync</button>
             <button type="button" class="@(_appView == "settings" ? "selected" : "")" aria-current="@(_appView == "settings" ? "page" : null)"
                     @onclick='() => SelectAppView("settings")'><span aria-hidden="true">⚙</span>Settings</button>
         </nav>
-        <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick='() => OpenEditor("record")'><span aria-hidden="true">＋</span></button>
-        @if (_editorOpen)
+        <button type="button" class="sv-modern-fab" aria-label="Create a new vault item" title="New item" @onclick="CreateRecordForActiveVault"><span aria-hidden="true">＋</span></button>
+        @if (_editorOpen && ActiveMode == VaultWorkspaceMode.MnemonicHd)
         {
             <aside class="sv-editor-sidecar" aria-label="Vault item editor">
+                <div class="sv-inspector-resize-handle sv-editor-resize-handle" role="separator"
+                     aria-label="Resize record editor" aria-orientation="vertical"
+                     tabindex="0" title="Drag or use arrow keys to adjust editor width"></div>
                 <div class="sv-sidecar-topbar">
                     <div><span class="sv-sidecar-eyebrow">Vault workspace</span><h2>@(_editorRecordId is not null ? "Edit item" : _editorKind == "folder" ? "New folder" : _editorKind == "file" ? "Add file" : "New record")</h2></div>
                     <button type="button" class="sv-sidecar-close" aria-label="Close editor" @onclick="CloseEditor">×</button>
@@ -433,65 +505,22 @@ else
         {
     @if (_selected is not null)
     {
-        <div class="modal-backdrop sv-record-inspector-backdrop" @onclick="CloseRecord">
-            <section class="record-modal terminal-panel sv-record-inspector" role="region"
-                     aria-labelledby="sv-record-title" @onclick:stopPropagation="true">
-                <div class="sv-inspector-resize-handle" role="separator" aria-label="Resize record preview" aria-orientation="vertical"
-                     tabindex="0" title="Drag to adjust preview width"></div>
-                <header class="modal-header sv-inspector-heading">
-                    <div class="sv-inspector-title"><span class="sv-inspector-record-icon" aria-hidden="true">▦</span><div><div class="panel-kicker">Record details</div><h2 id="sv-record-title">@_selected.Title</h2><p class="sv-inspector-subtitle">@FolderPath(_selected.FolderId)</p></div></div>
-                    <div class="sv-inspector-tools">
-                        <details class="sv-inspector-more"><summary aria-label="Record actions" title="More actions">⋯</summary>
-                            <div class="sv-inspector-more-menu">
-                                <button type="button" @onclick='() => CopyValueAsync(_selected.Id)'>Copy record ID</button>
-                                @if (!IsLedgerFile(_selected)) { <button type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
-                                <button class="sv-object-delete" type="button" @onclick="() => SelectDelete(_selected)">Delete</button>
-                            </div>
-                        </details>
-                        <button class="icon-button close-button" @onclick="CloseRecord" aria-label="Close record">×</button>
-                    </div>
-                </header>
-                <nav class="sv-inspector-tabs" aria-label="Record preview tabs">
-                    <button type="button" class="@(_recordInspectorTab == "details" ? "selected" : "")"
-                            aria-pressed="@(_recordInspectorTab == "details")"
-                            @onclick='() => _recordInspectorTab = "details"'>▤ Details</button>
-                    <button type="button" class="@(_recordInspectorTab == "activity" ? "selected" : "")"
-                            aria-pressed="@(_recordInspectorTab == "activity")"
-                            @onclick='() => _recordInspectorTab = "activity"'>◷ Activity</button>
-                </nav>
-                @if (_recordInspectorTab == "activity")
-                {
-                    <div class="sv-record-activity">
-                        <h3>Record information</h3>
-                        <dl><dt>Storage</dt><dd>Stellar ledger</dd>
-                            <dt>Type</dt><dd>@(IsLedgerFile(_selected) ? "Encrypted file" : "Secure record")</dd>
-                            <dt>Folder</dt><dd>@FolderPath(_selected.FolderId)</dd>
-                            <dt>Record ID</dt><dd class="sv-activity-id">@_selected.Id</dd></dl>
-                        <p>Historical activity is not available from the current record reader. No activity timestamps are inferred.</p>
-                    </div>
-                }
-                else
-                {
-                <div class="sv-inspector-section-label">Details</div>
-                @if (IsLedgerFile(_selected))
-                {
-                    <div class="data-field"><span class="field-label">ENCRYPTED LEDGER FILE</span><p>Stored in encrypted Stellar ledger chunks.</p><button class="pixel-button primary" type="button" @onclick="DownloadLedgerFileAsync">DOWNLOAD DECRYPTED FILE</button>@if (!string.IsNullOrWhiteSpace(_fileDownloadStatus)) { <p role="status" class="advanced-help">@_fileDownloadStatus</p> }</div>
-                }
-                else
-                {
-                <div class="data-field"><span class="field-label">Username</span><div class="field-value-row"><code>@(_selected.UserName ?? "—")</code><button class="mini-button" @onclick='() => CopyValueAsync(_selected.UserName)'>COPY</button></div></div>
-                <div class="data-field secret-field"><span class="field-label">Password / secret</span><div class="field-value-row"><code class="secret-value">@(_revealed ? _selected.Content : "••••••••••••")</code><div class="inline-actions"><button class="mini-button" @onclick="() => _revealed = !_revealed">@(_revealed ? "HIDE" : "REVEAL")</button><button class="mini-button" @onclick='() => CopyValueAsync(_selected.Content)'>COPY</button></div></div></div>
-                @if (!string.IsNullOrWhiteSpace(_selected.Url)) { <div class="data-field"><span class="field-label">Website</span><div class="field-value-row"><code>@_selected.Url</code><div class="inline-actions">@if (SafeRecordUrl(_selected.Url) is string safeUrl) { <a class="mini-button" href="@safeUrl" target="_blank" rel="noopener noreferrer" aria-label="Open website">Open</a> }<button class="mini-button" @onclick='() => CopyValueAsync(_selected.Url)'>Copy</button></div></div></div> }
-                @if (!string.IsNullOrWhiteSpace(_selected.Notes)) { <div class="data-field"><span class="field-label">Notes</span><p class="record-notes" style="white-space:pre-wrap">@_selected.Notes</p></div> }
-                @if (_selected.Tags is { Length: > 0 }) { <div class="tag-row detail-tags">@foreach (var tag in _selected.Tags) { <span class="pixel-tag">#@tag</span> }</div> }
-                }
-                }
-                <div class="modal-action-row record-actions">
-                    @if (!IsLedgerFile(_selected)) { <button class="pixel-button primary" type="button" @onclick='() => OpenEditor("record", _selected.Id)'>Edit record</button> }
-                    <button class="pixel-button danger" @onclick="() => SelectDelete(_selected)">DELETE</button>
-                </div>
-            </section>
-        </div>
+        <VaultRecordInspector @key="_selected.Id"
+                              Item="_selected"
+                              Strategy="@VaultMutationStrategyPolicy.Hd"
+                              Records="@Records.Concat(Folders).ToArray()"
+                              FolderPath="@FolderPath(_selected.FolderId)"
+                              CanEdit="@(!IsLedgerFile(_selected))"
+                              CanDelete="@(!IsLedgerFile(_selected))"
+                              CanSaveVerifiedFile="@(_verifiedTreeDownload is not null)"
+                              FileStatus="@_fileDownloadStatus"
+                              FileActionLabel="@(VaultLinkedTreeFilePolicy.IsRootRecord(_selected) ? "Verify file integrity" : "Verify and download file")"
+                              OnCopy="CopyValueAsync"
+                              OnClose="CloseRecord"
+                              OnEdit="EditSelectedPublishedRecord"
+                              OnDelete="DeleteSelectedPublishedRecordAsync"
+                              OnVerifyFile="DownloadLedgerFileAsync"
+                              OnSaveVerifiedFile="SaveVerifiedTreeFileAsync" />
     }
         }
     </div>
@@ -505,7 +534,8 @@ else
                     <button class="icon-button close-button" @onclick="ClosePending" aria-label="Close local draft">×</button>
                 </header>
                 @if (_selectedPending.State == VaultSyncState.Pending &&
-                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder)
+                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.UpdateRecord or VaultMutationKind.CreateFolder or VaultMutationKind.UpdateFolder &&
+                    !IsHdTreeMutation(_selectedPending))
                 {
                     <label class="terminal-label">LOCAL DRAFT TITLE</label>
                     <input class="terminal-input" @bind="_pendingEditTitle" maxlength="256" />
@@ -545,13 +575,6 @@ else
                 }
                 <div class="data-field"><span class="field-label">OPERATION</span><code>@_selectedPending.Kind</code></div>
                 <div class="data-field"><span class="field-label">LOCAL STATUS</span><code>@_selectedPending.State</code></div>
-                @if (_selectedPending.State == VaultSyncState.Pending &&
-                    _selectedPending.Kind is VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder &&
-                    _selectedPending.EntityId.Length == 32 && Ledger.IsConnected)
-                {
-                    <p class="advanced-help">Legacy offline ID: migration requires a current ledger read and does not publish data.</p>
-                    <button type="button" class="pixel-button compact" disabled="@_pendingDeleting" @onclick="MigrateSelectedLegacyIdAsync">MIGRATE LEGACY LOCAL ID</button>
-                }
                 <div class="data-field"><span class="field-label">SAVED ON DEVICE</span><code>@_selectedPending.CreatedUtc.ToLocalTime().ToString("g")</code></div>
                 @if (_selectedPending.State is VaultSyncState.Submitting or VaultSyncState.Uncertain)
                 {
@@ -653,6 +676,81 @@ else
 </AdaptiveShell>
 
 @code {
+    private string WorkspaceRenderKey =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey ? "linked" : _appView;
+
+    private VaultSecretKeyWorkspace? _linkedWorkspace;
+
+    private void CreateRecordForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            _linkedWorkspace?.CreateRecordFromShell();
+        else OpenEditor("record");
+    }
+
+    private void CreateFolderForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            _linkedWorkspace?.CreateFolderFromShell();
+        else OpenEditor("folder");
+    }
+
+    private void CreateFileForActiveVault()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+            SelectAppView("drafts");
+        else OpenEditor("file");
+    }
+
+    private Task RefreshActiveVaultAsync() =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey
+            ? _linkedWorkspace?.RefreshFromShellAsync() ?? Task.CompletedTask
+            : RefreshAsync();
+
+    private bool _showImportDialog;
+
+    private void OpenImportDialog()
+    {
+        if (_appView != "records" ||
+            ActiveMode is not (VaultWorkspaceMode.MnemonicHd or VaultWorkspaceMode.StellarSecretKey))
+            return;
+        _showImportDialog = true;
+    }
+
+    private void CloseImportDialog() => _showImportDialog = false;
+
+    private async Task ClearHybridResumeIntentAsync()
+    {
+        try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+        catch (JSException) { /* Volatile signing keys are still revoked by lock. */ }
+    }
+
+    private async Task LockActiveVaultAsync()
+    {
+        if (ActiveMode == VaultWorkspaceMode.StellarSecretKey)
+        {
+            if (_linkedWorkspace is null)
+                throw new InvalidOperationException("Linked workspace has not initialized.");
+            await _linkedWorkspace.LockFromShellAsync();
+            Workflow.Lock();
+            Retention.Reset();
+            LinkedRetention.Reset();
+            StorageMode.Reset();
+            Privacy.Clear();
+            ClearPendingSnapshot();
+            ClearSyncReview();
+            _showImportDialog = false;
+            await ClearHybridResumeIntentAsync();
+            return;
+        }
+        await LockAsync();
+    }
+
+    private Task OpenActiveAccountInfoAsync() =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey
+            ? _linkedWorkspace?.ShowAccountInfoFromShellAsync() ?? Task.CompletedTask
+            : OpenAccountInfoAsync();
+
     private int FolderDepth(string id)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -677,8 +775,22 @@ else
     private string _explorerLayout = "list";
     private string _mobileCollection = "all";
     private bool _showMobileFilters;
-    private string _recordInspectorTab = "details";
     private readonly HashSet<string> _collapsedFolders = new(StringComparer.Ordinal);
+    private void SelectFolderFromTree(string? id) => OpenFolder(id ?? string.Empty);
+    private void EditSelectedPublishedRecord()
+    {
+        if (_selected is { } item && !IsLedgerFile(item))
+            EditPublishedRecordFromRow(item);
+    }
+
+    private Task DeleteSelectedPublishedRecordAsync() =>
+        _selected is { } item && !IsLedgerFile(item)
+            ? SelectDelete(item) : Task.CompletedTask;
+
+    private void EditPublishedRecordFromRow(LedgerRecordItem item) =>
+        OpenEditor(item.IsFolder ? "folder" : "record", item.Id);
+
+
     private void ToggleTreeFolder(string id)
     {
         if (!_collapsedFolders.Add(id)) _collapsedFolders.Remove(id);
@@ -823,35 +935,6 @@ else
         finally { _pendingDeleting = false; }
     }
 
-    private async Task MigrateSelectedLegacyIdAsync()
-    {
-        if (_pendingDeleting || !Ledger.IsConnected ||
-            _selectedPending is not { State: VaultSyncState.Pending } selected ||
-            selected.EntityId.Length != 32 ||
-            selected.Kind is not (VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder)) return;
-        _pendingDeleting = true;
-        _pendingDeleteError = null;
-        try
-        {
-            var records = await Ledger.ReadAsync();
-            var entries = await PendingQueue.ReviewAllAsync(selected.AccountId, selected.NetworkId);
-            var occupied = new HashSet<string>(records.Select(x => x.Id), StringComparer.OrdinalIgnoreCase);
-            occupied.UnionWith(entries.Select(x => x.EntityId));
-            string nextId;
-            do { nextId = Guid.NewGuid().ToString("N")[..16]; }
-            while (occupied.Contains(nextId));
-            var migrated = await PendingQueue.MigrateLegacyCreateIdAsync(
-                selected.AccountId, selected.NetworkId, selected.Id, nextId);
-            _selectedPending = migrated;
-            await LoadPendingAsync();
-            _syncReview = null;
-            _syncEstimates = [];
-            _pendingDeleteError = "Legacy draft ID migrated locally. Review dependencies and costs before synchronization.";
-        }
-        catch (Exception ex) { _pendingDeleteError = "Legacy ID migration blocked: " + ex.Message; }
-        finally { _pendingDeleting = false; }
-    }
-
     private bool _pendingDeleting;
     private string? _pendingDeleteError;
     private async Task DiscardSelectedPendingAsync()
@@ -862,7 +945,7 @@ else
         try
         {
             await PendingQueue.DiscardPendingAsync(selected.AccountId, selected.NetworkId, selected.Id);
-            _syncReview = null;
+            ClearSyncReview();
             _syncEstimates = [];
             _syncEstimateNote = "Queue changed. Review synchronization readiness again.";
             _selectedPending = null;
@@ -940,7 +1023,7 @@ else
             byte[] revised = JsonSerializer.SerializeToUtf8Bytes(fields);
             try
             {
-                _syncReview = null;
+                ClearSyncReview();
                 _syncEstimates = [];
                 ClearSyncApproval();
                 _syncEstimateNote = "Local draft changed. Re-run sync review and fee estimation.";
@@ -954,6 +1037,37 @@ else
         finally { _pendingDeleting = false; }
     }
     private void ClosePending() { if (!_pendingDeleting) { _selectedPending = null; _pendingDeleteError = null; } }
+
+    private static bool IsHdTreeMutation(VaultPendingMutation change)
+    {
+        if (change.Kind != VaultMutationKind.CreateRecord) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(change.EncryptedPayload);
+            return doc.RootElement.TryGetProperty("Content", out var content) &&
+                content.ValueKind == JsonValueKind.String &&
+                content.GetString()?.StartsWith(VaultLinkedTreeFilePolicy.Prefix,
+                    StringComparison.Ordinal) == true;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    // Hidden parts remain visible in the per-transaction Sync queue, not as
+    // thousands of unrelated user records in the file explorer.
+    private static bool IsHdTreePart(VaultPendingMutation change)
+    {
+        if (!IsHdTreeMutation(change)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(change.EncryptedPayload);
+            if (!doc.RootElement.TryGetProperty("Tags", out var tags) ||
+                tags.ValueKind != JsonValueKind.Array || tags.GetArrayLength() == 0)
+                return false;
+            var type = tags[0].GetString();
+            return type is "svtree3-leaf" or "svtree3-branch";
+        }
+        catch (JsonException) { return false; }
+    }
 
     private static string PendingTitle(VaultPendingMutation change)
     {
@@ -1022,7 +1136,7 @@ else
         try
         {
             var report = await HybridReview.ReviewAsync(account, estimateFees: true);
-            _syncReview = report.Queue;
+            SetSyncReview(report.Queue);
             _syncEstimates = report.Estimates.Select(x =>
                 new PendingEstimate(x.Title, x.Explanation, x.Quote)).ToList();
             _syncEstimateNote = "Estimates are read-only and expire. Manual synchronization remains disabled.";
@@ -1046,8 +1160,8 @@ else
             foreach (var entry in interrupted.Where(x => x.State == VaultSyncState.Submitting))
                 await PendingQueue.QuarantineInterruptedAsync(account, network, entry.Id);
             _pendingError = null;
-            _syncReview = await PendingQueue.PrepareReviewAsync(account, network);
-            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            SetSyncReview(await PendingQueue.PrepareReviewAsync(account, network));
+            ReplacePendingSnapshot(await PendingQueue.ReviewAllAsync(account, network));
             _syncEstimates = [];
             ClearSyncApproval();
             _approvalStatus = null;
@@ -1078,6 +1192,8 @@ else
         {
             var network = Networks.CredentialKey(account);
             var review = await PendingQueue.PrepareReviewAsync(account, network);
+            try
+            {
             var mutation = review.Ready.SingleOrDefault(x => x.Id == snapshot.MutationId)
                 ?? throw new InvalidOperationException("Mutation is no longer ready.");
             VaultSyncApprovalGuard.RequireFresh(snapshot, mutation, account, network,
@@ -1091,6 +1207,12 @@ else
             _reviewedQuote = snapshot;
             _reviewedDraftTitle = draft.Title;
             _approvalStatus = "Quote checked against current queue and costs. Review the details below. Broadcasting is disabled.";
+            }
+            finally
+            {
+                foreach (var ready in review.Ready)
+                    CryptographicOperations.ZeroMemory(ready.EncryptedPayload);
+            }
         }
         catch (Exception ex) { _approvalStatus = "Quote rejected: " + ex.Message; }
         finally { _pendingLoading = false; }
@@ -1121,6 +1243,41 @@ else
             _approvalStatus = "Review acknowledged locally. No transaction was reserved, signed or broadcast.";
     }
 
+    private void ClearSyncReview()
+    {
+        if (_syncReview is { } existing)
+            foreach (var ready in existing.Ready)
+                CryptographicOperations.ZeroMemory(ready.EncryptedPayload);
+        _syncReview = null;
+    }
+
+    private void SetSyncReview(VaultSyncReview review)
+    {
+        ArgumentNullException.ThrowIfNull(review);
+        ClearSyncReview();
+        _syncReview = review;
+    }
+
+    private void ClearPendingSnapshot()
+    {
+        // Selected drafts can also be standalone results of a CAS revision,
+        // not references into the last reviewed queue list.
+        if (_selectedPending is { } selected &&
+            !_pendingItems.Any(item => ReferenceEquals(item, selected)))
+            CryptographicOperations.ZeroMemory(selected.EncryptedPayload);
+        _selectedPending = null;
+        foreach (var entry in _pendingItems)
+            CryptographicOperations.ZeroMemory(entry.EncryptedPayload);
+        _pendingItems = [];
+    }
+
+    private void ReplacePendingSnapshot(IReadOnlyList<VaultPendingMutation> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ClearPendingSnapshot();
+        _pendingItems = items;
+    }
+
     private VaultSyncReview? _syncReview;
     private async Task PrepareLocalSyncReviewAsync()
     {
@@ -1128,13 +1285,13 @@ else
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
         _pendingError = null;
-        _syncReview = null;
+        ClearSyncReview();
         _syncEstimates = [];
         _syncEstimateNote = null;
         ClearSyncApproval();
         try
         {
-            _syncReview = await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account));
+            SetSyncReview(await PendingQueue.PrepareReviewAsync(account, Networks.CredentialKey(account)));
         }
         catch (Exception ex) { _pendingError = "Sync readiness review failed: " + ex.Message; }
         finally { _pendingLoading = false; }
@@ -1151,16 +1308,25 @@ else
             Sessions.ActiveAccountId is not string account) return;
         _pendingLoading = true;
         _pendingError = null;
-        _syncReview = null;
+        ClearSyncReview();
+        // Old decrypted items must not remain visible when this fetch fails
+        // or a previous account's encrypted queue cannot be reopened.
+        ClearPendingSnapshot();
         _recoveryInspections = [];
         try
         {
             var network = Networks.CredentialKey(account);
-            _pendingItems = await PendingQueue.ReviewAllAsync(account, network);
+            ReplacePendingSnapshot(await PendingQueue.ReviewAllAsync(account, network));
             _recoveryInspections = await PendingQueue.InspectOutstandingRecoveriesAsync(account, network);
         }
         catch (Exception ex) { _pendingError = "Unable to open encrypted device queue: " + ex.Message; }
         finally { _pendingLoading = false; }
+    }
+
+    private async Task RefreshHybridWorkspaceAsync()
+    {
+        await LoadPendingAsync();
+        if (Ledger.IsConnected) await RefreshAsync();
     }
 
     private IReadOnlyList<LedgerRecordItem> _records = [];
@@ -1171,43 +1337,131 @@ else
 
 
     [Inject] private Microsoft.JSInterop.IJSRuntime JS { get; set; } = default!;
-    private static bool IsLedgerFile(LedgerRecordItem item) => LedgerFileProtocol.IsFile(item);
+    private static bool IsLedgerFile(LedgerRecordItem item) =>
+        VaultPublishedFileClassification.IsFile(item);
+
+    private static bool SamePublishedDeleteSnapshot(
+        LedgerRecordItem expected, LedgerRecordItem actual) =>
+        string.Equals(expected.Id, actual.Id, StringComparison.OrdinalIgnoreCase) &&
+        expected.Title == actual.Title &&
+        expected.Content == actual.Content &&
+        expected.FolderId == actual.FolderId &&
+        expected.IsFolder == actual.IsFolder &&
+        expected.UserName == actual.UserName &&
+        expected.Url == actual.Url &&
+        expected.Notes == actual.Notes &&
+        (expected.Tags ?? []).SequenceEqual(actual.Tags ?? [], StringComparer.Ordinal);
+
+    private sealed record VerifiedTreeDownload(string RootId, string FileName,
+        IReadOnlyList<LedgerRecordItem> Records);
+    private VerifiedTreeDownload? _verifiedTreeDownload;
+    private string? _fileDownloadStatus;
+    private LedgerRecordItem? _selected;
+
     private async Task DownloadLedgerFileAsync()
     {
         if (_selected is null || !IsLedgerFile(_selected)) return;
-        _fileDownloadStatus = "RECOVERING ENCRYPTED FILE FROM STELLAR...";
+        _verifiedTreeDownload = null;
+        _fileDownloadStatus = "Checking file chunks and cryptographic integrity on Stellar… No download has started.";
         try
         {
-            // Re-read the full authenticated ledger snapshot rather than trusting
-            // an old in-memory list that may omit parts from a recent publication.
             var all = await Ledger.ReadAsync();
             var current = all.SingleOrDefault(r => r.Id == _selected.Id)
-                ?? throw new InvalidDataException("File manifest is no longer available.");
-            var bytes = LedgerFileProtocol.DecodeFile(current, all);
-            try
+                ?? throw new InvalidDataException("File root is no longer available.");
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(current))
             {
-                await JS.InvokeVoidAsync("stellarVaultV2Download.save",
-                    LedgerFileProtocol.FileName(current), bytes);
-                _fileDownloadStatus = "File verified and downloaded.";
+                // This pass never exports plaintext or opens a file picker.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    current.Id, all, Stream.Null);
+                _verifiedTreeDownload = new VerifiedTreeDownload(
+                    current.Id, verified.FileName, all);
+                _fileDownloadStatus = "Integrity verified. Click Save verified file to choose where to download the decrypted copy.";
             }
-            finally { CryptographicOperations.ZeroMemory(bytes); }
+            else
+            {
+                var bytes = LedgerFileProtocol.DecodeFile(current, all);
+                try
+                {
+                    await JS.InvokeVoidAsync("stellarVaultV2Download.save",
+                        LedgerFileProtocol.FileName(current), bytes);
+                    _fileDownloadStatus = "File verified and downloaded. Keep the decrypted copy in a secure location.";
+                }
+                finally { CryptographicOperations.ZeroMemory(bytes); }
+            }
         }
         catch (Exception ex)
         {
-            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.Message;
+            _fileDownloadStatus = "Encrypted file recovery failed: " + ex.GetType().Name;
         }
     }
-    private string? _fileDownloadStatus;
-    private LedgerRecordItem? _selected;
-    private bool _revealed;
-    private void OpenRecord(LedgerRecordItem item) { _editorOpen = false; _selected = item; _recordInspectorTab = "details"; _revealed = false; _fileDownloadStatus = null; }
-    private void CloseRecord() { if (_busy) return; _selected = null; _revealed = false; _fileDownloadStatus = null; }
-    private void CancelDelete() { if (_busy) return; _deleteCandidate = null; _deleteEstimate = null; }
-    private static string? SafeRecordUrl(string? value)
+
+    private async Task SaveVerifiedTreeFileAsync()
     {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return null;
-        return uri.Scheme is "http" or "https" ? uri.AbsoluteUri : null;
+        if (_verifiedTreeDownload is not { } prepared) return;
+        _verifiedTreeDownload = null;
+        var pipe = new Pipe(new PipeOptions(
+            pauseWriterThreshold: 256 * 1024,
+            resumeWriterThreshold: 128 * 1024));
+        using var cancel = new CancellationTokenSource();
+        var producer = Task.Run(async () =>
+        {
+            await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+            try
+            {
+                await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, prepared.Records, writer, cancel.Token);
+                await writer.FlushAsync(cancel.Token);
+                await pipe.Writer.CompleteAsync();
+            }
+            catch (Exception ex)
+            {
+                await pipe.Writer.CompleteAsync(ex);
+                throw;
+            }
+        });
+        try
+        {
+            await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+            if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                throw new IOException("File export was cancelled.");
+            await producer;
+            _fileDownloadStatus = "Streamed verified file saved.";
+        }
+        catch (Exception ex)
+        {
+            cancel.Cancel();
+            try { await producer; } catch { /* Preserve export error. */ }
+            _fileDownloadStatus = "File export failed: " + ex.GetType().Name +
+                ". Verify the file again before retrying.";
+        }
+        finally { await pipe.Reader.CompleteAsync(); }
     }
+
+    private void OpenRecord(LedgerRecordItem item)
+    {
+        _editorOpen = false;
+        _selected = item;
+       
+        _fileDownloadStatus = null;
+        _verifiedTreeDownload = null;
+    }
+
+    private void CloseRecord()
+    {
+        if (_busy) return;
+        _selected = null;
+       
+        _fileDownloadStatus = null;
+        _verifiedTreeDownload = null;
+    }
+
+    private void CancelDelete()
+    {
+        if (_busy) return;
+        _deleteCandidate = null;
+        _deleteEstimate = null;
+    }
+
     private async Task CopyValueAsync(string? value) { if (!string.IsNullOrEmpty(value)) await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
     private bool _showAccountInfo, _infoLoading;
     private LedgerAccountInfo? _accountInfo;
@@ -1235,29 +1489,95 @@ else
         if (local is not null) OpenFolder(PendingFolderId(local) ?? string.Empty);
     }
     private LedgerRecordItem? _deleteCandidate;
-    private async Task SelectDelete(LedgerRecordItem item) {
+    private async Task SelectDelete(LedgerRecordItem item)
+    {
         if (_busy) return;
-        _deleteCandidate = item; _deleteEstimate = null;
-        _busy = true; _busyMessage = "ESTIMATING DELETE COST...";
-        try { _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id); }
-        catch (Exception ex) { _error = "Delete estimate failed: " + ex.Message; }
+        // File trees require their own durable, per-node deletion journal.
+        // Never treat a malformed file manifest as an ordinary record.
+        if (VaultPublishedFileClassification.IsManagedFileProtocolRecord(item))
+        {
+            _error = "Encrypted file deletion requires a verified file lifecycle. No record was deleted.";
+            return;
+        }
+        _deleteCandidate = null;
+        _deleteEstimate = null;
+        _busy = true;
+        _busyMessage = "ESTIMATING DELETE COST...";
+        try
+        {
+            var remote = await Ledger.ReadAsync();
+            var current = remote.SingleOrDefault(x =>
+                x.Id.Equals(item.Id, StringComparison.OrdinalIgnoreCase));
+            if (current is null || !SamePublishedDeleteSnapshot(item, current) ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(current))
+                throw new InvalidOperationException(
+                    "Record changed since it was displayed. Refresh before deleting.");
+            if (current.IsFolder && remote.Any(x =>
+                string.Equals(x.FolderId, current.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Folder is not empty; delete its children first.");
+            _deleteEstimate = await Ledger.EstimateDeleteAsync(item.Id);
+            _deleteCandidate = item;
+        }
+        catch (Exception ex)
+        {
+            _error = "Delete review failed: " + ex.Message;
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+        }
         finally { _busy = false; }
     }
-    private async Task DeleteSelectedAsync() {
-        if (_busy || _deleteCandidate is null) return;
-        _busy = true; _busyMessage = "DELETING FROM STELLAR...";
-        var id = _deleteCandidate.Id;
-        try {
-            var result = await Ledger.DeleteAsync(id);
-            _deleteCandidate = null; _deleteEstimate = null; _selected = null; _revealed = false;
+
+    private async Task DeleteSelectedAsync()
+    {
+        if (_busy || _deleteCandidate is not { } candidate || _deleteEstimate is null) return;
+        _busy = true;
+        _busyMessage = "DELETING FROM STELLAR...";
+        try
+        {
+            if (!Ledger.IsConnected ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(candidate))
+                throw new InvalidOperationException("File deletion is not authorized by ordinary record actions.");
+            // A fresh remote snapshot catches stale forms or conflicting
+            // tabs before signing. The Stellar transport itself does not yet
+            // provide atomic remote-version CAS; do not claim that it does.
+            var remote = await Ledger.ReadAsync();
+            var current = remote.SingleOrDefault(x =>
+                x.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase));
+            if (current is null || !SamePublishedDeleteSnapshot(candidate, current) ||
+                VaultPublishedFileClassification.IsManagedFileProtocolRecord(current))
+                throw new InvalidOperationException(
+                    "Published record changed since deletion was approved. Refresh and review again.");
+            if (current.IsFolder && remote.Any(x =>
+                string.Equals(x.FolderId, candidate.Id, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Folder is no longer empty.");
+            var freshCost = await Ledger.EstimateDeleteAsync(candidate.Id);
+            if (freshCost.NetworkFeeXlm > _deleteEstimate.NetworkFeeXlm ||
+                freshCost.PeakReserveXlm > _deleteEstimate.PeakReserveXlm)
+                throw new InvalidOperationException(
+                    "Delete fee or reserve increased. Reopen the cost review.");
+            var result = await Ledger.DeleteAsync(candidate.Id);
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+            _selected = null;
             _records = await Ledger.ReadAsync();
-            _error = "Deletion committed: " + result.TransactionHash + (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
-        } catch (Exception ex) { _error = "Deletion failed or refresh unavailable: " + ex.Message; }
+            _error = "Deletion committed: " + result.TransactionHash +
+                (result.Warning is null ? "" : " Cleanup warning: " + result.Warning);
+        }
+        catch (Exception ex)
+        {
+            _deleteCandidate = null;
+            _deleteEstimate = null;
+            _error = "Deletion canceled or outcome uncertain: " + ex.Message +
+                " If submission may have started, inspect the ledger before retrying.";
+        }
         finally { _busy = false; }
     }
     private string? _error;
     private List<LedgerRecordItem> Folders => _records.Where(r => r.IsFolder).ToList();
-    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder && !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal)).ToList();
+    private List<LedgerRecordItem> Records => _records.Where(r => !r.IsFolder &&
+        !r.Content.StartsWith(LedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
+        (!r.Content.StartsWith(VaultLinkedTreeFilePolicy.Prefix, StringComparison.Ordinal) ||
+         VaultLinkedTreeFilePolicy.IsRootRecord(r))).ToList();
     private IEnumerable<LedgerRecordItem> Breadcrumbs
     {
         get {
@@ -1306,7 +1626,40 @@ else
         if (!string.IsNullOrEmpty(InitialFolder)) _folder = InitialFolder;
         if (RequestedView == "help") _appView = "help";
     }
+    private string? _conflictLockError;
+
+    private async Task LockConflictingSessionsAsync()
+    {
+        // Do not switch strategies while either signing or local unlock key
+        // remains live. Preserve uncertain transaction markers on lock.
+        var failed = false;
+        try { await LinkedQueueKeys.LockAsync(); } catch { failed = true; }
+        try { await SecretLedger.DisconnectAsync(); } catch { failed = true; }
+        try { Workflow.Lock(); } catch { failed = true; }
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        Privacy.Clear();
+        ClearPendingSnapshot();
+        ClearSyncReview();
+        await ClearHybridResumeIntentAsync();
+        try { await Ledger.DisconnectAsync(); } catch { failed = true; }
+        if (failed)
+        {
+            _conflictLockError = "Not all sessions could be closed. Restart the application before unlocking another vault.";
+            return;
+        }
+        Nav.NavigateTo("/", replace: true);
+    }
+
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
+
     protected override async Task OnInitializedAsync() {
+        // An independent S-key session must never inspect the HD queue,
+        // registry or mnemonic-derived account in the shared route.
+        if (ActiveMode != VaultWorkspaceMode.MnemonicHd) return;
         if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked) await LoadPendingAsync();
         if (!Ledger.IsConnected) return;
         try {
@@ -1340,11 +1693,47 @@ else
         // The access screen cannot accept a new mnemonic while the local session
         // remains unlocked. End the session, never clear IndexedDB.
         Workflow.Lock();
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        Privacy.Clear();
+        await ClearHybridResumeIntentAsync();
+        await LinkedQueueKeys.LockAsync();
+        try { await SecretLedger.DisconnectAsync(); }
+        catch { /* No new signer session will be accepted before session lock. */ }
         try { await Ledger.DisconnectAsync(); }
         catch { /* Disconnect must not prevent opening the access screen. */ }
         Nav.NavigateTo("/", replace: true);
     }
-    private async Task LockAsync() {
-        Workflow.Lock(); await Ledger.DisconnectAsync(); Nav.NavigateTo("/");
+    private async Task LockAsync()
+    {
+        // An explicit user lock invalidates the local encryption session and
+        // its storage consent, but does not erase separately encrypted drafts.
+        Workflow.Lock();
+        Retention.Reset();
+        LinkedRetention.Reset();
+        StorageMode.Reset();
+        Privacy.Clear();
+        _showImportDialog = false;
+        ClearPendingSnapshot();
+        ClearSyncReview();
+        _revealedIds.Clear();
+        _selected = null;
+        ClearSyncApproval();
+        await ClearHybridResumeIntentAsync();
+        await LinkedQueueKeys.LockAsync();
+        await Ledger.DisconnectAsync();
+        Nav.NavigateTo("/", replace: true);
     }
+    public void Dispose()
+    {
+        ClearPendingSnapshot();
+        ClearSyncReview();
+        _pendingEditContent = string.Empty;
+        _pendingEditUsername = string.Empty;
+        _pendingEditUrl = string.Empty;
+        _pendingEditNotes = string.Empty;
+        _pendingEditTags = string.Empty;
+    }
+
 }

@@ -1,5 +1,5 @@
 using Microsoft.JSInterop;
-using StellarVault.Core.Services;
+using VaultEngine.Stellar.Services;
 
 namespace StellarVault.Pwa.Services;
 
@@ -9,11 +9,29 @@ namespace StellarVault.Pwa.Services;
 /// Transaction submission requires a fresh quote ID issued in this session.
 /// </summary>
 public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
-    IStellarSecretKeyLedger, IAsyncDisposable
+    IStellarSecretKeyLedger, IStellarSecretKeySignedSubmission,
+    IStellarSecretKeyRecordRevisionReader,
+    IStellarSecretKeyHistoricalRecordVerifier,
+    IStellarSecretKeyHistoricalExpansionVerifier,
+    IStellarSecretKeyVerifiedSessionRelease, IAsyncDisposable
 {
+    // JS interop camel-cases CLR properties. The encrypted S-key protocol and
+    // historical comparator use these exact Pascal-cased field names. Dictionary
+    // keys preserve that wire contract without changing durable draft JSON.
+    private static Dictionary<string, object?> ToJsDraft(LedgerRecordDraft draft) => new()
+    {
+        ["Title"] = draft.Title, ["Content"] = draft.Content,
+        ["FolderId"] = draft.FolderId, ["Tags"] = draft.Tags?.ToArray() ?? [],
+        ["IsFolder"] = draft.IsFolder, ["UserName"] = draft.UserName,
+        ["Url"] = draft.Url, ["Notes"] = draft.Notes
+    };
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
+    private long _connectionEpoch;
+    public long ConnectionEpoch => _connectionEpoch;
     private string? _root;
+    private string? _connectedPassphrase;
+    public string? ConnectedNetworkPassphrase => _connected ? _connectedPassphrase : null;
     public bool IsConnected => _connected;
     public string? RootAccountId => _root;
     private void RequireConnected()
@@ -27,6 +45,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         CancellationToken cancellationToken = default)
     {
         if (_connected) throw new InvalidOperationException("A Secret Key vault is already open.");
+        _connectionEpoch++;
         new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, secretKey).Validate();
         if (string.IsNullOrWhiteSpace(networkPassphrase))
             throw new ArgumentException("A network passphrase is required.", nameof(networkPassphrase));
@@ -38,6 +57,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             if (result is null || !StellarAccountAddress.IsValid(result.RootAccountId))
                 throw new InvalidDataException("Invalid root identity from Secret Key ledger.");
             _root = result.RootAccountId;
+            _connectedPassphrase = networkPassphrase;
             _connected = true;
         }
         catch
@@ -45,6 +65,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
             try { await js.InvokeVoidAsync("stellarVaultSecretLedger.close", _sessionId); }
             catch { /* The original failure is more informative. */ }
             _root = null;
+            _connectedPassphrase = null;
             _connected = false;
             throw;
         }
@@ -65,6 +86,91 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         if (items.Select(x => x.Id).Distinct(StringComparer.Ordinal).Count() != items.Length)
             throw new InvalidDataException("Duplicate Secret Key ledger record identifiers.");
         return items;
+    }
+
+    public async Task<string?> ReadRecordRevisionAsync(string recordId,
+        CancellationToken ct = default)
+    {
+        RequireConnected();
+        ValidateRecordId(recordId);
+        var revision = await js.InvokeAsync<string?>(
+            "stellarVaultSecretLedger.recordRevision", ct, _sessionId, recordId);
+        if (revision is not null &&
+            !VaultLinkedRemoteRevisionPolicy.IsValid(revision))
+            throw new InvalidDataException(
+                "The connected S-key manifest revision is malformed or noncanonical.");
+        return revision;
+    }
+
+    public async Task<bool> VerifyAsync(string transactionHash, VaultMutationKind kind,
+        string recordId, LedgerRecordDraft expectedDraft,
+        string? originalManifest, CancellationToken ct = default)
+    {
+        RequireConnected();
+        ValidateRecordId(recordId);
+        ArgumentNullException.ThrowIfNull(expectedDraft);
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid network transaction identity.", nameof(transactionHash));
+        var operationKind = kind switch
+        {
+            VaultMutationKind.CreateRecord or VaultMutationKind.CreateFolder => "create",
+            VaultMutationKind.UpdateRecord or VaultMutationKind.UpdateFolder => "update",
+            VaultMutationKind.DeleteRecord or VaultMutationKind.DeleteFolder => "delete",
+            _ => throw new NotSupportedException(
+                "Historical S-key record evidence cannot prove this mutation type.")
+        };
+        if (operationKind == "create"
+            ? originalManifest is not null
+            : !VaultLinkedRemoteRevisionPolicy.IsValid(originalManifest))
+            throw new InvalidDataException(
+                "The original S-key record revision does not match the claimed operation.");
+        var epoch = ConnectionEpoch;
+        var expectedRoot = RootAccountId;
+        var passphrase = ConnectedNetworkPassphrase;
+        var proven = await js.InvokeAsync<bool>(
+            "stellarVaultSecretLedger.verifyHistoricalRecord", ct,
+            _sessionId, transactionHash, operationKind, recordId,
+            ToJsDraft(expectedDraft), originalManifest);
+        if (!IsConnected || ConnectionEpoch != epoch ||
+            RootAccountId != expectedRoot ||
+            ConnectedNetworkPassphrase != passphrase)
+            throw new InvalidOperationException(
+                "The S-key signer scope changed during historical verification.");
+        return proven;
+    }
+
+    public async Task<bool> VerifyExpansionAsync(
+        string transactionHash, string childAccountId, CancellationToken ct = default)
+    {
+        RequireConnected();
+        StellarAccountAddress.Validate(childAccountId);
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid signed expansion transaction hash.", nameof(transactionHash));
+        var epoch = ConnectionEpoch;
+        var root = RootAccountId;
+        var passphrase = ConnectedNetworkPassphrase;
+        var proven = await js.InvokeAsync<bool>(
+            "stellarVaultSecretLedger.verifyHistoricalExpansion", ct,
+            _sessionId, transactionHash, childAccountId);
+        if (!IsConnected || ConnectionEpoch != epoch ||
+            RootAccountId != root || ConnectedNetworkPassphrase != passphrase)
+            throw new InvalidOperationException(
+                "Signer or network changed during signed expansion proof.");
+        return proven;
+    }
+
+    public async Task ReleaseVerifiedAsync(string transactionHash,
+        CancellationToken ct = default)
+    {
+        RequireConnected();
+        if (transactionHash is not { Length: 64 } ||
+            !transactionHash.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid reconciled transaction hash.", nameof(transactionHash));
+        if (!await js.InvokeAsync<bool>(
+                "stellarVaultSecretLedger.releaseVerifiedHistory", ct, _sessionId, transactionHash))
+            throw new InvalidOperationException("Signer quarantine could not be released.");
     }
 
     public async Task<LedgerAccountInfo> InspectAccountInfoAsync(
@@ -100,8 +206,18 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
                 (!draft.IsFolder && string.IsNullOrEmpty(draft.Content)))
                 throw new ArgumentException("Title and record content are required.");
         }
-        var quote = await js.InvokeAsync<VaultSecretLedgerQuote>(
-            "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId, draft);
+        VaultSecretLedgerQuote quote;
+        try
+        {
+            quote = await js.InvokeAsync<VaultSecretLedgerQuote>(
+                "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId,
+                draft is null ? null : ToJsDraft(draft));
+        }
+        catch (JSException ex) when (kind == "create" &&
+            ex.Message.Contains("SV_ACCOUNT_CAPACITY_REQUIRED", StringComparison.Ordinal))
+        {
+            throw new VaultAccountCapacityRequiredException();
+        }
         if (quote is null ||
             string.IsNullOrWhiteSpace(quote.QuoteId) || quote.QuoteId.Length != 32 ||
             !quote.QuoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ||
@@ -142,6 +258,32 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         CancellationToken cancellationToken = default) =>
         QuoteAsync("expand", null, null, cancellationToken);
 
+    public async Task<VaultSecretSubmissionDiagnostic?> InspectUncertainSubmissionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        RequireConnected();
+        var finding = await js.InvokeAsync<VaultSecretSubmissionDiagnostic?>(
+            "stellarVaultSecretLedger.inspectUncertain", cancellationToken, _sessionId);
+        if (finding is null) return null;
+        if (finding.RootAccountId != _root ||
+            !StellarAccountAddress.IsValid(finding.TargetAccountId) ||
+            finding.Kind is not ("create" or "update" or "delete" or "expand") ||
+            (finding.Kind == "expand" && finding.RecordId is not null) ||
+            (finding.Kind != "expand" && (finding.RecordId is not { Length: 16 } ||
+                !finding.RecordId.All(Uri.IsHexDigit))) ||
+            string.IsNullOrWhiteSpace(finding.NetworkPassphrase) ||
+            finding.NetworkPassphrase.Length > 512 ||
+            !Uri.TryCreate(finding.HorizonUrl, UriKind.Absolute, out var endpoint) ||
+            endpoint.Scheme != Uri.UriSchemeHttps ||
+            endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 ||
+            endpoint.Fragment.Length != 0 || endpoint.AbsolutePath != "/" ||
+            (finding.TransactionHash is not null &&
+                (finding.TransactionHash.Length != 64 ||
+                 !finding.TransactionHash.All(Uri.IsHexDigit))))
+            throw new InvalidDataException("Invalid volatile linked-ledger submission diagnostic.");
+        return finding;
+    }
+
     public async Task CancelQuoteAsync(string quoteId)
     {
         if (_connected && !string.IsNullOrWhiteSpace(quoteId))
@@ -162,9 +304,49 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         return hash;
     }
 
+    /// <summary>
+    /// Journal-backed callers provide a strict, fail-closed durable CAS
+    /// callback. JavaScript does not call Horizon submitTransaction until that
+    /// callback has completed successfully with the exact signed hash.
+    /// </summary>
+    public async Task<string> SubmitWithSignedHashAsync(
+        string quoteId, Func<string, Task> durableCheckpoint,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(durableCheckpoint);
+        RequireConnected();
+        if (quoteId is not { Length: 32 } ||
+            !quoteId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            throw new ArgumentException("Invalid reviewed transaction quote.", nameof(quoteId));
+
+        using var checkpoint = DotNetObjectReference.Create(
+            new SignedHashCheckpoint(durableCheckpoint));
+        var hash = await js.InvokeAsync<string>(
+            "stellarVaultSecretLedger.submit", cancellationToken,
+            _sessionId, quoteId, checkpoint);
+        if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
+            throw new InvalidDataException(
+                "Signed linked transaction returned an invalid hash; reconcile before retry.");
+        return hash.ToLowerInvariant();
+    }
+
+    public sealed class SignedHashCheckpoint(Func<string, Task> persist)
+    {
+        [JSInvokable("CheckpointSignedHash")]
+        public Task CheckpointSignedHash(string hash)
+        {
+            if (hash is not { Length: 64 } || !hash.All(Uri.IsHexDigit))
+                throw new InvalidDataException(
+                    "Refusing to checkpoint a malformed signed transaction hash.");
+            return persist(hash.ToLowerInvariant());
+        }
+    }
+
     public async Task DisconnectAsync()
     {
+        _connectionEpoch++;
         _root = null;
+        _connectedPassphrase = null;
         _connected = false;
         await js.InvokeVoidAsync("stellarVaultSecretLedger.close", _sessionId);
     }

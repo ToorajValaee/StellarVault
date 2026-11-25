@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..', 'src', 'StellarVault.Pwa', 'wwwroot');
 const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 test('startup script files exist and Blazor starts last', () => {
-  const assets = ['js/vendor/stellar-sdk.min.js', 'js/hd-keys.js', 'js/vault-v2-keywrap.js', 'js/vault-v2-indexeddb.js', 'js/vault-v2-lifecycle.js'];
+  const assets = ['js/vendor/stellar-sdk.min.js', 'js/hd-keys.js', 'js/vault-v2-indexeddb.js', 'js/vault-transaction-recovery.js', 'js/ledger-compat/app.js', 'js/vault-v2-keywrap.js', 'js/vault-v2-lifecycle.js'];
   let prior = -1;
   for (const name of assets) {
     const index = page.indexOf('src="' + name + '"');
@@ -17,7 +17,8 @@ test('startup script files exist and Blazor starts last', () => {
 });
 test('published service worker caches before activation', () => {
   const worker = fs.readFileSync(path.join(root, 'service-worker.published.js'), 'utf8');
-  assert.ok(worker.indexOf('await cache.addAll(assetsRequests)') < worker.indexOf('await self.skipWaiting()'));
+  assert.ok(worker.includes('await cache.addAll(assetsRequests)'));
+  assert.doesNotMatch(worker, /await self\.skipWaiting\(|await self\.clients\.claim\(/);
 });
 
 test('IndexedDB reads wait for transaction completion', () => {
@@ -57,9 +58,9 @@ test('offline navigation falls back to verified release shell', () => {
   const navigation = worker.indexOf("event.request.mode === 'navigate'");
   assert.ok(navigation >= 0);
   const branch = worker.slice(navigation);
-  assert.ok(branch.includes('await fetch(event.request)'));
+  assert.ok(branch.includes('return shell;'));
   assert.ok(branch.includes("await cache.match('index.html')"));
-  assert.ok(branch.indexOf('await fetch(event.request)') < branch.indexOf("await cache.match('index.html')"));
+  assert.ok(branch.includes('Verified release shell is missing'));
 });
 
 test('offline bundle does not require debug symbols', () => {
@@ -97,9 +98,16 @@ test('canonical vault keeps the original ledger browser, never substitutes a loc
 
 test('unlocked PWA session redirects from access to canonical vault without duplicate workspace', () => {
   const index = fs.readFileSync(path.join(root, '..', 'Pages', 'Index.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   assert.ok(index.includes('Navigation.NavigateTo("/vault", replace: true)'));
-  assert.ok(index.includes('if (!(Sessions.IsUnlocked || Ledger.IsConnected))'));
+  assert.match(index, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(index, /VaultWorkspaceMode\.ConflictingSessions/);
+  assert.doesNotMatch(index, /Navigation\.NavigateTo\("\/secret-vault"/);
+  assert.match(vault, /<VaultSecretKeyWorkspace Embedded="true"/);
+  assert.doesNotMatch(vault, /<VaultLinkedWorkspaceShell \/>/);
+  assert.match(vault, /ActiveMode == VaultWorkspaceMode\.StellarSecretKey/);
+  assert.match(vault, /if \(ActiveMode != VaultWorkspaceMode\.MnemonicHd\) return;/);
   assert.ok(access.includes('Sessions.IsUnlocked && Platform != "WEB PWA"'));
 });
 
@@ -126,7 +134,7 @@ test('saved local unlock navigates to the vault and disconnected state remains u
 
 test('offline vault keeps the normal ledger browser layout instead of an alternate editor', () => {
  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
- assert.ok(vault.includes('else if (Ledger.IsConnected && _registryReady != true)'));
+ assert.match(vault, /else if \(ActiveMode == VaultWorkspaceMode\.MnemonicHd &&\s*Ledger\.IsConnected && _registryReady == false\)/);
  assert.ok(vault.includes('search-console'));
  assert.ok(vault.includes('sv-folder-grid'));
  assert.ok(vault.includes('record-list'));
@@ -155,7 +163,7 @@ test('explicit-lock policy keeps session while switching tabs and requires mnemo
 });
 
 test('device retention requires explicit opt-in and defaults to on-chain-only', () => {
-  const core = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultStorageModeGate.cs'), 'utf8');
+  const core = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultStorageModeGate.cs'), 'utf8');
   assert.ok(core.includes('OnChainOnly = 0'));
   assert.ok(core.includes('EncryptedLocalWithManualSync = 1'));
   assert.ok(core.includes('Policy { get; private set; } = VaultDeviceRetentionPolicy.OnChainOnly'));
@@ -168,30 +176,49 @@ test('on-chain-only login bypasses local credentials and permits ledger pages', 
   const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
-  assert.ok(access.includes('Stellar only — nothing saved on this device'));
-  assert.ok(access.includes('checked="@(!_enableLocalStorage)"'));
-  assert.ok(access.includes('if (_enableLocalStorage)\n            {\n                Retention.RequireLocalPersistence();'));
+  assert.match(access, /<span>Stellar only<\/span>/);
+  assert.ok(access.includes('checked="@(!CurrentDeviceStoragePreference)"'));
+  assert.match(access, /if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   assert.ok(access.includes('if (!_enableLocalStorage || _workspaceMode == "ledger")'));
   assert.ok(program.includes('AddScoped<VaultDeviceRetentionGate>()'));
-  assert.ok(vault.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
-  assert.ok(add.includes('!Sessions.IsUnlocked && !Ledger.IsConnected'));
+  // A connected HD ledger is a valid on-chain-only session even without
+  // a local-vault unlock. The canonical route resolves credential strategy
+  // explicitly instead of using the old HD-only boolean guard.
+  const mode = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar',
+    'Services', 'VaultWorkspaceModeResolver.cs'), 'utf8');
+  assert.match(vault, /ActiveMode == VaultWorkspaceMode\.Locked/);
+  assert.match(vault, /VaultWorkspaceModeResolver\.Resolve\(/);
+  assert.match(mode, /if \(hdLocalUnlocked \|\| hdLedgerConnected\) return VaultWorkspaceMode\.MnemonicHd/);
+  assert.match(add, /!Sessions\.IsUnlocked && !Ledger\.IsConnected/);
 });
 
-test('on-chain-only file review never requires a local vault checkpoint', () => {
+test('HD hybrid file upload uses encrypted durable queue separately from session-only direct plans', () => {
   const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.ok(add.includes('if (!Retention.AllowsLocalPersistence) return; // On-chain only: in-memory plan'));
-  assert.ok(add.includes('if (Retention.AllowsLocalPersistence)\n                    {'));
-  assert.ok(add.includes('saved = await Checkpoints.LoadAsync(account)'));
+  assert.match(add, /!Sessions\.IsUnlocked \|\| !Retention\.AllowsLocalPersistence/);
+  assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(add, /selected\.OpenReadStream\(selected\.Size\)/);
+  assert.doesNotMatch(add, /Checkpoints\.LoadAsync|CurrentUploadPlan|_fileBytes/);
+  assert.match(add, /if \(CanSaveOffline\)/);
+  assert.match(add, /new StellarLedgerUploadPlan\(/);
+  assert.match(add, /DirectFileUpload\.PublishNextApprovedAsync\(/);
   assert.ok(css.includes('input[type="file"].sv-ledger-file-native-input'));
   assert.ok(add.includes('sv-file-native-input sv-ledger-file-native-input'));
+});
+
+test('large HD on-chain staging requires explicit local encrypted retention', () => {
+  const add = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  assert.match(add, /!Sessions\.IsUnlocked \|\| !Retention\.AllowsLocalPersistence/);
+  assert.match(add, /HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(add, /No transaction was submitted/);
+  assert.match(add, /@onclick="StageHdTreeFileAsync"/);
 });
 
 test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
   const recent = fs.readFileSync(path.join(root, 'js', 'vault-v2-recent-vault.js'), 'utf8');
-  const begin = access.indexOf('if (_enableLocalStorage)\n            {');
+  const begin = access.search(/if \(_enableLocalStorage\)\s*\{\s*Retention\.RequireLocalPersistence\(\)/);
   const end = access.indexOf('await ReportAccessStageAsync("connecting to Stellar ledger")', begin);
   assert.ok(begin > 0 && end > begin);
   const optIn = access.slice(begin, end);
@@ -202,11 +229,11 @@ test('opt-in encrypted seed remains separate from on-chain-only login', () => {
   assert.ok(recent.includes("iterations: 600000"));
   assert.ok(recent.includes("crypto.subtle.decrypt"));
   assert.ok(app.includes('stellarVaultRecentVault.unlockEncryptedSeed'));
-  assert.ok(app.includes('Workflow.Lock();\n            Retention.Reset();'));
+  assert.match(app, /catch\s*\{\s*Workflow\.Lock\(\);\s*Retention\.Reset\(\);\s*StorageMode\.Reset\(\);\s*throw;/);
 });
 
 test('shared offline queue requires storage consent and reconciles uncertain submissions', () => {
-  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
   for (const status of ['Pending', 'Submitting', 'Uncertain', 'Confirmed', 'Conflict', 'Failed'])
     assert.ok(queue.includes(status));
   assert.ok(queue.includes('retention.RequireLocalPersistence()'));
@@ -229,7 +256,7 @@ test('on-chain-only access distinguishes unfunded root from connection failure',
 });
 
 test('offline mutation confirmation requires independent verification and scoped status', () => {
-  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.Core', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultPendingMutationQueue.cs'), 'utf8');
   assert.ok(queue.includes('interface IVaultLedgerMutationVerifier'));
   assert.ok(queue.includes('await verifier.IsConfirmedAsync(current, transactionHash, ct)'));
   assert.ok(queue.includes('Queue entry belongs to another account or network.'));
@@ -248,7 +275,12 @@ test('encrypted offline queue stores authenticated envelopes, not readable draft
   assert.ok(adapter.includes('VaultCryptoPrimitives.Open'));
   assert.ok(adapter.includes('AssociatedData(account, network, id)'));
   assert.ok(adapter.includes('retention.RequireLocalPersistence()'));
-  assert.ok(adapter.includes('sessions.ActiveAccountId != accountId'));
+  // The queue no longer reads the active account from a mutable UI session.
+  // Its key-session operation must bind the requested account and network
+  // and reject cross-scope attempts before any plaintext can be decoded.
+  assert.match(adapter, /StellarAccountAddress\.Validate\(accountId\)/);
+  assert.match(adapter, /keySession\.ExecuteAsync\(accountId, networkId/);
+  assert.match(adapter, /item\.Id != id \|\| item\.AccountId != account \|\| item\.NetworkId != network/);
   assert.ok(adapter.includes('stellarVaultV2Db.replaceQueue'));
   assert.ok(program.includes('IVaultPendingMutationStore, IndexedDbVaultPendingMutationStore'));
   assert.ok(program.includes('IVaultLedgerMutationVerifier, EvidenceBasedVaultLedgerMutationVerifier'));
@@ -262,7 +294,7 @@ test('PWA exposes independent record, offline draft and manual sync views', () =
   assert.ok(vault.includes('_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked'));
   assert.ok(vault.includes('<VaultHybridDraftEditor />'));
   assert.ok(vault.includes('<VaultHybridRemoteChanges />'));
-  assert.ok(vault.includes('<VaultHybridSyncReview />'));
+  assert.ok(vault.includes('<VaultHybridSyncReview QueueChanged="RefreshHybridWorkspaceAsync" />'));
   assert.ok(vault.includes('_appView == "records"'));
   assert.ok(vault.includes('Ledger.ReadAsync()'));
   assert.ok(vault.includes('Ledger.DisconnectAsync()'));
@@ -298,10 +330,13 @@ test('PWA desktop explorer and mobile object storage share one folder model', ()
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
   assert.match(vault, /sv-explorer-layout/);
-  assert.match(vault, /sv-explorer-tree/);
+  const sharedTree = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultExplorerTree.razor'), 'utf8');
+  assert.match(vault, /<VaultExplorerTree Folders="@Folders"/);
+  assert.match(sharedTree, /sv-explorer-tree/);
   assert.match(vault, /sv-explorer-main/);
-  assert.match(vault, /FolderDepth\(folder.Id\)/);
-  assert.match(vault, /OpenFolder\(folder.Id\)/);
+  assert.match(sharedTree, /Depth\(folder.Id\)/);
+  assert.match(vault, /OnFolderSelected="SelectFolderFromTree"/);
   assert.match(css, /\.sv-explorer-tree/);
   assert.match(css, /\.sv-explorer-main \.record-list/);
   assert.match(css, /@media\(max-width:1040px\)/);
@@ -315,7 +350,7 @@ test('PWA modern design overrides CRT geometry and supports resizable record ins
   assert.match(css, /--sv-crt-grid:none/);
   assert.match(css, /--sv-record-inspector-width:400px/);
   assert.match(vault, /sv-inspector-resize-handle/);
-  assert.match(host, /pointerdown/);
+  assert.match(fs.readFileSync(path.join(root, 'js/pwa-inspector.js'), 'utf8'), /pointerdown/);
 });
 
 test('PWA loads only the consolidated modern design after scoped styles', () => {
@@ -370,7 +405,11 @@ test('Explorer rows expose individual action menus and the inspector never cente
   assert.match(vault, /class="sv-object-row/);
   assert.match(vault, /class="sv-object-actions"/);
   assert.match(vault, /Actions for folder/);
-  assert.match(vault, /Actions for \{item.Title\}/);
+  const sharedRow = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
+  assert.match(sharedRow, /class="sv-object-row/);
+  assert.match(sharedRow, /class="sv-object-actions"/);
+  assert.match(sharedRow, /Actions for \{Item.Title\}/);
   assert.doesNotMatch(vault, /<small>📁 @FolderPath\(item.FolderId\)<\/small>/);
   assert.match(css, /\.sv-web-shell:has\(\.sv-pwa-app\) > \.sv-adaptive-main/);
   assert.match(css, /width:calc\(100% - var\(--sv-record-inspector-width\)\)/);
@@ -383,16 +422,25 @@ test('Vault desktop explorer uses a genuine third-column inspector and nested fo
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
   const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.match(vault, /sv-tree-node/);
-  assert.match(vault, /ToggleTreeFolder\(folder.Id\)/);
+  const sharedTree = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultExplorerTree.razor'), 'utf8');
+  assert.match(sharedTree, /sv-tree-node/);
+  assert.match(vault, /OnToggleFolder="ToggleTreeFolder"/);
   assert.match(vault, /sv-current-folder/);
   assert.match(vault, /sv-explorer-list-head/);
   assert.match(vault, /sv-layout-switch/);
   assert.match(vault, /_explorerLayout == "grid"/);
   assert.match(vault, /<VaultItemEditor @ref="_inlineEditor" Embedded="true"/);
-  assert.match(vault, /sv-inspector-tabs/);
-  assert.match(vault, /sv-inspector-more/);
-  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _uncertainStage/);
+  const inspector = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  assert.match(vault, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(inspector, /sv-inspector-tabs/);
+  assert.match(inspector, /sv-inspector-more/);
+  // The obsolete flat-file upload checkpoint was removed; the shared HD
+  // streaming queue owns interrupted-file recovery instead.
+  assert.match(editor, /BlocksDismissal => _busy \|\| _estimate is not null \|\| _directFilePlan is not null/);
+  assert.doesNotMatch(editor, /_uncertainStage/);
+  assert.match(editor, /_directFileUncertain/);
   assert.match(editor, /OnSaved.InvokeAsync/);
   assert.match(css, /grid-template-columns:245px minmax\(0,1fr\) var\(--sv-record-inspector-width\)/);
   assert.match(css, /\.sv-editor-embedded/);
@@ -441,19 +489,22 @@ test('Network preference contains only non-secret metadata and custom network mu
   assert.match(home, /await DetectCustomAsync\(\)/);
   assert.match(home, /Custom network verified and selected/);
   assert.match(home, /select Detect network to retry/);
-  assert.match(home, /Early access — use test accounts only/);
+  assert.doesNotMatch(home, /Security and release status/);
 });
 
 test('Unlock button stays actionable and explains prerequisites without bypassing validation', () => {
   const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
-  assert.match(home, /type="submit" disabled="@_busy"/);
-  assert.match(home, /aria-describedby="sv-access-readiness"/);
-  assert.match(home, /private string AccessReadiness/);
+  // The unlock action lives outside the form for stable access-page layout,
+  // but still submits that form and remains disabled while access is busy.
+  assert.match(home, /type="submit" form="sv-access-form" disabled="@_busy"/);
+  assert.doesNotMatch(home, /sv-access-readiness|private string AccessReadiness/);
+  assert.doesNotMatch(home, /words entered\)/);
   assert.match(home, /if \(EnteredWordCount is not \(12 or 15 or 18 or 21 or 24\)\)/);
   assert.match(home, /if \(_enableLocalStorage && string\.IsNullOrWhiteSpace\(_passphrase\)\)/);
-  assert.match(home, /sv-access-security-notice/);
-  assert.match(css, /\.sv-access-security-notice/);
+  assert.doesNotMatch(home, /sv-access-security-notice/);
+  assert.match(home, /sv-entry-storage-guide/);
+  assert.match(css, /\.sv-entry-storage-guide/);
 });
 
 test('Signed approval and account modal block blurred background without obscuring dialog controls', () => {
@@ -564,7 +615,7 @@ test('Offline ledger refresh leaves last verified records and gives short status
 
 test('Unreachable registry never redirects an unlocked local vault to initialization', () => {
   const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
-  assert.match(vault, /else if \(Ledger\.IsConnected && _registryReady == false\)/);
+  assert.match(vault, /else if \(ActiveMode == VaultWorkspaceMode\.MnemonicHd &&\s*Ledger\.IsConnected && _registryReady == false\)/);
   assert.match(vault, /Stellar cannot be reached right now\. You can continue working with encrypted local drafts/);
   assert.doesNotMatch(vault, /Ledger setup check failed: " \+ ex\.Message/);
 });
@@ -589,7 +640,10 @@ test('Phone PWA reproduces the approved object-storage workspace while desktop s
   assert.match(vault, /sv-mobile-folder-back/);
   assert.match(vault, /_mobileCollection == "folders"/);
   assert.match(vault, /OpenEditor\("record"\)/);
-  assert.match(vault, /sv-record-inspector-backdrop/);
+  const inspector = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  assert.match(vault, /<VaultRecordInspector @key="_selected.Id"/);
+  assert.match(inspector, /sv-record-inspector-backdrop/);
   assert.match(css, /MOBILE VAULT/);
   assert.match(css, /@media\(max-width:840px\)/);
   assert.match(css, /sv-mobile-collection-folders/);
@@ -612,4 +666,227 @@ test('Inspector preserves selected grid mode and keeps explorer and details scro
   assert.match(css, /overscroll-behavior-y:contain!important/);
   assert.match(css, /sv-settings-help-link/);
   assert.match(css, /html\[data-theme="dark"\] \.sv-web-shell \.sv-sync-workspace/);
+});
+
+test('desktop add/edit uses the same drag width as record preview and explorer tree fills its pane', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const index = fs.readFileSync(path.join(root, 'js/pwa-inspector.js'), 'utf8');
+  assert.match(vault,/sv-inspector-resize-handle sv-editor-resize-handle/);
+  assert.match(index,/--sv-record-inspector-width/);
+  assert.match(index,/pointerdown/);
+  assert.match(index,/ArrowLeft/);
+  assert.match(css,/\.sv-editor-sidecar > \.sv-editor-resize-handle/);
+  assert.match(css,/\.sv-explorer-layout \{\s*align-items:stretch!important/);
+  assert.match(css,/\.sv-explorer-tree \{\s*align-self:stretch!important/);
+  assert.match(css,/min-height:100%!important/);
+});
+
+test('device storage stays expanded, the radio layout is stable and both credential modes can enroll device unlock', () => {
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultHome.razor'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultLinkedLocalQueuePanel.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const program = fs.readFileSync(path.join(root, '..', 'Program.cs'), 'utf8');
+  assert.match(home,/<section class="sv-access-storage-settings sv-entry-storage-outside"/);
+  assert.doesNotMatch(home,/<details class="sv-access-storage-settings/);
+  assert.match(home,/@if \(CurrentDeviceStoragePreference\)/);
+  assert.match(home,/@bind="_requestBiometricEnrollment"/);
+  assert.match(home,/DeviceUnlockPreference\.Requested/);
+  assert.match(css,/\.sv-access-storage-choices \.sv-biometric-choice > span/);
+  assert.match(css,/min-height:48px!important/);
+  assert.match(css,/\.sv-entry-showcase-content \{\s*margin:clamp\(34px,7vh,92px\) 0 0!important/);
+  assert.match(program,/AddScoped<VaultDeviceUnlockPreference>/);
+  assert.match(queue,/stellarVaultBiometric\.enroll/);
+  assert.match(queue,/stellarVaultBiometric\.unlock/);
+  assert.match(queue,/linked-s-key:/);
+});
+
+test('local and HD on-chain file editors stage large files with streaming instead of fixed UI caps', () => {
+  const local = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI',
+    'Components', 'VaultBinaryFilesView.razor'), 'utf8');
+  const ledger = fs.readFileSync(path.join(root, '..', 'Pages',
+    'VaultItemEditor.razor'), 'utf8');
+  const download = fs.readFileSync(path.join(root, 'js','vault-v2-download.js'),'utf8');
+  assert.match(local,/OpenReadStream\(_file\.Size\)/);
+  assert.match(local,/Files\.CopyVerifiedToAsync\(_openName, Stream\.Null\)/);
+  assert.match(local,/Files\.StreamVerifiedToAsync\(/);
+  assert.match(local,/NativeFiles\.SaveAsync\(name, reader\)/);
+  assert.match(download,/async saveStream\(filename, dotnetStreamReference\)/);
+  assert.match(download,/await source\.pipeTo\(target\)/);
+  // Documentation may explain the removed 1 MiB limit; only reject an
+  // actual fixed-size validation or OpenReadStream cap.
+  assert.doesNotMatch(local,/MaximumFileLength/);
+  assert.doesNotMatch(local,/_file\.Size\s*>\s*1024\s*\*\s*1024/);
+  assert.doesNotMatch(local,/OpenReadStream\(1024\s*\*\s*1024\)/);
+  assert.doesNotMatch(download,/Download exceeds limit/);
+  assert.match(ledger,/HybridDrafts\.StageTreeFileAsync\(/);
+  assert.match(ledger,/selected\.OpenReadStream\(selected\.Size\)/);
+  assert.match(ledger,/STAGE ENCRYPTED FILE FOR SYNC/);
+  assert.doesNotMatch(ledger,/if \(file\.Size > MaximumLedgerFileLength\)/);
+});
+
+test('HD and Secret Key native sessions offer the same record commands without changing signing flows', () => {
+  const native = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'NativeVaultWorkspace.razor'), 'utf8');
+  const linked = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultSecretKeyWorkspace.razor'), 'utf8');
+  const nativeCommands = native.slice(native.indexOf('<div class="sv-native-commandbar'), native.indexOf('@code {'));
+  const secretStart = nativeCommands.indexOf('@if (SecretLedger.IsConnected)');
+  const hdStart = nativeCommands.indexOf('else if (Ledger.IsConnected)', secretStart);
+  const disconnectedStart = nativeCommands.indexOf('else', hdStart + 'else if (Ledger.IsConnected)'.length);
+  assert.ok(secretStart >= 0 && hdStart > secretStart && disconnectedStart > hdStart);
+  const secretCommands = nativeCommands.slice(secretStart, hdStart);
+  const hdCommands = nativeCommands.slice(hdStart, disconnectedStart);
+  for (const action of ['NewNativeRecordForActiveStrategy', 'NewNativeFolderForActiveStrategy',
+    'RefreshNativeActiveStrategyAsync', 'DisconnectSelectedLedgerAsync']) {
+    assert.ok(secretCommands.includes('@onclick="' + action + '"'), 'Secret Key: ' + action);
+    assert.ok(hdCommands.includes('@onclick="' + action + '"'), 'HD: ' + action);
+  }
+  assert.match(native, /if \(SecretLedger\.IsConnected\) _linkedWorkspace\?\.CreateRecordFromShell\(\)/);
+  assert.match(native, /else if \(Ledger\.IsConnected\) SetNativeMode\("record"\)/);
+  assert.match(linked, /<VaultExplorerTree Folders="@_items\.Where\(x => x\.IsFolder\)\.ToArray\(\)"/);
+});
+
+test('HD and independent Secret Key workspaces share one published record filter and row renderer', () => {
+  const native = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'NativeVaultWorkspace.razor'), 'utf8');
+  const linked = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultSecretKeyWorkspace.razor'), 'utf8');
+  const published = fs.readFileSync(path.join(root, '..', '..',
+    'StellarVault.UI', 'Components', 'VaultPublishedItemsView.razor'), 'utf8');
+  assert.match(native, /<VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy\.Hd" Items="_ledgerRecords"/);
+  assert.match(linked, /<VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy\.Linked" Items="_items"/);
+  assert.match(native, /Collection="@_nativeCollection"/);
+  assert.match(linked, /OnEdit="EditLinkedRow"/);
+  assert.match(linked, /OnDelete="DeleteLinkedRowAsync"/);
+  assert.match(published, /VaultPublishedFileClassification\.IsInternalNode\(x\)/);
+  assert.match(published, /string\.Equals\(x\.FolderId \?\? "", FolderId \?\? "", StringComparison\.Ordinal\)/);
+  assert.match(published, /OrderByDescending\(x => x\.IsFolder\)/);
+  assert.match(published, /<VaultExplorerItemRow Item="item"/);
+});
+
+test('ending a hybrid session cannot force passphrase unlock on a later on-chain-only login', () => {
+  const app = fs.readFileSync(path.join(root, '..', 'App.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  const access = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const recent = fs.readFileSync(path.join(root, 'js', 'vault-v2-recent-vault.js'), 'utf8');
+  assert.match(recent, /sessionStorage\.setItem\(activeHybridTabKey/);
+  assert.match(recent, /sessionStorage\.removeItem\(activeHybridTabKey/);
+  assert.match(recent, /function hasHybridSession\(account, network\)/);
+  assert.match(app, /stellarVaultRecentVault\.hasHybridSession/);
+  assert.match(app, /_coldAccount = recent\.Account/);
+  assert.match(app, /stellarVaultRecentVault\.clearHybridSession/);
+  assert.match(app, /Retention\.Reset\(\)/);
+  assert.match(app, /StorageMode\.Reset\(\)/);
+  assert.match(app, /SecretLedger\.DisconnectAsync\(\)/);
+  assert.match(access, /stellarVaultRecentVault\.markHybridSession/);
+  assert.match(access, /if \(!_enableLocalStorage\)\s*await JS\.InvokeVoidAsync\("stellarVaultRecentVault\.clearHybridSession"\)/);
+  assert.match(access, /Retention\.Reset\(\)/);
+  assert.match(vault, /private async Task ClearHybridResumeIntentAsync\(\)/);
+  assert.match(vault, /await ClearHybridResumeIntentAsync\(\)/);
+  assert.match(vault, /Privacy\.Clear\(\)/);
+  assert.match(vault, /StorageMode\.Reset\(\)/);
+  assert.match(vault, /@onclick="LockActiveVaultAsync">Lock vault/);
+});
+
+test('access passphrase and help controls are shared by HD and independent S-key', () => {
+  const home = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultHome.razor'), 'utf8');
+  const notice = fs.readFileSync(path.join(root, '..', '..', 'StellarVault.UI', 'Components', 'VaultStorageSecurityNotice.razor'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'css', 'modern-app.css'), 'utf8');
+  const key = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar', 'Services', 'VaultLinkedQueueKeySession.cs'), 'utf8');
+  assert.match(home, /@if \(CurrentDeviceStoragePreference\)\s*\{\s*<div class="sv-storage-credential-group">/);
+  assert.match(home, /class="sv-biometric-choice sv-storage-device-unlock"/);
+  assert.match(home, /class="sv-storage-passphrase-field"/);
+  assert.match(home, /id="sv-passphrase" form="sv-access-form"/);
+  assert.equal((home.match(/id="sv-passphrase"/g) || []).length, 1);
+  assert.ok(home.indexOf('id="sv-passphrase"') < home.indexOf('<form id="sv-access-form"'));
+  assert.match(home, /LinkedQueueKeys\.HasLocalCredentialsAsync\(\)/);
+  assert.match(home, /LinkedQueueKeys\.UnlockAsync\(_passphrase\)/);
+  assert.match(home, /LinkedQueueKeys\.CreateAsync\(_passphrase\)/);
+  assert.match(home, /_passphrase\.Length < 12/);
+  assert.match(home, /private void SelectCredentialMode\(VaultCredentialMode mode\)[\s\S]*?_passphrase = string\.Empty;\s*ClearMnemonic\(\)/);
+  assert.match(home, /class="sv-entry-storage-guide"/);
+  assert.match(home, /About local storage and Sync/);
+  assert.match(home, /aria-expanded="@_storageHelpOpen"/);
+  assert.match(home, /aria-expanded="@_deviceHelpOpen"/);
+  assert.match(home, /class="sv-storage-help-trigger"/);
+  assert.doesNotMatch(home, /Security and release status|sv-access-readiness/);
+  assert.match(notice, /Strategy == VaultMutationStrategyPolicy\.Linked/);
+  assert.match(key, /public Task UnlockAsync\(string localPassphrase/);
+  assert.match(css, /\.sv-storage-help-trigger/);
+});
+
+test('PWA disposes decrypted pending entries and Sync reviews on lock and navigation', () => {
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.match(vault, /@implements IDisposable/);
+  assert.match(vault, /private void ClearPendingSnapshot\(\)/);
+  assert.match(vault, /private void ClearSyncReview\(\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(selected\.EncryptedPayload\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+  assert.match(vault, /CryptographicOperations\.ZeroMemory\(ready\.EncryptedPayload\)/);
+  assert.match(vault, /ReplacePendingSnapshot\(await PendingQueue\.ReviewAllAsync\(/);
+  assert.match(vault, /SetSyncReview\(await PendingQueue\.PrepareReviewAsync\(/);
+  assert.match(vault, /public void Dispose\(\)\s*\{\s*ClearPendingSnapshot\(\);\s*ClearSyncReview\(\);/);
+  const lock = vault.slice(vault.indexOf('private async Task LockAsync()'));
+  assert.match(lock, /ClearPendingSnapshot\(\);\s*ClearSyncReview\(\);/);
+});
+
+test('direct on-chain deletion excludes malformed file envelopes and refreshes approved snapshot', () => {
+  const rootPath = path.join(root, '..', '..');
+  const classifier = fs.readFileSync(path.join(rootPath,
+    'VaultEngine.Stellar', 'Services', 'VaultPublishedFileClassification.cs'), 'utf8');
+  const row = fs.readFileSync(path.join(rootPath,
+    'StellarVault.UI', 'Components', 'VaultExplorerItemRow.razor'), 'utf8');
+  const inspector = fs.readFileSync(path.join(rootPath,
+    'StellarVault.UI', 'Components', 'VaultRecordInspector.razor'), 'utf8');
+  const vault = fs.readFileSync(path.join(root, '..', 'Pages', 'Vault.razor'), 'utf8');
+  assert.match(classifier, /public static bool IsManagedFileProtocolRecord\(/);
+  const smoke = fs.readFileSync(path.join(rootPath, '..', 'tests',
+    'StellarVault.Core.CryptoTests', 'VaultPublishedFileClassificationSmoke.cs'), 'utf8');
+  const runner = fs.readFileSync(path.join(rootPath, '..', 'tests',
+    'StellarVault.Core.CryptoTests', 'Program.cs'), 'utf8');
+  assert.match(smoke, /Malformed published file was not protected from ordinary mutation/);
+  assert.match(runner, /VaultPublishedFileClassificationSmoke\.RunAsync\(\)/);
+  for (const marker of ['SinglePrefix', 'ManifestPrefix', 'ChunkPrefix', 'VaultLinkedTreeFilePolicy.Prefix'])
+    assert.ok(classifier.includes(marker), 'must recognize ' + marker);
+  assert.match(row, /!VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\) && CanDelete/);
+  assert.match(inspector, /CanDelete && !VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(Item\)/);
+  const prepare = vault.slice(vault.indexOf('private async Task SelectDelete('),
+    vault.indexOf('private async Task DeleteSelectedAsync()'));
+  const submit = vault.slice(vault.indexOf('private async Task DeleteSelectedAsync()'),
+    vault.indexOf('private string? _error;', vault.indexOf('private async Task DeleteSelectedAsync()')));
+  assert.match(prepare, /VaultPublishedFileClassification\.IsManagedFileProtocolRecord\(item\)/);
+  assert.match(prepare, /var remote = await Ledger\.ReadAsync\(\)/);
+  assert.match(prepare, /SamePublishedDeleteSnapshot\(item, current\)/);
+  assert.match(prepare, /current\.IsFolder && remote\.Any/);
+  assert.match(submit, /var remote = await Ledger\.ReadAsync\(\)/);
+  assert.match(submit, /SamePublishedDeleteSnapshot\(candidate, current\)/);
+  assert.match(submit, /freshCost\.NetworkFeeXlm > _deleteEstimate\.NetworkFeeXlm/);
+  assert.match(submit, /freshCost\.PeakReserveXlm > _deleteEstimate\.PeakReserveXlm/);
+  assert.match(submit, /await Ledger\.DeleteAsync\(candidate\.Id\)/);
+  assert.ok(submit.indexOf('SamePublishedDeleteSnapshot(candidate, current)') <
+    submit.indexOf('await Ledger.DeleteAsync(candidate.Id)'), 'preflight must run before deletion');
+});
+
+test('Stellar-only HD file upload uses a separate no-persistence fee-approved file plan', () => {
+  const editor = fs.readFileSync(path.join(root, '..', 'Pages', 'VaultItemEditor.razor'), 'utf8');
+  const core = fs.readFileSync(path.join(root, '..', '..', 'VaultEngine.Stellar',
+    'Services', 'StellarLedgerUploadCoordinator.cs'), 'utf8');
+  assert.match(editor, /@inject StellarLedgerUploadCoordinator DirectFileUpload/);
+  assert.match(editor, /@onclick="PrepareDirectFileAsync"/);
+  assert.match(editor, /!CanSaveOffline && _selectedHdFile is \{ Size: > StellarLedgerFileProtocol\.MaxFileBytes \}/);
+  assert.match(editor, /selected\.OpenReadStream\(StellarLedgerFileProtocol\.MaxFileBytes\)/);
+  assert.match(editor, /new StellarLedgerUploadPlan\(/);
+  assert.match(editor, /CryptographicOperations\.ZeroMemory\(content\)/);
+  assert.match(editor, /DirectFileUpload\.ReviewAsync\(plan\)/);
+  assert.match(editor, /DirectFileUpload\.PublishNextApprovedAsync\(/);
+  assert.match(editor, /fresh\.NetworkFeeXlm <= approvedCost\.NetworkFeeXlm/);
+  assert.match(editor, /_directFileUncertain = mayHaveSubmitted/);
+  assert.match(editor, /StellarLedgerFileProtocol\.DecodeFile\(manifest, remote\)/);
+  assert.match(core, /plan\.Remaining\(finalSnapshot\)/);
+  assert.match(core, /await ledger\.PublishWithIdAsync\(next\.Id, next\.Draft\)/);
+  assert.match(core, /requestApproval\(next\.Draft\)/);
+  assert.doesNotMatch(editor, /localStorage\.setItem|sessionStorage\.setItem/);
 });

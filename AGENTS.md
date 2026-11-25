@@ -2,13 +2,26 @@
 
 Read [docs/ENGINEERING_HANDOFF.md](docs/ENGINEERING_HANDOFF.md) before modifying code. Update it with each meaningful repository change. Keep this file aligned with the product architecture and unresolved blockers.
 
+## Current validation policy — supersedes older CI prohibitions (2026-11-15)
+
+- User now **permits GitHub CI when useful**, but asked earlier to avoid unnecessary Actions/token use. One workflow, `.github/workflows/manual-verify.yml`, is registered on both `main` and this feature branch. Its ONLY trigger is `workflow_dispatch`: no push/PR triggers, no deployment, no network transactions. Do not add automatic runs without new user authorization.
+- Select `architecture/pluggable-vault-records-and-chains` in Actions → Manual StellarVault verification → Run workflow. Build/test failures must be investigated from actual logs; do not assert that source parsing equals a successful .NET build.
+- See `docs/verification/manual-validation.md` and `docs/architecture/implementation-reality-check.md`. Existing HD queue, file protocol, folder planner and verifier infrastructure must be reused instead of rebuilt. Ignore earlier historical instructions in this file saying GitHub Actions must *never* be recreated; they refer to the user's older instruction.
+- Linked encrypted queue read-only inspection and foreign-scope rejection paths must zero decrypted draft buffers before returning or throwing.
+
 ## Architecture and product contract
 
-- Shared .NET 10 domain/services: `src/StellarVault.Core`; PWA host: `src/StellarVault.Pwa`; reusable UI: `src/StellarVault.UI`.
+- Landing host: `src/StellarVault.Landing`; serve only its `wwwroot`. Keep deployment configuration and original archive provenance outside the public root. Landing claims must match implemented capabilities and release evidence; the API currently provides authenticated read-only diagnostics, not hosted storage writes.
+
+- **Engine-first ownership (2026-11-17):** `src/VaultEngine.Core` is the independent provider-neutral engine and MUST NOT reference StellarVault or a chain provider. `src/VaultEngine.Stellar` owns the existing Stellar crypto/storage/queue/session/provider services and references the engine, never a StellarVault consumer. StellarVault PWA/MAUI/UI and the HTTP API consume the SAME engine assembly. A future EvmVault must consume it through its own provider; do not duplicate the engine. `StellarVault.Core` has been removed. App-native lifecycle/navigation event services live in `StellarVault.UI/Services`; do not recreate a separate app Core project for them. Older historical entries naming `StellarVault.Core/Services` refer to code now moved to `VaultEngine.Stellar/Services` unless explicitly application-only.
+- **Stellar integration ownership (2026-11-17):** `src/VaultEngine.Stellar.Horizon` owns pure Horizon clients, network profiles/identity checks, receipt workflow and the engine observation adapter. It references only `VaultEngine.Core`, never a consumer or signing/crypto package. `StellarVault.Application` and `StellarVault.Infrastructure` have been removed. API keys, tenant grants, rate limits and HTTP authorization remain in `StellarVault.Api`; do not move them into the engine/provider libraries.
+- Shared UI remains `src/StellarVault.UI`; PWA host remains `src/StellarVault.Pwa`. Current HTTP API consumption is provider-neutral engine transaction observation; hosted object write APIs are not implemented and must not be represented as complete.
 - **Product architecture decision (2026-11-14):** two independent first-class *intended* credential/account strategies: BIP-39 SEP-5 mnemonic / deterministic HD child accounts, and imported Stellar S-key / linked independently created child accounts with explicit root public-key signer authorization. The latter is NOT an HD mnemonic substitute or a legacy-only migration. Reuse records/folders, encryption service contracts, on-chain review and hybrid workflows where safe, but do not cross their derivation/signing/discovery paths.
 - Stellar on-chain vault is the primary mode. Optional encrypted IndexedDB local mode must be explicitly enabled. Do not silently switch to local persistence or broadcast transactions.
 - Preserve the original on-chain `/vault` experience and account/network isolation. Keep mnemonic/keys out of logs, URL parameters and unencrypted persistent storage.
 - Offline mutation queues are encrypted at rest, account/network scoped, and use compare-and-swap durable state transitions. Never retry Submitting/Uncertain mutations blindly.
+
+- Landing host: `src/StellarVault.Landing`, public document root `wwwroot`; keep host configuration and provenance outside it. Static presentation only: no engine project reference or wallet behavior. Keep feature copy aligned with the handoff and validate with `node scripts/verify-landing.cjs`.
 
 ## Safety-critical Sync rules
 
@@ -421,3 +434,177 @@ The earlier Phase 1 S-key inspection-only status in this file is a historic mile
 The new independently versioned Secret Key protocol is implemented in `src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js` and exposed through `IStellarSecretKeyLedger` / `BrowserSecretKeyLedger`. Its imported S-key is not handed to HD services; it derives independent AES-GCM encryption, stores `skh:/skc:` encrypted manifests/chunks in one reviewed atomic transaction, manages root-authorized independent child accounts through explicit user-approved CreateAccount+SetOptions+ManageData, and rejects mainnet mutation. The shared `VaultSecretKeyWorkspace` in UI serves PWA `/secret-vault` and MAUI. Script and adapter asset/DI registration must stay synchronized in both hosts. Both scripts enforce signer policy/network binding and fail-closed recovery.
 
 **Hard blocker warnings:** unknown legacy `svh:/svc:` record formats are not auto-migrated; account-chain registry authentication and independently verified historical evidence are not yet production complete; Stellar has no native ManageData compare-and-swap; existing HD hybrid queue, binary files and platform file workflows are **not** automatically applicable to S-key sessions. Do not route a Secret Key queue to `IStellarLedgerRecords` (HD), store S-key plaintext, automatically retry uncertain writes, or enable Mainnet based solely on mocked tests. Signing, crypto, recovery, and account provisioning need audited Testnet validation before promotion. `tests/secret-key-ledger.test.cjs` contains mocked ledger workflow coverage; test runner, .NET 10 compilation and real devices were unavailable during this pass.
+
+## Pluggable design direction (2026-11-14)
+- See `docs/architecture/pluggable-vault.md`. Account provenance, record logical type, storage mode, and blockchain transport are independent; do not conflate MIME extension detection with safe file preview.
+- The new account/record factories are extension contracts and legacy MIME classification only, not wired multi-chain support. Preserve historical ciphertext layout and do not enable S-key Mainnet writes or sync broadcasts.
+- Future sharing must never export account/seed/master encryption keys; future import/export needs authenticated versioned envelopes and conflict-safe folder mapping.
+
+## Priority clarification — 2026-11-14
+- EVM is **last priority** and only motivates clean interfaces; do not build EVM functionality now. Complete and validate existing Stellar HD and independently linked S-key paths, common record/file handling and safe synchronization first; sharing and portable import/export come later.
+- The local record type factory is actively used for new text/binary saves. The account-strategy factory is **not** a live provider; `VaultConnectedStellarAccountInventory` only inspects already-connected sessions. No implicit account creation or transaction broadcast via factory calls.
+
+## 2026-11-14 integration note
+- Registered Stellar HD and linked provisioning-strategy implementations are read-only for connected inspection. CreateNext and per-node Discover fail closed; linked UI validates inventory via factory without bypassing transaction approval.
+- Record type factory now validates HD and linked on-chain drafts as credential/folder types. Existing on-chain serialization remains unchanged.
+- Local binary text/plain files are rejected until file-vs-text discriminator migration exists. Changes are not build/test verified.
+
+## Reviewed linked expansion milestone
+- Linked chain expansion now routes through `VaultLinkedAccountExpansion`, retaining exact quote/approval and root/network scope; it consumes pending intent before the network operation, never retries an uncertain submission, and checks connected count/tail after. This is **not** production-safe cross-device deduplication or proof of historical signer authorization.
+- Do not replace the explicit S-key quote UI with an unapproved generic factory CreateNext; keep existing HD transaction behavior untouched. EVM is last priority. This work has not been compiled or device-tested.
+
+## Storage-driven chain capacity rule
+- The linked S-key UI must not require users to request another account. `VaultLinkedRecordWritePlanner` handles a typed create-only storage-capacity signal from the Stellar JS planner, preparing an expansion quote as part of the requested record save. The extra account and the record write each require their own explicit user-approved quote and verified outcome; never automatically broadcast the second transaction.
+- Do not treat insufficient funds, MAX_OPS, update-account exhaustion, or maximum chain length as permission to allocate another account. These require explicit failure or a separately audited migration/large-record protocol. Preserve in-memory draft handling and no-blind-retry uncertainty.
+- This integration is source-only, not build/run validated.
+
+## Linked-account safety update (2026-11-14)
+- Reserve one available tail ManageData slot for the next sv:next:v1 link when planning *new* records. Never extend a 1000-entry tail or allocate a child for a record that already exceeds the atomic transaction limit.
+- On submission uncertainty, the linked JS session and UI block further mutations. Read-only Refresh cannot unblock them. Cross-session durable reconciliation remains unimplemented and is required before production release.
+- Regression test source cases were added but not run; never report test pass without executing. EVM is still last priority.
+
+## Read-only linked submission diagnostic
+- Linked S-key JS transport now retains a volatile public-only unresolved submission snapshot, exposed through InspectUncertainSubmissionAsync and read-only UI. No signing material, plaintext, ciphertext or original draft enters this diagnostic.
+- This is not a durable journal or independent historical proof; a missing snapshot must not be treated as completed or failed transaction. No tests/builds executed in this batch.
+
+## Linked recovery inspection (2026-11-14)
+- `VaultLinkedRecoveryInspector` is registered in PWA/MAUI and observes current linked account tail or record visibility for an uncertain submission without any mutation. Its result is **not historical proof and cannot clear a write block**.
+- Existing encrypted hybrid queue requires an independent local vault key and device consent; do not persist S-key vault unresolved diagnostics using that queue without proper isolation and an audited key lifecycle.
+- No builds/tests executed, no durable linked journal. EVM last priority.
+
+## Linked uncertain-recovery boundary — 2026-11-14
+- Same-runtime S-key lock/reopen no longer drops an unresolved public-only marker; connected UI checks this before enabling writes. Full reload and other devices are NOT protected. Never claim durable recovery.
+- Read-only Horizon-linked receipt adapter checks selected HTTPS network identity, receipt and root source. It is advisory and cannot confirm exact operation or record, cannot clear quarantine, and never submits. Native host explicitly links adapter. Tests were added but not executed.
+- Keep explicit local-storage consent and independent S-key encryption lifecycle as blockers for durable journal; no plaintext localStorage shortcuts. EVM last.
+
+## Cross-session linked guard update
+- JS unresolvedByVault must be checked at plan start, submit start and immediately before network transmission across all sessions sharing exact root/network. Do not move the last guard earlier: async preflight can interleave. This protects only one JS realm, not reloads or devices.
+- New create requests against an already saturated tail must fail rather than triggering a new-account quote, because the tail cannot accept a chain pointer. Node regression cases added but not executed; no CI checks visible. EVM remains last priority.
+
+## Capability reuse directive — 2026-11-14
+- Before writing a new subsystem, consult `docs/architecture/capability-reuse-audit.md`: encrypted pending queue, consent, manual sync/reconciliation, folder graph, file staging/chunking, Horizon historical readers and shared PWA/MAUI UI ALREADY exist for parts of HD/hybrid. Report **wiring gaps**, **policy disables** and **verification gaps** separately from absent implementation.
+- `VaultStellarDraftClassification` reuses the existing record factory in BOTH HD and linked record planners. Preserve two independent account/signing strategies: never use HD-derived secrets, registry HMAC or unlocked HD device keys in imported S-key mode.
+- Prefer extracting cross-strategy logic from existing Core rather than adding parallel file, queue, approval or recovery engines. Neither build nor test was run for this batch. EVM remains last.
+
+## Shared approval policy refactor (2026-11-14)
+- `VaultApprovalScopeGuard` is the shared account/network/age review check. Existing HD queue `VaultSyncApprovalGuard` continues to require its own payload digest and CAS checks, while S-key expansion retains exact quote comparison and separate reviewed signer transport. Do not rewrite those strategy-specific authorization checks as one generic submit function.
+- Do not claim linked offline queue parity: independent S-key authenticated encryption/storage-key lifecycle and protocol adapter are not wired. Reuse existing encrypted queue and folder/file mechanics once isolated. Added regression source, not executed; EVM last.
+
+## Consent-bound encrypted queue reuse (2026-11-14)
+- `VaultScopedQueueReview` is the read-only shared queue+folder snapshot used by HD `VaultHybridSyncReviewService`; it delegates to existing encrypted queue/CAS, does not persist anything or publish. Recheck the active local vault epoch and exact network/consent after async reading.
+- `VaultLinkedQueueInspection` is strictly read-only and `CanPublish=false`. Matching public account address does not authenticate queue format or authorize imported S-key signing. It is not a linked-sync UI workflow; do not silently reinterpret HD-format queued data as S-key drafts. Both hosts register it.
+- Next use existing CAS, queue state policy, folder graph and file mechanisms, after strategy-tagged authenticated local credential/key lifecycle and a protocol-specific approval transport. No builds/tests for this source batch. EVM last.
+
+## Shared queue strategy discriminator (2026-11-15)
+- `VaultPendingMutation.OriginStrategyId` is optional trailing metadata. Null always means existing legacy HD; only `stellar-hd-v2` and `stellar-secret-key-chain` are recognized. Reject unknown IDs. Authenticated encrypted store CAS equality includes this value, and it cannot change during transitions.
+- HD queue enqueue/fee review must not accept tagged linked intents; linked read-only inspection must never count legacy entries as S-key. Strategy metadata is **not signer ownership evidence**. No linked local persistence/sync is enabled without a separately authenticated encryption key, local-storage consent and historical operation verification.
+- Keep reusing existing queue, folder graph and file infrastructure; regression source not executed. EVM is last priority.
+
+## Queue-key lifecycle seam and linked-origin isolation (2026-11-15)
+- Existing IndexedDB/MAUI encrypted queue stores now accept `IVaultQueueKeySession`; current `VaultLocalQueueKeySession` uses the existing local-vault unlock key, not imported S-key credentials. Do not register it as an S-key queue key source. The stores still enforce explicit device-storage consent and existing AES-GCM AAD/storage IDs.
+- `VaultPendingMutationQueue.SameDurableRevision` must compare origin; linked-origin entries must not enter HD state transitions or ready review. Read-only mixed-queue inspection remains allowed. The S-key provider requires independently authorized/derived keys and distinct namespace before enabling writes.
+- Source-only refactor, static regression cases not executed. Prefer adapting existing stores/CAS rather than another queue or file engine. EVM last.
+
+## Single-snapshot encrypted queue review (2026-11-15)
+- Reuse pure `VaultPendingMutationReviewPolicy.Build(all)` for HD queue readiness. `VaultScopedQueueReview` must read `ReviewAllAsync` once and construct readiness and folder graph from that same authenticated snapshot; do not reintroduce separate asynchronous reads in one review.
+- Preserve HD-only readiness, linked-origin fail-closed, existing file policy and all consent/key-session requirements. Do not claim an S-key queue publisher exists yet. Source regression assertions were updated; tests not executed (no local checkout/dotnet).
+
+
+## S-key linked expansion preflight and lock safety (2026-11-15)
+- `VaultLinkedExpansionPreflightException` means Core did NOT invoke the linked ledger transport for that specific quote. It is safe to discard the unsubmitted review, but never infer that sibling or earlier transactions are confirmed/absent. After `ledger.SubmitApprovedAsync` any error is potentially uncertain; never retry blindly or classify that exception as preflight.
+- Lock must invoke `VaultLinkedAccountExpansion.AbandonUnsubmittedAsync` even if UI has already lost the visible quote. This only invalidates Core reviews still pending before transmission; runtime uncertainty markers remain intact.
+- Linked JS `inspectUncertain` checks the global same-runtime vault tombstone so parallel sessions see each other's unresolved writes. Tail UPDATE writes must preserve a spare entry for `sv:next:v1`; do not only reserve on CREATE.
+- Source regression cases added; no Node execution, .NET build or live Testnet confirmation. Continue reusing existing Core queue/folder/file machinery rather than creating parallel engines; EVM last.
+
+
+## Independent linked-key encrypted queue seam (2026-11-15)
+- `VaultLinkedQueueKeySession` is separate from `VaultLocalQueueKeySession`/HD session and uses existing Argon2id wrapped random data-key lifecycle ONLY after connected S-key signer+network verification and explicit device-retention consent. Its credential namespace `secret-chain:queue-key:v1:` is distinct from HD, and wrapped records are isolated by exact account/network scope.
+- `VaultLinkedQueueStorageScope` prefixes queue ciphertext namespace `secret-chain:queue:v1:`. `IndexedDbVaultLinkedQueueSnapshotStore` and `FileSystemVaultLinkedQueueSnapshotStore` reuse existing encrypted stores with this independent key and namespace (native has a distinct directory). Linked queue inspector NO LONGER reads HD `VaultScopedQueueReview`; it is read-only, rejects HD-origin ciphertext and always `CanPublish=false`.
+- PWA/MAUI DI and lock/background/dispose paths must zero the S-key queue key. Never auto-enable S-key durable mutation writes, manual sync or encrypted local enrollment without explicit consent, accurate signer provenance and operation verification.
+- Branch CI validation workflow added; recent builds/tests report failure but connector exposes no output. Do not assert a green build. Investigate CI before production. EVM last.
+
+## Live S-key signer validation for encrypted local queue (2026-11-15)
+- `VaultLinkedQueueKeySession.ExecuteAsync` verifies live JS signer/linked chain via `ledger.InspectAccountInfoAsync` before and after key callbacks; cached `IsConnected` cannot authorize local encrypted queue access after JS signer revocation. Network outage fails closed. No true offline S-key unlocking until separate authenticated local proof is developed.
+- Branch and PWA release workflows run the S-key regression suite, but recent CI reports failure with no accessible logs via connector. Do not call the feature tested or production-ready. HD queue remains independent and no linked queue publisher is enabled.
+
+
+## GitHub CI disabled; shared S-key device panel (2026-11-15)
+
+- At explicit user request, **DO NOT recreate GitHub Actions CI workflows**: all four `.github/workflows/*.yml` files were removed from active feature branch and existing three from main. User wants to minimize GitHub workflow usage. Validation must be local/manual unless the user changes this requirement.
+- `VaultLinkedLocalQueuePanel` (shared PWA/MAUI) grants explicit independent S-key consent, supports separate local passphrase create/unlock/lock, and only allows read-only encrypted queue inspection. No local linked publish/Sync stage exists. Disabling consent is not deleting data.
+- `VaultLinkedLocalRetentionGate` is a separate required session consent barrier in S-key key/credential/queue read services; HD global device consent alone is insufficient.
+- `IStellarSecretKeyLedger.ConnectionEpoch` changes on connect/disconnect; `VaultLinkedQueueKeySession` binds unlock to that exact epoch so the local key cannot remain authorized after reconnecting the same imported account. Static tests added, builds/test execution remain unverified.
+
+
+## Linked S-key queued create pipeline — 2026-11-15
+- `IVaultLinkedDraftStore` **reuses** the original encrypted PWA/native queue stores; add/delete/CAS only after S-key-specific consent and key/session/network origin checks. CAS may transition Pending→Submitting→Confirmed/Uncertain only without changing any immutable field or a confirmed 64-hex transaction hash. Do not route through the HD queue authorizer.
+- `VaultLinkedDraftWorkspace` stages encrypted create records/folders with original Core folder parent dependency logic. `VaultLinkedDraftPublication` manually quotes, binds full queue revision+signer epoch, requires explicit approval, checks remote inventory, reserves via durable CAS BEFORE sending and fails closed on uncertainty. No automatic retry/rebroadcast. Connected record read-back is not independent historical operation proof.
+- The shared `VaultLinkedLocalQueuePanel` now offers create/list/discard, parent folder selection and reviewed manual create publication on PWA and MAUI. Not yet true offline: key session and stage require connected live S-key ledger. Queued updates/deletes, file upload parity, queued capacity expansion and durable historical reconciliation still outstanding. Do not describe complete production sync.
+- `tests/StellarVault.Core.CryptoTests/LinkedDraftSmoke.cs` exercises native encrypted queue and fake linked ledger, and Node static checks cover the integration, but **no .NET build or executable test run was possible here**. GitHub Actions must stay removed on main and feature branch; user explicitly prohibited CI due token usage. EVM remains last.
+
+
+## Independent retention fix (2026-11-15)
+- CRITICAL: `VaultLinkedLocalRetentionGate.DeviceRetention` is an independent `VaultDeviceRetentionGate`, and ONLY this gate may be passed to existing encrypted store implementations for S-key credentials/queue. Never inject the global HD `VaultDeviceRetentionGate` into linked queue services or toggle HD retention from `VaultLinkedLocalQueuePanel`. The linked consent gate grants/resets its own device policy.
+- S-key local consent and HD local consent are separate even when an account G-address is the same. Preserve the existing strategy-specific encrypted credential/queue namespaces for backward compatibility.
+- Smoke source and Node static assertions updated; not built/executed. No GitHub CI per user request. See `docs/ENGINEERING_HANDOFF.md`.
+
+
+## Offline-only linked queue authorization and uncertain assessment (2026-11-15)
+
+- Existing imported S-key local wrapped credentials may be unlocked offline with PUBLIC root G-address, selected network and separate local passphrase via `VaultLinkedQueueKeySession.UnlockOfflineAsync`, with explicit S-key-specific device retention consent. Offline queue key use MUST NOT contact Horizon, infer ownership from public root alone, access HD credentials, or authorize publication. First-time enrollment still requires the connected signer and chain.
+- `CanPublish` requires a separate **live signer-backed queue unlock**, exact selected/connected network passphrase, active epoch and consent. Reconnecting a signer after an offline-only unlock does not promote that queue session. Core `VaultLinkedDraftPublication` must enforce `CanPublish` regardless of UI state. Switching network must lock/fail closed; `IsUnlocked` must not throw in UI for malformed custom network settings.
+- `VaultLinkedDraftWorkspace` may stage/list/discard local record/folder creates offline, but remote parent IDs and record collisions remain unverified until online preflight. Shared PWA/MAUI panel must disable publish/remote recovery while offline and remain reachable from locked S-key entry screen.
+- `VaultLinkedDraftRecoveryReview` is read-only advisory for durable Uncertain/Submitting queue entries: NO TryReplaceAsync, queue release, retry or confirmation based only on matching current-state fields or Horizon receipt. Exact historical operation and signer proof is still an unimplemented release blocker.
+- LinkedDraftSmoke and Node source regression checks expanded; no .NET compile or integration test execution was possible. No GitHub Actions CI; user explicitly asked to remove it. EVM last.
+
+
+## S-key draft editing uses shared CAS and cycle checks (2026-11-15)
+- `VaultLinkedMutationTransitionPolicy` is the only linked store transition validator for both PWA IndexedDB and native filesystem. Pending create drafts may revise content + DependsOn atomically with same immutable mutation identity; only Pending→Submitting→Confirmed/Uncertain are supported publication transitions. Never allow Uncertain/Confirmed/Submitting→Pending or mutation ID/origin/account/network changes.
+- `VaultLinkedDraftWorkspace.ReviseAsync` requires an exact current SHA-256 fingerprint of the opened plaintext-serialized payload, checks local pending parent ancestor cycles, and CAS-commits a revision. Shared `VaultLinkedLocalQueuePanel` handles explicit editing while keeping password fields masked and preserving unverified offline remote parent IDs. A draft edit never signs or broadcasts.
+- Tests added but not executed; do NOT recreate GitHub Actions CI. Production blockers remain historical proof/reconciliation, queued updates/deletes and file chunks, staged capacity expansion, device Testnet tests and security audit.
+
+
+## Manual-only linked queue ordering (2026-11-15)
+
+- Use pure `VaultLinkedManualSyncPlan.Build` for read-only next-ready draft ordering from a SINGLE authenticated encrypted queue snapshot. Do not generate a second queue or retry engine. Feed existing `VaultQueuedCreatePolicy.Problems` blockers, disable suggestions on ANY Uncertain/Submitting/Conflict, and require `VaultLinkedQueueKeySession.CanPublish`.
+- The UI `Review next ready draft` only calls the original S-key manual review/quote. Always require separate explicit user fee approval for each on-chain transaction; no auto-batch broadcast, background sync or retry.
+- Local fake-ledger smoke and Node source assertions were added but not executed. No GitHub Actions per user request; production release blockers remain exact historical proof/recovery, queued update/delete, files, capacity expansion and complete .NET/MAUI/Testnet validation.
+
+
+## Journaled linked account capacity for manual encrypted drafts (2026-11-15)
+
+- Manual S-key queue capacity expansion MUST go through `VaultLinkedExpansionJournal`, reusing `VaultLinkedAccountExpansion` for signer/fee authorization and existing encrypted queue stores for atomic journal transitions. `ExtendLinkedChain` is Linked-only; HD enqueue must explicitly reject it.
+- Expansion journal ID MUST deterministically bind authenticated root+network+current tail so concurrent browser tabs cannot Add two different intents for the SAME account tail. Reserve Pending→Submitting via existing CAS BEFORE network submit; leave Uncertain/Submitting on unknown outcome, never retry automatically. Pending intent after a pre-reservation crash also blocks all linked queue publishing. Only still-Pending (never reserved) intents may be explicitly CAS-deleted; never clear Submitting/Uncertain/Confirmed without independent operation-level proof.
+- The shared PWA/MAUI panel shows a separate fee-reviewed account-expansion step, then requires a separate record fee review. `VaultLinkedManualSyncPlan` and `VaultLinkedDraftPublication` block ordinary creates while any expansion intent remains unconfirmed. `VaultLinkedDraftRecoveryReview` is advisory only.
+- This only journals expansion via the encrypted queue UI. The older direct workspace expansion may still lack restart-durable unknown submission state. Manual Node/.NET/device validation outstanding; no GitHub Actions per user request. Do not claim production ready.
+
+
+## Canonical authenticated vault route / shared workspace (2026-11-15)
+
+- **Current product decision:** PWA has a single authenticated workspace route, `/vault`, for both first-class account strategies. `/secret-vault` is now a redirect/deep-link alias, NOT a separately mounted workspace. Empty S-key first-run still visits the common `/initialize` and then `/vault`. Historic references above to a distinct PWA S-key route are superseded.
+- `VaultWorkspaceModeResolver` in Core selects `Locked`, `MnemonicHd`, `StellarSecretKey`, or `ConflictingSessions` exclusively from authenticated host session states; it rejects simultaneous active HD and linked S-key sessions and does not infer strategy from record contents, local consent, address shapes, or UI routes. `Index.razor`, `Initialize.razor`, and `Vault.razor` enforce this. HD local-only sessions must still open `/vault` when Stellar is offline.
+- PWA `Vault.razor` hosts `VaultLinkedWorkspaceShell` when the imported S-key signer is active, preserving the modern app rail, mobile tabs, folder tree, list/grid selection, inspector, settings and help. `VaultSecretKeyWorkspace` is embedded with a selected view; its independent S-key signer, account-chain review, encrypted local queue, and history checkpoint remain completely separate from the HD services. Its local queue component stays mounted when switching PWA tabs, to preserve pending in-memory approval state. The nonembedded MAUI component continues to show its own queue without being hidden by the PWA view selector.
+- S-key tree file parts/branches are hidden from ordinary explorer; only authenticated file roots are shown. Generic text reveal/edit/delete of immutable file trees remains blocked; verified download stays in linked Sync. The S-key offline-only local encrypted draft unlock remains available from a disclosure on locked `/vault`, with separate passphrase/consent and no Stellar writes.
+- `tests/shared-vault-workspace.test.cjs` and `VaultWorkspaceModeSmoke` pin route and security isolation. New code was edited through GitHub; exact HEAD still requires local `scripts/verify-release.ps1` compilation, browser rendering, PWA refresh and MAUI device regression. This refactor unifies navigation and explorer presentation but **does not yet merge all strategy-specific editor and Sync form internals** into a single cross-host component; do not claim total UI-component consolidation.
+
+
+## Shared UI completed at component boundaries (2026-11-15, supersedes older separate workspace statements)
+
+- Product invariant: **one canonical `/vault`, one responsive application shell, one collection of UI components, independent authenticated HD and imported S-key logic**. No UI should derive or guess account mode from records; `VaultWorkspaceModeResolver` is the explicit authenticated-session guard.
+- Both PWA strategies render under the SAME `src/StellarVault.Pwa/Pages/Vault.razor` sidebar, screen header, mobile tabs and toolbar. Former `VaultLinkedWorkspaceShell.razor` was deleted; `/secret-vault` is only a redirect. S-key uses an embedded strategy-bound content controller, not another app shell.
+- Actual shared Razor components: `src/StellarVault.UI/Components/VaultExplorerTree.razor` (hierarchical folder tree), `VaultExplorerItemRow.razor` (public encrypted file/record row and action menu), `VaultRecordFields.razor` (HD/S-key published AND encrypted local draft editors), and `VaultRecordInspector.razor` (record information, secret reveal/copy, safe file actions and tabs). These are used from BOTH strategies on PWA AND the native MAUI host. Shared `VaultPublishedFileClassification` hides internal hierarchical nodes, and prevents editing/deleting file roots via generic record handlers.
+- **Strategy-specific behavior lives behind callbacks and services**: HD registry, mnemonic account derivation and journal; imported S-key independently linked account chain, signer/review/expansion journal and isolated locally encrypted queue. Never rewrite them into a generic signer or mix HD/S-key device retention and credentials.
+- `VaultLinkedLocalQueuePanel` has stable mounted `View="drafts"` vs `View="sync"` surfaces; its default `"all"` remains for explicit offline queue recovery and nonembedded use. Switching PWA/MAUI tabs must preserve pending quote, unsigned authorization, and uncertain submitted history. The MAUI linked component stays mounted via stable native content key, not re-instantiated on every tab.
+- HD file trees and S-key file trees are presented as **one file root**. Plaintext file is recovered only through the original mode's verified reader; no generic text reveal/edit/delete is allowed on an encrypted manifest or child. Whole-tree delete remains explicitly unsupported.
+- Legacy HD and S-key UI markup can remain for strategy-specific transaction approval/capacity review, but new shared record/folder/browser visuals must go in the shared UI components instead of duplicating markup. Native and PWA user flows should remain aligned.
+- Connector edits have NOT compiled this exact HEAD. Run `powershell -File scripts/verify-release.ps1` locally, hard-refresh PWA, exercise both credential modes and independent S-key offline encrypted draft recovery, test mobile navigation while a quote is pending, and confirm no HD access in S-key mode before considering production sign-off.
+
+
+## MAUI native parity with shared HD/S-key UI (2026-11-15)
+
+- Native `NativeVaultWorkspace.razor` already mounts `VaultSecretKeyWorkspace Embedded="true"` across all native tabs and uses the same `VaultRecordFields`, `VaultExplorerTree`, `VaultExplorerItemRow` and `VaultRecordInspector` as the PWA and HD workflows. Do not reintroduce a separate S-key-only editor or navigation shell. Device-local storage remains an explicitly named separate destination; it must not become the S-key queue implicitly.
+- Native HD record publication must use `CurrentPublishDraft()` both at fee review and approval, plus `CurrentPublishFingerprint()`. Never reconstruct only `new LedgerRecordDraft(title, content)` in the publish action: that discards folder, tags, username, URL and notes.
+- Native HD file upload no longer uses the obsolete `StellarLedgerUploadPlan`/whole-file `_uploadBytes`/1 MiB authoring path. It must stream the picked `Stream` directly through `VaultHybridDraftWorkspace.StageTreeFileAsync`, guarded by explicit local retention, an unlocked matching HD root account and no automatic transaction submission. Sync continues to own individual fees, historical confirmation and root-last publication.
+- Native SVTREE3 reads use the shared `VaultLinkedTreeFilePolicy.ReadAsync` authentication, a read-only verified preflight, and a bounded pipe to the native file saver; preserve explicit revalidation of root/account/network/content hash before Save. Legacy SVFILE is read-only. Do not claim the file saver is crash-atomic without host/device evidence.
+- `VaultWorkspaceModeResolver` applies to native too; conflicting HD and S-key unlocks block all actions until both sessions are explicitly locked. Fail closed on uncertain native/WebView credential teardown.
+- The new native regression tests in `tests/maui-ledger-assets.test.cjs` pin these properties. Their source-only checks passed when authored, but the full `scripts/verify-release.ps1`, Android simulator/physical device and disposable Testnet transaction/export tests must still run before production.

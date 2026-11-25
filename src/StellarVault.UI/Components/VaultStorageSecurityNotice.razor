@@ -1,6 +1,11 @@
+@using VaultEngine.Stellar.Services
 <div class="terminal-alert warning" role="note">
     <strong>STORAGE AND SIGNING ARE SEPARATE</strong>
-    @if (Native)
+    @if (Strategy == VaultMutationStrategyPolicy.Linked)
+    {
+        <span>Your Stellar secret key authorizes the linked account chain. The separate vault passphrase protects encrypted device records; publication still requires explicit transaction approval.</span>
+    }
+    else if (Native)
     {
         <span>A BIP-39 recovery phrase authorizes the Stellar ledger session. The local vault uses a separate passphrase; connecting to Stellar does not unlock locally encrypted records.</span>
     }
@@ -12,4 +17,5 @@
 
 @code {
     [Parameter] public bool Native { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
 }

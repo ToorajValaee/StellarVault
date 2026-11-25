@@ -1,0 +1,66 @@
+@* The same published item row, icons, labels and context actions are used
+   by both HD/mnemonic and independent S-key vaults. Only callback logic and
+   authorizations are strategy-specific. *@
+@if (!VaultPublishedFileClassification.IsInternalNode(Item))
+{
+    <div class="sv-object-row @(Selected ? "is-selected" : "")" @key="Item.Id">
+        <button type="button" class="record-card sv-modern-record"
+                aria-label="@($"View {Item.Title}")"
+                aria-current="@(Selected ? "true" : null)"
+                @onclick="() => OnOpen.InvokeAsync(Item)">
+            <span class="sv-modern-record-icon" aria-hidden="true">@(Item.IsFolder ? "📁" : IsFile ? "▤" : "▦")</span>
+            <span class="record-card-body">
+                <strong>@Item.Title</strong>
+                <small>@(Item.IsFolder ? "Folder" : IsFile ? "Encrypted file" : "Secure record")</small>
+                @if (!IsFile && Item.Tags is { Length: > 0 })
+                {
+                    <span class="tag-row">
+                        @foreach (var tag in Item.Tags.Take(3))
+                        {
+                            <span class="pixel-tag">#@tag</span>
+                        }
+                    </span>
+                }
+            </span>
+        </button>
+        <span class="sv-object-type">@(Item.IsFolder ? "Folder" : IsFile ? "File" : "Record")</span>
+        <span class="sv-object-storage">Stellar</span>
+        <details class="sv-object-actions">
+            <summary aria-label="@($"Actions for {Item.Title}")" title="More actions">⋯</summary>
+            <div class="sv-object-menu">
+                <button type="button" @onclick="() => OnOpen.InvokeAsync(Item)">
+                    @(Item.IsFolder ? "Open folder details" : "View details")
+                </button>
+                @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
+                {
+                    <button type="button" class="sv-row-export-action"
+                            @onclick="() => OnOpen.InvokeAsync(Item)">Export…</button>
+                }
+                @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item) && CanEdit)
+                {
+                    <button type="button" @onclick="() => OnEdit.InvokeAsync(Item)">
+                        @(Item.IsFolder ? "Rename / move" : "Edit record")
+                    </button>
+                }
+                @if (!VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item) && CanDelete)
+                {
+                    <button type="button" class="sv-object-delete"
+                            @onclick="() => OnDelete.InvokeAsync(Item)">Delete</button>
+                }
+            </div>
+        </details>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public LedgerRecordItem Item { get; set; } = default!;
+    [Parameter] public bool Selected { get; set; }
+    [Parameter] public string Strategy { get; set; } = VaultMutationStrategyPolicy.Hd;
+    [Parameter] public IReadOnlyList<LedgerRecordItem> Records { get; set; } = [];
+    [Parameter] public bool CanEdit { get; set; } = true;
+    [Parameter] public bool CanDelete { get; set; } = true;
+    [Parameter] public EventCallback<LedgerRecordItem> OnOpen { get; set; }
+    [Parameter] public EventCallback<LedgerRecordItem> OnEdit { get; set; }
+    [Parameter] public EventCallback<LedgerRecordItem> OnDelete { get; set; }
+    private bool IsFile => VaultPublishedFileClassification.IsFile(Item);
+}

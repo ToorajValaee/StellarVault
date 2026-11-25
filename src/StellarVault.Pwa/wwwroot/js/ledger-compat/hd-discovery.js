@@ -32,7 +32,7 @@ window.stellarVaultHdDiscovery = (() => {
       throw new Error('No SEP-5 index-0 Stellar account exists for this mnemonic on the selected network. Verify the mnemonic, optional BIP-39 passphrase and network. Legacy derivation is not implemented; do not fund an unverified address.');
     }
     const native = (root.balances || []).find(b => b.asset_type === 'native');
-    if (!native) throw new Error('Root account has no native XLM balance');
+    if (!native) throw new Error('Root account has no native-asset balance');
     const macKey = await window.stellarVaultRegistry.registryMacKey(
       seed, networkPassphrase, rootId);
     const registryEncoded = root.data_attr?.[REGISTRY_KEY];

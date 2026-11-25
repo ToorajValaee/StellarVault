@@ -10,10 +10,16 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0" PrivateAssets="all" />
-    <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Core/VaultEngine.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Stellar/VaultEngine.Stellar.csproj" />
+    <ProjectReference Include="../VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj" />
     <ProjectReference Include="../StellarVault.UI/StellarVault.UI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ServiceWorker Include="wwwroot/service-worker.js" PublishedContent="wwwroot/service-worker.published.js" />
   </ItemGroup>
-</Project>
+  <Target Name="VerifyPublishedServiceWorkerAlias" AfterTargets="Publish">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)/wwwroot/service-worker.published.js"
+          DestinationFiles="$(PublishDir)wwwroot/service-worker.js" />
+    <Delete Files="$(PublishDir)wwwroot/service-worker.js.gz;$(PublishDir)wwwroot/service-worker.js.br" />
+  </Target></Project>

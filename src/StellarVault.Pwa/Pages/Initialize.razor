@@ -1,18 +1,27 @@
 @page "/initialize"
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @inject IStellarLedgerRecords Ledger
+@inject IStellarSecretKeyLedger SecretLedger
 @inject VaultSessionManager Sessions
 @inject NavigationManager Nav
 
 <AdaptiveShell PlatformName="WEB PWA" Subtitle="SET UP YOUR VAULT">
-@if (!Sessions.IsUnlocked && !Ledger.IsConnected)
+@if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel centered-message" role="alert">
+        <h1>Conflicting vault sessions</h1>
+        <p>Lock the previous independent vault session before continuing setup. No transaction was submitted.</p>
+        <a class="pixel-button primary" href="/vault">Review and lock both sessions</a>
+    </section>
+}
+else if (ActiveMode == VaultWorkspaceMode.Locked)
 {
     <section class="terminal-panel centered-message">
         <h1>Vault locked</h1>
         <a class="pixel-button primary" href="/">Unlock vault</a>
     </section>
 }
-else if (!Ledger.IsConnected)
+else if (!Ledger.IsConnected && !SecretLedger.IsConnected)
 {
     <section class="terminal-panel centered-message">
         <h1>Connect to Stellar</h1>
@@ -35,7 +44,39 @@ else
             <div><h1>Set up your vault</h1></div>
         </header>
         <div class="terminal-panel credential-form">
-            @if (_checking) { <p role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> CHECKING ROOT REGISTRY AND FUNDING...</p> }
+            @if (_checking) { <p role="status" aria-live="polite"><span class="sv-loading-spinner" aria-hidden="true"></span> @(SecretLedger.IsConnected ? "CHECKING SECRET KEY ACCOUNT AND FUNDING..." : "CHECKING ROOT REGISTRY AND FUNDING...")</p> }
+            else if (SecretLedger.IsConnected)
+            {
+                <p class="advanced-help">Your independent Stellar Secret Key account is connected. This vault uses an account chain, not an HD recovery-phrase registry. Review its funding before continuing. Checking your account and opening the vault does not submit a transaction.</p>
+                @if (_linkedInfo is not null)
+                {
+                    <div class="stats-strip">
+                        <div><span>TOTAL NATIVE</span><strong>@_linkedInfo.BalanceNative</strong></div>
+                        <div><span>SPENDABLE NATIVE</span><strong>@_linkedInfo.SpendableNative</strong></div>
+                        <div><span>LINKED STELLAR ACCOUNTS</span><strong>@_linkedInfo.TotalAccounts</strong></div>
+                    </div>
+                    <details class="sv-access-learn"><summary>Account details</summary>
+                        <p class="advanced-help">Root address: @_linkedInfo.RootAccountId</p>
+                        <p class="advanced-help">Tail address: @_linkedInfo.TailAccountId</p>
+                    </details>
+                    @if (!HasLinkedSpendable)
+                    {
+                        <div class="terminal-alert warning">This account currently has no spendable XLM. Reading is available, but creating records requires network fees and account reserves. Fund the root account on the selected network before publishing.</div>
+                    }
+                    <div class="terminal-alert" role="status">Account connected. No HD registry initialization or transaction is required for this Secret Key vault.</div>
+                    <button class="pixel-button compact" disabled="@_busy" @onclick="RefreshFundingAsync">↻ REFRESH BALANCE</button>
+                    <label style="display:flex;gap:.65rem;align-items:center;margin:.75rem 0">
+                        <input type="checkbox" @bind="_confirmed" />
+                        <span>I understand that future on-chain writes require separate fee approval.</span>
+                    </label>
+                    <button class="pixel-button primary" disabled="@(!_confirmed || _busy)" @onclick="ContinueLinkedAsync">OPEN SECRET KEY VAULT →</button>
+                }
+                else
+                {
+                    <p class="advanced-help">Account details are unavailable. Refresh to verify the connected signer and network.</p>
+                    <button class="pixel-button compact" disabled="@_busy" @onclick="RefreshFundingAsync">↻ RETRY ACCOUNT CHECK</button>
+                }
+            }
             else if (_ready)
             {
                 <div class="terminal-alert success" role="status"><strong>REGISTRY READY</strong><span>Authenticated registry detected. Continue to your vault.</span></div>
@@ -78,7 +119,49 @@ else
 </AdaptiveShell>
 
 @code {
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
     private LedgerFundingStatus? _funding;
+    private LedgerAccountInfo? _linkedInfo;
+    private long _linkedEpoch;
+    private bool HasLinkedSpendable =>
+        _linkedInfo is not null &&
+        decimal.TryParse(_linkedInfo.SpendableNative,
+            System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var spendable) &&
+        spendable > 0m;
+
+    private bool MatchingLinkedSession(string root, long epoch) =>
+        ActiveMode == VaultWorkspaceMode.StellarSecretKey &&
+        SecretLedger.IsConnected &&
+        SecretLedger.RootAccountId == root &&
+        SecretLedger.ConnectionEpoch == epoch;
+
+    private async Task InspectLinkedAsync()
+    {
+        if (!SecretLedger.IsConnected || SecretLedger.RootAccountId is not string root)
+            throw new InvalidOperationException("Unlock the Secret Key vault first.");
+        var epoch = SecretLedger.ConnectionEpoch;
+        var info = await SecretLedger.InspectAccountInfoAsync();
+        if (!MatchingLinkedSession(root, epoch) || info.RootAccountId != root)
+            throw new InvalidOperationException("Secret Key signer changed during funding inspection.");
+        _linkedInfo = info;
+        _linkedEpoch = epoch;
+    }
+
+    private void ContinueLinkedAsync()
+    {
+        if (!_confirmed || _busy || _linkedInfo is not { } info ||
+            !MatchingLinkedSession(info.RootAccountId, _linkedEpoch))
+        {
+            _error = "Account or network session changed. Refresh the setup check before continuing.";
+            _confirmed = false;
+            return;
+        }
+        Nav.NavigateTo("/vault");
+    }
+
     private bool _confirmed, _busy, _checking = true, _ready;
     private string? _error;
     private string _loadingMessage = "PROCESSING...";
@@ -87,32 +170,55 @@ else
     {
         try
         {
+            if (ActiveMode == VaultWorkspaceMode.ConflictingSessions) return;
+            if (SecretLedger.IsConnected)
+            {
+                await InspectLinkedAsync();
+                return;
+            }
             if (!Ledger.IsConnected) return;
             _ready = await Ledger.HasRegistryAsync();
             if (!_ready) _funding = await Ledger.InspectRegistryFundingAsync();
         }
-        catch (Exception ex) { _error = "Registry inspection failed: " + ex.Message; }
+        catch (Exception)
+        {
+            _linkedInfo = null;
+            _error = "Setup inspection could not verify the connected account or network. Refresh the balance and retry; no transaction was sent.";
+        }
         finally { _checking = false; }
     }
 
     private async Task RefreshFundingAsync()
     {
-        if (_busy || !Ledger.IsConnected) return;
+        if (_busy || ActiveMode is VaultWorkspaceMode.Locked or
+                VaultWorkspaceMode.ConflictingSessions) return;
         _busy = true;
         _loadingMessage = "REFRESHING NATIVE BALANCE...";
         _error = null;
         try
         {
+            if (SecretLedger.IsConnected)
+            {
+                _linkedInfo = null;
+                _confirmed = false;
+                await InspectLinkedAsync();
+                return;
+            }
             _ready = await Ledger.HasRegistryAsync();
             if (!_ready) _funding = await Ledger.InspectRegistryFundingAsync();
         }
-        catch (Exception ex) { _error = "Treasury inspection failed: " + ex.Message; }
+        catch (Exception)
+        {
+            _linkedInfo = null;
+            _error = "Funding inspection failed. Check the network and connected signer; no transaction was sent.";
+        }
         finally { _busy = false; }
     }
 
     private async Task InitializeAsync()
     {
-        if (_busy || !_confirmed || _funding?.CanInitialize != true || !Ledger.IsConnected) return;
+        if (_busy || !_confirmed || _funding?.CanInitialize != true ||
+            ActiveMode != VaultWorkspaceMode.MnemonicHd || !Ledger.IsConnected) return;
         _busy = true;
         _loadingMessage = "INITIALIZING STELLAR REGISTRY...";
         _error = null;

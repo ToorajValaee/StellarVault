@@ -1,7 +1,9 @@
 @using StellarVault.UI.Components
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @using Microsoft.JSInterop
+@using System.IO.Pipelines
 @inject VaultSessionManager Sessions
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
 @inject VaultSessionWorkflow Workflow
 @inject IStellarLedgerRecords Ledger
 @inject IStellarSecretKeyVaultDiscovery SecretChain
@@ -13,9 +15,11 @@
 @inject VaultNativeNavigationState NativeNavigation
 @inject Microsoft.JSInterop.IJSRuntime JS
 @inject IVaultNativeFileAccess NativeFiles
-@inject StellarLedgerUploadCoordinator UploadCoordinator
-@inject IStellarUploadCheckpointStore UploadCheckpoints
+@inject VaultHybridDraftWorkspace HybridDrafts
+@inject StellarLedgerUploadCoordinator DirectFileUpload
 @implements IAsyncDisposable
+
+<VaultTransactionRecoveryPanel />
 
 @if (_foregroundRevoked)
 {
@@ -23,6 +27,20 @@
         <h2>NATIVE SESSION LOCKED</h2>
         <p>StellarVault left the foreground. Encryption and signing credentials are being
            cleared. If this screen remains, close and reopen the app before reconnecting.</p>
+    </section>
+}
+else if (ActiveMode == VaultWorkspaceMode.ConflictingSessions)
+{
+    <section class="terminal-panel" role="alert">
+        <h2>Conflicting vault sessions</h2>
+        <p>Mnemonic/HD and independent Secret Key sessions are both active.
+           Vault actions are disabled until both are locked. No transaction was sent.</p>
+        <button type="button" class="pixel-button primary" disabled="@_ledgerBusy"
+                @onclick="LockConflictingNativeSessionsAsync">Lock both vaults</button>
+        @if (_conflictingLockError is not null)
+        {
+            <p role="alert" class="terminal-alert warning">@_conflictingLockError</p>
+        }
     </section>
 }
 else
@@ -78,10 +96,10 @@ else
             </div>
         </header>
         <nav class="sv-native-nav" aria-label="Primary navigation">
-            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Home</span></button>
-            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Vault</span></button>
-            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
-            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
+            <button type="button" class="@(_nativePage == "stellar" ? "selected" : "")" aria-current="@(_nativePage == "stellar" ? "page" : null)" data-native-destination="stellar" title="Vault (Ctrl+1)" @onclick='() => NavigateNative("stellar")'><span class="sv-native-nav-icon" aria-hidden="true">⌂</span><span>Vault</span></button>
+            <button type="button" class="@(_nativePage == "local" ? "selected" : "")" aria-current="@(_nativePage == "local" ? "page" : null)" data-native-destination="local" title="Device (Ctrl+2)" @onclick='() => NavigateNative("local")'><span class="sv-native-nav-icon" aria-hidden="true">♙</span><span>Device</span></button>
+            <button type="button" class="@(_nativePage == "sync" ? "selected" : "")" aria-current="@(_nativePage == "sync" ? "page" : null)" data-native-destination="sync" title="Sync (Ctrl+3)" @onclick='() => NavigateNative("sync")'><span class="sv-native-nav-icon" aria-hidden="true">⟳</span><span>Sync</span></button>
+            <button type="button" class="@(_nativePage == "settings" ? "selected" : "")" aria-current="@(_nativePage == "settings" ? "page" : null)" data-native-destination="settings" title="Settings (Ctrl+4)" @onclick='() => NavigateNative("settings")'><span class="sv-native-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
         </nav>
         <main class="sv-native-scroll" id="native-content" tabindex="-1" @key="NativeContentKey">
           <div class="sv-native-content">
@@ -91,7 +109,7 @@ else
                     <h1>@(_nativePage == "stellar" ? "Records" : _nativePage == "local" ? "My vault" : _nativePage == "settings" ? "Settings" : "Sync")</h1>
                 </div>
             }
-    @if (_nativePage == "settings")
+    @if (_nativePage == "settings" && !SecretLedger.IsConnected)
     {
         <section class="sv-native-settings" aria-label="Vault settings">
             <div class="terminal-panel">
@@ -124,6 +142,18 @@ else
         </section>
     }
     <section class="native-preview sv-vault-data" aria-label="Native vault workspace">
+        @if (SecretLedger.IsConnected)
+        {
+            @* Keep the same linked component mounted across native tabs to
+               preserve signer-bound quotes, local encrypted queue and recovery. *@
+            <VaultSecretKeyWorkspace Embedded="true"
+                                     View="@(_nativePage == "stellar" ? "records" :
+                                             _nativePage == "local" ? "drafts" : _nativePage)"
+                                     OnViewChange="NavigateLinkedNative"
+                                     @ref="_linkedWorkspace" />
+        }
+        else
+        {
         @if (_nativePage == "stellar")
         {
         <section aria-label="Stellar ledger recovery" class="terminal-panel">
@@ -133,7 +163,7 @@ else
                 {
                     <label class="sv-native-mainnet-consent">
                         <input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_ledgerBusy" />
-                        I understand that Mainnet uses real funds and approved transactions may cost XLM.
+                        I understand that Mainnet uses real funds and approved transactions may incur fees in the network's native asset.
                     </label>
                 }
                 <div class="sv-credential-mode-picker" role="group" aria-label="Vault account type">
@@ -156,6 +186,7 @@ else
                            spellcheck="false" maxlength="56" @bind="_ledgerSecretKey" @bind:event="oninput"
                            disabled="@(_ledgerBusy || _secretRuntimeReady != true)" />
                     <p class="sv-native-subtle-status">Independent Secret Key vault. Verify account signers and encrypted records before unlocking. Ledger mutations require a separate fee review and are Testnet-only until audit.</p>
+                    <VaultLinkedLocalQueuePanel />
                     @if (_secretInspection is not null)
                     {
                         <section class="terminal-panel" aria-label="Verified secret-key account chain">
@@ -171,16 +202,12 @@ else
                 { <p class="sv-native-subtle-status" role="status">Preparing your vault…</p> }
 
             }
-            else if (SecretLedger.IsConnected)
-            {
-                <VaultSecretKeyWorkspace />
-            }
             else
             {
                 @if (_nativeMode == "browse")
                 {
                 <div class="sv-native-browser-toolbar">
-                    <span class="sv-native-subtle-status">@_ledgerRecords.Count items</span>
+                    <span class="sv-native-subtle-status">@_ledgerRecords.Count(x => !VaultPublishedFileClassification.IsInternalNode(x)) items</span>
                     <div class="sv-native-browser-actions">
                         <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("record")'>＋ Record</button>
                         <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick='() => SetNativeMode("folder")'>＋ Folder</button>
@@ -197,33 +224,17 @@ else
                 {
                                 <section aria-label="Publish Stellar item" class="terminal-panel">
                     <h3>@(_nativeMode == "folder" ? "New folder" : "New record")</h3>
-                    <label class="terminal-label" for="native-publish-title">Title</label>
-                    <input id="native-publish-title" class="terminal-input" @bind="_publishTitle" @bind:event="oninput" disabled="@_ledgerBusy" maxlength="256" />
-                    <label class="terminal-label" for="native-publish-folder">Folder</label>
-                    <select id="native-publish-folder" class="terminal-input" @bind="_publishFolder" disabled="@_ledgerBusy">
-                        <option value="">My vault (root)</option>
-                        @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => x.Title))
-                        { <option value="@folder.Id">@folder.Title</option> }
-                    </select>
-                    @if (_nativeMode != "folder")
-                    {
-                    <label class="terminal-label" for="native-publish-username">Username / identifier</label>
-                    <input id="native-publish-username" class="terminal-input" @bind="_publishUsername" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
-                    <label class="terminal-label" for="native-publish-url">URL</label>
-                    <input id="native-publish-url" class="terminal-input" type="url" @bind="_publishUrl" @bind:event="oninput" autocomplete="off" disabled="@_ledgerBusy" />
-                    <label class="terminal-label" for="native-publish-content">Secret / content</label>
-                    <div class="sv-native-secret-entry">
-                        <input id="native-publish-content" class="terminal-input" type="@(_showPublishSecret ? "text" : "password")"
-                               @bind="_publishContent" @bind:event="oninput" autocomplete="new-password" disabled="@_ledgerBusy" />
-                        <button type="button" class="pixel-button compact" @onclick="() => _showPublishSecret = !_showPublishSecret"
-                                aria-label="@(_showPublishSecret ? "Hide secret" : "Show secret")">@(_showPublishSecret ? "Hide" : "Show")</button>
-                    </div>
-                    <label class="terminal-label" for="native-publish-notes">Notes</label>
-                    <textarea id="native-publish-notes" class="terminal-input" @bind="_publishNotes" @bind:event="oninput" disabled="@_ledgerBusy" rows="4"></textarea>
-                    <label class="terminal-label" for="native-publish-tags">Tags</label>
-                    <input id="native-publish-tags" class="terminal-input" @bind="_publishTags" @bind:event="oninput"
-                           placeholder="work, private" disabled="@_ledgerBusy" />
-                    }
+                    <VaultRecordFields IsFolder="@(_nativeMode == "folder")"
+                                       Disabled="_ledgerBusy"
+                                       Folders="@_ledgerRecords.Where(x => x.IsFolder).ToArray()"
+                                       @bind-Title="_publishTitle"
+                                       @bind-FolderId="_publishFolder"
+                                       @bind-Username="_publishUsername"
+                                       @bind-Url="_publishUrl"
+                                       @bind-Secret="_publishContent"
+                                       @bind-Notes="_publishNotes"
+                                       @bind-Tags="_publishTags"
+                                       @bind-ShowSecret="_showPublishSecret" />
                     <details class="sv-native-help"><summary>About publishing</summary>
                         <p>Publishing writes an encrypted record to Stellar. Network fees and account reserves apply; every transaction requires explicit approval.</p>
                     </details>
@@ -241,21 +252,39 @@ else
                 {
                                 <section aria-label="Upload Stellar file" class="terminal-panel">
                     <h3>Add file</h3>
-                    <p class="notice">Each part requires a separate approved Stellar transaction. Keep the original file until all stages are confirmed. Interrupted uploads can resume by selecting the same file.</p>
-                    <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ChooseUploadFileAsync">Choose file to upload</button>
-                    @if (_uploadPlan is not null)
+                    @if (Retention.AllowsLocalPersistence && Sessions.IsUnlocked &&
+                        Sessions.ActiveAccountId == _rootAccountId)
                     {
-                        <p>File: @_uploadFileName · @_uploadBytes?.Length bytes · @_uploadPlan.Entries.Count stages</p>
-                        <p>Remaining stages: @_uploadRemaining</p>
-                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ReconcileUploadAsync">Recheck on-chain progress</button>
-                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _uploadNeedsReconciliation)" @onclick="ReviewUploadStageAsync">Review next transaction</button>
-                        @if (_uploadCost is not null)
+                        <p class="notice">Hybrid upload: stream any file into the encrypted Sync queue, then approve and historically verify its SVTREE3 transactions separately. No transaction is sent during staging.</p>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || _nativeDirectFilePlan is not null)" @onclick="StageNativeTreeFileAsync">Choose file and stage securely</button>
+                    }
+                    else
+                    {
+                        <p class="notice">Stellar-only upload: publish an SVFILE1/SVFILE2 file up to 1 MiB directly without saving encrypted drafts on this device. Every chunk and the final manifest require separate fee approval. Closing during upload loses its in-memory plan and can leave orphan chunks.</p>
+                        <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !Ledger.IsConnected || _nativeDirectFilePlan is not null)" @onclick="PrepareNativeDirectFileAsync">Choose file to review on Stellar</button>
+                    }
+                    @if (_nativeDirectFilePlan is not null)
+                    {
+                        <p class="sv-native-subtle-status" role="status">Verified @_nativeDirectFileCompleted of @_nativeDirectFilePlan.Entries.Count file records in this session.</p>
+                        @if (_nativeDirectFileUncertain)
                         {
-                            <VaultTransactionCostReview Cost="_uploadCost" Network="@_ledgerNetwork" Title="UPLOAD FILE STAGE" Stage="@_uploadStageTitle" />
-                            <label><input type="checkbox" @bind="_uploadApproved" disabled="@_ledgerBusy" /> Approve this single Stellar transaction</label>
-                            <button type="button" class="pixel-button compact" disabled="@(_ledgerBusy || !_uploadApproved)" @onclick="PublishUploadStageAsync">Submit approved stage</button>
+                            <p class="terminal-alert warning">The last transaction outcome is uncertain. Do not retry without historical investigation; incomplete chunks may remain on Stellar.</p>
                         }
-                        <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelUpload">Clear file from memory</button>
+                        else
+                        {
+                            @if (_nativeDirectFileCost is not null)
+                            {
+                                <VaultTransactionCostReview Cost="_nativeDirectFileCost" Network="@_ledgerNetwork" Title="PUBLISH FILE RECORD" />
+                                <label><input type="checkbox" @bind="_nativeDirectFileApproved" disabled="@_ledgerBusy" /> I approve this file transaction and its displayed fee and reserve.</label>
+                                <button type="button" class="pixel-button primary" disabled="@(_ledgerBusy || !_nativeDirectFileApproved)" @onclick="ConfirmNativeDirectFileAsync">Approve and publish this record</button>
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="CancelNativeDirectFileCost">Cancel this approval</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ReviewNextNativeDirectFileAsync">Review next file transaction</button>
+                            }
+                            <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="StopNativeDirectFile">Stop upload (preserve on-chain chunks)</button>
+                        }
                     }
                     @if (!string.IsNullOrWhiteSpace(_uploadMessage))
                     {
@@ -265,6 +294,7 @@ else
                 }
                 @if (_nativeMode == "browse")
                 {
+                    <div class="sv-access-actions"><details class="sv-object-actions"><summary>⋯ Vault menu</summary><div class="sv-object-menu"><VaultRecordTransferPanel Mode="import" Strategy="@VaultMutationStrategyPolicy.Hd" Records="_ledgerRecords" /></div></details></div>
                     <div class="sv-native-mobile-collections" role="group" aria-label="Browse items">
                         <button type="button" class="@(_nativeCollection == "all" ? "selected" : "")" @onclick='() => _nativeCollection = "all"'>▱ All Items</button>
                         <button type="button" class="@(_nativeCollection == "folders" ? "selected" : "")" @onclick='() => _nativeCollection = "folders"'>▱ Folders</button>
@@ -273,18 +303,18 @@ else
                     <label class="sv-native-mobile-search"><span aria-hidden="true">⌕</span><input type="search" aria-label="Search vault items" placeholder="Search your vault…" @bind="_nativeSearch" @bind:event="oninput" /></label>
                     @if (_ledgerRecords.Any(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)) && string.IsNullOrEmpty(_selectedFolderId))
                     {
-                        <section class="sv-native-folder-shortcuts" aria-label="Folder shortcuts">
+                        <details class="sv-native-folder-shortcuts"><summary>Quick folders</summary>
                             <div class="sv-native-section-title"><h2>Folder Shortcuts</h2><button type="button" @onclick='() => _nativeCollection = "folders"'>See all ›</button></div>
                             <div class="sv-native-shortcut-grid">
                                 @foreach (var shortcut in _ledgerRecords.Where(x => x.IsFolder && string.IsNullOrEmpty(x.FolderId)).Take(4))
                                 {
                                     <button type="button" @onclick="() => OpenNativeFolder(shortcut.Id)">
                                         <span aria-hidden="true">📁</span><strong>@shortcut.Title</strong>
-                                        <small>@_ledgerRecords.Count(x => x.FolderId == shortcut.Id) items</small>
+                                        <small>@_ledgerRecords.Count(x => x.FolderId == shortcut.Id && !VaultPublishedFileClassification.IsInternalNode(x)) items</small>
                                     </button>
                                 }
                             </div>
-                        </section>
+                        </details>
                     }
                     <div class="sv-native-list-toolbar">
                         @if (!string.IsNullOrEmpty(_selectedFolderId))
@@ -293,16 +323,11 @@ else
                         }
                         <h2>@(_nativeCollection == "folders" ? "Folders" : _nativeCollection == "records" ? "Records" : "All Items")</h2><button type="button" aria-label="Toggle item layout" @onclick='() => _nativeGrid = !_nativeGrid'>☷</button></div>
                     <div class="sv-native-explorer sv-native-collection-@_nativeCollection @(_nativeGrid ? "sv-native-grid-mode" : "")">
-                        <aside class="sv-native-folder-tree" aria-label="Folder tree">
-                            <button type="button" class="sv-native-tree-item @(_selectedFolderId == "" ? "selected" : "")"
-                                    @onclick='() => OpenNativeFolder("")'>▣ My vault</button>
-                            @foreach (var folder in _ledgerRecords.Where(x => x.IsFolder).OrderBy(x => NativeFolderPath(x.Id)))
-                            {
-                                <button type="button" class="sv-native-tree-item @(_selectedFolderId == folder.Id ? "selected" : "")"
-                                        style="--sv-tree-depth:@NativeFolderDepth(folder.Id)"
-                                        @onclick="() => OpenNativeFolder(folder.Id)">▸ ▣ @folder.Title</button>
-                            }
-                        </aside>
+                        <VaultExplorerTree Folders="@_ledgerRecords.Where(x => x.IsFolder).ToArray()"
+                                           SelectedFolderId="@(string.IsNullOrEmpty(_selectedFolderId) ? null : _selectedFolderId)"
+                                           CollapsedFolderIds="_nativeCollapsedFolders"
+                                           OnFolderSelected="SelectNativeFolderFromSharedTree"
+                                           OnToggleFolder="ToggleNativeFolder" />
                         <div class="sv-native-object-storage">
                             <label class="terminal-label" for="native-ledger-folder">Folder</label>
                             <select id="native-ledger-folder" class="terminal-input sv-native-mobile-folder"
@@ -314,89 +339,35 @@ else
                                 }
                             </select>
                             <div class="sv-native-object-grid">
-                            @foreach (var item in _ledgerRecords.Where(x => (x.FolderId ?? "") == _selectedFolderId &&
-                                !x.Content.StartsWith(StellarLedgerFileProtocol.ChunkPrefix, StringComparison.Ordinal) &&
-                                (_nativeCollection == "all" || (_nativeCollection == "folders" && x.IsFolder) || (_nativeCollection == "records" && !x.IsFolder)) &&
-                                (string.IsNullOrWhiteSpace(_nativeSearch) || x.Title.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase) ||
-                                    (x.Tags is not null && x.Tags.Any(tag => tag.Contains(_nativeSearch, StringComparison.OrdinalIgnoreCase)))))
-                                .OrderByDescending(x => x.IsFolder).ThenBy(x => x.Title))
-                            {
-                                <div class="sv-native-object-row @(_selectedRecord?.Id == item.Id ? "is-selected" : "")">
-                                    <button type="button" class="sv-native-object-card" disabled="@_ledgerBusy"
-                                            @onclick="() => SelectRecord(item.Id)">
-                                        <span class="sv-native-object-icon" aria-hidden="true">@(item.IsFolder ? "📁" : StellarLedgerFileProtocol.IsFile(item) ? "▤" : "▦")</span>
-                                        <span class="sv-native-object-description"><strong>@item.Title</strong>
-                                            <small>@(item.IsFolder ? $"Folder · {_ledgerRecords.Count(x => x.FolderId == item.Id)} items" : StellarLedgerFileProtocol.IsFile(item) ? "Encrypted file" : "Record")</small></span>
-                                    </button>
-                                    <button type="button" class="sv-native-row-more" aria-label="@($"Open {item.Title} details")" @onclick="() => SelectRecord(item.Id)">⋯</button>
-                                </div>
-                            }
+                            <VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy.Hd" Items="_ledgerRecords"
+                                                     FolderId="@_selectedFolderId"
+                                                     Search="@_nativeSearch"
+                                                     Collection="@_nativeCollection"
+                                                     SelectedItemId="@_selectedRecord?.Id"
+                                                     Busy="_ledgerBusy"
+                                                     OnOpen="SelectNativePublishedItem" />
                             </div>
                         </div>
                     </div>
                 @if (_selectedRecord is not null && !_selectedRecord.IsFolder)
                 {
-                    <section class="sv-native-detail-screen" aria-label="Selected ledger record">
-                        <button type="button" class="sv-native-sheet-close" aria-label="Close record details" @onclick="ResetSelection">×</button>
-                        <div class="sv-native-sheet-heading">
-                            <span class="sv-native-sheet-icon" aria-hidden="true">@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "▤" : "▦")</span>
-                            <div><h3>@_selectedRecord.Title</h3><small>@(string.IsNullOrWhiteSpace(_selectedFolderId) ? "My vault" : NativeFolderPath(_selectedFolderId))</small></div>
-                        </div>
-                        <nav class="sv-native-sheet-tabs" aria-label="Record details tabs">
-                            <button type="button" class="@(_nativeDetailTab == "details" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "details")" @onclick='() => _nativeDetailTab = "details"'>▤ Details</button>
-                            <button type="button" class="@(_nativeDetailTab == "activity" ? "selected" : "")" aria-pressed="@(_nativeDetailTab == "activity")" @onclick='() => _nativeDetailTab = "activity"'>◷ Activity</button>
-                        </nav>
-                        @if (_nativeDetailTab == "activity")
-                        {
-                            <div class="sv-native-activity-panel">
-                                <p>Storage: Stellar ledger</p>
-                                <p>Type: @(StellarLedgerFileProtocol.IsFile(_selectedRecord) ? "Encrypted file" : "Secure record")</p>
-                                <p>Historical activity is not available from the current ledger reader.</p>
-                            </div>
-                        }
-                        else
-                        {
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.UserName))
-                            {
-                                <div class="sv-native-detail-field"><label>Username</label><p>@_selectedRecord.UserName</p></div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Url))
-                            {
-                                <div class="sv-native-detail-field"><label>URL</label><p>@_selectedRecord.Url</p></div>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(_selectedRecord.Notes))
-                            {
-                                <div class="sv-native-detail-field"><label>Notes</label><p>@_selectedRecord.Notes</p></div>
-                            }
-                            @if (_selectedRecord.Tags is { Length: > 0 })
-                            {
-                                <div class="sv-native-detail-field"><label>Tags</label><div class="sv-native-tag-list">
-                                    @foreach (var tag in _selectedRecord.Tags)
-                                    {
-                                        <span>@tag</span>
-                                    }
-                                </div></div>
-                            }
-                            @if (StellarLedgerFileProtocol.IsFile(_selectedRecord))
-                            {
-                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="VerifySelectedFile">Verify file integrity</button>
-                                <button type="button" class="pixel-button compact" disabled="@_ledgerBusy" @onclick="ExportSelectedFileAsync">Export verified file</button>
-                                <p class="notice">Export creates an unencrypted copy outside StellarVault. Save only to a trusted location.</p>
-                                @if (!string.IsNullOrEmpty(_verifiedFileMessage))
-                                {
-                                    <p role="status">@_verifiedFileMessage</p>
-                                }
-                            }
-                            else
-                            {
-                                <button type="button" class="pixel-button compact" @onclick="ToggleSecret">@(_revealSecret ? "Hide secret" : "Reveal secret")</button>
-                                @if (_revealSecret)
-                                {
-                                    <pre style="white-space:pre-wrap;overflow-wrap:anywhere">@_selectedRecord.Content</pre>
-                                }
-                            }
-                        }
-                    </section>
+                    <VaultRecordInspector @key="_selectedRecord.Id"
+                                          Embedded="true"
+                                          Item="_selectedRecord"
+                                          Strategy="@VaultMutationStrategyPolicy.Hd"
+                                          Records="_ledgerRecords"
+                                          FolderPath="@(string.IsNullOrEmpty(_selectedFolderId)
+                                              ? "My vault" : NativeFolderPath(_selectedFolderId))"
+                                          CanEdit="false"
+                                          CanDelete="false"
+                                          FileStatus="@_verifiedFileMessage"
+                                          CanSaveVerifiedFile="@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ||
+                                               (_verifiedNativeTree is not null &&
+                                                _verifiedNativeTree.RootId == _selectedRecord.Id))"
+                                          OnClose="ResetSelection"
+                                          OnCopy="CopyNativeRecordValueAsync"
+                                          OnVerifyFile="VerifySelectedFile"
+                                          OnSaveVerifiedFile="ExportSelectedFileAsync" />
                 }
                 }
             }
@@ -411,21 +382,12 @@ else
             @if (Ledger.IsConnected)
             {
                 <details class="sv-native-help"><summary>About storage and transactions</summary>
-                    <p>Local records stay on this device. Publishing to Stellar needs your approval and may cost XLM.</p>
+                    <p>Local records stay on this device. Publishing to Stellar needs your approval and may incur network-native fees.</p>
                 </details>
             }
         </section>
         }
-        @if (_nativePage == "sync" && SecretLedger.IsConnected)
-        {
-            <section class="terminal-panel" aria-label="Secret Key synchronization status">
-                <h3>Secret Key vault synchronization</h3>
-                <p>On-chain encrypted records and folders are available in the Home vault workspace. Offline draft synchronization for this independent account-chain mode is not enabled yet.</p>
-                <p>No local draft will be submitted through the HD transaction signer.</p>
-                <button type="button" class="pixel-button compact" @onclick='() => NavigateNative("stellar")'>Return to Secret Key vault</button>
-            </section>
-        }
-        else if (_nativePage is "local" or "sync")
+        @if (_nativePage is "local" or "sync")
         {
         <section class="terminal-panel" aria-label="Local encrypted vault status">
             <h3>@(Sessions.IsUnlocked ? "Your saved items" : "Unlock local storage")</h3>
@@ -508,28 +470,40 @@ else
             <p role="status" aria-live="polite">@_message</p>
         }
         }
+        }
     </section>
           </div>
         </main>
-        @if (_nativePage == "stellar" && Ledger.IsConnected && _nativeMode == "browse")
+        @if (_nativePage == "stellar" && _nativeMode == "browse" &&
+             (Ledger.IsConnected || SecretLedger.IsConnected))
         {
-            <button class="sv-native-mobile-fab" type="button" aria-label="New record" @onclick='() => SetNativeMode("record")'>＋</button>
+            <button class="sv-native-mobile-fab" type="button" aria-label="New record"
+                    @onclick="NewNativeRecordForActiveStrategy">＋</button>
         }
         <div class="sv-native-commandbar @(_nativePage == "stellar" && (Ledger.IsConnected || SecretLedger.IsConnected) && _nativeMode == "browse" ? "sv-native-commandbar-quiet" : "")" aria-label="Quick actions">
             @if (_nativePage == "stellar")
             {
                 @if (SecretLedger.IsConnected)
                 {
-                    <span class="sv-native-command-hint">Independent Secret Key vault connected</span>
+                    <button type="button" class="sv-native-command primary"
+                            disabled="@_ledgerBusy" @onclick="NewNativeRecordForActiveStrategy">＋ Record</button>
                     <button type="button" class="sv-native-command"
-                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock Secret Key vault</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeFolderForActiveStrategy">＋ Folder</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="RefreshNativeActiveStrategyAsync">Refresh</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
                 }
                 else if (Ledger.IsConnected)
                 {
                     <button type="button" class="sv-native-command primary"
-                            disabled="@_ledgerBusy" @onclick="RefreshLedgerAsync">Refresh records</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeRecordForActiveStrategy">＋ Record</button>
                     <button type="button" class="sv-native-command"
-                            disabled="@_ledgerBusy" @onclick="DisconnectLedgerAsync">Disconnect</button>
+                            disabled="@_ledgerBusy" @onclick="NewNativeFolderForActiveStrategy">＋ Folder</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="RefreshNativeActiveStrategyAsync">Refresh</button>
+                    <button type="button" class="sv-native-command"
+                            disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
                 }
                 else
                 {
@@ -538,6 +512,21 @@ else
                             disabled="@(_ledgerBusy || (_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _runtimeReady != true : _secretRuntimeReady != true) || string.IsNullOrWhiteSpace(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? _ledgerMnemonic : _ledgerSecretKey) || (_ledgerNetwork == "public" && !_confirmMainnetAccess) || (_ledgerNetwork == "custom" && !CustomNetworkReady))"
                             @onclick="ConnectSelectedLedgerCredentialAsync">@(_ledgerCredentialMode == VaultCredentialMode.MnemonicHd ? "Connect Stellar" : "Inspect linked accounts")</button>
                 }
+            }
+            else if (SecretLedger.IsConnected)
+            {
+                @if (_nativePage == "local")
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("sync")'>Review Sync</button>
+                }
+                else if (_nativePage == "sync")
+                {
+                    <button type="button" class="sv-native-command primary"
+                            @onclick='() => NavigateNative("local")'>Encrypted drafts</button>
+                }
+                <button type="button" class="sv-native-command"
+                        disabled="@_ledgerBusy" @onclick="DisconnectSelectedLedgerAsync">Lock</button>
             }
             else if (_nativePage == "settings")
             {
@@ -574,22 +563,114 @@ else
 }
 
 @code {
+    private VaultWorkspaceMode ActiveMode =>
+        VaultWorkspaceModeResolver.Resolve(
+            Sessions.IsUnlocked, Ledger.IsConnected, SecretLedger.IsConnected);
+    private string? _conflictingLockError;
+
+    private async Task LockConflictingNativeSessionsAsync()
+    {
+        if (_ledgerBusy) return;
+        _ledgerBusy = true;
+        bool failed = false;
+        try { await LinkedQueueKeys.LockAsync(); } catch { failed = true; }
+        try { Workflow.Lock(); } catch { failed = true; }
+        try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
+        catch { failed = true; }
+        try { if (Ledger.IsConnected) await Ledger.DisconnectAsync(); }
+        catch { failed = true; }
+        _ledgerMnemonic = string.Empty;
+        _ledgerSecretKey = string.Empty;
+        _passphrase = string.Empty;
+        _localConsent = false;
+        Retention.Reset();
+        if (failed)
+        {
+            // A failed native/WebView signer teardown cannot be bypassed by
+            // switching account strategies or navigating to another tab.
+            _foregroundRevoked = true;
+            _conflictingLockError = "Signer cleanup could not be confirmed. Restart the app before unlocking again.";
+        }
+        else
+        {
+            _conflictingLockError = null;
+            ClearLedgerView();
+            _nativePage = "stellar";
+        }
+        _ledgerBusy = false;
+    }
+
     [Parameter] public string HostPlatform { get; set; } = "Android";
     private string _nativePage = "stellar";
     private string _localMode = "records";
     private string _syncMode = "changes";
     // Recreate only the content scroller when the selected screen changes;
     // don't carry a deep scroll offset into a different native destination.
-    private string NativeContentKey => _nativePage switch
+    private VaultSecretKeyWorkspace? _linkedWorkspace;
+    // Preserve one signer-bound linked component and its pending quotes across
+    // all native tabs, but keep HD content isolated in other sessions.
+    private string NativeContentKey => SecretLedger.IsConnected
+        ? "linked-authenticated-session"
+        : _nativePage switch
+        {
+            "local" => "local:" + _localMode,
+            "sync" => "sync:" + _syncMode,
+            "settings" => "settings",
+            _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
+        };
+
+    private void NewNativeRecordForActiveStrategy()
     {
-        "local" => "local:" + _localMode,
-        "sync" => "sync:" + _syncMode,
-        "settings" => "settings",
-        _ => "stellar:" + _nativeMode + ":" + (_selectedRecord?.Id ?? _selectedFolderId)
-    };
+        if (SecretLedger.IsConnected) _linkedWorkspace?.CreateRecordFromShell();
+        else if (Ledger.IsConnected) SetNativeMode("record");
+    }
+
+    private void NewNativeFolderForActiveStrategy()
+    {
+        if (SecretLedger.IsConnected) _linkedWorkspace?.CreateFolderFromShell();
+        else if (Ledger.IsConnected) SetNativeMode("folder");
+    }
+
+    private async Task RefreshNativeActiveStrategyAsync()
+    {
+        if (SecretLedger.IsConnected)
+        {
+            if (_linkedWorkspace is not null)
+                await _linkedWorkspace.RefreshFromShellAsync();
+        }
+        else if (Ledger.IsConnected) await RefreshLedgerAsync();
+    }
+
+    private readonly HashSet<string> _nativeCollapsedFolders = new(StringComparer.Ordinal);
+    private void SelectNativeFolderFromSharedTree(string? id) =>
+        OpenNativeFolder(id ?? string.Empty);
+    private void ToggleNativeFolder(string id)
+    {
+        if (!_nativeCollapsedFolders.Add(id)) _nativeCollapsedFolders.Remove(id);
+    }
+    private void SelectNativePublishedItem(LedgerRecordItem item)
+    {
+        if (item.IsFolder) OpenNativeFolder(item.Id);
+        else SelectRecord(item.Id);
+    }
+
+    private void NavigateLinkedNative(string view) =>
+        NavigateNative(view switch
+        {
+            "records" => "stellar",
+            "drafts" => "local",
+            "sync" => "sync",
+            "settings" => "settings",
+            _ => "stellar"
+        });
 
     private void NavigateNative(string page)
     {
+        if (_nativeDirectFilePlan is not null && !_nativeDirectFileUncertain)
+        {
+            _uploadMessage = "Stop the current file upload before leaving this screen. Published chunks will remain on Stellar.";
+            return;
+        }
         if (page is not ("stellar" or "local" or "sync" or "settings")) return;
         _nativePage = page;
         NativeNavigation.SetSecondaryDestination(page != "stellar");
@@ -612,7 +693,6 @@ else
     private string _nativeMode = "browse";
     private string _nativeCollection = "all";
     private string _nativeSearch = "";
-    private string _nativeDetailTab = "details";
     private bool _nativeGrid;
 
     private void OpenNativeFolder(string id)
@@ -649,7 +729,8 @@ else
 
     private void SetNativeMode(string mode)
     {
-        if (_ledgerBusy || mode is not ("browse" or "record" or "folder" or "file")) return;
+        if (_ledgerBusy || _nativeDirectFilePlan is not null ||
+            mode is not ("browse" or "record" or "folder" or "file")) return;
         if (_nativeMode is "record" or "folder" && mode != _nativeMode && _publishEstimate is not null) CancelPublish();
         if (_nativeMode == "browse" && mode is ("record" or "folder"))
             _publishFolder = _selectedFolderId;
@@ -892,7 +973,10 @@ else
     {
         if (_ledgerBusy || !_publishApproved || _publishEstimate is null ||
             _publishFingerprint is null || !Ledger.IsConnected) return;
-        var draft = new LedgerRecordDraft(_publishTitle.Trim(), _publishContent);
+        // Recreate the EXACT reviewed draft. A minimal two-field draft here
+        // silently discarded folder, tags, URL, username and notes even
+        // though they were included in the fee preview.
+        var draft = CurrentPublishDraft();
         if (_publishFingerprint != CurrentPublishFingerprint())
         {
             CancelPublish();
@@ -945,328 +1029,321 @@ else
         }
     }
 
-    private byte[]? _uploadBytes;
-    private StellarLedgerUploadPlan? _uploadPlan;
-    private string? _uploadFileName;
-    private string? _uploadFingerprint;
-    private LedgerCostPreview? _uploadCost;
-    private string? _uploadStageId;
-    private string? _reviewedUploadFingerprint;
-    private string? _uploadStageTitle;
-    private int _uploadRemaining;
-    private bool _uploadApproved;
-    private bool _uploadNeedsReconciliation;
-    private string? _uploadMessage;
+    // Both hosts reuse the same Core reconciliation-first uploader.
+    // The plan is deliberately volatile; it is not encrypted local retention.
+    private StellarLedgerUploadPlan? _nativeDirectFilePlan;
+    private string? _nativeDirectFileRoot;
+    private string? _nativeDirectFileScope;
+    private string? _nativeDirectFileNextId;
+    private LedgerRecordDraft? _nativeDirectFileNextDraft;
+    private LedgerCostPreview? _nativeDirectFileCost;
+    private int _nativeDirectFileCompleted;
+    private bool _nativeDirectFileApproved;
+    private bool _nativeDirectFileUncertain;
 
-    private void ClearUploadReview()
+    private void RequireNativeDirectFileScope()
     {
-        _uploadCost = null;
-        _uploadStageId = null;
-        _reviewedUploadFingerprint = null;
-        _uploadStageTitle = null;
-        _uploadApproved = false;
+        if (!Ledger.IsConnected || _nativeDirectFileRoot is null ||
+            _nativeDirectFileScope != NetworkSelection.CredentialKey(_nativeDirectFileRoot) ||
+            _nativeDirectFileUncertain)
+            throw new InvalidOperationException(
+                "Stellar root or network changed, or this upload needs historical reconciliation.");
     }
 
-    private void CancelUpload()
+    private async Task PrepareNativeDirectFileAsync()
     {
-        if (_uploadBytes is not null)
-            System.Security.Cryptography.CryptographicOperations.ZeroMemory(_uploadBytes);
-        _uploadBytes = null;
-        _uploadPlan = null;
-        _uploadFileName = null;
-        _uploadFingerprint = null;
-        _uploadRemaining = 0;
-        _uploadNeedsReconciliation = false;
-        ClearUploadReview();
-    }
-
-    private async Task ChooseUploadFileAsync()
-    {
-        if (_ledgerBusy || !Ledger.IsConnected || string.IsNullOrWhiteSpace(_rootAccountId)) return;
+        if (_ledgerBusy || !Ledger.IsConnected || _nativeDirectFilePlan is not null)
+            return;
         _ledgerBusy = true;
-        CancelUpload();
+        byte[]? content = null;
         _uploadMessage = null;
         try
         {
             var picked = await NativeFiles.PickAsync();
-            if (picked is null) return;
-            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            if (picked is null)
+            {
+                _uploadMessage = "File selection canceled. No transaction was sent.";
+                return;
+            }
             await using var input = picked.Stream;
-            using var buffer = new MemoryStream();
-            var block = new byte[8192];
+            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            var root = await Ledger.InspectAccountInfoAsync();
+            // Enforce the protocol limit incrementally, never buffering an
+            // unbounded native file before determining it is too large.
+            await using var memory = new MemoryStream();
+            var buffer = new byte[16 * 1024];
             try
             {
-                int read;
-                while ((read = await input.ReadAsync(block)) > 0)
+                while (true)
                 {
-                    if (buffer.Length + read > StellarLedgerFileProtocol.MaxFileBytes)
-                        throw new InvalidDataException("Selected file exceeds the supported upload bound.");
-                    buffer.Write(block, 0, read);
+                    var count = await input.ReadAsync(buffer);
+                    if (count == 0) break;
+                    if (memory.Length + count > StellarLedgerFileProtocol.MaxFileBytes)
+                        throw new InvalidDataException(
+                            "Direct Stellar-only files are limited to 1 MiB. Use the separately consented encrypted Sync queue for larger files.");
+                    await memory.WriteAsync(buffer.AsMemory(0, count));
                 }
-                _uploadBytes = buffer.ToArray();
+                content = memory.ToArray();
             }
             finally
             {
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(block);
-                // MemoryStream.ToArray creates a separate copy. Clear its
-                // backing buffer on success and on interrupted reads.
-                System.Security.Cryptography.CryptographicOperations.ZeroMemory(
-                    buffer.GetBuffer().AsSpan());
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(memory.GetBuffer());
             }
-            _uploadFileName = picked.FileName;
-            var fileHash = System.Security.Cryptography.SHA256.HashData(_uploadBytes);
-            var metadata = System.Text.Encoding.UTF8.GetBytes(
-                _ledgerNetwork + "\\0" + _rootAccountId + "\\0" + picked.FileName + "\\0" +
-                Convert.ToHexString(fileHash));
-            _uploadFingerprint = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(metadata));
-            System.Security.Cryptography.CryptographicOperations.ZeroMemory(fileHash);
-            System.Security.Cryptography.CryptographicOperations.ZeroMemory(metadata);
-
             StorageMode.Select(VaultStorageMode.StellarLedger);
-            var checkpoint = await UploadCheckpoints.LoadAsync(_rootAccountId);
-            if (checkpoint is not null)
-            {
-                checkpoint.Validate();
-                if (checkpoint.Fingerprint != _uploadFingerprint)
-                    throw new InvalidDataException("Another file upload is pending for this account. Re-select the original file.");
-            }
-            _uploadPlan = new StellarLedgerUploadPlan(picked.FileName, picked.FileName,
-                "application/octet-stream", _uploadBytes, checkpointIds: checkpoint?.Ids);
-            if (checkpoint is null)
-                await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
-                    StellarUploadCheckpoint.CurrentVersion, _uploadFingerprint,
-                    _uploadPlan.Entries.Select(x => x.Id).ToArray(), 0));
+            var title = picked.FileName.Length > 256
+                ? picked.FileName[..256] : picked.FileName;
+            var mime = string.IsNullOrWhiteSpace(picked.ContentType)
+                ? "application/octet-stream" : picked.ContentType;
+            _nativeDirectFilePlan = new StellarLedgerUploadPlan(title,
+                picked.FileName, mime, content,
+                string.IsNullOrEmpty(_selectedFolderId) ? null : _selectedFolderId);
+            _nativeDirectFileRoot = root.RootAccountId;
+            _nativeDirectFileScope = NetworkSelection.CredentialKey(root.RootAccountId);
+            _nativeDirectFileCompleted = 0;
+            _uploadMessage = "Direct file plan prepared in volatile memory. Every record needs separate approval.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFilePlan = null;
+            _uploadMessage = "Direct file preparation failed; no transaction submitted: " + ex.Message;
+        }
+        finally
+        {
+            if (content is not null)
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(content);
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+        if (_nativeDirectFilePlan is not null)
+            await ReviewNextNativeDirectFileAsync();
+    }
 
-            _uploadRemaining = (await UploadCoordinator.ReviewAsync(_uploadPlan)).Count;
-            if (_uploadRemaining == 0)
+    private async Task ReviewNextNativeDirectFileAsync()
+    {
+        if (_ledgerBusy || _nativeDirectFileCost is not null ||
+            _nativeDirectFilePlan is not { } plan || _nativeDirectFileUncertain) return;
+        _ledgerBusy = true;
+        try
+        {
+            RequireNativeDirectFileScope();
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if ((await Ledger.InspectAccountInfoAsync()).RootAccountId != _nativeDirectFileRoot)
+                throw new InvalidOperationException("Signing root changed.");
+            var remaining = await DirectFileUpload.ReviewAsync(plan);
+            if (remaining.Count == 0)
             {
-                // An existing manifest is not sufficient: verify its decoded
-                // payload against the selected original before deleting recovery
-                // metadata. This also covers a lost final transaction response.
-                var snapshot = await Ledger.ReadAsync();
-                var manifest = snapshot.SingleOrDefault(x => x.Id == _uploadPlan.ManifestId)
-                    ?? throw new InvalidDataException("Confirmed file manifest missing.");
-                var recovered = StellarLedgerFileProtocol.DecodeFile(manifest, snapshot);
-                try
+                var ledgerRecords = await Ledger.ReadAsync();
+                var published = ledgerRecords.Single(x => x.Id == plan.ManifestId);
+                var decoded = StellarLedgerFileProtocol.DecodeFile(published, ledgerRecords);
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(decoded);
+                _nativeDirectFilePlan = null;
+                _uploadMessage = "File integrity verified on Stellar. All transactions completed.";
+                _nativeMode = "browse";
+                _ledgerRecords = ledgerRecords;
+                return;
+            }
+            _nativeDirectFileCompleted = plan.Entries.Count - remaining.Count;
+            _nativeDirectFileNextId = remaining[0].Id;
+            _nativeDirectFileNextDraft = remaining[0].Draft;
+            _nativeDirectFileCost = await Ledger.EstimateAsync(remaining[0].Draft);
+            _nativeDirectFileApproved = false;
+            _uploadMessage = "Review transaction " + (_nativeDirectFileCompleted + 1) +
+                " of " + plan.Entries.Count + ". Each record must be approved individually.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFileCost = null;
+            _nativeDirectFileNextId = null;
+            _nativeDirectFileNextDraft = null;
+            _uploadMessage = "File review unavailable; nothing new was submitted: " + ex.Message;
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+    }
+
+    private void CancelNativeDirectFileCost()
+    {
+        if (_ledgerBusy) return;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileApproved = false;
+    }
+
+    private void StopNativeDirectFile()
+    {
+        if (_ledgerBusy) return;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFilePlan = null;
+        _nativeDirectFileApproved = false;
+        _uploadMessage = "Upload stopped. Published chunks are not deleted or retried automatically.";
+    }
+
+    private static bool SameNativeFileDraft(LedgerRecordDraft x, LedgerRecordDraft y) =>
+        x.Title == y.Title && x.Content == y.Content && x.FolderId == y.FolderId &&
+        x.IsFolder == y.IsFolder && x.UserName == y.UserName && x.Url == y.Url &&
+        x.Notes == y.Notes && (x.Tags ?? []).SequenceEqual(y.Tags ?? [], StringComparer.Ordinal);
+
+    private async Task ConfirmNativeDirectFileAsync()
+    {
+        if (_ledgerBusy || !_nativeDirectFileApproved ||
+            _nativeDirectFilePlan is not { } plan ||
+            _nativeDirectFileNextId is not { } approvedId ||
+            _nativeDirectFileNextDraft is not { } draft ||
+            _nativeDirectFileCost is not { } cost || _nativeDirectFileUncertain) return;
+        _ledgerBusy = true;
+        CancelNativeDirectFileCost();
+        var committed = false;
+        var mayHaveSubmitted = false;
+        try
+        {
+            RequireNativeDirectFileScope();
+            StorageMode.Select(VaultStorageMode.StellarLedger);
+            if ((await Ledger.InspectAccountInfoAsync()).RootAccountId != _nativeDirectFileRoot)
+                throw new InvalidOperationException("Signing root changed.");
+            var remaining = await DirectFileUpload.ReviewAsync(plan);
+            if (remaining.Count == 0 || remaining[0].Id != approvedId ||
+                !SameNativeFileDraft(remaining[0].Draft, draft))
+                throw new InvalidOperationException("File plan changed since approval.");
+            committed = await DirectFileUpload.PublishNextApprovedAsync(plan,
+                async current =>
                 {
-                    if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-                            recovered, _uploadBytes))
-                        throw new InvalidDataException("Recovered file does not match selected content.");
-                }
-                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered); }
-                await UploadCheckpoints.ClearAsync(_rootAccountId);
-                _ledgerRecords = snapshot;
-                CancelUpload();
-                _uploadMessage = "Recovered file verified on Stellar. Checkpoint cleared.";
+                    if (!SameNativeFileDraft(draft, current)) return false;
+                    var fresh = await Ledger.EstimateAsync(current);
+                    var eligible = fresh.NetworkFeeXlm <= cost.NetworkFeeXlm &&
+                        fresh.PeakReserveXlm <= cost.PeakReserveXlm &&
+                        fresh.CreatesChildNode == cost.CreatesChildNode;
+                    if (eligible) mayHaveSubmitted = true;
+                    return eligible;
+                });
+            if (!committed)
+            {
+                _uploadMessage = "File or costs changed before authorization. Review the transaction again.";
+                return;
+            }
+            _nativeDirectFileCompleted++;
+            _uploadMessage = "Published and verified " + _nativeDirectFileCompleted +
+                " of " + plan.Entries.Count + " file records. Review the next transaction.";
+        }
+        catch (Exception ex)
+        {
+            _nativeDirectFileUncertain = mayHaveSubmitted;
+            _uploadMessage = mayHaveSubmitted
+                ? "Transaction outcome uncertain (" + ex.GetType().Name +
+                    "). Investigate current and historical ledger state. Do not retry."
+                : "File review failed before signing (" + ex.GetType().Name +
+                    "). Review the transaction costs again; nothing was submitted.";
+        }
+        finally
+        {
+            StorageMode.Reset();
+            _ledgerBusy = false;
+        }
+        if (committed && !_nativeDirectFileUncertain)
+            await ReviewNextNativeDirectFileAsync();
+    }
+
+    private string? _uploadMessage;
+
+    private async Task StageNativeTreeFileAsync()
+    {
+        if (_ledgerBusy || !Ledger.IsConnected || !Sessions.IsUnlocked ||
+            !Retention.AllowsLocalPersistence) return;
+        // A device-only unlock for some *other* HD account must never stage
+        // on-chain file mutations under the currently connected root.
+        if (_rootAccountId is null ||
+            !string.Equals(Sessions.ActiveAccountId, _rootAccountId,
+                StringComparison.Ordinal))
+        {
+            _uploadMessage = "Unlock encrypted local storage for the same Stellar HD root account before staging files.";
+            return;
+        }
+        _ledgerBusy = true;
+        _uploadMessage = null;
+        try
+        {
+            var picked = await NativeFiles.PickAsync();
+            if (picked is null)
+            {
+                _uploadMessage = "File selection was canceled. No transaction was sent.";
+                return;
+            }
+            await using var input = picked.Stream;
+            StellarLedgerFileProtocol.ValidateName(picked.FileName);
+            var title = picked.FileName.Length > 256
+                ? picked.FileName[..256] : picked.FileName;
+            var mime = string.IsNullOrWhiteSpace(picked.ContentType)
+                ? "application/octet-stream" : picked.ContentType;
+            var staged = await HybridDrafts.StageTreeFileAsync(
+                title, picked.FileName, mime, input,
+                string.IsNullOrEmpty(_selectedFolderId) ? null : _selectedFolderId);
+            _uploadMessage = "Encrypted file tree staged as " + staged.NodeCount +
+                " independent ledger nodes. Open Sync to review fees and historically confirm each transaction. Root " +
+                staged.RootId + " publishes last. No transaction was submitted.";
+        }
+        catch (Exception ex)
+        {
+            _uploadMessage = "Encrypted file staging failed (" + ex.GetType().Name +
+                "). Inspect the local Sync journal before retrying. No transaction was submitted.";
+        }
+        finally { _ledgerBusy = false; }
+    }
+
+    private sealed record VerifiedNativeTree(string RootId, string FileName,
+        long Length, string Sha256Hex, string RootAccount, string Network);
+    private VerifiedNativeTree? _verifiedNativeTree;
+
+    private async Task VerifySelectedFile()
+    {
+        _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
+        var selected = _selectedRecord;
+        if (selected is null || !VaultPublishedFileClassification.IsFile(selected) ||
+            !Ledger.IsConnected) return;
+        try
+        {
+            var fresh = await Ledger.ReadAsync();
+            var current = fresh.SingleOrDefault(x => x.Id == selected.Id)
+                ?? throw new InvalidDataException("The selected ledger file no longer exists.");
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(current))
+            {
+                // No unverified plaintext reaches a user-selected destination.
+                var verified = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    current.Id, fresh, Stream.Null);
+                var rootAccount = _rootAccountId
+                    ?? throw new InvalidOperationException("The HD account is disconnected.");
+                if (!Ledger.IsConnected || _rootAccountId != rootAccount)
+                    throw new InvalidOperationException("The HD session changed during verification.");
+                _verifiedNativeTree = new(current.Id, verified.FileName,
+                    verified.Length, verified.Sha256Hex, rootAccount, _ledgerNetwork);
+                _verifiedFileMessage = "File contents and hierarchy verified. Select Save verified file.";
             }
             else
-                _uploadMessage = "File staged. Review and approve each remaining transaction.";
+            {
+                // Legacy SVFILE readers remain read-only; all new files use
+                // bounded encrypted staging rather than whole-file arrays.
+                var bytes = StellarLedgerFileProtocol.DecodeFile(current, fresh);
+                try
+                {
+                    _verifiedFileMessage = "Verified legacy file: " +
+                        StellarLedgerFileProtocol.FileName(current) + " (" +
+                        bytes.Length + " bytes).";
+                }
+                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
+            }
         }
         catch (Exception)
         {
-            CancelUpload();
-            _uploadMessage = "File staging failed, or saved checkpoint does not match this file. Nothing was submitted.";
-        }
-        finally
-        {
-            StorageMode.Reset();
-            _ledgerBusy = false;
-        }
-    }
-
-    private async Task ReconcileUploadAsync()
-    {
-        if (_ledgerBusy || _uploadPlan is null || _rootAccountId is null ||
-            _uploadFingerprint is null || !Ledger.IsConnected) return;
-        _ledgerBusy = true;
-        ClearUploadReview();
-        try
-        {
-            StorageMode.Select(VaultStorageMode.StellarLedger);
-            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
-            _uploadRemaining = remaining.Count;
-            if (_uploadRemaining == 0)
-            {
-                var snapshot = await Ledger.ReadAsync();
-                var manifest = snapshot.SingleOrDefault(x => x.Id == _uploadPlan.ManifestId)
-                    ?? throw new InvalidDataException("Confirmed file manifest missing.");
-                var recovered = StellarLedgerFileProtocol.DecodeFile(manifest, snapshot);
-                try
-                {
-                    if (_uploadBytes is null ||
-                        !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(recovered, _uploadBytes))
-                        throw new InvalidDataException("Recovered ledger file did not match the selected file.");
-                }
-                finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered); }
-                await UploadCheckpoints.ClearAsync(_rootAccountId);
-                _ledgerRecords = snapshot;
-                CancelUpload();
-                _uploadMessage = "File verified against Stellar. Checkpoint cleared.";
-            }
-            else
-            {
-                var done = _uploadPlan.Entries.Count - remaining.Count;
-                await UploadCheckpoints.SaveAsync(_rootAccountId,
-                    new StellarUploadCheckpoint(StellarUploadCheckpoint.CurrentVersion,
-                        _uploadFingerprint, _uploadPlan.Entries.Select(x => x.Id).ToArray(), done));
-                _uploadNeedsReconciliation = false;
-                _uploadMessage = $"Ledger reports {done} completed stages and {remaining.Count} remaining. Review before continuing.";
-            }
-        }
-        catch
-        {
-            _uploadMessage = "Could not reconcile this upload. Keep your original file and checkpoint.";
-        }
-        finally
-        {
-            StorageMode.Reset();
-            _ledgerBusy = false;
-        }
-    }
-
-    private async Task ReviewUploadStageAsync()
-    {
-        if (_ledgerBusy || _uploadNeedsReconciliation || _uploadPlan is null || !Ledger.IsConnected) return;
-        _ledgerBusy = true;
-        ClearUploadReview();
-        try
-        {
-            StorageMode.Select(VaultStorageMode.StellarLedger);
-            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
-            _uploadRemaining = remaining.Count;
-            if (remaining.Count == 0)
-            {
-                _uploadMessage = "File already fully committed on Stellar.";
-                return;
-            }
-            var next = remaining[0];
-            _uploadCost = await Ledger.EstimateAsync(next.Draft, next.Id);
-            _uploadStageId = next.Id;
-            _reviewedUploadFingerprint = _uploadFingerprint;
-            _uploadStageTitle = next.Draft.Title;
-            _uploadMessage = "Review the estimate, then approve exactly one stage.";
-        }
-        catch
-        {
-            ClearUploadReview();
-            _uploadMessage = "Unable to estimate or reconcile file stages. No transaction submitted.";
-        }
-        finally
-        {
-            StorageMode.Reset();
-            _ledgerBusy = false;
-        }
-    }
-
-    private async Task PublishUploadStageAsync()
-    {
-        if (_ledgerBusy || !_uploadApproved || _uploadCost is null || _uploadPlan is null ||
-            _uploadStageId is null || _reviewedUploadFingerprint != _uploadFingerprint ||
-            !Ledger.IsConnected || _rootAccountId is null ||
-            _uploadFingerprint is null) return;
-        var approvedId = _uploadStageId;
-        var approvedPlan = _uploadPlan;
-        var approvedEntry = approvedPlan.Entries.FirstOrDefault(x => x.Id == approvedId);
-        if (approvedEntry.Draft is null)
-        {
-            ClearUploadReview();
-            _uploadMessage = "Approved file stage no longer exists. Review the upload again.";
-            return;
-        }
-        var approvedDraft = approvedEntry.Draft;
-        var approvedCost = _uploadCost;
-        _ledgerBusy = true;
-        ClearUploadReview();
-        bool stageConfirmed = false;
-        bool fileVerified = false;
-        try
-        {
-            StorageMode.Select(VaultStorageMode.StellarLedger);
-            if (!await Ledger.HasRegistryAsync())
-                throw new InvalidOperationException("Ledger registry not initialized.");
-            // Re-estimate after explicit approval; a changed fee or reserve
-            // invalidates the previous authorization.
-            var currentCost = await Ledger.EstimateAsync(approvedDraft, approvedId);
-            if (currentCost != approvedCost)
-            {
-                _uploadMessage = "Fee or reserve changed since approval. Review this upload stage again; nothing was submitted.";
-                return;
-            }
-            var published = await UploadCoordinator.PublishNextApprovedAsync(approvedPlan,
-                draft => Task.FromResult(ReferenceEquals(draft, approvedDraft)));
-            stageConfirmed = published;
-            var remaining = await UploadCoordinator.ReviewAsync(_uploadPlan);
-            _uploadRemaining = remaining.Count;
-            await UploadCheckpoints.SaveAsync(_rootAccountId, new StellarUploadCheckpoint(
-                StellarUploadCheckpoint.CurrentVersion, _uploadFingerprint,
-                _uploadPlan.Entries.Select(x => x.Id).ToArray(),
-                _uploadPlan.Entries.Count - remaining.Count));
-            _uploadNeedsReconciliation = false;
-            _uploadMessage = _uploadRemaining == 0
-                ? "File manifest confirmed on Stellar. Upload complete."
-                : published ? "Stage confirmed. Review the next transaction."
-                    : "Stage changed during review. Re-approve before proceeding.";
-            if (_uploadRemaining == 0)
-            {
-                // Reconstruct from the authoritative ledger, not the original
-                // upload bytes, before clearing the recovery checkpoint.
-                var snapshot = await Ledger.ReadAsync();
-                var manifest = snapshot.SingleOrDefault(x => x.Id == _uploadPlan.ManifestId)
-                    ?? throw new InvalidDataException("Confirmed manifest was not found.");
-                var recovered = StellarLedgerFileProtocol.DecodeFile(manifest, snapshot);
-                try
-                {
-                    if (_uploadBytes is null ||
-                        !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(recovered, _uploadBytes))
-                        throw new InvalidDataException("Recovered file content differs from the submitted bytes.");
-                }
-                finally
-                {
-                    System.Security.Cryptography.CryptographicOperations.ZeroMemory(recovered);
-                }
-                fileVerified = true;
-                _ledgerRecords = snapshot;
-                await UploadCheckpoints.ClearAsync(_rootAccountId);
-                CancelUpload();
-                _uploadMessage = "File recovered and verified from Stellar. Upload complete.";
-            }
-        }
-        catch
-        {
-            _uploadNeedsReconciliation = true;
-            _uploadMessage = fileVerified
-                ? "File verified on Stellar, but checkpoint cleanup failed. Reconcile before selecting another file."
-                : stageConfirmed
-                    ? "Upload stage confirmed on Stellar, but follow-up recovery failed. Reconcile before continuing; do not submit the stage again."
-                    : "Submission failed or confirmation is uncertain. Reconcile and re-approve before retry.";
-        }
-        finally
-        {
-            StorageMode.Reset();
-            _ledgerBusy = false;
-        }
-    }
-
-    private void VerifySelectedFile()
-    {
-        _verifiedFileMessage = null;
-        var selected = _selectedRecord;
-        if (selected is null || !StellarLedgerFileProtocol.IsFile(selected)) return;
-        try
-        {
-            // The shared codec validates the manifest, ordered parts and SHA-256.
-            // No file content is stored in app-private storage or shown in the UI.
-            var bytes = StellarLedgerFileProtocol.DecodeFile(selected, _ledgerRecords);
-            try
-            {
-                var name = StellarLedgerFileProtocol.FileName(selected);
-                _verifiedFileMessage = $"Verified file: {name} ({bytes.Length} bytes).";
-            }
-            finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
-        }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException or System.Text.Json.JsonException or InvalidOperationException)
-        {
-            _verifiedFileMessage = "File verification failed. An incomplete or corrupted ledger file cannot be opened.";
+            // A network, JSON or host failure must never expose a partially
+            // authenticated file or print an untrusted exception message.
+            _verifiedNativeTree = null;
+            _verifiedFileMessage = "File integrity could not be verified. Nothing was exported.";
         }
     }
 
@@ -1274,28 +1351,86 @@ else
     {
         if (_ledgerBusy || !Ledger.IsConnected) return;
         var selected = _selectedRecord;
-        if (selected is null || !StellarLedgerFileProtocol.IsFile(selected)) return;
+        if (selected is null || !VaultPublishedFileClassification.IsFile(selected)) return;
         _ledgerBusy = true;
-        _verifiedFileMessage = null;
         byte[]? plaintext = null;
         try
         {
-            // Always reconstruct and re-verify just before exporting, rather
-            // than trusting an earlier verification of mutable ledger state.
-            plaintext = StellarLedgerFileProtocol.DecodeFile(selected, _ledgerRecords);
-            var name = StellarLedgerFileProtocol.FileName(selected);
-            StellarLedgerFileProtocol.ValidateName(name);
-            using var stream = new MemoryStream(plaintext, writable: false);
-            var saved = await NativeFiles.SaveAsync(name, stream);
-            _verifiedFileMessage = saved
-                ? "Unencrypted file exported to the location you selected."
-                : "File export was canceled or failed. Your vault remains unchanged.";
+            if (VaultLinkedTreeFilePolicy.IsRootRecord(selected))
+            {
+                var prepared = _verifiedNativeTree;
+                _verifiedNativeTree = null; // one-shot, including failed picker
+                if (prepared is null || prepared.RootId != selected.Id ||
+                    prepared.RootAccount != _rootAccountId ||
+                    prepared.Network != _ledgerNetwork || !Ledger.IsConnected)
+                    throw new InvalidOperationException("Verify the tree file again after an account or network change.");
+
+                // A new read ensures the root and its referenced children have
+                // not been changed or removed since the user's verification.
+                var current = await Ledger.ReadAsync();
+                // LedgerRecordItem contains reference-type tag arrays; record
+                // equality would report false for identical fresh Horizon
+                // snapshots. Authenticate the entire current tree instead.
+                var currentRoot = await VaultLinkedTreeFilePolicy.ReadAsync(
+                    prepared.RootId, current, Stream.Null);
+                if (currentRoot.FileName != prepared.FileName ||
+                    currentRoot.Length != prepared.Length ||
+                    !string.Equals(currentRoot.Sha256Hex, prepared.Sha256Hex,
+                        StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException(
+                        "The file changed after verification. Verify again.");
+
+                var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 256 * 1024,
+                    resumeWriterThreshold: 128 * 1024));
+                using var cancel = new CancellationTokenSource();
+                var producer = Task.Run(async () =>
+                {
+                    await using var writer = pipe.Writer.AsStream(leaveOpen: true);
+                    try
+                    {
+                        await VaultLinkedTreeFilePolicy.ReadAsync(
+                            prepared.RootId, current, writer, cancel.Token);
+                        await writer.FlushAsync(cancel.Token);
+                        await pipe.Writer.CompleteAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        await pipe.Writer.CompleteAsync(ex);
+                        throw;
+                    }
+                });
+                try
+                {
+                    await using var reader = pipe.Reader.AsStream(leaveOpen: true);
+                    if (!await NativeFiles.SaveAsync(prepared.FileName, reader))
+                        throw new IOException("File selection was canceled or write failed.");
+                    await producer;
+                    _verifiedFileMessage = "Authenticated file saved with bounded-memory streaming.";
+                }
+                catch
+                {
+                    cancel.Cancel();
+                    try { await producer; } catch { /* preserve original export failure */ }
+                    throw;
+                }
+                finally { await pipe.Reader.CompleteAsync(); }
+            }
+            else
+            {
+                var fresh = await Ledger.ReadAsync();
+                var current = fresh.Single(x => x.Id == selected.Id);
+                plaintext = StellarLedgerFileProtocol.DecodeFile(current, fresh);
+                var name = StellarLedgerFileProtocol.FileName(current);
+                using var stream = new MemoryStream(plaintext, writable: false);
+                _verifiedFileMessage = await NativeFiles.SaveAsync(name, stream)
+                    ? "Verified legacy file exported."
+                    : "Legacy file export canceled; no ledger data changed.";
+            }
         }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException or
-                                    System.Text.Json.JsonException or InvalidOperationException or
-                                    UnauthorizedAccessException or IOException or NotSupportedException)
+        catch (Exception)
         {
-            _verifiedFileMessage = "File export failed. The file was not marked as exported.";
+            _verifiedNativeTree = null;
+            _verifiedFileMessage = "File export failed. Verify again before retrying.";
         }
         finally
         {
@@ -1305,18 +1440,26 @@ else
         }
     }
 
+    private async Task CopyNativeRecordValueAsync(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", value); }
+        catch { _verifiedFileMessage = "Clipboard is unavailable on this device."; }
+    }
+
     private void ResetSelection()
     {
         _selectedRecord = null;
         _revealSecret = false;
         _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
     }
 
     private void SelectRecord(string id)
     {
-        _nativeDetailTab = "details";
         _revealSecret = false;
         _verifiedFileMessage = null;
+        _verifiedNativeTree = null;
         var record = _ledgerRecords.SingleOrDefault(x => x.Id == id);
         if (record is null) { _selectedRecord = null; return; }
         if (record.IsFolder)
@@ -1335,8 +1478,13 @@ else
         _rootAccountId = null;
         _selectedFolderId = string.Empty;
         ResetSelection();
-        CancelUpload();
         CancelPublish();
+        _nativeDirectFilePlan = null;
+        _nativeDirectFileCost = null;
+        _nativeDirectFileNextDraft = null;
+        _nativeDirectFileNextId = null;
+        _nativeDirectFileApproved = false;
+        _nativeDirectFileUncertain = false;
         _publishTitle = string.Empty;
         _publishContent = string.Empty;
         _publishFolder = _publishUsername = _publishUrl = _publishNotes = _publishTags = string.Empty;
@@ -1368,6 +1516,8 @@ else
                     (NetworkSelection.CustomHorizonUrl, NetworkSelection.CustomPassphrase),
                 _ => throw new InvalidOperationException("Select a verified Stellar network.")
             };
+            if (string.IsNullOrWhiteSpace(passphrase))
+                throw new InvalidOperationException("Select a verified Stellar network passphrase.");
             if (!await JS.InvokeAsync<bool>("stellarVaultNativeRuntime.inspectSecret"))
                 throw new InvalidOperationException("Stellar S-key runtime is unavailable.");
             _secretInspection = await SecretChain.InspectAsync(_ledgerSecretKey, url, passphrase);
@@ -1395,6 +1545,7 @@ else
     {
         if (SecretLedger.IsConnected)
         {
+            await LinkedQueueKeys.LockAsync();
             await SecretLedger.DisconnectAsync();
             _secretInspection = null;
             _ledgerMessage = "Secret Key vault locked.";
@@ -1523,6 +1674,7 @@ else
 
     private async Task RevokeForegroundAsync()
     {
+        await LinkedQueueKeys.LockAsync();
         _ledgerMnemonic = string.Empty;
         _passphrase = string.Empty;
         _localConsent = false;
@@ -1600,8 +1752,9 @@ else
         }
     }
 
-    private void LockVault()
+    private async Task LockVault()
     {
+        await LinkedQueueKeys.LockAsync();
         Workflow.Lock();
         Retention.Reset();
         _passphrase = string.Empty;
@@ -1611,6 +1764,7 @@ else
 
     public async ValueTask DisposeAsync()
     {
+        await LinkedQueueKeys.LockAsync();
         Sessions.StateChanged -= OnSessionChanged;
         ForegroundLifecycle.ForegroundLost -= OnForegroundLost;
         NativeNavigation.BackRequested -= OnAndroidBackRequested;

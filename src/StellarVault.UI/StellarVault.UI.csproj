@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
-    <ProjectReference Include="../StellarVault.Core/StellarVault.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Core/VaultEngine.Core.csproj" />
+    <ProjectReference Include="../VaultEngine.Stellar/VaultEngine.Stellar.csproj" />
   </ItemGroup>
 </Project>

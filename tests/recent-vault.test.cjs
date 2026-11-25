@@ -13,10 +13,16 @@ function create() {
     setItem: (key, value) => data.set(key, value),
     removeItem: key => data.delete(key)
   };
-  const ctx = vm.createContext({window:{},localStorage:storage,URL,TextEncoder,TextDecoder});
+  const sessionData = new Map();
+  const sessionStorage = {
+    getItem: key => sessionData.get(key) ?? null,
+    setItem: (key, value) => sessionData.set(key, value),
+    removeItem: key => sessionData.delete(key)
+  };
+  const ctx = vm.createContext({window:{},localStorage:storage,sessionStorage,URL,TextEncoder,TextDecoder});
   const script = fs.readFileSync(path.join(__dirname,'../src/StellarVault.Pwa/wwwroot/js/vault-v2-recent-vault.js'),'utf8');
   vm.runInContext(script,ctx);
-  return {api:ctx.window.stellarVaultRecentVault,data};
+  return {api:ctx.window.stellarVaultRecentVault,data,sessionData};
 }
 const account = 'G' + 'A'.repeat(55);
 test('remembers only public account and network',()=>{
@@ -59,4 +65,21 @@ test('custom network requires a public network identity to support offline reope
   const {api,data}=create();
   assert.throws(()=>api.save(account,'custom','https://horizon.example.com/'));
   assert.equal(data.size,0);
+});
+
+test('active hybrid resume is tab scoped and not implied by saved encrypted credentials', () => {
+  const {api,data,sessionData} = create();
+  api.save(account,'testnet');
+  assert.equal(api.hasHybridSession(account,'testnet'),false,
+    'Remembered device vault must not force passphrase-only access');
+  api.markHybridSession(account,'testnet');
+  assert.equal(api.hasHybridSession(account,'testnet'),true);
+  assert.equal(api.hasHybridSession(account,'public'),false);
+  assert.equal(api.hasHybridSession('G'+'B'.repeat(55),'testnet'),false);
+  assert.equal(data.size,1,'hybrid resume must not put anything in localStorage');
+  assert.equal(sessionData.size,1);
+  api.clearHybridSession();
+  assert.equal(api.hasHybridSession(account,'testnet'),false,
+    'End session must prevent a saved vault from hijacking a later on-chain login');
+  assert.equal(data.size,1,'End session must not silently delete encrypted user data');
 });

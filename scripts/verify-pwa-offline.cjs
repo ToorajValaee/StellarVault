@@ -1,0 +1,95 @@
+'use strict';
+// Offline UI acceptance + real current-design landing screenshots, synthetic only.
+const {chromium}=require('playwright');
+const crypto=require('node:crypto'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const assert=require('node:assert/strict');
+let stage='startup';
+(async()=>{
+  const base=process.argv[2]||'http://127.0.0.1:18082';
+  const words={window:{}};
+  vm.runInNewContext(fs.readFileSync('src/StellarVault.Pwa/wwwroot/js/bip39-english.js','utf8'),words);
+  const entropy=crypto.randomBytes(16);
+  const bits=[...entropy].map(b=>b.toString(2).padStart(8,'0')).join('')+
+    crypto.createHash('sha256').update(entropy).digest()[0].toString(2).padStart(8,'0').slice(0,4);
+  const mnemonic=bits.match(/.{11}/g).map(b=>words.window.stellarVaultBip39English[parseInt(b,2)]).join(' ');
+  entropy.fill(0);
+  const passphrase=crypto.randomBytes(24).toString('base64');
+  const browser=await chromium.launch({channel:process.env.PWA_BROWSER_CHANNEL||'msedge',headless:true});
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  let writes=0;
+  context.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).origin!==new URL(base).origin)writes++;});
+  try{
+    const page=await context.newPage();await page.goto(base);
+    await page.getByRole('heading',{name:'Unlock your vault',exact:true}).waitFor({timeout:90000});
+    stage='opt-in';
+    await page.getByRole('radio',{name:'Encrypted on this device',exact:true}).check();
+    await page.locator('#sv-passphrase').fill(passphrase);
+    await page.locator('.sv-mnemonic-grid input').first().fill(mnemonic);
+    await context.setOffline(true);
+    stage='offline create and unlock';
+    await page.getByRole('button',{name:'Unlock vault',exact:true}).click();
+    await page.waitForURL('**/vault',{timeout:90000});
+    await page.getByRole('button',{name:'Drafts',exact:true}).first().click();
+    stage='offline folder';
+    await page.getByRole('button',{name:'＋ Folder',exact:true}).click();
+    await page.getByLabel('TITLE *',{exact:true}).fill('Personal');
+    await page.getByRole('button',{name:'Save encrypted draft',exact:true}).click();
+    await page.getByRole('button',{name:'＋ Record',exact:true}).waitFor();
+    stage='offline record';
+    await page.getByRole('button',{name:'＋ Record',exact:true}).click();
+    await page.getByLabel('TITLE *',{exact:true}).fill('Team workspace');
+    await page.getByLabel('FOLDER',{exact:true}).selectOption({label:'Personal (local draft)'});
+    await page.getByLabel('USERNAME / IDENTIFIER',{exact:true}).fill('alex@example.com');
+    await page.getByLabel('URL',{exact:true}).fill('https://example.com');
+    await page.getByLabel('SECRET / PASSWORD *',{exact:true}).fill('synthetic-example-only');
+    await page.getByLabel('NOTES',{exact:true}).fill('Example record for the product preview.');
+    await page.getByLabel('TAGS // COMMA SEPARATED',{exact:true}).fill('work, shared');
+    await page.getByRole('button',{name:'Save encrypted draft',exact:true}).click();
+    await page.getByRole('button',{name:'＋ Record',exact:true}).waitFor();
+    stage='offline reload';await page.reload();
+    await page.getByRole('heading',{name:'VAULT HIDDEN',exact:true}).waitFor({timeout:90000});
+    await page.locator('#sv-resume-pass').fill('deliberately-wrong-test-passphrase');
+    stage='wrong password rejection';
+    await page.getByRole('button',{name:'UNLOCK VAULT',exact:true}).click();
+    await page.getByText('Unable to unlock. Check the passphrase and retry.',{exact:true}).waitFor({timeout:60000});
+    assert.equal(await page.getByRole('dialog',{name:'Vault privacy lock'}).count(),1,'Wrong password removed privacy lock');
+    await page.locator('#sv-resume-pass').fill(passphrase);
+    stage='correct offline reopen';
+    await page.getByRole('button',{name:'UNLOCK VAULT',exact:true}).click();
+    await page.getByRole('dialog',{name:'Vault privacy lock'}).waitFor({state:'hidden',timeout:90000});
+    await page.getByRole('button',{name:'Drafts',exact:true}).first().click();
+    await page.getByText('Team workspace',{exact:true}).waitFor();
+    stage='plaintext storage check';
+    const plaintextFound=await page.evaluate(async({mnemonic,passphrase})=>{
+      const needles=[mnemonic,passphrase,'synthetic-example-only','Team workspace'];
+      if(Object.values(localStorage).some(v=>needles.some(n=>v.includes(n))))return true;
+      const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('stellar-vault-v2');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+      let found=false;
+      for(const name of db.objectStoreNames)await new Promise((resolve,reject)=>{
+        const tx=db.transaction(name,'readonly'),request=tx.objectStore(name).openCursor();
+        request.onsuccess=()=>{const c=request.result;if(!c)return;
+          const text=new TextDecoder().decode(c.value);
+          if(needles.some(n=>text.includes(n)))found=true;c.continue();};
+        tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);
+      });db.close();return found;
+    },{mnemonic,passphrase});
+    assert.equal(plaintextFound,false,'Sensitive material was persisted without encryption');
+    assert.equal(writes,0,'Offline operation attempted a ledger submission');
+    stage='desktop screenshot';
+    const output=path.resolve('src/StellarVault.Landing/wwwroot/assets/screens');fs.mkdirSync(output,{recursive:true});
+    await page.screenshot({path:path.join(output,'pwa-desktop-current.png')});
+    await page.setViewportSize({width:1200,height:630});
+    await page.screenshot({path:path.join(output,'pwa-social-current.png')});
+    stage='mobile screenshot';await page.setViewportSize({width:390,height:844});
+    await page.locator('.sv-hybrid-item').filter({has:page.getByText('Team workspace',{exact:true})})
+      .getByRole('button',{name:'Edit draft',exact:true}).click();
+    await page.getByLabel('TITLE *',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('SECRET / PASSWORD *',{exact:true}).getAttribute('type'),'password');
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile draft editor overflows');
+    await page.screenshot({path:path.join(output,'pwa-mobile-current.png')});
+    stage='reconnect';await context.setOffline(false);
+    assert.ok(await page.evaluate(()=>navigator.onLine),'Browser did not reconnect');
+    assert.equal(writes,0);
+    console.log('PASS: offline encrypted vault creation, folder/record editing, worker reload, wrong-password rejection, correct reopen, no plaintext credentials/records at rest, mobile layout, reconnect and current-design screenshots. No ledger writes.');
+  }finally{await context.close();await browser.close();}
+})().catch(error=>{console.error('Offline acceptance failed at '+stage+' ('+error.name+'). Credentials omitted.');process.exitCode=1;});

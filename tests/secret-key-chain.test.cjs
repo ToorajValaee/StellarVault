@@ -93,7 +93,7 @@ test('secret key input is checksum-validated by the Stellar SDK', async () => {
 test('neither host silently substitutes a secret for an HD mnemonic', () => {
   const home = fs.readFileSync(path.join(root, 'src/StellarVault.UI/Components/VaultHome.razor'), 'utf8');
   const native = fs.readFileSync(path.join(root, 'src/StellarVault.UI/Components/NativeVaultWorkspace.razor'), 'utf8');
-  const core = fs.readFileSync(path.join(root, 'src/StellarVault.Core/Services/VaultCredentialMode.cs'), 'utf8');
+  const core = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services/VaultCredentialMode.cs'), 'utf8');
   const pwa = fs.readFileSync(path.join(root, 'src/StellarVault.Pwa/wwwroot/index.html'), 'utf8');
   const maui = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/wwwroot/index.html'), 'utf8');
   const csproj = fs.readFileSync(path.join(root, 'src/StellarVault.Maui/StellarVault.Maui.csproj'), 'utf8');
@@ -109,10 +109,22 @@ test('neither host silently substitutes a secret for an HD mnemonic', () => {
   assert.match(maui, /js\/vault-secret-chain.js/);
   assert.match(csproj, /vault-secret-chain.js/);
 });
-test('zero signer thresholds are rejected rather than treated as root-only authorization', async () => {
+test('newly funded root with zero Stellar thresholds can be recovered read-only', async () => {
+  const fixture = start({ linked: false });
+  fixture.records[rootId].thresholds = {
+    low_threshold: 0, med_threshold: 0, high_threshold: 0
+  };
+  const inspected = await fixture.inspect();
+  assert.equal(inspected.RootAccountId, rootId);
+  assert.equal(inspected.Accounts.length, 1);
+  assert.match(inspected.Note, /Read-only recovery/);
+  assert.equal(fixture.writes(), 0);
+});
+
+test('child accounts with zero signing thresholds remain blocked', async () => {
   const fixture = start();
   fixture.records[childId].thresholds.med_threshold = 0;
-  await assert.rejects(fixture.inspect(), /signer thresholds/);
+  await assert.rejects(fixture.inspect(), /unsafe zero signer thresholds/);
 });
 
 test('an HD-v2 registered root cannot be mistaken for an independent S-key chain', async () => {
@@ -127,4 +139,23 @@ test('an additional active child signer blocks single-secret chain recovery',asy
     type:'ed25519_public_key',key:'G'+'D'.repeat(55),weight:1
   });
   await assert.rejects(fixture.inspect(),/additional active signer/);
+});
+
+test('linked recovery rechecks network identity and queue root across asynchronous reads', () => {
+  const code = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services',
+    'VaultLinkedDraftRecoveryReview.cs'), 'utf8');
+  assert.match(code, /ledger\.ConnectedNetworkPassphrase is not \{ Length: > 0 \} passphrase/);
+  assert.match(code, /keys\.ActiveRootAccountId != root/);
+  assert.match(code, /RequireSameScope\(root, scope, epoch, passphrase\)/);
+  assert.match(code, /ledger\.ConnectedNetworkPassphrase != passphrase/);
+  assert.match(code, /network\.CredentialKey\(root\) != scope/);
+  assert.match(code, /CryptographicOperations\.ZeroMemory\(entry\.EncryptedPayload\)/);
+});
+
+test('linked historical reconciliation fails closed if storage provenance changes', () => {
+  const code = fs.readFileSync(path.join(root, 'src/VaultEngine.Stellar/Services',
+    'VaultLinkedVerifiedReconciliation.cs'), 'utf8');
+  assert.match(code, /after\.HistoricalStorageAccount != before\.HistoricalStorageAccount/);
+  assert.match(code, /if \(!await store\.TryReplaceAsync\(entry, confirmed, CancellationToken\.None\)\)/);
+  assert.match(code, /if \(!proven\)/);
 });

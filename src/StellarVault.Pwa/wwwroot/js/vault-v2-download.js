@@ -24,8 +24,13 @@ window.stellarVaultV2Download = Object.freeze({
       input.addEventListener('change', async () => {
         const file = input.files?.[0];
         if (!file) { finish(null); return; }
-        if (file.size <= 0 || file.size > 1024 * 1024) {
-          fail(new RangeError('Select a non-empty file no larger than 1 MiB'));
+        // An SVRB record backup adds a 5-byte magic/version header,
+        // 16-byte salt, 12-byte GCM nonce and 16-byte tag to its bounded
+        // 1 MiB JSON body. Enforce a small hard upper bound here; individual
+        // Core callers validate their format's stricter limit.
+        const maxPortableRecordBackupBytes = 1024 * 1024 + 5 + 16 + 12 + 16;
+        if (file.size <= 0 || file.size > maxPortableRecordBackupBytes) {
+          fail(new RangeError('Selected file exceeds the record-backup picker limit'));
           return;
         }
         try {
@@ -57,16 +62,12 @@ window.stellarVaultV2Download = Object.freeze({
     if (payload instanceof Uint8Array) {
       data = payload.slice();
     } else if (typeof payload === 'string') {
-      if (payload.length > 2 * 1024 * 1024) throw new RangeError('Download exceeds limit');
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(payload)) throw new TypeError('Invalid binary base64');
       const raw = atob(payload);
       data = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
     } else {
       throw new TypeError('Expected binary file content');
-    }
-    if (data.byteLength > 1024 * 1024) {
-      data.fill(0);
-      throw new RangeError('Download exceeds limit');
     }
     const safeName = typeof filename === 'string'
       ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
@@ -83,6 +84,56 @@ window.stellarVaultV2Download = Object.freeze({
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       // Do not zero the interop-provided payload, which may be shared by the runtime.
       data.fill(0);
+    }
+  },
+  // Must be invoked directly from a real user click. Acquires only a handle;
+  // no file is created or written until saveStream runs after verification.
+  // Dispose/cancel simply drops the handle if later authorization fails.
+  async selectSaveDestination(filename) {
+    if (typeof window.showSaveFilePicker !== 'function')
+      throw new Error('Verified exports require a browser Save File Picker.');
+    const safeName = typeof filename === 'string'
+      ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
+      : 'stellar-vault-record';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: safeName || 'stellar-vault-record'
+    });
+    let used = false;
+    return {
+      async writeStream(dotnetStreamReference) {
+        if (used) throw new Error('The selected export destination was already used.');
+        used = true;
+        const target = await handle.createWritable();
+        try {
+          const source = await dotnetStreamReference.stream();
+          await source.pipeTo(target);
+        } catch (error) {
+          try { await target.abort(); } catch (_) { /* already closed */ }
+          throw error;
+        }
+      }
+    };
+  },
+  // Streams verified bytes to the browser's user-selected file sink without
+  // constructing a whole-file Blob. The File System Access API holds writes
+  // in a temporary file and only commits them once pipeTo closes normally;
+  // a failed verification or transfer aborts the sink instead.
+  async saveStream(filename, dotnetStreamReference) {
+    if (typeof window.showSaveFilePicker !== 'function')
+      throw new Error('Streaming downloads require a browser with Save File Picker support.');
+    const safeName = typeof filename === 'string'
+      ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
+      : 'stellar-vault-record';
+    const handle = await window.showSaveFilePicker({
+      suggestedName: safeName || 'stellar-vault-record'
+    });
+    const target = await handle.createWritable();
+    try {
+      const source = await dotnetStreamReference.stream();
+      await source.pipeTo(target);
+    } catch (error) {
+      try { await target.abort(); } catch (_) { /* The stream may already be aborted. */ }
+      throw error;
     }
   }
 });

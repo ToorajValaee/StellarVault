@@ -1,5 +1,5 @@
 @using Microsoft.Extensions.Logging
-@using StellarVault.Core.Services
+@using VaultEngine.Stellar.Services
 @using Microsoft.JSInterop
 @inject VaultSessionManager Sessions
 @inject VaultSessionWorkflow Workflow
@@ -9,6 +9,9 @@
 @inject IStellarSecretKeyLedger SecretLedger
 @inject VaultStorageModeGate StorageMode
 @inject VaultDeviceRetentionGate Retention
+@inject VaultLinkedLocalRetentionGate LinkedRetention
+@inject VaultLinkedQueueKeySession LinkedQueueKeys
+@inject VaultDeviceUnlockPreference DeviceUnlockPreference
 @inject VaultLedgerRecordWorkspace LedgerWorkspace
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
@@ -66,6 +69,10 @@
                 <div class="sv-entry-feature"><span aria-hidden="true">◇</span><span>Encrypted from the moment you unlock</span></div>
                 <div class="sv-entry-feature"><span aria-hidden="true">▣</span><span>Your records and folders, in one place</span></div>
                 <div class="sv-entry-feature"><span aria-hidden="true">◎</span><span>Stellar-backed storage when you approve</span></div>
+                <details class="sv-entry-storage-guide">
+                    <summary>About local storage and Sync</summary>
+                    <p>Optional device storage uses a separate vault passphrase for either HD or Secret Key access. Local drafts remain encrypted on this device until you explicitly review and approve publication to Stellar. Signing credentials are never saved as plaintext.</p>
+                </details>
             </div>
             <div class="sv-entry-showcase-foot">PRIVATE BY DESIGN <span aria-hidden="true">·</span> YOU STAY IN CONTROL</div>
         </aside>
@@ -75,7 +82,70 @@
                 <h1>Unlock your vault</h1>
                 <p>@(_credentialMode == VaultCredentialMode.MnemonicHd ? "Enter your recovery phrase to securely access your StellarVault workspace." : "Inspect an independent vault rooted in your existing Stellar secret key.")</p>
             </div>
-        <form class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
+        @if (Platform == "WEB PWA")
+        {
+            <section class="sv-access-storage-settings sv-entry-storage-outside" aria-label="Optional encrypted device storage">
+                <h2 class="sv-storage-heading">Device storage <span class="sv-storage-optional">(optional)</span></h2>
+                <fieldset class="sv-access-storage-choices" disabled="@_busy">
+                    <legend class="sr-only">Device storage preference</legend>
+                    <label class="sv-biometric-choice">
+                        <input type="radio" name="device-retention" checked="@(!CurrentDeviceStoragePreference)"
+                               @onchange="() => SelectDeviceStorageAsync(false)" />
+                        <span>Stellar only</span>
+                    </label>
+                    <label class="sv-biometric-choice">
+                        <input type="radio" name="device-retention" checked="@CurrentDeviceStoragePreference"
+                               @onchange="() => SelectDeviceStorageAsync(true)" />
+                        <span>Encrypted on this device</span>
+                    </label>
+                </fieldset>
+                @if (CurrentDeviceStoragePreference)
+                {
+                    <div class="sv-storage-credential-group">
+                        <label class="sv-biometric-choice sv-storage-device-unlock">
+                            <input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
+                            <span>Enable device unlock <small>(optional)</small></span>
+                        </label>
+                        <div class="sv-storage-passphrase-field">
+                            <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
+                            <input id="sv-passphrase" form="sv-access-form" class="terminal-input"
+                                   type="password" autocomplete="new-password"
+                                   @bind="_passphrase" @bind:event="oninput"
+                                   disabled="@(_busy || Sessions.IsUnlocked)" />
+                            <p class="sv-storage-passphrase-hint">Protects encrypted records on this device. Device unlock can optionally use this passphrase after enrollment.</p>
+                        </div>
+                    </div>
+                }
+                <div class="sv-storage-help-actions">
+                    <button type="button" class="sv-storage-help-trigger"
+                            aria-expanded="@_storageHelpOpen" aria-controls="sv-storage-help"
+                            @onclick="() => _storageHelpOpen = !_storageHelpOpen">
+                        <span aria-hidden="true">ⓘ</span> About encrypted storage
+                    </button>
+                    <button type="button" class="sv-storage-help-trigger"
+                            aria-expanded="@_deviceHelpOpen" aria-controls="sv-device-help"
+                            @onclick="() => _deviceHelpOpen = !_deviceHelpOpen">
+                        <span aria-hidden="true">ⓘ</span> About device unlock
+                    </button>
+                </div>
+                @if (_storageHelpOpen)
+                {
+                    <p id="sv-storage-help" class="sv-storage-help-text">
+                        Encrypted local drafts use a separate passphrase and explicit consent.
+                        Stellar-only access does not erase previously saved encrypted data.
+                        Both HD and Secret Key vaults require separate transaction approval for publication.
+                    </p>
+                }
+                @if (_deviceHelpOpen)
+                {
+                    <p id="sv-device-help" class="sv-storage-help-text">
+                        Device unlock can protect a local vault passphrase on supported devices.
+                        It does not store or replace the mnemonic or Stellar secret key.
+                    </p>
+                }
+            </section>
+        }
+        <form id="sv-access-form" class="access-form terminal-panel" aria-label="Vault access" @onsubmit="AccessVaultAsync" @onsubmit:preventDefault="true">
 
             @if (Platform == "WEB PWA")
             {
@@ -98,7 +168,7 @@
                     <input id="sv-secret-key" class="terminal-input" type="password" autocomplete="off"
                            autocapitalize="characters" spellcheck="false" maxlength="56"
                            @bind="_secretKey" @bind:event="oninput" disabled="@_busy" />
-                    <p class="advanced-help">This is an independent account-chain architecture, not an HD wallet. This independent vault uses linked Stellar accounts and explicit root-key signer authorization. Record and folder transactions require approval; mutations are Testnet-only until security audit.</p>
+                    <p class="advanced-help">Independent linked-account vault. Signing and publication require separate approval; mutations remain Testnet-only until security review.</p>
                 }
                 @if (_credentialMode == VaultCredentialMode.MnemonicHd && _recentAccount is not null && !Sessions.IsUnlocked && _network == _recentNetwork)
                 {
@@ -108,43 +178,18 @@
                     </details>
                 }
 
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd)
-                {
-                <details class="sv-access-storage-settings" open="@_enableLocalStorage">
-                    <summary>Save encrypted items on this device (optional)</summary>
-                    <fieldset class="sv-access-storage-choices">
-                        <legend class="sr-only">Device storage choice</legend>
-                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@(!_enableLocalStorage)" @onchange="() => _enableLocalStorage = false" disabled="@_busy" /> Stellar only — nothing saved on this device</label>
-                        <label class="sv-biometric-choice"><input type="radio" name="device-retention" checked="@_enableLocalStorage" @onchange="() => _enableLocalStorage = true" disabled="@_busy" /> Save encrypted items on this device</label>
-                    </fieldset>
-                </details>
-                }
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd && _enableLocalStorage)
-                {
-                <label class="terminal-label" for="sv-passphrase">Vault passphrase</label>
-                <input id="sv-passphrase" class="terminal-input" type="password"
-                       autocomplete="off" @bind="_passphrase" @bind:event="oninput" disabled="@(_busy || Sessions.IsUnlocked)" />
-                <VaultStorageSecurityNotice />
-                <details class="sv-access-learn"><summary>About local storage and Sync</summary><p>Your recovery phrase is encrypted on this device using a separate passphrase. Offline records and folders can be synced only after your approval. Hybrid file syncing is unavailable.</p></details>
-                }
+
                 @if (_network == "public" && !Sessions.IsUnlocked)
                 {
                     <div class="terminal-alert warning" role="alert">
                         <strong>MAINNET // REAL ASSETS AND NETWORK FEES</strong>
-                        <span>You selected Stellar PUBLIC. Any approved on-chain operation may spend real XLM. Local encrypted records remain browser-only unless you explicitly publish them.</span>
+                        <span>You selected Stellar PUBLIC. Any approved on-chain operation may spend the network's native asset. Local encrypted records remain browser-only unless you explicitly publish them.</span>
                         <label class="sv-biometric-choice"><input type="checkbox" @bind="_confirmMainnetAccess" disabled="@_busy" />
                             I UNDERSTAND THIS IS STELLAR MAINNET
                         </label>
                     </div>
                 }
-                @if (_credentialMode == VaultCredentialMode.MnemonicHd && !Sessions.IsUnlocked && _enableLocalStorage)
-                {
-                    <label class="sv-biometric-choice"><input type="checkbox" @bind="_requestBiometricEnrollment" disabled="@_busy" />
-                        Enable device unlock after signing in (optional)
-                    </label>
-                    <p class="advanced-help">Use a passkey protected by your device's biometrics or PIN for future privacy unlocks on this device. Enrollment happens only here, after your passphrase is verified.</p>
-                }
-                @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
+                 @if (_pendingBiometricAccount is not null && Sessions.IsUnlocked)
                 {
                     <div class="terminal-alert" role="status">
                         <strong>ENABLE DEVICE UNLOCK?</strong>
@@ -163,27 +208,7 @@
                         <span>Keep this screen open.</span>
                     </div>
                 }
-                <div class="sv-access-actions">
-                    @if (Sessions.IsUnlocked)
-                    {
-                        <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
-                    }
-                    else
-                    {
-                        <button class="pixel-button primary" type="submit" disabled="@_busy"
-                                aria-describedby="sv-access-readiness">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
-                    }
-                </div>
-                @if (!Sessions.IsUnlocked)
-                {
-                    <p id="sv-access-readiness" class="sv-access-readiness" role="status" aria-live="polite">
-                        @AccessReadiness
-                    </p>
-                }
-                <details class="sv-access-security-notice">
-                    <summary>Security and release status</summary>
-                    <p><strong>Early access — use test accounts only.</strong> StellarVault has not completed a production security audit. Do not enter recovery phrases protecting real funds. Records saved only on this device are not automatically backed up or synchronized.</p>
-                </details>
+
             }
             else
             {
@@ -237,6 +262,19 @@
                 </div>
             }
         </form>
+        @if (Platform == "WEB PWA")
+        {
+            <div class="sv-access-actions sv-entry-actions-outside">
+                @if (Sessions.IsUnlocked)
+                {
+                    <button class="pixel-button primary" type="button" disabled="@_busy" @onclick="LockAsync">LOCK VAULT</button>
+                }
+                else
+                {
+                    <button class="pixel-button primary" type="submit" form="sv-access-form" disabled="@_busy">@(_busy ? "Checking…" : _credentialMode == VaultCredentialMode.MnemonicHd ? "Unlock vault" : "Unlock Secret Key vault")</button>
+                }
+            </div>
+        }
         <p class="sv-entry-privacy"><span aria-hidden="true">♧</span> Your recovery credential stays in this session. Never share it with anyone.</p>
         </div>
     </div>
@@ -276,7 +314,7 @@
             <section class="terminal-panel" aria-label="Stellar ledger records">
                 <div class="panel-kicker">ON-CHAIN HD-V2 DATABASE</div>
                 <h2>STELLAR LEDGER</h2>
-                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions cost XLM and require a funded root account and initialized HD registry.</p>
+                <p class="advanced-help">These records use Stellar ManageData entries and are separate from browser-only encrypted records. Transactions incur native-asset fees and require a funded root account and initialized HD registry.</p>
                 @if (LedgerRecords.IsConnected)
                 {
                     <p class="advanced-help" role="status">Signed ledger session connected.</p>
@@ -345,6 +383,7 @@
     private string? _recentNetwork;
     private string? _recentHorizonUrl;
     private bool _recentHasDeviceUnlock;
+    private bool _offlineCustomNamespace;
 
     private sealed class RecentVault
     {
@@ -406,6 +445,22 @@
                         // preference never stores a trusted network passphrase.
                         // Do not require the user to repeat the Detect action.
                         await DetectCustomAsync();
+                        // A remembered PUBLIC network identifier may select an
+                        // existing encrypted local namespace while disconnected.
+                        // It is never network/signing authority: leave the ledger
+                        // disconnected until a fresh explicit network detection.
+                        if (_customPassphrase is null && recent?.Network == "custom" &&
+                            _recentAccount is not null &&
+                            !string.IsNullOrWhiteSpace(recent.NetworkPassphrase) &&
+                            string.Equals(recent.HorizonUrl?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.Ordinal))
+                        {
+                            _customPassphrase = recent.NetworkPassphrase;
+                            _detectedHorizon = url;
+                            NetworkSelection.ConfigureCustom(recent.NetworkPassphrase);
+                            NetworkSelection.CustomHorizonUrl = url;
+                            _offlineCustomNamespace = true;
+                            _networkStatus = "Remembered custom network selects local encrypted storage only. Horizon is unverified; Stellar signing remains disconnected.";
+                        }
                     }
                 }
 
@@ -457,6 +512,9 @@
             if (!await Workflow.HasLocalVaultAsync(_recentAccount))
                 throw new InvalidOperationException("Local vault was not found.");
             await Workflow.UnlockAsync(_recentAccount, _passphrase);
+            if (Platform == "WEB PWA")
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.markHybridSession",
+                    _recentAccount, _network);
             StorageMode.Select(VaultStorageMode.LocalEncrypted);
             _workspaceMode = "record";
             // Local reopening succeeds without Stellar signing; route out of the
@@ -508,7 +566,11 @@
         _workspaceMode = workspace;
     }
     private bool _enableLocalStorage;
-    private bool _requestBiometricEnrollment;
+    private bool _requestBiometricEnrollment
+    {
+        get => DeviceUnlockPreference.Requested;
+        set => DeviceUnlockPreference.Requested = CurrentDeviceStoragePreference && value;
+    }
     private bool _confirmMainnetAccess;
     private string? _pendingBiometricAccount;
     private string? _pendingBiometricPassphrase;
@@ -540,6 +602,37 @@
         _postAccessUrl = null;
         if (destination is not null) Navigation.NavigateTo(destination);
     }
+    private bool CurrentDeviceStoragePreference =>
+        _credentialMode == VaultCredentialMode.MnemonicHd
+            ? _enableLocalStorage : LinkedRetention.AllowsLocalPersistence;
+
+    private async Task SelectDeviceStorageAsync(bool enabled)
+    {
+        if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected)
+            return;
+        if (_credentialMode == VaultCredentialMode.MnemonicHd)
+        {
+            _enableLocalStorage = enabled;
+            if (!enabled)
+            {
+                _passphrase = string.Empty;
+                DeviceUnlockPreference.Reset();
+            }
+            return;
+        }
+        if (enabled)
+        {
+            LinkedRetention.GrantExplicitConsent();
+        }
+        else
+        {
+            await LinkedQueueKeys.LockAsync();
+            LinkedRetention.Reset();
+            _passphrase = string.Empty;
+            DeviceUnlockPreference.Reset();
+        }
+    }
+
     private VaultCredentialMode _credentialMode = VaultCredentialMode.MnemonicHd;
     private string _secretKey = string.Empty;
     private VaultSecretChainInspection? _secretChainInspection;
@@ -549,6 +642,9 @@
         _credentialMode = mode;
         _secretKey = string.Empty;
         _secretChainInspection = null;
+        // Never carry the HD local passphrase into an independent S-key
+        // account session (or vice versa) when changing credential strategies.
+        _passphrase = string.Empty;
         ClearMnemonic();
         _message = null;
     }
@@ -630,6 +726,8 @@
         finally { _busy = false; }
     }
 
+    private bool _storageHelpOpen;
+    private bool _deviceHelpOpen;
     private string _passphrase = string.Empty;
     private string? _message;
     private bool _busy;
@@ -646,6 +744,7 @@
         // Re-entering a custom endpoint always requires fresh detection.
         // A previous custom passphrase must never authorize a new selection.
         NetworkSelection.ResetCustom();
+        _offlineCustomNamespace = false;
         NetworkSelection.ChoosePreset(value);
         _network = value;
         _customPassphrase = null;
@@ -665,6 +764,7 @@
     {
         if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || _network != "custom") return;
         var requestedHorizon = _customHorizon.Trim();
+        _offlineCustomNamespace = false;
         var startingEpoch = Sessions.Epoch;
         _busy = true;
         _message = null;
@@ -707,33 +807,22 @@
     private int EnteredWordCount => _mnemonic.Split((char[]?)null,
         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length;
 
-    private string AccessReadiness
-    {
-        get
-        {
-            if (_busy) return "Checking vault credential…";
-            if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
-                return _secretKey.Length != 56 ? "Enter your existing 56-character Stellar S-key to unlock its independent account chain." :
-                    "Ready to unlock the Secret Key vault. Signing requires separate transaction approval.";
-            if (EnteredWordCount is not (12 or 15 or 18 or 21 or 24))
-                return $"Enter a complete 12, 15, 18, 21 or 24-word recovery phrase ({EnteredWordCount} words entered).";
-            if (_enableLocalStorage && string.IsNullOrWhiteSpace(_passphrase))
-                return "Enter a vault passphrase to enable encrypted device storage.";
-            if (_network == "custom" &&
-                (string.IsNullOrWhiteSpace(_customPassphrase) ||
-                 !string.Equals(_detectedHorizon, _customHorizon.Trim(), StringComparison.Ordinal)))
-                return "Detect your custom Horizon network before unlocking.";
-            if (_network == "public" && !_confirmMainnetAccess)
-                return "Confirm the mainnet risk notice before unlocking.";
-            return "Ready to unlock. Your recovery phrase is processed in this session.";
-        }
-    }
-
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected) return;
+        if (_offlineCustomNamespace && (!CurrentDeviceStoragePreference ||
+            _credentialMode != VaultCredentialMode.MnemonicHd))
+        {
+            _message = "Offline custom-network access can only reopen the existing encrypted HD device vault. Enable encrypted device storage, or detect the network online before connecting a signer.";
+            return;
+        }
         if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
         {
+            if (CurrentDeviceStoragePreference && _passphrase.Length < 12)
+            {
+                _message = "Enter a vault passphrase of at least 12 characters for encrypted device storage.";
+                return;
+            }
             await InspectSecretKeyChainAsync();
             return;
         }
@@ -792,6 +881,10 @@
                     return;
                 }
             }
+            // Re-entering on-chain-only explicitly replaces any prior tab's
+            // hybrid-resume intent. Saved encrypted data is not erased.
+            if (!_enableLocalStorage)
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession");
             Retention.Select(_enableLocalStorage
                 ? VaultDeviceRetentionPolicy.EncryptedLocalWithManualSync
                 : VaultDeviceRetentionPolicy.OnChainOnly);
@@ -816,12 +909,18 @@
                 await ReportAccessStageAsync("encrypting on-device recovery credentials");
                 await JS.InvokeVoidAsync("stellarVaultRecentVault.saveEncryptedSeed",
                     account, _network, _mnemonic, _passphrase);
+                // Mark a resumable HYBRID tab only after its credential unlock
+                // and encrypted recovery seed have both succeeded.
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.markHybridSession",
+                    account, _network);
             }
             await ReportAccessStageAsync("connecting to Stellar ledger");
             _message = !_enableLocalStorage ? "Opening on-chain-only vault." : exists ? "Vault opened." : "Your local encrypted vault is ready.";
             try
             {
                 await LedgerRecords.DisconnectAsync();
+                if (_offlineCustomNamespace)
+                    throw new InvalidOperationException("Remembered custom metadata selects local storage only; detect the network online before reconnecting Stellar.");
                 var horizonUrl = _network switch
                 {
                     "testnet" => "https://horizon-testnet.stellar.org",
@@ -925,6 +1024,7 @@
         _secretChainInspection = null;
         _message = null;
         _busy = true;
+        var recoveryStage = "checking credential and network";
         try
         {
             new VaultAccessCredential(VaultCredentialMode.StellarSecretKeyChain, _secretKey).Validate();
@@ -950,26 +1050,107 @@
             };
             // Verify signer authority and chain recovery before opening the
             // independent encrypted record backend. No on-chain writes here.
+            recoveryStage = "inspecting account signers and linked chain";
             _secretChainInspection = await SecretChain.InspectAsync(_secretKey, horizon, passphrase);
+            // A new independent S-key session must never inherit the tab's
+            // mnemonic-hybrid resume flow.
+            if (Platform == "WEB PWA")
+                await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession");
+            recoveryStage = "opening encrypted Secret Key ledger";
             await SecretLedger.ConnectAsync(_secretKey, horizon, passphrase);
-            await SecretLedger.ReadAsync();
+            recoveryStage = "decrypting and validating ledger records";
+            var recovered = await SecretLedger.ReadAsync();
             NetworkSelection.Select(_network);
-            Navigation.NavigateTo("/secret-vault");
+            // The shared access passphrase unlocks only this strategy's
+            // separate, explicitly consented encrypted device vault. The
+            // S-key signer and network connection never depend on a local
+            // passphrase in Stellar-only mode.
+            if (CurrentDeviceStoragePreference)
+            {
+                if (_passphrase.Length < 12)
+                    throw new InvalidOperationException("Encrypted device vault passphrase is too short.");
+                recoveryStage = "unlocking independent encrypted device drafts";
+                LinkedRetention.RequireLocalPersistence();
+                var localExists = await LinkedQueueKeys.HasLocalCredentialsAsync();
+                if (localExists)
+                    await LinkedQueueKeys.UnlockAsync(_passphrase);
+                else
+                    await LinkedQueueKeys.CreateAsync(_passphrase);
+                if (_requestBiometricEnrollment &&
+                    SecretLedger.RootAccountId is string linkedRoot)
+                {
+                    try
+                    {
+                        await JS.InvokeVoidAsync("stellarVaultBiometric.enroll",
+                            "linked-s-key:" + NetworkSelection.CredentialKey(linkedRoot), _passphrase);
+                    }
+                    catch (Exception ex) when (ex is JSException or
+                        InvalidOperationException or OperationCanceledException)
+                    {
+                        // Device unlock is optional and must not abort an
+                        // otherwise authenticated encrypted local session.
+                    }
+                    DeviceUnlockPreference.Reset();
+                }
+            }
+            // Match the HD first-run route without pretending that an
+            // independent S-key account has a mnemonic-derived registry.
+            // Existing nonempty S-key vaults go straight to their workspace.
+            Navigation.NavigateTo(recovered.Count == 0
+                ? "/initialize" : "/vault");
         }
         catch (Exception ex)
         {
-            Logger.LogWarning("Secret Key ledger opening failed: {ErrorType}", ex.GetType().Name);
+            // Never log a credential, exception object or untrusted Horizon
+            // response; only the stage and sanitized exception type.
+            Logger.LogWarning("Secret Key unlock failed at {RecoveryStage}: {ErrorType}",
+                recoveryStage, ex.GetType().Name);
+            try { await LinkedQueueKeys.LockAsync(); }
+            catch { /* Do not mask the original failure. */ }
             try { if (SecretLedger.IsConnected) await SecretLedger.DisconnectAsync(); }
             catch { /* Do not mask the original failure. */ }
-            _message = ex.Message.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase)
-                ? "An older StellarVault record format was detected. It requires read-only migration verification before this version can unlock it; no records were overwritten."
-                : "Secret Key vault could not be recovered. Check the network, linked signers, record integrity and funding. No transaction was sent.";
+            _message = ExplainSecretKeyRecoveryFailure(recoveryStage, ex);
         }
         finally
         {
             _secretKey = string.Empty;
+            _passphrase = string.Empty;
             _busy = false;
         }
+    }
+
+    private static string ExplainSecretKeyRecoveryFailure(string stage, Exception error)
+    {
+        // Error messages can originate from browser JS or an untrusted Horizon
+        // response. Categorize known fixed strings; never echo their raw text.
+        var detail = error.Message;
+        string advice;
+        if (detail.Contains("historical vault record format", StringComparison.OrdinalIgnoreCase) ||
+            detail.Contains("different or historical vault record format", StringComparison.OrdinalIgnoreCase))
+            advice = "Older encrypted record format detected; read-only migration verification is required.";
+        else if (detail.Contains("HD-v2 vault root", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("registered as an HD-v2 vault", StringComparison.OrdinalIgnoreCase))
+            advice = "This is a mnemonic/HD vault account. Choose Recovery phrase / HD instead.";
+        else if (detail.Contains("404", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("Account not found", StringComparison.OrdinalIgnoreCase))
+            advice = "The root or linked account was not found. Check the selected network and fund the root account if it is new.";
+        else if (detail.Contains("network identity", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("network does not match", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("Horizon network", StringComparison.OrdinalIgnoreCase))
+            advice = "The selected Horizon endpoint does not match the network. Verify Testnet/Mainnet selection.";
+        else if (detail.Contains("signer", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("threshold", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("chain pointer", StringComparison.OrdinalIgnoreCase))
+            advice = "Signer thresholds or linked account pointers require inspection. No signing permissions were changed.";
+        else if (detail.Contains("record chunk", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("ciphertext", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("manifest", StringComparison.OrdinalIgnoreCase) ||
+                 detail.Contains("decrypted record", StringComparison.OrdinalIgnoreCase))
+            advice = "Encrypted ledger records could not be authenticated. No records were changed.";
+        else
+            advice = "Check browser console for a sanitized failure category, the selected network and account funding.";
+        return "Secret Key vault opening stopped while " + stage + ". " + advice +
+            " No transaction was sent.";
     }
 
     private async Task ReportAccessStageAsync(string stage)
@@ -983,7 +1164,16 @@
     {
         if (_busy) return;
         Workflow.Lock();
+        if (Platform == "WEB PWA")
+        {
+            try { await JS.InvokeVoidAsync("stellarVaultRecentVault.clearHybridSession"); }
+            catch (JSException) { /* In-memory vault session is already locked. */ }
+        }
+        Retention.Reset();
+        LinkedRetention.Reset();
         StorageMode.Reset();
+        _enableLocalStorage = false;
+        _workspaceMode = "ledger";
         await LedgerRecords.DisconnectAsync();
         _ledgerItems = null;
         _ledgerRegistryReady = false;
