@@ -123,7 +123,9 @@ function harness(passphrase=TEST) {
     }
   };
   const sandbox={
-    window:{StellarSdk:sdk},
+    // Isolate ledger protocol tests; durable transport is exercised separately
+    // by transaction-recovery and real-SDK integration tests.
+    window:{StellarSdk:sdk,stellarVaultTransactionRecovery:{attach:async()=>{},assertWritable:async()=>{},detach:()=>{}}},
     crypto:webcrypto,atob,btoa,TextEncoder,TextDecoder,URL,
     fetch:async url=>{
       if(url.includes('/transactions/')){

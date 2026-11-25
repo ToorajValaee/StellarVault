@@ -1,3 +1,4 @@
+# Historical configuration. Production Compose now uses nginx-edge.conf.
 {
     admin off
     email {$ACME_EMAIL}

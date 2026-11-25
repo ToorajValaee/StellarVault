@@ -19,6 +19,8 @@
 @inject StellarLedgerUploadCoordinator DirectFileUpload
 @implements IAsyncDisposable
 
+<VaultTransactionRecoveryPanel />
+
 @if (_foregroundRevoked)
 {
     <section class="terminal-panel" role="alert">
@@ -358,7 +360,7 @@ else
                                               ? "My vault" : NativeFolderPath(_selectedFolderId))"
                                           CanEdit="false"
                                           CanDelete="false"
-                                          FileStatus="_verifiedFileMessage"
+                                          FileStatus="@_verifiedFileMessage"
                                           CanSaveVerifiedFile="@(StellarLedgerFileProtocol.IsFile(_selectedRecord) ||
                                                (_verifiedNativeTree is not null &&
                                                 _verifiedNativeTree.RootId == _selectedRecord.Id))"

@@ -1,0 +1,5 @@
+*.sh text eol=lf
+*.png binary
+*.ttf binary
+# Integrity checks cover these upstream license bytes exactly.
+src/StellarVault.Landing/wwwroot/assets/fonts/OFL-*.txt text eol=lf

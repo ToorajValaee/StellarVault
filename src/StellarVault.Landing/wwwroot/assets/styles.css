@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Vazirmatn:wght@400;500;600;700;800&display=swap');
+@font-face { font-family: 'Manrope'; src: url('fonts/Manrope-Variable.ttf') format('truetype'); font-weight: 200 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Space Grotesk'; src: url('fonts/SpaceGrotesk-Variable.ttf') format('truetype'); font-weight: 300 700; font-style: normal; font-display: swap; }
 
 :root {
   --bg: #070913;
@@ -764,7 +765,7 @@ html[lang='fa'] .cta-panel h2 {
   background: linear-gradient(180deg, rgba(1,8,6,.96), rgba(4,22,16,.9));
 }
 .shot::before {
-  content: 'LIVE'; position: absolute; top: 10px; left: 10px; z-index: 2; padding: 4px 8px;
+  content: 'PWA'; position: absolute; top: 10px; left: 10px; z-index: 2; padding: 4px 8px;
   border: 1px solid rgba(255,217,107,.24); background: rgba(255,217,107,.08); color: #ffd96b;
   font: 700 10px/1 var(--font-display); letter-spacing: .12em;
 }

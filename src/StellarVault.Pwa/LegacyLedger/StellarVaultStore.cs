@@ -42,6 +42,9 @@ public sealed class StellarVaultStore : IAsyncDisposable
 
     public VaultNetworkSettings Settings => _settings;
 
+    public ValueTask RequireRecoveryWritesAsync() => _js.InvokeVoidAsync(
+        "stellarVaultTransactionRecovery.assertWritable", "hd:" + _sessionId);
+
     public async Task<RootTreasurySnapshot> InspectRootTreasuryAsync(
         int additionalSponsoredUnits = 0,
         long expectedFeeStroops = 0,

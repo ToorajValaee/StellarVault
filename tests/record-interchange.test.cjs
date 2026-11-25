@@ -105,6 +105,19 @@ test('PWA file picker accepts max-size authenticated SVRB overhead but no larger
   assert.match(backup, /MaximumBackupBytes = VaultRecordInterchange\.MaximumBytes \+/);
 });
 
+test('browser streaming filenames preserve normal characters and reject path/control characters', async () => {
+  const vm = require('node:vm');
+  const names = [];
+  const window = { showSaveFilePicker: async options => {
+    names.push(options.suggestedName);
+    return { createWritable: async () => ({ abort: async () => {} }) };
+  } };
+  vm.runInNewContext(read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js'), { window, document: {}, URL: {}, setTimeout });
+  await window.stellarVaultV2Download.saveStream('file-x0-17.txt', { stream: async () => ({ pipeTo: async () => {} }) });
+  await window.stellarVaultV2Download.saveStream('a/b\\c\u0000.txt', { stream: async () => ({ pipeTo: async () => {} }) });
+  assert.deepEqual(names, ['file-x0-17.txt', 'a_b_c_.txt']);
+});
+
 test('browser export destination is chosen before work and cannot be reused', async () => {
   const vm = require('node:vm');
   const code = read('src/StellarVault.Pwa/wwwroot/js/vault-v2-download.js');

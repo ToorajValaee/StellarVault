@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.join(__dirname, '..', 'src', 'StellarVault.Pwa', 'wwwroot');
 const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 test('startup script files exist and Blazor starts last', () => {
-  const assets = ['js/vendor/stellar-sdk.min.js', 'js/hd-keys.js', 'js/vault-v2-keywrap.js', 'js/vault-v2-indexeddb.js', 'js/vault-v2-lifecycle.js'];
+  const assets = ['js/vendor/stellar-sdk.min.js', 'js/hd-keys.js', 'js/vault-v2-indexeddb.js', 'js/vault-transaction-recovery.js', 'js/ledger-compat/app.js', 'js/vault-v2-keywrap.js', 'js/vault-v2-lifecycle.js'];
   let prior = -1;
   for (const name of assets) {
     const index = page.indexOf('src="' + name + '"');
@@ -294,7 +294,7 @@ test('PWA exposes independent record, offline draft and manual sync views', () =
   assert.ok(vault.includes('_appView == "sync" && Retention.AllowsLocalPersistence && Sessions.IsUnlocked'));
   assert.ok(vault.includes('<VaultHybridDraftEditor />'));
   assert.ok(vault.includes('<VaultHybridRemoteChanges />'));
-  assert.ok(vault.includes('<VaultHybridSyncReview />'));
+  assert.ok(vault.includes('<VaultHybridSyncReview QueueChanged="RefreshHybridWorkspaceAsync" />'));
   assert.ok(vault.includes('_appView == "records"'));
   assert.ok(vault.includes('Ledger.ReadAsync()'));
   assert.ok(vault.includes('Ledger.DisconnectAsync()'));

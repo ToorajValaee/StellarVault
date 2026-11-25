@@ -34,6 +34,7 @@ $tests = @(Get-ChildItem -LiteralPath (Join-Path $repo 'tests') -Filter '*.test.
 if ($tests.Count -eq 0) { throw 'No Node regression tests found.' }
 Invoke-Checked 'Node syntax (Stellar signer)' { & node --check 'src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js' }
 Invoke-Checked 'Vendored signer provenance' { & node 'scripts/verify-vendor.cjs' }
+Invoke-Checked 'Landing assets and bundled font integrity' { & node 'scripts/verify-landing.cjs' }
 Invoke-Checked 'JavaScript dependency advisories' { & $npmExecutable audit --registry=https://registry.npmjs.org --audit-level=low }
 Invoke-Checked 'Complete Node regression suite' { & node --test @tests }
 Invoke-Checked 'PWA dependency security audit' { & dotnet restore 'src/StellarVault.Pwa/StellarVault.Pwa.csproj' -p:NuGetAudit=true -p:NuGetAuditMode=all '-warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904,NU1905' }

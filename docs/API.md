@@ -71,7 +71,29 @@ The API and StellarVault reference the same independent `VaultEngine.Core.dll`. 
 The former `StellarVault.Application` and `StellarVault.Infrastructure` projects were removed. Their receipt/Horizon functionality now belongs to the Stellar integration library. A future EVM provider can supply its own RPC adapter; it does not need copies of these projects. No EVM implementation is supplied here.
 The authenticated read-only HTTP API accepts no signing keys, mnemonic, plaintext, custom endpoint, transaction submission or durable queue. POST/PUT/DELETE routes are absent. Network aliases are guarded by per-tenant grants. Every `/v1` endpoint requires authentication; unauthorized network lookups return the same 404 as unavailable networks before contacting Horizon. API access does not establish Stellar account ownership or grant signing authority. Tenant storage quotas, billing, distributed rate budgets and hosted private object/journal persistence remain unimplemented.
 
-Global rate limit: 60 requests/minute/process, with no queue. Outbound requests use a 10-second timeout, no redirects/cookies, 8 connections/server, a 64 KiB root response cap and a 256 KiB receipt cap. All responses disable caching. Terminate HTTPS at a trusted reverse proxy, restrict direct backend access and configure `AllowedHosts` for the service hostname (defaults to loopback). Add infrastructure-level distributed abuse/concurrency controls. No permissive CORS or forwarded-header trust is enabled.
+Default per-process limits are 600 global and 60 per-tenant requests/minute, with concurrency limits of 16 global and 4 per tenant, and no waiting queue. Configure these through ApiLimits; multiple instances need a shared infrastructure limit. Outbound requests have a 10-second total inspection budget, no redirects/cookies, 8 connections/server, a 64 KiB root response cap and a 256 KiB receipt cap. All responses disable caching. Terminate HTTPS at the trusted edge, restrict direct backend access and configure exact AllowedHosts. Forwarded headers are trusted only from explicitly configured proxy IPs. No permissive CORS is enabled.
+
+## B2B integration acceptance
+
+Give each customer its own tenant and secret-manager key, with grants only to
+the operator-reviewed network aliases it needs. Configure an exact expected
+passphrase and trusted HTTPS Horizon root per customer network. Keep the API
+behind the private Compose network and route external traffic through the TLS
+edge. Browser applications must not embed a B2B key in their JavaScript bundles;
+use a customer-controlled server integration.
+
+At onboarding, verify 401 without a key; only granted networks in discovery;
+404 for an ungranted network; 400 for a malformed hash; 200 for an existing
+successful receipt with the expected network ID; 429 with Retry-After under
+the configured budget; and immediate rejection of a revoked key after operator
+configuration restart. Rotate keys with overlapping digests before revoking
+the old digest. Do not log Authorization, full request bodies or customer secrets.
+
+A 404/502/504 is an unknown or unavailable observation, not permission to
+resubmit a transaction. A 200 receipt still has recordLinkedToTransaction=false
+and mutationConfirmed=false. The service accepts no signing secrets and cannot
+create customer vault records, files, storage quotas or invoices. See
+[deployment and renewal](DEPLOYMENT.md) for operator acceptance and rollback.
 
 ## Verification and remaining work
 

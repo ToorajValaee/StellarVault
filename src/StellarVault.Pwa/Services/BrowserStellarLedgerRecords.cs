@@ -373,6 +373,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
         if (string.IsNullOrWhiteSpace(draft.Title) || string.IsNullOrEmpty(draft.Content))
             throw new ArgumentException("Record title and content are required.");
         var store = RequireStore();
+        await store.RequireRecoveryWritesAsync();
         if (recordId is null)
             return Preview(await store.EstimateAddAsync(ToRecord(draft, Guid.NewGuid().ToString("N")[..16], DateTimeOffset.UtcNow)));
         var snapshot = await store.ReadAsync();
@@ -385,6 +386,7 @@ public sealed class BrowserStellarLedgerRecords(IJSRuntime js) : IStellarLedgerR
     public async Task<LedgerCostPreview> EstimateDeleteAsync(string id)
     {
         var store = RequireStore();
+        await store.RequireRecoveryWritesAsync();
         var snapshot = await store.ReadAsync();
         if (snapshot.Warnings.Count != 0) throw new InvalidDataException("Ledger recovery warnings prevent safe estimation.");
         var location = snapshot.Records.SingleOrDefault(x => x.Record.Id == id)

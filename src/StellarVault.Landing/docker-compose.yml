@@ -3,8 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: stellarvault-landing:latest
+    image: ${LANDING_IMAGE:-stellarvault-landing:local-review}
     container_name: stellarvault-landing
     restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:size=32m,mode=1777"]
     ports:
-      - "8080:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"

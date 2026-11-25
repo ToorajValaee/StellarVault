@@ -408,6 +408,7 @@
         _ => "Draft requires attention: " + code
     };
 
+    [Parameter] public EventCallback QueueChanged { get; set; }
     private VaultHybridSyncReviewService.Report? _report;
     private string? _error;
     private bool _busy;
@@ -586,7 +587,7 @@
         {
             _error = "Historical verification was unavailable or queue state changed. The original submission may have reached Stellar; do not retry.";
         }
-        finally { _busy = false; }
+        finally { _busy = false; await QueueChanged.InvokeAsync(); }
     }
 
     private async Task SelectQuoteAsync(VaultHybridSyncReviewService.Item item)
@@ -673,7 +674,7 @@
             // label as a failed transaction or offer a retry shortcut.
             _error = "Submission could not be completed or verified. The mutation may already have reached Stellar. Inspect the durable queue and ledger; DO NOT RETRY.";
         }
-        finally { _busy = false; }
+        finally { _busy = false; await QueueChanged.InvokeAsync(); }
     }
 
 

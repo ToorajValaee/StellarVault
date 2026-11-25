@@ -1,4 +1,16 @@
 services:
+  landing:
+    image: ${LANDING_IMAGE:?Set LANDING_IMAGE to a verified immutable release image}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    mem_limit: 128m
+    pids_limit: 128
+    networks:
+      application:
+        ipv4_address: 172.30.31.5
   pwa:
     image: ${PWA_IMAGE:?Set PWA_IMAGE to a verified immutable release image}
     restart: unless-stopped
@@ -37,24 +49,29 @@ services:
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
-    cap_add: [NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
     tmpfs: ["/tmp:size=32m,mode=1777"]
     mem_limit: 128m
     pids_limit: 128
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL:-}
     ports:
-      - ${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80
-      - ${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443
+      - ${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:8080
+      - ${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:8443
     volumes:
       - type: bind
-        source: ${CADDY_CONFIG_FILE:-./Caddyfile}
-        target: /etc/caddy/Caddyfile
+        source: ${EDGE_CONFIG_FILE:-./nginx-edge.conf}
+        target: /etc/nginx/conf.d/default.conf
         read_only: true
-      - caddy_data:/data
-      - caddy_config:/config
+      - type: bind
+        source: ${TLS_CERTIFICATE_DIR:?Set TLS_CERTIFICATE_DIR to the operator-owned certificate directory}
+        target: /etc/stellarvault/tls
+        read_only: true
+      - type: bind
+        source: ${ACME_WEBROOT:?Set ACME_WEBROOT to the operator-owned ACME challenge directory}
+        target: /var/www/acme
+        read_only: true
     depends_on:
+      landing:
+        condition: service_healthy
       pwa:
         condition: service_healthy
       api:
@@ -67,6 +84,3 @@ networks:
     ipam:
       config:
         - subnet: 172.30.31.0/29
-volumes:
-  caddy_data:
-  caddy_config:

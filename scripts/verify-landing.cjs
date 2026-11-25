@@ -29,5 +29,17 @@ for (const [name, hash] of Object.entries(manifest.sha256)) {
   if (!fs.existsSync(file) || crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==hash) failures.push('Changed original binary: '+name);
   originals++;
 }
+const fontsRoot=path.join(publicRoot,'assets/fonts');
+const fonts=JSON.parse(fs.readFileSync(path.join(fontsRoot,'provenance.json'),'utf8'));
+if(fonts.source!=='https://github.com/google/fonts'||!/^[a-f0-9]{40}$/.test(fonts.revision)||fonts.files.length!==4)
+  failures.push('Invalid bundled font provenance');
+for(const entry of fonts.files){
+  if(!/^[A-Za-z-]+\.(?:ttf|txt)$/.test(entry.name)||!/^[a-f0-9]{64}$/.test(entry.sha256)){
+    failures.push('Invalid font provenance entry');continue;
+  }
+  const file=path.join(fontsRoot,entry.name);
+  if(!fs.existsSync(file)||crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')!==entry.sha256)
+    failures.push('Bundled font integrity mismatch: '+entry.name);
+}
 if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
 console.log('Landing verified: '+files.length+' public files; local HTML references and '+originals+' original binary assets checked.');

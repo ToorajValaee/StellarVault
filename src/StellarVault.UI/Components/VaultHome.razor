@@ -383,6 +383,7 @@
     private string? _recentNetwork;
     private string? _recentHorizonUrl;
     private bool _recentHasDeviceUnlock;
+    private bool _offlineCustomNamespace;
 
     private sealed class RecentVault
     {
@@ -444,6 +445,22 @@
                         // preference never stores a trusted network passphrase.
                         // Do not require the user to repeat the Detect action.
                         await DetectCustomAsync();
+                        // A remembered PUBLIC network identifier may select an
+                        // existing encrypted local namespace while disconnected.
+                        // It is never network/signing authority: leave the ledger
+                        // disconnected until a fresh explicit network detection.
+                        if (_customPassphrase is null && recent?.Network == "custom" &&
+                            _recentAccount is not null &&
+                            !string.IsNullOrWhiteSpace(recent.NetworkPassphrase) &&
+                            string.Equals(recent.HorizonUrl?.TrimEnd('/'), url.TrimEnd('/'), StringComparison.Ordinal))
+                        {
+                            _customPassphrase = recent.NetworkPassphrase;
+                            _detectedHorizon = url;
+                            NetworkSelection.ConfigureCustom(recent.NetworkPassphrase);
+                            NetworkSelection.CustomHorizonUrl = url;
+                            _offlineCustomNamespace = true;
+                            _networkStatus = "Remembered custom network selects local encrypted storage only. Horizon is unverified; Stellar signing remains disconnected.";
+                        }
                     }
                 }
 
@@ -727,6 +744,7 @@
         // Re-entering a custom endpoint always requires fresh detection.
         // A previous custom passphrase must never authorize a new selection.
         NetworkSelection.ResetCustom();
+        _offlineCustomNamespace = false;
         NetworkSelection.ChoosePreset(value);
         _network = value;
         _customPassphrase = null;
@@ -746,6 +764,7 @@
     {
         if (_busy || Sessions.IsUnlocked || LedgerRecords.IsConnected || _network != "custom") return;
         var requestedHorizon = _customHorizon.Trim();
+        _offlineCustomNamespace = false;
         var startingEpoch = Sessions.Epoch;
         _busy = true;
         _message = null;
@@ -791,6 +810,12 @@
     private async Task AccessVaultAsync()
     {
         if (_busy || Platform != "WEB PWA" || Sessions.IsUnlocked || LedgerRecords.IsConnected || SecretLedger.IsConnected) return;
+        if (_offlineCustomNamespace && (!CurrentDeviceStoragePreference ||
+            _credentialMode != VaultCredentialMode.MnemonicHd))
+        {
+            _message = "Offline custom-network access can only reopen the existing encrypted HD device vault. Enable encrypted device storage, or detect the network online before connecting a signer.";
+            return;
+        }
         if (_credentialMode == VaultCredentialMode.StellarSecretKeyChain)
         {
             if (CurrentDeviceStoragePreference && _passphrase.Length < 12)
@@ -894,6 +919,8 @@
             try
             {
                 await LedgerRecords.DisconnectAsync();
+                if (_offlineCustomNamespace)
+                    throw new InvalidOperationException("Remembered custom metadata selects local storage only; detect the network online before reconnecting Stellar.");
                 var horizonUrl = _network switch
                 {
                     "testnet" => "https://horizon-testnet.stellar.org",

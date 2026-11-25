@@ -81,6 +81,10 @@
                LogicalName="wwwroot/js/vault-secret-chain.js" />
     <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js"
                LogicalName="wwwroot/js/vault-secret-ledger.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-v2-indexeddb.js"
+               LogicalName="wwwroot/js/vault-v2-indexeddb.js" />
+    <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/vault-transaction-recovery.js"
+               LogicalName="wwwroot/js/vault-transaction-recovery.js" />
     <MauiAsset Include="../StellarVault.Pwa/wwwroot/js/ledger-compat/*.js"
                LogicalName="wwwroot/js/ledger-compat/%(Filename)%(Extension)" />
   </ItemGroup>

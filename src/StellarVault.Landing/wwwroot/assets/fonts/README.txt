@@ -1,4 +1,11 @@
-Dana font integration
+Bundled open fonts
+
+Manrope and Space Grotesk are bundled from the official google/fonts repository.
+See provenance.json for the immutable source revision and SHA-256 hashes, and
+OFL-Manrope.txt / OFL-SpaceGrotesk.txt for their SIL Open Font Licenses.
+The landing page does not fetch fonts or stylesheets from third-party servers.
+
+Optional Dana font integration
 
 The stylesheet is configured to load these licensed WOFF2 files when you add them:
 - Dana-Regular.woff2

@@ -221,7 +221,7 @@ else
                 <p class="advanced-help">Nothing syncs without your approval. Changes that might have been submitted remain pending until verified.</p>
                 <button type="button" class="pixel-button compact" @onclick="LoadPendingAsync" disabled="@_pendingLoading">↻ Refresh</button>
                 <button type="button" class="pixel-button compact" @onclick="PrepareLocalSyncReviewAsync" disabled="@_pendingLoading">Review changes</button>
-                <VaultHybridSyncReview />
+                <VaultHybridSyncReview QueueChanged="RefreshHybridWorkspaceAsync" />
                 @if (_pendingError is not null) { <p class="terminal-alert warning" role="status">@_pendingError</p> }
                 @if (!string.IsNullOrWhiteSpace(_syncEstimateNote)) { <p class="advanced-help" role="status">@_syncEstimateNote</p> }
                 @if (_pendingItems.Count > 0)
@@ -513,7 +513,7 @@ else
                               CanEdit="@(!IsLedgerFile(_selected))"
                               CanDelete="@(!IsLedgerFile(_selected))"
                               CanSaveVerifiedFile="@(_verifiedTreeDownload is not null)"
-                              FileStatus="_fileDownloadStatus"
+                              FileStatus="@_fileDownloadStatus"
                               FileActionLabel="@(VaultLinkedTreeFilePolicy.IsRootRecord(_selected) ? "Verify file integrity" : "Verify and download file")"
                               OnCopy="CopyValueAsync"
                               OnClose="CloseRecord"
@@ -1321,6 +1321,12 @@ else
         }
         catch (Exception ex) { _pendingError = "Unable to open encrypted device queue: " + ex.Message; }
         finally { _pendingLoading = false; }
+    }
+
+    private async Task RefreshHybridWorkspaceAsync()
+    {
+        await LoadPendingAsync();
+        if (Ledger.IsConnected) await RefreshAsync();
     }
 
     private IReadOnlyList<LedgerRecordItem> _records = [];

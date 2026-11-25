@@ -209,6 +209,9 @@ window.stellarVault = (() => {
                 seed, normalizeHorizonUrl(horizonUrl), String(networkPassphrase));
             const cryptoKey = await window.stellarVaultEncryption.deriveKey(
                 seed, opened.networkPassphrase, opened.rootAccountId);
+            await window.stellarVaultTransactionRecovery.attach('hd:' + sessionId, 'hd',
+                opened.rootAccountId, opened.networkPassphrase,
+                normalizeHorizonUrl(horizonUrl), opened.rootKeypair, opened.server);
             stellarSessions.set(sessionId, {
                 ...opened, keypair: opened.rootKeypair,
                 passphrase: opened.networkPassphrase, cryptoKey,
@@ -246,6 +249,7 @@ window.stellarVault = (() => {
     }
 
     function deleteSession(sessionId) {
+        window.stellarVaultTransactionRecovery?.detach('hd:' + sessionId);
         const session = stellarSessions.get(sessionId);
         if (session) {
             try {

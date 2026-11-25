@@ -120,6 +120,8 @@ window.stellarVaultSecretLedger = (() => {
        verifiedHistories:new Set(),inFlight:false,
       needsReconciliation:!!prior,uncertain:prior?{...prior}:null};
     await chain(state);
+    await window.stellarVaultTransactionRecovery.attach('sk:' + id, 'skey', root,
+      passphrase, net.origin, pair, server);
     sessions.set(id,state);
     return {RootAccountId:root};
   }
@@ -131,6 +133,7 @@ window.stellarVaultSecretLedger = (() => {
     s.quotes.clear();
   }
   function close(id) {
+    window.stellarVaultTransactionRecovery?.detach('sk:' + id);
     const s=sessions.get(id);
     if(s) {
       clearQuotes(s);
@@ -270,6 +273,7 @@ window.stellarVaultSecretLedger = (() => {
     return view.nodes.at(-1);
   }
   async function plan(id,kind,recordId,draft) {
+    await window.stellarVaultTransactionRecovery.assertWritable('sk:' + id);
     const s=session(id);
     if(s.passphrase===MAINNET)fail('Secret Key ledger mutations are Testnet-only pending audit.');
     if(s.inFlight)fail('A ledger operation is already in progress.');

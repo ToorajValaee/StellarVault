@@ -43,15 +43,26 @@ for (const corrupt of [false, true]) test(corrupt
       throw new Error('Synthetic lost response');
     }
   }
-  const sandbox = { window: { StellarSdk: { ...sdk, Keypair: ObservedKeypair, Horizon: { Server } } },
+  const recoveryEntries = new Map();
+  const sandbox = { window: { StellarSdk: { ...sdk, Keypair: ObservedKeypair, Horizon: { Server } },
+    stellarVaultV2Db: {
+      readQueue: async name => recoveryEntries.get(name) || null,
+      replaceQueue: async (name, previous, next) => {
+        if (recoveryEntries.has(name)) return false;
+        recoveryEntries.set(name, next); return true;
+      },
+      deleteQueueIfMatch: async () => { throw Error('Lost response cannot release recovery'); }
+    } },
     crypto: webcrypto, TextEncoder, TextDecoder, URL, atob, btoa,
     fetch: async url => ({ ok: true, json: async () => url.includes('/ledgers?')
       ? { _embedded: { records: [{ base_reserve_in_stroops: 5000000 }] } }
       : url.endsWith('/fee_stats') ? { last_ledger_base_fee: '100' }
       : { network_passphrase: passphrase } }) };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/StellarVault.Pwa/wwwroot/js/vault-transaction-recovery.js'), 'utf8'), sandbox);
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/StellarVault.Pwa/wwwroot/js/vault-secret-ledger.js'), 'utf8'), sandbox);
   const api = sandbox.window.stellarVaultSecretLedger;
   await api.open('test', key.secret(), 'https://synthetic.invalid', passphrase);
+  sandbox.window.stellarVaultTransactionRecovery.consent('skey', root, passphrase, true);
   assert.ok(opened.secret() === key.secret(), 'HKDF temporary cleanup corrupted the retained signer');
   const quote = await api.plan('test', 'create', '0123456789abcdef', {
     Title: 'Synthetic test', Content: 'Synthetic data', Tags: [], IsFolder: false });
@@ -78,7 +89,7 @@ for (const corrupt of [false, true]) test(corrupt
   for (const operation of capturedTx.operations)
     assert.ok(operation.value.byteLength <= 64, 'ManageData value exceeded the protocol limit');
   assert.equal(api.inspectUncertain('test').TransactionHash, checkpoint);
-  await assert.rejects(api.plan('test', 'create', 'fedcba9876543210', {}), /unresolved/);
+  await assert.rejects(api.plan('test', 'create', 'fedcba9876543210', {}), /needs recovery/);
   api.close('test');
 });
 

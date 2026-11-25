@@ -1,3 +1,4 @@
+# Historical local-only smoke configuration, not the production edge.
 {
     admin off
     skip_install_trust

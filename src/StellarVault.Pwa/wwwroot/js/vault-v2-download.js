@@ -122,7 +122,7 @@ window.stellarVaultV2Download = Object.freeze({
     if (typeof window.showSaveFilePicker !== 'function')
       throw new Error('Streaming downloads require a browser with Save File Picker support.');
     const safeName = typeof filename === 'string'
-      ? filename.replace(/[\\\\/\\x00-\\x1f\\x7f]/g, '_').slice(0, 160)
+      ? filename.replace(/[\\/\x00-\x1f\x7f]/g, '_').slice(0, 160)
       : 'stellar-vault-record';
     const handle = await window.showSaveFilePicker({
       suggestedName: safeName || 'stellar-vault-record'
