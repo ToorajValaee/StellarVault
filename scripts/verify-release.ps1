@@ -20,7 +20,7 @@ $npmExecutable = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { 'npm.cmd
 if (-not (Get-Command $npmExecutable -ErrorAction SilentlyContinue)) { throw 'npm is required for dependency advisory checks.' }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 10 SDK is required.' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git is required to identify the tested commit.' }
-$branchName = ([string](& git branch --show-current)).Trim()
+$branchName = (@(& git branch --show-current) -join '').Trim()
 if (-not $branchName) { $branchName = '(detached HEAD)' }
 $commit = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Not a Git checkout.' }
