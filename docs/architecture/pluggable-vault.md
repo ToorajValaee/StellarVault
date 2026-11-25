@@ -1,3 +1,5 @@
+> Status reconciliation (2026-11-25): this document contains historical implementation snapshots. Current code is on main, the three web hosts are deployed, 253 Node regressions and local build checks have passed, and live HD folder/child/file historical reconciliation has been exercised. Consented encrypted transport recovery now persists signed transaction metadata across restarts. Earlier statements about absent SDKs, volatile-only recovery or missing reconciliation are historical. See [current release status](../verification/current-release-status.md) for the remaining acceptance boundaries.
+
 # Pluggable vault architecture (2026-11-14)
 
 ## Core invariant

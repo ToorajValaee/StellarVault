@@ -1,8 +1,8 @@
-# Vault data-key wrapping (implementation stage)
+# Vault data-key wrapping
 
 `VaultKeyEnvelope.GenerateDataKey()` creates a random 32-byte AES-256 vault data key. `Wrap(dataKey, wrappingKey, stellarAccountId)` encrypts it using AES-256-GCM, a fresh 96-bit nonce, and authenticated account binding. `Unwrap(envelope, wrappingKey, stellarAccountId)` returns the original key only after authentication. Format is SVKW magic, version 1, nonce, 32-byte encrypted key and 16-byte tag.
 
-The wrapping key **must** be 32 cryptographically random or independently derived bytes from an approved key derivation and key management workflow. Never pass a raw passphrase, Stellar seed, or Stellar secret key as a wrapping key. This module deliberately does not implement password derivation; a vetted Argon2id library and explicit KDF parameters are still required before passphrase unlock can ship.
+The wrapping key **must** be 32 cryptographically random or independently derived bytes from an approved key derivation and key management workflow. Never pass a raw passphrase, Stellar seed, or Stellar secret key as a wrapping key. Password derivation is implemented separately by VaultPassphraseKdf using Argon2id and bounded, serialized parameters; VaultPassphraseLifecycle composes it with key wrapping.
 
 Store the envelope as confidential application metadata; an envelope alone is not an account-ownership proof. The core validates canonical Stellar G-address StrKey CRC16 checksums. The application must verify Stellar account ownership and authorization separately. Clear temporary key buffers after use; managed runtime copies and GC mean zeroization is best-effort. Key rotation can rewrap the same data key without rewriting every encrypted chunk. Do not consider the overall unlock flow production ready until the KDF, secure key lifecycle, and account authorization are integrated and validated.
 
@@ -14,7 +14,7 @@ Store the envelope as confidential application metadata; an envelope alone is no
 
 `LocalStellarVault.CreateSessionAsync(accountId, wrappingKey)` and `UnlockSessionAsync(accountId, wrappingKey)` return `VaultUnlockedSession`. Call `ExecuteAsync(async (db, key, ct) => ...)` to run account database operations with a short-lived key copy. The session serializes operations and zeroes temporary key copies on completion. Dispose the session after use to zero its owned data key. Do not call `Dispose` from inside an `ExecuteAsync` callback, as disposal waits for in-flight operations; instead dispose from the owning scope. Never cache, capture, or return the provided key memory. .NET cannot guarantee that all managed/runtime copies are cleared.
 
-This session is not yet wired into PWA or MAUI lifecycle events (backgrounding, screen lock, inactivity), and it does not perform Stellar ownership proof. A 32-byte wrapping key must be supplied by a secure KDF or platform keystore; passing a raw passphrase remains prohibited.
+Session lifecycle is wired through VaultSessionManager and host privacy/lifecycle components. Native device acceptance is outside the current web deployment scope. The local session does not perform Stellar ownership proof. A 32-byte wrapping key must be supplied by a secure KDF or platform keystore; passing a raw passphrase remains prohibited.
 
 ## Application session ownership
 

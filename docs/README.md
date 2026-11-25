@@ -10,4 +10,4 @@ StellarVault is a .NET 10 encrypted vault with PWA and MAUI consumers of the ind
 
 The code under `src/` is authoritative. HD mnemonic and imported S-key strategies remain independent. See the [engine boundary](architecture/account-object-engine.md), [API contract](API.md), [deployment runbook](DEPLOYMENT.md), and [production release gate](verification/production-release-gate.md).
 
-Current launch preparation is on `architecture/pluggable-vault-records-and-chains`. Production merge/deployment is conditional on release evidence; local build success does not establish security or recoverability.
+The current release branch is `main`. Landing, PWA and the authenticated read-only B2B API are deployed on the VPS. See [current release status](verification/current-release-status.md) for tested behavior and outstanding acceptance checks. Older dated design notes describe earlier implementation stages.
