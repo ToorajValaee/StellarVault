@@ -5,7 +5,7 @@ Scope is the browser PWA and authenticated, read-only receipt API. Native-device
 approval and a hosted storage/write API are not part of this batch. Work is on
 `architecture/pluggable-vault-records-and-chains`, based on `53e22404`; validation
 logs identify the actual worktree/commit and explicitly flag uncommitted files.
-No production merge, push, VPS deployment, or network write was performed.
+No production merge, push or VPS deployment was performed. Subsequent authorized synthetic network writes and the latest evidence are recorded in [the November 25 live results](2026-11-25-live-testnet-results.md).
 
 ## Resolved findings
 
@@ -61,10 +61,57 @@ No production merge, push, VPS deployment, or network write was performed.
 
 ## Remaining launch gates
 
-1. Fund a fresh disposable custom-Testnet account and complete **both** HD and
+### Live follow-up and additional blockers
+
+The disposable account was subsequently funded with 20 native. A separately
+approved two-operation setup succeeded in ledger 3033652, transaction
+`a0fdefcc2b747b24a2f7b413d6685b69e7c7edddc406153a1c560cd09e97a131`:
+positive S-key root thresholds and a separate HD root funded with 10 native.
+
+Real browser interaction then exposed and corrected additional defects:
+
+- Shell-invoked S-key create/folder/refresh operations must notify the child
+  renderer; changing its fields from the parent does not guarantee a render.
+- The shared record title input was missing an attribute-closing quote, so its
+  actual DOM ID did not match the label. Razor compilation had not rejected it.
+- Blazor camel-cases CLR properties sent to JavaScript. S-key quote/history
+  functions expect Pascal-cased protocol fields. The host now supplies explicit
+  dictionary keys without changing durable queue JSON. A new executable host
+  interop harness tests the actual adapter with camel-case serialization.
+- S-key HKDF cleanup used `Buffer.slice()`, which aliases the SDK's retained
+  private seed. Wiping the temporary buffer corrupted the signer. It now copies
+  with `new Uint8Array(...)`; the writer independently checks local root/child
+  signatures before checkpoint/broadcast. Real-SDK tests now assert outside
+  the writer's caught transport boundary so failed assertions cannot be masked
+  as the deliberately simulated lost response. A corrupt-signer fixture proves
+  zero transport calls and zero signed-hash checkpoints. **241 Node tests pass.**
+
+One actual S-key create attempt before the seed-copy fix entered the conservative
+uncertain UI without a returned hash. The test driver's local file-lock failure
+then lost diagnostic control of that browser session. **That account remains
+quarantined; no retry, guessed hash, queue confirmation, or release was attempted.**
+An absent current record/receipt and a later source diagnosis are not original
+transaction attribution. The account is
+`GDPUT7FS2DB352I4JZIQ6H7QEKR7RS5GASRAQD6GUPXRAXHK4ZKRIEW6`.
+Independent fresh-account tests are required; this is not a successful create.
+
+Trivy 0.76.2 with its downloaded advisory database found no high/critical issues
+in the API image. The original PWA image had seven high/critical OS findings;
+refreshing Nginx to digest
+`637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a`
+(1.30.8-alpine) cleared the high/critical base-image findings and is now pinned.
+**Caddy remains blocked** by dependency findings CVE-2026-116587 (go-jose/v3)
+and CVE-2026-78661 (x/net). No reachability waiver or custom crypto fork is
+claimed. The scanner output and SDK integrity/download checks are local evidence,
+not independent security approval.
+
+### Outstanding acceptance
+
+1. Complete fresh disposable custom-Testnet tests for **both** HD and
    independent S-key create/read/update/delete, signed-history reconciliation,
    file integrity, clean-session recovery, interruptions and concurrent-tab
-   checks. The generated test account was still absent (404) at review time.
+   checks. The initial funding blocker was resolved; its create attempt is now
+   quarantined as described above. Use a separately authorized fresh account.
    Never log credentials or use production secrets for this work.
 2. Rebuild and attest final immutable Linux images after the source batch is
    committed. Repeat browser/HTTPS smoke on those exact artifacts. Base image

@@ -60,7 +60,7 @@ test('both strategies reuse one PWA app chrome and two identical explorer compon
   assert.match(vault, /<VaultExplorerItemRow Item="item"/);
   assert.match(linked, /<VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy\.Linked" Items="_items"/);
   assert.match(published, /<VaultExplorerItemRow Item="item"/);
-  assert.match(published, /Strategy="Strategy"/);
+  assert.match(published, /Strategy="@Strategy"/);
   assert.match(published, /Records="Items"/);
   assert.match(tree, /class="sv-explorer-tree terminal-panel"/);
   assert.match(row, /class="sv-object-row/);

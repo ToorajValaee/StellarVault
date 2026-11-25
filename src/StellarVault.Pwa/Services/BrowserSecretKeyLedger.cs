@@ -15,6 +15,16 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
     IStellarSecretKeyHistoricalExpansionVerifier,
     IStellarSecretKeyVerifiedSessionRelease, IAsyncDisposable
 {
+    // JS interop camel-cases CLR properties. The encrypted S-key protocol and
+    // historical comparator use these exact Pascal-cased field names. Dictionary
+    // keys preserve that wire contract without changing durable draft JSON.
+    private static Dictionary<string, object?> ToJsDraft(LedgerRecordDraft draft) => new()
+    {
+        ["Title"] = draft.Title, ["Content"] = draft.Content,
+        ["FolderId"] = draft.FolderId, ["Tags"] = draft.Tags?.ToArray() ?? [],
+        ["IsFolder"] = draft.IsFolder, ["UserName"] = draft.UserName,
+        ["Url"] = draft.Url, ["Notes"] = draft.Notes
+    };
     private readonly string _sessionId = "sk-" + Guid.NewGuid().ToString("N");
     private bool _connected;
     private long _connectionEpoch;
@@ -121,7 +131,7 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         var proven = await js.InvokeAsync<bool>(
             "stellarVaultSecretLedger.verifyHistoricalRecord", ct,
             _sessionId, transactionHash, operationKind, recordId,
-            expectedDraft, originalManifest);
+            ToJsDraft(expectedDraft), originalManifest);
         if (!IsConnected || ConnectionEpoch != epoch ||
             RootAccountId != expectedRoot ||
             ConnectedNetworkPassphrase != passphrase)
@@ -200,7 +210,8 @@ public sealed class BrowserSecretKeyLedger(IJSRuntime js) :
         try
         {
             quote = await js.InvokeAsync<VaultSecretLedgerQuote>(
-                "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId, draft);
+                "stellarVaultSecretLedger.plan", ct, _sessionId, kind, recordId,
+                draft is null ? null : ToJsDraft(draft));
         }
         catch (JSException ex) when (kind == "create" &&
             ex.Message.Contains("SV_ACCOUNT_CAPACITY_REQUIRED", StringComparison.Ordinal))

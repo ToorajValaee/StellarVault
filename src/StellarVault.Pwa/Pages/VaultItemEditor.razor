@@ -119,7 +119,8 @@ else
         {
             <div class="terminal-panel credential-form">
                 <VaultRecordFields IsFolder="@(_kind == "folder")"
-                                   ExcludedId="RecordId"
+                                   ExcludedId="@RecordId"
+                                   Disabled="@(_busy || _loading)"
                                    Folders="@AvailableFolders.ToArray()"
                                    @bind-Title="_title"
                                    @bind-FolderId="_folder"

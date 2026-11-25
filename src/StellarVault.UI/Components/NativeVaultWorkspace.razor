@@ -338,10 +338,10 @@ else
                             </select>
                             <div class="sv-native-object-grid">
                             <VaultPublishedItemsView Strategy="@VaultMutationStrategyPolicy.Hd" Items="_ledgerRecords"
-                                                     FolderId="_selectedFolderId"
-                                                     Search="_nativeSearch"
-                                                     Collection="_nativeCollection"
-                                                     SelectedItemId="_selectedRecord?.Id"
+                                                     FolderId="@_selectedFolderId"
+                                                     Search="@_nativeSearch"
+                                                     Collection="@_nativeCollection"
+                                                     SelectedItemId="@_selectedRecord?.Id"
                                                      Busy="_ledgerBusy"
                                                      OnOpen="SelectNativePublishedItem" />
                             </div>

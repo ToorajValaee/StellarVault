@@ -1,5 +1,5 @@
 ARG SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb
-ARG PWA_SERVER_IMAGE=ghcr.io/nginx/nginx-unprivileged:stable-alpine@sha256:ea4fd7ab5a8dc6348c18240bd3546f355f8373cd8f112580f7d8bd8ff5a74772
+ARG PWA_SERVER_IMAGE=ghcr.io/nginx/nginx-unprivileged:stable-alpine@sha256:637c35e46af7bc0dd3d3bcf7162e004e13ab3b370fde7cd416e2ac410b5a985a
 FROM ${SDK_IMAGE} AS build
 WORKDIR /src
 COPY global.json NuGet.Config ./

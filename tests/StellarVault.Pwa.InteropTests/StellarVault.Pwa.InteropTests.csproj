@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VaultEngine.Stellar/VaultEngine.Stellar.csproj" />
+    <ProjectReference Include="../../src/StellarVault.UI/StellarVault.UI.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Compile Include="../../src/StellarVault.Pwa/Services/BrowserSecretKeyLedger.cs" Link="BrowserSecretKeyLedger.cs" />
+  </ItemGroup>
+</Project>

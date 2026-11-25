@@ -20,7 +20,8 @@ $npmExecutable = if ([Environment]::OSVersion.Platform -eq 'Win32NT') { 'npm.cmd
 if (-not (Get-Command $npmExecutable -ErrorAction SilentlyContinue)) { throw 'npm is required for dependency advisory checks.' }
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw '.NET 10 SDK is required.' }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git is required to identify the tested commit.' }
-$branchName = (& git branch --show-current).Trim()
+$branchName = ([string](& git branch --show-current)).Trim()
+if (-not $branchName) { $branchName = '(detached HEAD)' }
 $commit = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Not a Git checkout.' }
 $dirty = @(& git status --porcelain).Count -gt 0
@@ -42,6 +43,7 @@ Invoke-Checked 'Stellar provider Release build' { & dotnet build 'src/VaultEngin
 Invoke-Checked 'Stellar Horizon integration Release build' { & dotnet build 'src/VaultEngine.Stellar.Horizon/VaultEngine.Stellar.Horizon.csproj' -c Release }
 Invoke-Checked 'API Release build' { & dotnet build 'src/StellarVault.Api/StellarVault.Api.csproj' -c Release }
 Invoke-Checked 'API network boundary tests' { & dotnet run --project 'tests/StellarVault.Api.Tests/StellarVault.Api.Tests.csproj' -c Release }
+Invoke-Checked 'PWA S-key JS interop contract' { & dotnet run --project 'tests/StellarVault.Pwa.InteropTests/StellarVault.Pwa.InteropTests.csproj' -c Release }
 if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
     Invoke-Checked 'Authenticated API HTTP smoke' { & powershell -NoProfile -File 'scripts/verify-api-http.ps1' }
 }

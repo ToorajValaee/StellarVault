@@ -3,7 +3,7 @@
 <section class="sv-shared-record-fields" aria-label="Vault record details">
     <div class="form-section-title">Details</div>
     <label class="terminal-label" for="@(_prefix + "-title")">TITLE *</label>
-    <input class="terminal-input" id="@(_prefix + "-title") type="text"
+    <input class="terminal-input" id="@(_prefix + "-title")" type="text"
            maxlength="256" autocomplete="off" spellcheck="false"
            disabled="@Disabled" value="@Title" @oninput="e => TitleChanged.InvokeAsync(e.Value?.ToString() ?? string.Empty)" />
 

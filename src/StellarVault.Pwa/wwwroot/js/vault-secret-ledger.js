@@ -104,7 +104,9 @@ window.stellarVaultSecretLedger = (() => {
     const net=await verifiedNetwork(horizon,passphrase);
     const pair=sdk.Keypair.fromSecret(secret),root=pair.publicKey();
     const server=new sdk.Horizon.Server(net.origin,{allowHttp:net.origin.startsWith('http:')});
-    const seed=pair.rawSecretKey().slice();
+    // SDK returns a Buffer view of its live signing seed. Buffer.slice() aliases
+    // that memory: wiping it would corrupt the signer. Copy before deriving.
+    const seed=new Uint8Array(pair.rawSecretKey());
     let key;
     try {
       const ikm=await crypto.subtle.importKey('raw',seed,'HKDF',false,['deriveKey']);
@@ -472,6 +474,12 @@ window.stellarVaultSecretLedger = (() => {
       // This is not proof of inclusion and NEVER authorizes an automatic retry.
       const rawHash=tx.hash();
       if(!rawHash||rawHash.length!==32)fail('Signed transaction hash unavailable; no broadcast attempted.');
+      const signedBy=address=>tx.signatures?.some(signature=>{
+        try{return s.sdk.Keypair.fromPublicKey(address).verify(rawHash,new Uint8Array(signature.signature()));}
+        catch{return false;}
+      });
+      if(!signedBy(s.root)||(q.kind==='expand'&&!signedBy(q.childId)))
+        fail('Local transaction signature verification failed; no broadcast attempted.');
       const signedHash=Array.from(rawHash,b=>b.toString(16).padStart(2,'0')).join('');
       // Journal-backed callers MUST durably CAS-checkpoint this exact hash
       // before the first byte is broadcast. If the callback rejects, do not

@@ -84,6 +84,7 @@ function harness(passphrase=TEST) {
     setTimeout(_){return this;}
     build(){return this;}
     sign(pair){this.signed.push(pair.publicKey());}
+    get signatures(){return this.signed.map(key=>({signature:()=>Buffer.from(key)}));}
     hash(){return Buffer.from((submitted+1).toString(16).padStart(64,'0'),'hex');}
     static fromXDR(xdr,network){
       assert.equal(network,passphrase);

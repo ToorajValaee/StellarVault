@@ -155,7 +155,7 @@
         }
         @if (!IsFile && VaultRecordInterchange.IsOrdinary(Item))
         {
-            <VaultRecordTransferPanel Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id" />
+            <VaultRecordTransferPanel Mode="export" Strategy="@Strategy" Records="Records" SelectedRecordId="@Item.Id" />
         }
         <div class="modal-action-row record-actions">
             @if (CanEdit && !VaultPublishedFileClassification.IsManagedFileProtocolRecord(Item))

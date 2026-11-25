@@ -186,7 +186,7 @@ test('PWA imports open from left rail, not record header, for both account strat
   assert.match(linked, /@if \(!Embedded\)[\s\S]*?Mode="import"/);
   assert.match(row, /class="sv-row-export-action"/);
   assert.match(row, /@onclick="\(\) => OnOpen\.InvokeAsync\(Item\)">Export…/);
-  assert.match(inspector, /Mode="export" Strategy="Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
+  assert.match(inspector, /Mode="export" Strategy="@Strategy" Records="Records" SelectedRecordId="@Item.Id"/);
   assert.match(panel, /if \(Mode == "import"\)/);
   assert.match(panel, /Mode == "export" && SelectedRecordId is not null/);
   assert.match(panel, /selected\.Length != 1 \|\| !VaultRecordInterchange\.IsOrdinary/);
