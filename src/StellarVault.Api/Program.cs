@@ -114,6 +114,8 @@ app.Use(async (context, next) =>
     }
     await next(context);
 });
+app.UseStaticFiles(); // Public API documentation only; /v1 remains authenticated.
+app.MapGet("/docs", () => Results.Redirect("/docs/index.html"));
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();app.MapHealthChecks("/health/live");

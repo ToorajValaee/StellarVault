@@ -1,0 +1,120 @@
+{
+  "servers": [
+    {
+      "url": "https://api.svault.ir"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/v1/capabilities": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Successful read-only observation"
+          },
+          "504": {
+            "description": "Inspection timed out"
+          },
+          "404": {
+            "description": "Not available or not granted"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "502": {
+            "description": "Upstream identity or availability failure"
+          }
+        }
+      }
+    },
+    "/v1/networks": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Successful read-only observation"
+          },
+          "504": {
+            "description": "Inspection timed out"
+          },
+          "404": {
+            "description": "Not available or not granted"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "502": {
+            "description": "Upstream identity or availability failure"
+          }
+        }
+      }
+    },
+    "/v1/networks/{network}/transactions/{hash}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Successful read-only observation"
+          },
+          "504": {
+            "description": "Inspection timed out"
+          },
+          "404": {
+            "description": "Not available or not granted"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "502": {
+            "description": "Upstream identity or availability failure"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "required": true,
+            "name": "network",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9-]{1,64}$"
+            }
+          },
+          {
+            "in": "path",
+            "required": true,
+            "name": "hash",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{64}$"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "openapi": "3.0.3",
+  "info": {
+    "title": "StellarVault B2B receipt API",
+    "description": "Read-only tenant-scoped diagnostics. No vault storage or transaction submission.",
+    "version": "v1"
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

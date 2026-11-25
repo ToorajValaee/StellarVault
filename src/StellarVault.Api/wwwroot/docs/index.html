@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>StellarVault B2B API</title>
+<h1>StellarVault B2B API v1</h1>
+<p>Authenticated, tenant-isolated Stellar network discovery and read-only transaction receipt inspection.</p>
+<p><a href="/openapi.json">OpenAPI specification</a> · <a href="https://github.com/ToorajValaee/StellarVault/blob/main/docs/API.md">Integration and operator guide</a></p>
+<h2>Authentication</h2><p>Send your operator-issued key in <code>Authorization: Bearer &lt;api-key&gt;</code>. Keep keys in a server-side secret manager, never browser bundles or URLs. Only granted network aliases are accessible.</p>
+<h2>Routes</h2><ul><li>GET /health/live — process health</li><li>GET /health/ready — configuration readiness</li><li>GET /v1/capabilities — supported capabilities</li><li>GET /v1/networks — granted network aliases</li><li>GET /v1/networks/{network}/transactions/{hash} — successful receipt observation</li></ul>
+<h2>Errors</h2><p>400 invalid input; 401 invalid/missing key; 404 unavailable or ungranted network/receipt; 429 rate limit (observe Retry-After); 502 upstream identity/availability failure; 504 inspection deadline.</p>
+<h2>Evidence boundary</h2><p>A successful receipt is endpoint-attested, not independent proof of record contents. Responses retain recordLinkedToTransaction=false and mutationConfirmed=false. An unavailable receipt never authorizes resubmission.</p>
+<p>This API does not accept signing keys, store customer vault records or submit transactions.</p></html>
